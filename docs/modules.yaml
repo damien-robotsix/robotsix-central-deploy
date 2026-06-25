@@ -1,0 +1,29 @@
+# robotsix-central-deploy modules
+
+modules:
+  lifecycle:
+    name: lifecycle
+    description: >
+      Lifecycle control API for the robotsix suite — start, stop, restart,
+      and inspect the status of managed services.
+    package: robotsix_central_deploy.lifecycle
+    entrypoint: robotsix_central_deploy.lifecycle.cli:main
+    dependencies:
+      - fastapi
+      - uvicorn
+      - pydantic
+      - pydantic-settings
+      - pyyaml
+    config:
+      env_prefix: ROBOTSIX_LIFECYCLE_
+      env_example: .env.lifecycle.example
+    endpoints:
+      - GET /health
+      - GET /services
+      - GET /services/{name}
+      - POST /services/{name}/start
+      - POST /services/{name}/stop
+      - POST /services/{name}/restart
+    docs: /docs
+    openapi: /openapi.json
+    tests: tests/lifecycle/
