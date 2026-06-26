@@ -9,7 +9,9 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from robotsix_central_deploy.lifecycle.backend import NoopBackend
+from unittest.mock import AsyncMock
+
+from robotsix_central_deploy.lifecycle.backend import ComponentInspect, NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
@@ -122,6 +124,58 @@ class TestGetStatus:
         assert data["name"] == "svc-a"
         assert data["state"] in {e.value for e in ServiceState}
         assert "image" in data
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/health
+# ---------------------------------------------------------------------------
+
+
+class TestGetServiceHealth:
+    async def test_not_found(self, client: AsyncClient, auth_headers: dict):
+        resp = await client.get("/services/nonexistent/health", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        await _seed_store("svc-a")
+        resp = await client.get("/services/svc-a/health")
+        assert resp.status_code == 401
+
+    async def test_no_health_check_returns_unknown(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("svc-a")
+        # NoopBackend.status returns ComponentInspect with health="" by default
+        resp = await client.get("/services/svc-a/health", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"name": "svc-a", "health": "unknown"}
+
+    async def test_healthy_container(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("svc-a")
+        inspect = ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        mock_status = AsyncMock(return_value=inspect)
+        monkeypatch.setattr(server_mod.app.state.backend, "status", mock_status)
+
+        resp = await client.get("/services/svc-a/health", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"name": "svc-a", "health": "healthy"}
+
+    async def test_unhealthy_container(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("svc-a")
+        inspect = ComponentInspect(state=ServiceState.RUNNING, health="unhealthy")
+        mock_status = AsyncMock(return_value=inspect)
+        monkeypatch.setattr(server_mod.app.state.backend, "status", mock_status)
+
+        resp = await client.get("/services/svc-a/health", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"name": "svc-a", "health": "unhealthy"}
 
 
 # ---------------------------------------------------------------------------
