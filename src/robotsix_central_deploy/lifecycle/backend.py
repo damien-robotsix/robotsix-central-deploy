@@ -321,8 +321,31 @@ class DockerSdkBackend(ExecutionBackend):
             except Exception:
                 pass
 
+            # running_digest from the image's RepoDigests
+            running_digest = ""
+            try:
+                image_id = container.attrs.get("Image", "")
+                if image_id:
+                    img = self._client.images.get(image_id)
+                    repo_digests = img.attrs.get("RepoDigests", [])
+                    # Prefer an entry matching the service image (strips tag)
+                    prefix = service.image.rsplit(":", 1)[0] + "@"
+                    for rd in repo_digests:
+                        if rd.startswith(prefix):
+                            running_digest = rd.split("@", 1)[1]
+                            break
+                    if not running_digest:
+                        # Fallback: any RepoDigest entry with sha256
+                        for rd in repo_digests:
+                            if "@sha256:" in rd:
+                                running_digest = rd.split("@", 1)[1]
+                                break
+            except Exception:
+                pass  # Gracefully degrade; digest stays ""
+
             return ComponentInspect(
                 state=state, image_revision=revision, health=health,
+                running_digest=running_digest,
             )
 
         return await loop.run_in_executor(None, _inspect)

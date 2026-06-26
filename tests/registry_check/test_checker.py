@@ -85,3 +85,17 @@ class TestRegistryChecker:
         assert result == "sha256:xyz"
         call_headers = mock_client.head.call_args[1].get("headers", {})
         assert call_headers.get("Authorization") == "Bearer my-pat"
+
+    async def test_accept_header_contains_oci_manifest_type(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:abc"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = self._make_checker(mock_client)
+        await checker.get_latest_digest("ghcr.io/owner/image:main")
+        call_headers = mock_client.head.call_args[1].get("headers", {})
+        accept = call_headers.get("Accept", "")
+        assert "application/vnd.oci.image.manifest.v1+json" in accept
+        assert "application/vnd.docker.distribution.manifest.v1+json" not in accept

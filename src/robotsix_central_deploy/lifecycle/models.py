@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -76,6 +76,7 @@ class ComponentInspect:
     state: ServiceState
     image_revision: str = ""  # org.opencontainers.image.revision label; empty if absent
     health: str = ""          # "healthy" | "unhealthy" | "starting" | "" (no health check)
+    running_digest: str = ""  # sha256:... from image RepoDigests; empty when unresolvable
 
 
 @dataclass
@@ -96,6 +97,12 @@ class ServiceRecord:
     latest_registry_digest: str = ""
 
     def to_status(self) -> "ServiceStatus":
+        if not self.deployed_image_digest or not self.latest_registry_digest:
+            update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
+        elif self.deployed_image_digest == self.latest_registry_digest:
+            update_state = "up-to-date"
+        else:
+            update_state = "update-available"
         return ServiceStatus(
             name=self.name,
             state=self.state,
@@ -106,7 +113,8 @@ class ServiceRecord:
             health=self.health,
             running_digest=self.deployed_image_digest,
             latest_digest=self.latest_registry_digest,
-            update_available=self.update_available,
+            update_available=(update_state == "update-available"),
+            update_state=update_state,
         )
 
     def to_list_item(self) -> "ServiceListItem":
@@ -131,6 +139,7 @@ class ServiceStatus(BaseModel):
     update_available: bool = False
     running_digest: str = ""   # deployed_image_digest short-form (full sha256)
     latest_digest: str = ""    # last known registry manifest digest
+    update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
 
 
 class ServiceListItem(BaseModel):

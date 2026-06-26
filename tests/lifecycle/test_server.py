@@ -422,6 +422,7 @@ class TestUpdateAvailable:
         assert resp.status_code == 200
         data = resp.json()
         assert data["update_available"] is False
+        assert data["update_state"] == "up-to-date"
         assert data["running_digest"] == "sha256:aaa"
         assert data["latest_digest"] == "sha256:aaa"
 
@@ -436,6 +437,7 @@ class TestUpdateAvailable:
         assert resp.status_code == 200
         data = resp.json()
         assert data["update_available"] is True
+        assert data["update_state"] == "update-available"
         assert data["running_digest"] == "sha256:aaa"
         assert data["latest_digest"] == "sha256:bbb"
 
@@ -450,6 +452,7 @@ class TestUpdateAvailable:
         assert resp.status_code == 200
         data = resp.json()
         assert data["update_available"] is False
+        assert data["update_state"] == "unknown"
         assert data["latest_digest"] == ""
 
     async def test_list_returns_update_available_field(
@@ -460,3 +463,20 @@ class TestUpdateAvailable:
         assert resp.status_code == 200
         items = resp.json()["services"]
         assert all("update_available" in item for item in items)
+
+    async def test_running_digest_populated_from_inspect(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="")
+        inspect = ComponentInspect(
+            state=ServiceState.RUNNING, running_digest="sha256:e9f0"
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "status",
+            AsyncMock(return_value=inspect),
+        )
+        resp = await client.get("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["running_digest"] == "sha256:e9f0"
+        assert data["update_state"] == "unknown"  # latest not yet fetched

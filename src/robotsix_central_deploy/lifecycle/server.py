@@ -62,6 +62,7 @@ _http_client: httpx.AsyncClient | None = None
 async def _registry_check_loop(
     store: ServiceStore,
     checker: RegistryChecker,
+    backend: ExecutionBackend,
     interval_sec: int,
 ) -> None:
     """Periodically poll the registry for every managed service and
@@ -71,6 +72,16 @@ async def _registry_check_loop(
             await asyncio.sleep(interval_sec)
             records = await store.list_all()
             for record in records:
+                # Refresh running_digest from Docker if unknown
+                if record.image and not record.deployed_image_digest:
+                    try:
+                        ins = await backend.status(record)
+                        if ins.running_digest:
+                            record.deployed_image_digest = ins.running_digest
+                            await store.put(record)
+                    except Exception:
+                        pass
+
                 if not record.image or not record.deployed_image_digest:
                     continue
                 try:
@@ -138,7 +149,7 @@ async def lifespan(app: FastAPI):
     if _config.registry_check_interval > 0:
         bg_task = asyncio.create_task(
             _registry_check_loop(
-                _store, registry_checker, _config.registry_check_interval,
+                _store, registry_checker, _backend, _config.registry_check_interval,
             )
         )
 
@@ -329,6 +340,11 @@ async def get_service_status(
         record.state = inspect.state
         record.image_revision = inspect.image_revision
         record.health = inspect.health
+        await store.put(record)
+
+    # Persist running_digest from image inspect if available
+    if inspect.running_digest and inspect.running_digest != record.deployed_image_digest:
+        record.deployed_image_digest = inspect.running_digest
         await store.put(record)
 
     # Registry check — update if we have image+digest and checker is available
