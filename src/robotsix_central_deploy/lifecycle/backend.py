@@ -9,9 +9,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from .models import ComponentInspect, ServiceRecord, ServiceState
+from .models import ComponentInspect, DeployOutcome, RollbackOutcome, ServiceRecord, ServiceState
+
+if TYPE_CHECKING:
+    from ..registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,21 @@ class ExecutionBackend(ABC):
 
     @abstractmethod
     async def status(self, service: ServiceRecord) -> ComponentInspect: ...
+
+    @abstractmethod
+    async def deploy(
+        self,
+        service: ServiceRecord,
+        config: "ComponentConfig",
+        image_ref: str,
+    ) -> DeployOutcome: ...
+
+    @abstractmethod
+    async def rollback(
+        self,
+        service: ServiceRecord,
+        config: "ComponentConfig",
+    ) -> RollbackOutcome: ...
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +69,12 @@ class NoopBackend(ExecutionBackend):
 
     async def status(self, service: ServiceRecord) -> ComponentInspect:
         return ComponentInspect(state=service.state)
+
+    async def deploy(self, service: ServiceRecord, config, image_ref: str) -> DeployOutcome:
+        return DeployOutcome(deployed_digest="sha256:noop", previous_digest="", state=ServiceState.RUNNING)
+
+    async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
+        return RollbackOutcome(deployed_digest=service.previous_image_digest or "sha256:noop", state=ServiceState.RUNNING)
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +135,12 @@ class DockerBackend(ExecutionBackend):
     async def status(self, service: ServiceRecord) -> ComponentInspect:
         state = await self._inspect_state(service.container_name or service.name) or ServiceState.UNKNOWN
         return ComponentInspect(state=state)
+
+    async def deploy(self, service: ServiceRecord, config, image_ref: str) -> DeployOutcome:
+        raise NotImplementedError("deploy not supported for DockerBackend — use DockerSdkBackend")
+
+    async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
+        raise NotImplementedError("rollback not supported for DockerBackend — use DockerSdkBackend")
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -325,3 +355,169 @@ class DockerSdkBackend(ExecutionBackend):
             return ServiceState.FAILED
 
         return ServiceState.RUNNING
+
+    # -- deploy / rollback --------------------------------------------------
+
+    def _create_container(self, config: "ComponentConfig", image_ref: str):
+        """Create a Docker container from a ComponentConfig spec (synchronous)."""
+        import docker
+
+        ports = {
+            f"{p.container}/{p.protocol}": p.host
+            for p in config.ports
+        }
+        volumes = {
+            m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
+            for m in config.mounts
+        }
+        healthcheck = None
+        if config.health_check:
+            hc = config.health_check
+            healthcheck = {
+                "Test": hc.test,
+                "Interval": hc.interval_seconds * int(1e9),
+                "Timeout": hc.timeout_seconds * int(1e9),
+                "Retries": hc.retries,
+                "StartPeriod": hc.start_period_seconds * int(1e9),
+            }
+        return self._client.containers.create(
+            image=image_ref,
+            name=config.container_name,
+            environment=config.env,
+            ports=ports,
+            volumes=volumes,
+            healthcheck=healthcheck,
+            detach=True,
+            restart_policy={"Name": "unless-stopped"},
+        )
+
+    async def _wait_healthy(self, name: str, timeout: float = 60.0) -> None:
+        """Poll container health status until healthy, or raise on unhealthy/timeout."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while loop.time() < deadline:
+            container = await self._get_container(name)
+            if container is None:
+                raise RuntimeError(f"Container {name} disappeared during health wait")
+
+            def _poll():
+                container.reload()
+                h = container.attrs["State"].get("Health")
+                return h["Status"] if h else "healthy"  # no healthcheck → treat as healthy
+
+            status = await loop.run_in_executor(None, _poll)
+            if status == "healthy":
+                return
+            if status == "unhealthy":
+                raise RuntimeError(f"Container {name} is unhealthy after deploy")
+            await asyncio.sleep(2)
+        logger.warning("Health wait timed out for %s after %.0fs — proceeding", name, timeout)
+
+    def _stop_and_remove(self, container) -> None:
+        """Stop and force-remove a container (synchronous, best-effort stop)."""
+        try:
+            container.stop(timeout=30)
+        except Exception:
+            pass
+        container.remove(force=True)
+
+    async def deploy(
+        self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
+    ) -> DeployOutcome:
+        """Pull *image_ref*, recreate the container from *config*, return outcome."""
+        import docker
+
+        name = self._container_name(service)
+        loop = asyncio.get_running_loop()
+
+        # Step 1 — pull target image; obtain its digest
+        try:
+            image = await loop.run_in_executor(
+                None, lambda: self._client.images.pull(image_ref)
+            )
+        except docker.errors.APIError as exc:
+            raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
+        new_digest: str = image.id  # "sha256:<hex>"
+
+        # Step 2 — snapshot current container's image digest (for rollback)
+        prior_digest = ""
+        existing = await self._get_container(name)
+        if existing is not None:
+            try:
+                prior_digest = await loop.run_in_executor(None, lambda: existing.image.id)
+            except Exception:
+                pass
+
+        # Step 3 — stop + remove old container (if present)
+        if existing is not None:
+            try:
+                await loop.run_in_executor(None, lambda: self._stop_and_remove(existing))
+            except docker.errors.APIError as exc:
+                raise RuntimeError(f"Failed to remove existing container {name!r}: {exc}") from exc
+
+        # Step 4 — create + start new container
+        try:
+            new_container = await loop.run_in_executor(
+                None, lambda: self._create_container(config, image_ref)
+            )
+            await loop.run_in_executor(None, new_container.start)
+        except Exception as exc:
+            # Best-effort restore: if we have a prior digest, try to recreate it
+            if prior_digest:
+                logger.error(
+                    "deploy %s failed after container removal — attempting restore from %s",
+                    name, prior_digest,
+                )
+                try:
+                    restore = await loop.run_in_executor(
+                        None, lambda: self._create_container(config, prior_digest)
+                    )
+                    await loop.run_in_executor(None, restore.start)
+                    logger.info("Restored %s from prior digest %s", name, prior_digest)
+                except Exception as restore_exc:
+                    logger.error("Restore of %s also failed: %s", name, restore_exc)
+            raise RuntimeError(f"Container create/start failed for {name!r}: {exc}") from exc
+
+        # Step 5 — health wait (if configured)
+        if config.health_check:
+            await self._wait_healthy(name, timeout=60.0)
+
+        return DeployOutcome(
+            deployed_digest=new_digest,
+            previous_digest=prior_digest,
+            state=ServiceState.RUNNING,
+        )
+
+    async def rollback(
+        self, service: ServiceRecord, config: "ComponentConfig"
+    ) -> RollbackOutcome:
+        """Recreate container from ``service.previous_image_digest``."""
+        import docker
+
+        name = self._container_name(service)
+        target_digest = service.previous_image_digest  # guaranteed non-empty by server layer
+        loop = asyncio.get_running_loop()
+
+        # Stop + remove current container
+        existing = await self._get_container(name)
+        if existing is not None:
+            try:
+                await loop.run_in_executor(None, lambda: self._stop_and_remove(existing))
+            except docker.errors.APIError as exc:
+                raise RuntimeError(f"Failed to remove container {name!r} for rollback: {exc}") from exc
+
+        # Create + start from prior digest
+        try:
+            rollback_container = await loop.run_in_executor(
+                None, lambda: self._create_container(config, target_digest)
+            )
+            await loop.run_in_executor(None, rollback_container.start)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Rollback container create/start failed for {name!r}: {exc}"
+            ) from exc
+
+        if config.health_check:
+            await self._wait_healthy(name, timeout=60.0)
+
+        return RollbackOutcome(deployed_digest=target_digest, state=ServiceState.RUNNING)

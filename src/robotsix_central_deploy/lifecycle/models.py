@@ -90,6 +90,8 @@ class ServiceRecord:
     container_name: str = ""     # Docker container name; if blank, falls back to `name`
     image_revision: str = ""
     health: str = ""
+    deployed_image_digest: str = ""   # sha256 digest of the currently running image
+    previous_image_digest: str = ""  # sha256 digest of the image before the last deploy (enables rollback)
 
     def to_status(self) -> "ServiceStatus":
         return ServiceStatus(
@@ -151,3 +153,50 @@ class ErrorDetail(BaseModel):
 
     error: str
     detail: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Deploy / rollback schemas
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DeployOutcome:
+    """Result of a ``deploy()`` call on the execution backend."""
+
+    deployed_digest: str   # sha256 digest of the newly pulled/started image
+    previous_digest: str   # sha256 digest of the image that was running before
+    state: ServiceState
+
+
+@dataclass
+class RollbackOutcome:
+    """Result of a ``rollback()`` call on the execution backend."""
+
+    deployed_digest: str   # sha256 digest of the image now running (the prior digest)
+    state: ServiceState
+
+
+class DeployRequest(BaseModel):
+    """Optional image override for a deploy request."""
+
+    image: Optional[str] = None  # override image ref; if None, uses ComponentConfig.image
+
+
+class DeployResponse(BaseModel):
+    """API response for ``POST /services/{name}/deploy``."""
+
+    name: str
+    action: str = "deploy"
+    deployed_digest: str
+    previous_digest: str
+    current_state: ServiceState
+
+
+class RollbackResponse(BaseModel):
+    """API response for ``POST /services/{name}/rollback``."""
+
+    name: str
+    action: str = "rollback"
+    rolled_back_to_digest: str
+    current_state: ServiceState
