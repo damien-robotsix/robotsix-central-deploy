@@ -5,7 +5,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Enable periodic analysis workflows: audit, health, test_gap,
-  module_curator, completeness_check, copy_paste.
+  module_curator, completeness_check, copy_paste, state_sync.
 
 ## [0.1.0] — 2025-06-25
 
