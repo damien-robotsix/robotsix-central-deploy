@@ -4,6 +4,9 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Removed dead backward-compat alias** — `verify_api_key = verify_auth`
+  alias removed from `src/robotsix_central_deploy/lifecycle/auth.py`.  All
+  callers already use `verify_auth` directly.
 - **Monitoring UI dashboard** — new `GET /ui` endpoint serves a self-contained
   HTML dashboard at `/ui` showing live component status, image revision (first 12
   chars), health, and start/stop/restart controls.  Auth-gated via `verify_auth`;
