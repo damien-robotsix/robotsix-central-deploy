@@ -28,6 +28,9 @@
   .badge-failed { background: var(--red); }
   .badge-starting, .badge-stopping, .badge-restarting { background: var(--amber); }
   .badge-error { background: var(--red); }
+  .badge-update-ok { background: var(--green); }
+  .badge-update-avail { background: var(--amber); }
+  .badge-update-unknown { background: var(--grey); }
   .health-healthy { color: var(--green); font-weight: 600; }
   .health-unhealthy { color: var(--red); font-weight: 600; }
   .health-unknown { color: var(--grey); }
@@ -111,12 +114,13 @@
       <th>Status</th>
       <th>Image Revision</th>
       <th>Health</th>
+      <th>Up to date</th>
       <th>Actions</th>
       <th>Logs</th>
     </tr>
   </thead>
   <tbody id="table-body">
-    <tr><td colspan="6" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
+    <tr><td colspan="7" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
   </tbody>
 </table>
 
@@ -174,11 +178,26 @@ function renderRow(svc) {
     errorHtml = `<span class="error-detail" title="${escAttr(lastError)}">${escHtml(lastError.slice(0, 80))}${lastError.length > 80 ? '…' : ''}</span>`;
   }
 
+  // Up-to-date badge
+  const updateState = svc.update_state || 'unknown';
+  let updateBadge = '';
+  if (updateState === 'up-to-date') {
+    updateBadge = '<span class="badge badge-update-ok">up to date</span>';
+  } else if (updateState === 'update-available') {
+    const runningShort = (svc.running_digest || '').replace(/^sha256:/, '').slice(0, 12);
+    const latestShort = (svc.latest_digest || '').replace(/^sha256:/, '').slice(0, 12);
+    const tooltip = `running ${runningShort || '?'} ≠ latest ${latestShort || '?'}`;
+    updateBadge = `<span class="badge badge-update-avail" title="${escAttr(tooltip)}">update available</span>`;
+  } else {
+    updateBadge = '<span class="badge badge-update-unknown">unknown</span>';
+  }
+
   return `<tr id="row-${escAttr(svc.name)}">
     <td>${escHtml(svc.name)}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
     <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
     <td><span class="${healthClass}">${escHtml(healthDisplay)}</span></td>
+    <td>${updateBadge}</td>
     <td class="actions">
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
@@ -287,7 +306,7 @@ async function loadDashboard() {
         rows.push(`<tr id="row-${escAttr(svc.name)}">
           <td>${escHtml(svc.name)}</td>
           <td><span class="badge badge-error">error</span></td>
-          <td>—</td><td>—</td><td></td><td></td>
+          <td>—</td><td>—</td><td>—</td><td></td><td></td>
         </tr>`);
       }
     }
