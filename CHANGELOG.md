@@ -4,6 +4,22 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Registry image-update detection** — new `registry_check` subpackage with
+  `RegistryChecker` that polls the GHCR registry for the latest manifest
+  digest and compares against the deployed image digest.
+  - `GET /services/{name}` now returns `update_available` (bool),
+    `running_digest`, and `latest_digest` fields.
+  - `GET /services` list items include `update_available`.
+  - New config options: `ROBOTSIX_LIFECYCLE_GHCR_TOKEN`,
+    `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL` (cache seconds, default 300),
+    `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL` (background poll seconds;
+    0 disables).
+  - `deployed_image_digest` now stores the manifest digest (from
+    `RepoDigests`) instead of the image config digest, making it
+    comparable to the registry's `Docker-Content-Digest` header.
+  - Background task updates all service records periodically when
+    `registry_check_interval > 0`; shuts down cleanly on server exit.
+
 - **Added `follow` query param to logs endpoint** — `GET /services/{name}/logs`
   now accepts `follow=bool` (default `false`).  When `follow=true`, the
   `DockerSdkBackend` passes `follow=True` to the Docker SDK and iterates log

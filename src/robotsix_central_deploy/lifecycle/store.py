@@ -100,6 +100,8 @@ class FileStore(ServiceStore):
                 health=d.get("health", ""),
                 deployed_image_digest=d.get("deployed_image_digest", ""),
                 previous_image_digest=d.get("previous_image_digest", ""),
+                update_available=d.get('update_available', False),
+                latest_registry_digest=d.get('latest_registry_digest', ''),
             )
         return records
 
@@ -116,6 +118,8 @@ class FileStore(ServiceStore):
                 "health": r.health,
                 "deployed_image_digest": r.deployed_image_digest,
                 "previous_image_digest": r.previous_image_digest,
+                "update_available": r.update_available,
+                "latest_registry_digest": r.latest_registry_digest,
             }
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(yaml.safe_dump(raw, default_flow_style=False), encoding="utf-8")

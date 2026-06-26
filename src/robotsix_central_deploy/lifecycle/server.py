@@ -14,11 +14,13 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -41,10 +43,51 @@ from .models import (
     can_transition,
 )
 from ..registry.loader import ComponentRegistry, RegistryLoadError
+from ..registry_check import RegistryChecker
 from ..ui.router import router as ui_router
 from .store import FileStore, InMemoryStore, ServiceStore
 
 logger = logging.getLogger(__name__)
+
+#: Module-level registry checker (set by lifespan, used by endpoints).
+_registry_checker: RegistryChecker | None = None
+_http_client: httpx.AsyncClient | None = None
+
+
+# ---------------------------------------------------------------------------
+# Background registry-check loop
+# ---------------------------------------------------------------------------
+
+
+async def _registry_check_loop(
+    store: ServiceStore,
+    checker: RegistryChecker,
+    interval_sec: int,
+) -> None:
+    """Periodically poll the registry for every managed service and
+    update ``update_available`` / ``latest_registry_digest``."""
+    try:
+        while True:
+            await asyncio.sleep(interval_sec)
+            records = await store.list_all()
+            for record in records:
+                if not record.image or not record.deployed_image_digest:
+                    continue
+                try:
+                    latest = await checker.get_latest_digest(record.image)
+                    if latest is not None:
+                        new_ua = latest != record.deployed_image_digest
+                        if (
+                            record.update_available != new_ua
+                            or record.latest_registry_digest != latest
+                        ):
+                            record.update_available = new_ua
+                            record.latest_registry_digest = latest
+                            await store.put(record)
+                except Exception:  # noqa: BLE001
+                    pass
+    except asyncio.CancelledError:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -72,13 +115,33 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _config, _store, _backend
+    global _config, _store, _backend, _registry_checker, _http_client
     _config = LifecycleConfig()  # type: ignore[call-arg]
     _store = _build_store(_config)
     _backend = _build_backend(_config)
     app.state.config = _config
     app.state.store = _store
     app.state.backend = _backend
+
+    # -- Registry checker ------------------------------------------------
+    http_client = httpx.AsyncClient(timeout=10.0)
+    registry_checker = RegistryChecker(
+        http_client,
+        ghcr_token=_config.ghcr_token,
+        ttl_seconds=_config.registry_check_ttl,
+    )
+    app.state.registry_checker = registry_checker
+    _registry_checker = registry_checker
+    _http_client = http_client
+
+    bg_task = None
+    if _config.registry_check_interval > 0:
+        bg_task = asyncio.create_task(
+            _registry_check_loop(
+                _store, registry_checker, _config.registry_check_interval,
+            )
+        )
+
     logger.info(
         "lifecycle server starting — store=%s backend=%s auth=%s",
         type(_store).__name__,
@@ -110,6 +173,11 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry  # may be None if load failed
 
     yield
+
+    if bg_task:
+        bg_task.cancel()
+        await asyncio.gather(bg_task, return_exceptions=True)
+    await http_client.aclose()
     logger.info("lifecycle server shutting down")
 
 
@@ -161,6 +229,10 @@ async def _get_registry(request: Request):
     if registry is None:
         raise HTTPException(status_code=503, detail="Component registry not loaded")
     return registry
+
+
+def _get_registry_checker(request: Request) -> RegistryChecker:
+    return request.app.state.registry_checker
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -240,6 +312,7 @@ async def list_services(
 )
 async def get_service_status(
     name: str,
+    request: Request,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
@@ -257,6 +330,24 @@ async def get_service_status(
         record.image_revision = inspect.image_revision
         record.health = inspect.health
         await store.put(record)
+
+    # Registry check — update if we have image+digest and checker is available
+    checker: RegistryChecker = _get_registry_checker(request)
+    if record.image and record.deployed_image_digest:
+        try:
+            latest = await checker.get_latest_digest(record.image)
+            if latest is not None:
+                new_ua = latest != record.deployed_image_digest
+                if (
+                    record.update_available != new_ua
+                    or record.latest_registry_digest != latest
+                ):
+                    record.update_available = new_ua
+                    record.latest_registry_digest = latest
+                    await store.put(record)
+        except Exception:  # noqa: BLE001
+            pass  # degrade gracefully; return last known update_available
+
     return record.to_status()
 
 
