@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robotsix Deploy — Component Status</title>
+<style>
+  :root {
+    --green: #2e7d32; --green-bg: #e8f5e9;
+    --red: #c62828; --red-bg: #ffebee;
+    --grey: #616161; --grey-bg: #f5f5f5;
+    --amber: #e65100; --amber-bg: #fff8e1;
+    --blue: #0d47a1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafafa; color: #212121; padding: 24px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
+  h1 { font-size: 1.4rem; color: var(--blue); }
+  #refresh-time { font-size: 0.8rem; color: var(--grey); }
+  .error-banner { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); padding: 10px 16px; border-radius: 4px; margin-bottom: 16px; display: none; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); overflow: hidden; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e0e0e0; font-size: 0.9rem; }
+  th { background: #f5f5f5; font-weight: 600; color: #424242; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; color: #fff; }
+  .badge-running { background: var(--green); }
+  .badge-stopped { background: var(--grey); }
+  .badge-failed { background: var(--red); }
+  .badge-starting, .badge-stopping, .badge-restarting { background: var(--amber); }
+  .badge-error { background: var(--red); }
+  .health-healthy { color: var(--green); font-weight: 600; }
+  .health-unhealthy { color: var(--red); font-weight: 600; }
+  .health-unknown { color: var(--grey); }
+  .revision { font-family: monospace; font-size: 0.82rem; cursor: default; }
+  .actions { display: flex; gap: 4px; }
+  .actions button { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #bdbdbd; border-radius: 3px; background: #fff; cursor: pointer; }
+  .actions button:hover:not(:disabled) { background: #e3f2fd; border-color: var(--blue); }
+  .actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: not-allowed; }
+  .error-detail { display: block; font-size: 0.75rem; color: var(--red); margin-top: 2px; }
+  .inline-error { font-size: 0.75rem; color: var(--red); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Robotsix Deploy — Component Status</h1>
+  <span id="refresh-time">Last refreshed: --:--:--</span>
+</header>
+
+<div id="error-banner" class="error-banner"></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Status</th>
+      <th>Image Revision</th>
+      <th>Health</th>
+      <th>Actions</th>
+      <th>Logs</th>
+    </tr>
+  </thead>
+  <tbody id="table-body">
+    <tr><td colspan="6" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
+  </tbody>
+</table>
+
+<script>
+const REFRESH_INTERVAL_MS = 30000;
+let refreshTimer = null;
+
+function updateRefreshTime() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  document.getElementById('refresh-time').textContent = `Last refreshed: ${hh}:${mm}:${ss}`;
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideError() {
+  const el = document.getElementById('error-banner');
+  el.style.display = 'none';
+}
+
+function renderRow(svc) {
+  const state = svc.state || 'unknown';
+  const badgeClass = `badge-${state}`;
+  const rev = svc.image_revision || '';
+  const revShort = rev ? rev.slice(0, 12) : '\u2014';
+  const health = svc.health || '';
+  let healthClass = 'health-unknown';
+  if (health === 'healthy') healthClass = 'health-healthy';
+  else if (health === 'unhealthy') healthClass = 'health-unhealthy';
+  const healthDisplay = health || '\u2014';
+  const lastError = svc.last_error || '';
+
+  let errorHtml = '';
+  if (lastError) {
+    errorHtml = `<span class="error-detail" title="${escAttr(lastError)}">${escHtml(lastError.slice(0, 80))}${lastError.length > 80 ? '…' : ''}</span>`;
+  }
+
+  return `<tr id="row-${escAttr(svc.name)}">
+    <td>${escHtml(svc.name)}</td>
+    <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
+    <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
+    <td><span class="${healthClass}">${escHtml(healthDisplay)}</span></td>
+    <td class="actions">
+      <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
+      <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
+      <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
+      <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
+    </td>
+    <td><a href="#" class="logs-link" data-component="${escAttr(svc.name)}" onclick="return false;">Logs</a></td>
+  </tr>`;
+}
+
+function setButtonsDisabled(name, disabled) {
+  ['start', 'stop', 'restart'].forEach(action => {
+    const btn = document.getElementById(`btn-${action}-${name}`);
+    if (btn) btn.disabled = disabled;
+  });
+}
+
+function showRowError(name, msg) {
+  const el = document.getElementById(`err-${name}`);
+  if (el) {
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+}
+
+function hideRowError(name) {
+  const el = document.getElementById(`err-${name}`);
+  if (el) {
+    el.style.display = 'none';
+  }
+}
+
+async function fetchOneStatus(name) {
+  const resp = await fetch(`/services/${encodeURIComponent(name)}`, { credentials: 'same-origin' });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+async function loadDashboard() {
+  hideError();
+  try {
+    const resp = await fetch('/services', { credentials: 'same-origin' });
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        // Re-trigger auth challenge by navigating to /ui
+        window.location.href = '/ui';
+        return;
+      }
+      const body = await resp.json().catch(() => ({}));
+      showError(body.error || `Failed to load services (HTTP ${resp.status})`);
+      return;
+    }
+    const data = await resp.json();
+    const services = data.services || [];
+
+    const results = await Promise.allSettled(
+      services.map(svc => fetchOneStatus(svc.name))
+    );
+
+    const rows = [];
+    for (let i = 0; i < services.length; i++) {
+      const svc = services[i];
+      const result = results[i];
+      if (result.status === 'fulfilled') {
+        rows.push(renderRow(result.value));
+      } else {
+        rows.push(`<tr id="row-${escAttr(svc.name)}">
+          <td>${escHtml(svc.name)}</td>
+          <td><span class="badge badge-error">error</span></td>
+          <td>—</td><td>—</td><td></td><td></td>
+        </tr>`);
+      }
+    }
+
+    document.getElementById('table-body').innerHTML = rows.join('');
+    updateRefreshTime();
+  } catch (err) {
+    showError(`Dashboard error: ${err.message}`);
+  }
+}
+
+async function doAction(name, action) {
+  hideRowError(name);
+  setButtonsDisabled(name, true);
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/${action}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+    // Refresh just this row
+    const svc = await fetchOneStatus(name);
+    const rowEl = document.getElementById(`row-${name}`);
+    if (rowEl) {
+      rowEl.outerHTML = renderRow(svc);
+    }
+    updateRefreshTime();
+  } catch (err) {
+    showRowError(name, err.message);
+    // Try to refresh the row anyway to get current state
+    try {
+      const svc = await fetchOneStatus(name);
+      const rowEl = document.getElementById(`row-${name}`);
+      if (rowEl) {
+        rowEl.outerHTML = renderRow(svc);
+      }
+    } catch (_) { /* ignore */ }
+  } finally {
+    setButtonsDisabled(name, false);
+    startAutoRefresh();
+  }
+}
+
+function escHtml(s) {
+  const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
+  return String(s).replace(/[&<>"']/g, ch => map[ch]);
+}
+
+function escAttr(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadDashboard, REFRESH_INTERVAL_MS);
+}
+
+// Bootstrap
+loadDashboard();
+startAutoRefresh();
+</script>
+
+</body>
+</html>

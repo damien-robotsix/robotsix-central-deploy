@@ -39,3 +39,16 @@ modules:
       - pydantic
       - pyyaml
     tests: tests/registry/
+
+  ui:
+    name: ui
+    description: >
+      Monitoring dashboard UI — serves a self-contained HTML page at /ui
+      showing live component status, image revision, health, and start/stop/
+      restart controls. Auth-gated via verify_auth.
+    package: robotsix_central_deploy.ui
+    dependencies:
+      - fastapi
+    endpoints:
+      - GET /ui
+    tests: tests/ui/

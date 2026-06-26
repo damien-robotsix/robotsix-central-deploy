@@ -385,7 +385,6 @@ class DockerSdkBackend(ExecutionBackend):
 
     def _create_container(self, config: "ComponentConfig", image_ref: str):
         """Create a Docker container from a ComponentConfig spec (synchronous)."""
-        import docker
 
         ports = {
             f"{p.container}/{p.protocol}": p.host

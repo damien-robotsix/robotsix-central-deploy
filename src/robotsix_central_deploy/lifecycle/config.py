@@ -51,5 +51,11 @@ class LifecycleConfig(BaseSettings):
 
     @property
     def auth_required(self) -> bool:
-        """True when credentials are configured — auth is optional for dev."""
-        return bool(self.api_key) or bool(self.auth_username and self.auth_password)
+        """True when credentials are configured — auth is optional for dev.
+
+        Only ``api_key`` gates enforcement.  The legacy ``auth_username`` /
+        ``auth_password`` fields are no longer consulted because ``verify_auth``
+        matches passwords against ``api_key`` alone.  A user with only those
+        legacy vars set would otherwise be locked out with no valid credential.
+        """
+        return bool(self.api_key)

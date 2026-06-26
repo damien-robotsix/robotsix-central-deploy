@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
@@ -38,6 +37,7 @@ from .models import (
     can_transition,
 )
 from ..registry.loader import ComponentRegistry, RegistryLoadError
+from ..ui.router import router as ui_router
 from .store import FileStore, InMemoryStore, ServiceStore
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,8 @@ app = FastAPI(
         401: {"model": ErrorDetail, "description": "Unauthorized — invalid or missing credentials"},
     },
 )
+
+app.include_router(ui_router)
 
 
 # ---------------------------------------------------------------------------

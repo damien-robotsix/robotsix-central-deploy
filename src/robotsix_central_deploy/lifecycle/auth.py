@@ -23,28 +23,31 @@ async def verify_auth(request: Request) -> None:
     if api_key and config.api_key and _safe_compare(api_key, config.api_key):
         return
 
-    # Try HTTP Basic Auth
+    # Try HTTP Basic Auth — password must equal config.api_key; username is ignored.
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Basic "):
-        try:
-            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-            username, _, password = decoded.partition(":")
-        except Exception:
-            pass
-        else:
-            if (
-                config.auth_username
-                and config.auth_password
-                and _safe_compare(username, config.auth_username)
-                and _safe_compare(password, config.auth_password)
-            ):
-                return
+        password = _decode_basic_auth(auth_header)
+        if password and _safe_compare(password, config.api_key):
+            return
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Authentication required",
-        headers={"WWW-Authenticate": 'Basic realm="Central Deploy"'},
+        headers={"WWW-Authenticate": 'Basic realm="Robotsix Central Deploy"'},
     )
+
+
+def _decode_basic_auth(header: str) -> str:
+    """Decode an HTTP Basic Auth header and return the password portion.
+
+    Returns ``""`` on malformed input — never raises.
+    """
+    try:
+        decoded = base64.b64decode(header[6:]).decode("utf-8")
+        _, _, password = decoded.partition(":")
+        return password
+    except Exception:
+        return ""
 
 
 def _safe_compare(a: str, b: str) -> bool:
@@ -55,3 +58,7 @@ def _safe_compare(a: str, b: str) -> bool:
     for x, y in zip(a, b):
         result |= ord(x) ^ ord(y)
     return result == 0
+
+
+# Backward-compatible alias for callers that import verify_api_key.
+verify_api_key = verify_auth
