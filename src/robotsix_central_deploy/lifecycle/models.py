@@ -207,3 +207,26 @@ class RollbackResponse(BaseModel):
     action: str = "rollback"
     rolled_back_to_digest: str
     current_state: ServiceState
+
+
+# ---------------------------------------------------------------------------
+# Disk usage schemas
+# ---------------------------------------------------------------------------
+
+
+class DockerDfStats(BaseModel):
+    """Docker storage breakdown from ``docker system df``."""
+
+    images_size_bytes: int = 0
+    build_cache_size_bytes: int = 0
+    build_cache_reclaimable_bytes: int = 0
+
+
+class DiskUsageResponse(BaseModel):
+    """Host disk usage + Docker storage breakdown."""
+
+    total_bytes: int
+    used_bytes: int
+    free_bytes: int
+    warn_threshold_bytes: int
+    docker: DockerDfStats

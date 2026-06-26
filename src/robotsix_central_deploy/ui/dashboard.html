@@ -39,6 +39,14 @@
   .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: not-allowed; }
   .error-detail { display: block; font-size: 0.75rem; color: var(--red); margin-top: 2px; }
   .inline-error { font-size: 0.75rem; color: var(--red); margin-top: 2px; }
+  .banner-warn { background:#c0392b; color:#fff; padding:8px 16px; border-radius:4px; margin-bottom:12px; font-weight:bold; }
+  .disk-panel { margin-bottom:20px; }
+  .disk-panel table { border-collapse:collapse; min-width:400px; }
+  .disk-panel td, .disk-panel th { padding:4px 12px; text-align:right; }
+  .disk-panel th { text-align:left; font-weight:normal; color:#888; }
+  .disk-bar-wrap { width:200px; height:12px; background:#ddd; border-radius:6px; display:inline-block; vertical-align:middle; }
+  .disk-bar-fill { height:100%; border-radius:6px; background:#27ae60; }
+  .disk-bar-fill.warn { background:#c0392b; }
 </style>
 </head>
 <body>
@@ -49,6 +57,15 @@
 </header>
 
 <div id="error-banner" class="error-banner"></div>
+
+<div id="disk-warning" class="banner banner-warn" style="display:none">
+  ⚠ Low disk space — free space is below threshold!
+</div>
+
+<section class="disk-panel">
+  <h2>Disk Usage</h2>
+  <div id="disk-content">Loading…</div>
+</section>
 
 <table>
   <thead>
@@ -152,8 +169,44 @@ async function fetchOneStatus(name) {
   return resp.json();
 }
 
+function authHeaders() {
+  // Browser sends Basic Auth automatically after initial authentication.
+  return {};
+}
+
+async function fetchDiskUsage() {
+    try {
+        const resp = await fetch('/disk', { headers: authHeaders(), credentials: 'same-origin' });
+        if (!resp.ok) { document.getElementById('disk-content').textContent = 'Error loading disk info.'; return; }
+        renderDiskPanel(await resp.json());
+    } catch (e) {
+        document.getElementById('disk-content').textContent = 'Error: ' + e.message;
+    }
+}
+
+function fmt_gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GiB'; }
+
+function renderDiskPanel(data) {
+    const usedPct = Math.round(data.used_bytes / data.total_bytes * 100);
+    const warn = data.free_bytes < data.warn_threshold_bytes;
+    document.getElementById('disk-warning').style.display = warn ? '' : 'none';
+    const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
+    document.getElementById('disk-content').innerHTML = `
+        <table>
+          <tr><th>Host total</th><td>${fmt_gb(data.total_bytes)}</td></tr>
+          <tr><th>Host used</th><td>${fmt_gb(data.used_bytes)}
+            <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
+            ${usedPct}%</td></tr>
+          <tr><th>Host free</th><td>${fmt_gb(data.free_bytes)}</td></tr>
+          <tr><th>Docker images</th><td>${fmt_gb(data.docker.images_size_bytes)}</td></tr>
+          <tr><th>Docker build cache</th><td>${fmt_gb(data.docker.build_cache_size_bytes)}</td></tr>
+          <tr><th>Build cache reclaimable</th><td>${fmt_gb(data.docker.build_cache_reclaimable_bytes)}</td></tr>
+        </table>`;
+}
+
 async function loadDashboard() {
   hideError();
+  fetchDiskUsage(); // fire-and-forget disk refresh alongside services
   try {
     const resp = await fetch('/services', { credentials: 'same-origin' });
     if (!resp.ok) {

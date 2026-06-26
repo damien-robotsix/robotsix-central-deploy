@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Optional
 
-from .models import ComponentInspect, DeployOutcome, RollbackOutcome, ServiceRecord, ServiceState
+from .models import ComponentInspect, DeployOutcome, DockerDfStats, RollbackOutcome, ServiceRecord, ServiceState
 
 if TYPE_CHECKING:
     from ..registry.models import ComponentConfig
@@ -58,6 +58,11 @@ class ExecutionBackend(ABC):
         since: str | None = None,
     ) -> AsyncIterator[bytes]: ...
 
+    @abstractmethod
+    async def disk_df(self) -> DockerDfStats:
+        """Return Docker storage breakdown (images, build cache, reclaimable)."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -92,6 +97,9 @@ class NoopBackend(ExecutionBackend):
         since: str | None = None,
     ) -> AsyncIterator[bytes]:
         yield b"[noop backend]\n"
+
+    async def disk_df(self) -> DockerDfStats:
+        return DockerDfStats()
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +174,10 @@ class DockerBackend(ExecutionBackend):
         since: str | None = None,
     ) -> AsyncIterator[bytes]:
         yield b"[docker-cli backend: use docker_sdk for log streaming]\n"
+
+    async def disk_df(self) -> DockerDfStats:
+        # CLI backend does not support df — returns zeroes.
+        return DockerDfStats()
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -578,3 +590,27 @@ class DockerSdkBackend(ExecutionBackend):
                 yield chunk if isinstance(chunk, bytes) else chunk.encode()
         except docker.errors.APIError as exc:
             yield f"[docker error: {exc}]\n".encode()
+
+    async def disk_df(self) -> DockerDfStats:
+        import docker  # noqa: PLC0415
+
+        loop = asyncio.get_running_loop()
+        try:
+            result = await loop.run_in_executor(None, self._client.api.df)
+        except docker.errors.APIError as exc:
+            logger.warning("docker df failed: %s", exc)
+            return DockerDfStats()
+        images = result.get("Images") or []
+        build_cache = result.get("BuildCache") or []
+        images_size = sum(img.get("Size", 0) for img in images)
+        builder_size = result.get("BuilderSize", 0)
+        reclaimable = sum(
+            item.get("Size", 0)
+            for item in build_cache
+            if not item.get("InUse", True)
+        )
+        return DockerDfStats(
+            images_size_bytes=images_size,
+            build_cache_size_bytes=builder_size,
+            build_cache_reclaimable_bytes=reclaimable,
+        )
