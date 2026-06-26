@@ -476,7 +476,14 @@ class DockerSdkBackend(ExecutionBackend):
             )
         except docker.errors.APIError as exc:
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
-        new_digest: str = image.id  # "sha256:<hex>"
+        # Derive manifest digest from RepoDigests (comparable to registry
+        # Docker-Content-Digest header), falling back to config digest.
+        repo_without_tag = image_ref.rsplit(':', 1)[0]
+        repo_digests = image.attrs.get('RepoDigests', [])
+        new_digest: str = next(
+            (rd.split('@')[1] for rd in repo_digests if rd.startswith(repo_without_tag + '@')),
+            image.id,
+        )
 
         # Step 2 — snapshot current container's image digest (for rollback)
         prior_digest = ""

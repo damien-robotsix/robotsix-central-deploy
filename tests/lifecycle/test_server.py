@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from robotsix_central_deploy.lifecycle.backend import ComponentInspect, NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
@@ -25,12 +25,15 @@ from robotsix_central_deploy.lifecycle import server as server_mod
 # ---------------------------------------------------------------------------
 
 
-async def _seed_store(*names: str) -> None:
+async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -> None:
     """Populate the server's store with records for testing."""
     s = server_mod.app.state.store
     assert s is not None
     for name in names:
-        await s.put(ServiceRecord(name=name, state=ServiceState.STOPPED, image=f"{name}:latest"))
+        rec = ServiceRecord(name=name, state=ServiceState.STOPPED, image=image or f"{name}:latest")
+        if deployed_digest:
+            rec.deployed_image_digest = deployed_digest
+        await s.put(rec)
 
 
 # ---------------------------------------------------------------------------
@@ -50,13 +53,19 @@ def _reset_globals(monkeypatch):
     store = InMemoryStore()
     backend = NoopBackend()
 
+    # Registry checker mock
+    mock_checker = MagicMock()
+    mock_checker.get_latest_digest = AsyncMock(return_value=None)
+
     # Set both the module-level globals and app.state so all code paths work.
     server_mod._config = cfg
     server_mod._store = store
     server_mod._backend = backend
+    server_mod._registry_checker = mock_checker
     server_mod.app.state.config = cfg
     server_mod.app.state.store = store
     server_mod.app.state.backend = backend
+    server_mod.app.state.registry_checker = mock_checker
 
 
 @pytest.fixture
@@ -394,3 +403,60 @@ class TestLogsEndpoint:
         assert resp.status_code == 422
         resp2 = await client.get("/services/svc-a/logs?tail=10001", headers=auth_headers)
         assert resp2.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Update available (registry check)
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateAvailable:
+    async def test_up_to_date_when_digests_match(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa")
+        mock_checker = MagicMock()
+        mock_checker.get_latest_digest = AsyncMock(return_value="sha256:aaa")
+        monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
+        resp = await client.get("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["update_available"] is False
+        assert data["running_digest"] == "sha256:aaa"
+        assert data["latest_digest"] == "sha256:aaa"
+
+    async def test_update_available_when_digests_differ(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa")
+        mock_checker = MagicMock()
+        mock_checker.get_latest_digest = AsyncMock(return_value="sha256:bbb")
+        monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
+        resp = await client.get("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["update_available"] is True
+        assert data["running_digest"] == "sha256:aaa"
+        assert data["latest_digest"] == "sha256:bbb"
+
+    async def test_registry_unreachable_degrades_gracefully(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa")
+        mock_checker = MagicMock()
+        mock_checker.get_latest_digest = AsyncMock(return_value=None)
+        monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
+        resp = await client.get("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["update_available"] is False
+        assert data["latest_digest"] == ""
+
+    async def test_list_returns_update_available_field(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("svc-a")
+        resp = await client.get("/services", headers=auth_headers)
+        assert resp.status_code == 200
+        items = resp.json()["services"]
+        assert all("update_available" in item for item in items)

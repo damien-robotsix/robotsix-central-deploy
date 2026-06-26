@@ -52,3 +52,14 @@ modules:
     endpoints:
       - GET /ui
     tests: tests/ui/
+
+  registry_check:
+    name: registry_check
+    description: >
+      Registry image-update detection — polls the GHCR registry for the
+      latest manifest digest and compares against the deployed image digest
+      to determine whether an update is available.
+    package: robotsix_central_deploy.registry_check
+    dependencies:
+      - httpx
+    tests: tests/registry_check/

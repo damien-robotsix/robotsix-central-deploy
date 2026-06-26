@@ -92,6 +92,8 @@ class ServiceRecord:
     health: str = ""
     deployed_image_digest: str = ""   # sha256 digest of the currently running image
     previous_image_digest: str = ""  # sha256 digest of the image before the last deploy (enables rollback)
+    update_available: bool = False
+    latest_registry_digest: str = ""
 
     def to_status(self) -> "ServiceStatus":
         return ServiceStatus(
@@ -102,10 +104,13 @@ class ServiceRecord:
             updated_at=self.updated_at,
             image_revision=self.image_revision,
             health=self.health,
+            running_digest=self.deployed_image_digest,
+            latest_digest=self.latest_registry_digest,
+            update_available=self.update_available,
         )
 
     def to_list_item(self) -> "ServiceListItem":
-        return ServiceListItem(name=self.name, state=self.state)
+        return ServiceListItem(name=self.name, state=self.state, update_available=self.update_available)
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +128,9 @@ class ServiceStatus(BaseModel):
     health: str = ""
     last_error: Optional[str] = None
     updated_at: float = Field(default_factory=time.time)
+    update_available: bool = False
+    running_digest: str = ""   # deployed_image_digest short-form (full sha256)
+    latest_digest: str = ""    # last known registry manifest digest
 
 
 class ServiceListItem(BaseModel):
@@ -130,6 +138,7 @@ class ServiceListItem(BaseModel):
 
     name: str
     state: ServiceState
+    update_available: bool = False
 
 
 class ServiceListResponse(BaseModel):

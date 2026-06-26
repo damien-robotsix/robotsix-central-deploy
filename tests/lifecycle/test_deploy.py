@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -74,13 +74,18 @@ def _ensure_registry(monkeypatch, registry):
     store = InMemoryStore()
     backend = NoopBackend()
 
+    mock_checker = MagicMock()
+    mock_checker.get_latest_digest = AsyncMock(return_value=None)
+
     server_mod._config = cfg
     server_mod._store = store
     server_mod._backend = backend
+    server_mod._registry_checker = mock_checker
     server_mod.app.state.config = cfg
     server_mod.app.state.store = store
     server_mod.app.state.backend = backend
     server_mod.app.state.registry = registry
+    server_mod.app.state.registry_checker = mock_checker
 
 
 # ---------------------------------------------------------------------------
