@@ -347,8 +347,8 @@ class TestLogsEndpoint:
 
         captured: list[dict] = []
 
-        async def _fake_stream(service, tail=100, since=None):
-            captured.append({"tail": tail, "since": since})
+        async def _fake_stream(service, tail=100, since=None, follow=False):
+            captured.append({"tail": tail, "since": since, "follow": follow})
             yield f"tail={tail} since={since}".encode()
 
         original = server_mod.app.state.backend.stream_logs
@@ -361,7 +361,30 @@ class TestLogsEndpoint:
             assert resp.status_code == 200
             assert b"tail=50 since=1700000000" in resp.content
             assert len(captured) == 1
-            assert captured[0] == {"tail": 50, "since": "1700000000"}
+            assert captured[0] == {"tail": 50, "since": "1700000000", "follow": False}
+        finally:
+            server_mod.app.state.backend.stream_logs = original
+
+    async def test_follow_param_forwarded_to_backend(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("svc-a")
+        captured: list[dict] = []
+
+        async def _fake_stream(service, tail=100, since=None, follow=False):
+            captured.append({"tail": tail, "since": since, "follow": follow})
+            yield b"live line\n"
+
+        original = server_mod.app.state.backend.stream_logs
+        server_mod.app.state.backend.stream_logs = _fake_stream
+        try:
+            resp = await client.get(
+                "/services/svc-a/logs?follow=true",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            assert len(captured) == 1
+            assert captured[0]["follow"] is True
         finally:
             server_mod.app.state.backend.stream_logs = original
 

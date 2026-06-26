@@ -303,6 +303,7 @@ async def get_service_logs(
     name: str,
     tail: int = Query(100, ge=1, le=10000),
     since: str | None = Query(None, description="ISO 8601 or Unix timestamp"),
+    follow: bool = Query(False, description="If true, stream new log lines as they arrive"),
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
@@ -310,7 +311,7 @@ async def get_service_logs(
     record = await _get_or_create_record(name, store)
 
     async def log_gen():
-        async for chunk in backend.stream_logs(record, tail=tail, since=since):
+        async for chunk in backend.stream_logs(record, tail=tail, since=since, follow=follow):
             yield chunk
 
     return StreamingResponse(log_gen(), media_type="text/plain; charset=utf-8")

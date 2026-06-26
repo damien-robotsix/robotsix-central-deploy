@@ -4,6 +4,14 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Added `follow` query param to logs endpoint** — `GET /services/{name}/logs`
+  now accepts `follow=bool` (default `false`).  When `follow=true`, the
+  `DockerSdkBackend` passes `follow=True` to the Docker SDK and iterates log
+  chunks via `run_in_executor` instead of a bare synchronous `for` loop,
+  preventing event-loop blocking.  `NoopBackend` and `DockerBackend` stubs
+  accept the new parameter.  Client disconnects trigger `log_iter.close()` via
+  `asyncio.CancelledError` handling.
+
 - **Removed legacy `auth_username`/`auth_password` fields** from
   `LifecycleConfig` — these env vars were no longer consulted by
   `verify_auth`, which matches passwords against `api_key` alone.
