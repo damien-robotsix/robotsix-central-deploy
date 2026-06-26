@@ -155,6 +155,13 @@ class ErrorDetail(BaseModel):
     detail: str = ""
 
 
+class ServiceHealthResponse(BaseModel):
+    """Response for ``GET /services/{name}/health``."""
+
+    name: str
+    health: str  # "healthy" | "unhealthy" | "starting" | "unknown"
+
+
 # ---------------------------------------------------------------------------
 # Deploy / rollback schemas
 # ---------------------------------------------------------------------------

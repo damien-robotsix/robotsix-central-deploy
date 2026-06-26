@@ -5,6 +5,7 @@ Endpoints:
 * ``GET  /health``                          — liveness probe (no auth).
 * ``GET  /services``                        — list all managed services.
 * ``GET  /services/{name}``                 — full status for one service.
+* ``GET  /services/{name}/health``           — health status for one service (auth-gated).
 * ``GET  /services/{name}/logs``            — stream container logs (auth-gated).
 * ``POST /services/{name}/start``           — start a service (idempotent).
 * ``POST /services/{name}/stop``            — stop a service (idempotent).
@@ -30,6 +31,7 @@ from .models import (
     DeployResponse,
     ErrorDetail,
     RollbackResponse,
+    ServiceHealthResponse,
     ServiceListResponse,
     ServiceRecord,
     ServiceState,
@@ -231,6 +233,32 @@ async def get_service_status(
         record.health = inspect.health
         await store.put(record)
     return record.to_status()
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/health
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/services/{name}/health",
+    response_model=ServiceHealthResponse,
+    summary="Get service health",
+    responses={404: {"model": ErrorDetail, "description": "Service not found"}},
+)
+async def get_service_health(
+    name: str,
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> ServiceHealthResponse:
+    record = await _get_or_create_record(name, store)
+    inspect = await backend.status(record)
+    if inspect.health != record.health:
+        record.health = inspect.health
+        await store.put(record)
+    health = inspect.health if inspect.health else "unknown"
+    return ServiceHealthResponse(name=name, health=health)
 
 
 # ---------------------------------------------------------------------------
