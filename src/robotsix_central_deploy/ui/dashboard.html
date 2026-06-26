@@ -36,7 +36,44 @@
   .actions button { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #bdbdbd; border-radius: 3px; background: #fff; cursor: pointer; }
   .actions button:hover:not(:disabled) { background: #e3f2fd; border-color: var(--blue); }
   .actions button:disabled { opacity: 0.45; cursor: not-allowed; }
-  .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: not-allowed; }
+  .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: pointer; }
+
+  /* Log viewer modal */
+  .log-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .log-overlay.open { display: flex; }
+  .log-panel {
+    background: #1e1e1e; color: #d4d4d4;
+    border-radius: 6px; width: 85vw; height: 80vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  .log-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px; background: #2d2d2d; flex-shrink: 0;
+  }
+  .log-header h2 { font-size: 0.95rem; color: #e0e0e0; font-weight: 600; }
+  .log-close {
+    background: none; border: none; color: #9e9e9e; font-size: 1.3rem;
+    cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .log-close:hover { color: #fff; }
+  .log-status {
+    padding: 4px 16px; font-size: 0.75rem; color: #9e9e9e;
+    background: #252525; flex-shrink: 0;
+  }
+  .log-body {
+    flex: 1; overflow-y: auto; padding: 12px 16px;
+  }
+  .log-body pre {
+    margin: 0; font-family: "Courier New", Courier, monospace;
+    font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap;
+    word-break: break-all;
+  }
   .error-detail { display: block; font-size: 0.75rem; color: var(--red); margin-top: 2px; }
   .inline-error { font-size: 0.75rem; color: var(--red); margin-top: 2px; }
   .banner-warn { background:#c0392b; color:#fff; padding:8px 16px; border-radius:4px; margin-bottom:12px; font-weight:bold; }
@@ -83,7 +120,21 @@
   </tbody>
 </table>
 
+<div id="log-modal" class="log-overlay" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
+  <div class="log-panel">
+    <div class="log-header">
+      <h2 id="log-modal-title">Logs — <span id="log-modal-component"></span></h2>
+      <button class="log-close" onclick="closeLogs()" title="Close">&times;</button>
+    </div>
+    <div id="log-status" class="log-status">Connecting…</div>
+    <div class="log-body">
+      <pre id="log-output"></pre>
+    </div>
+  </div>
+</div>
+
 <script>
+let logAbortController = null;
 const REFRESH_INTERVAL_MS = 30000;
 let refreshTimer = null;
 
@@ -134,7 +185,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
-    <td><a href="#" class="logs-link" data-component="${escAttr(svc.name)}" onclick="return false;">Logs</a></td>
+    <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
   </tr>`;
 }
 
@@ -283,6 +334,62 @@ async function doAction(name, action) {
   }
 }
 
+function openLogs(name) {
+  document.getElementById('log-modal-component').textContent = name;
+  document.getElementById('log-output').textContent = '';
+  document.getElementById('log-status').textContent = 'Connecting\u2026';
+  document.getElementById('log-modal').classList.add('open');
+  streamLogs(name);
+}
+
+function closeLogs() {
+  document.getElementById('log-modal').classList.remove('open');
+  if (logAbortController) {
+    logAbortController.abort();
+    logAbortController = null;
+  }
+}
+
+async function streamLogs(name) {
+  if (logAbortController) logAbortController.abort();
+  logAbortController = new AbortController();
+  const signal = logAbortController.signal;
+  const statusEl = document.getElementById('log-status');
+  const outputEl = document.getElementById('log-output');
+  const bodyEl = outputEl.parentElement;
+
+  try {
+    const resp = await fetch(
+      `/services/${encodeURIComponent(name)}/logs?tail=200&follow=true`,
+      { credentials: 'same-origin', signal }
+    );
+    if (!resp.ok) {
+      statusEl.textContent = `Error: HTTP ${resp.status}`;
+      return;
+    }
+    statusEl.textContent = 'Streaming\u2026';
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let atBottom = true;
+
+    // Track whether user has scrolled away from the bottom
+    bodyEl.addEventListener('scroll', () => {
+      atBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 32;
+    }, { passive: true });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { statusEl.textContent = 'Stream ended.'; break; }
+      outputEl.textContent += decoder.decode(value, { stream: true });
+      if (atBottom) bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return; // normal close — suppress
+    statusEl.textContent = `Error: ${err.message}`;
+  }
+}
+
 function escHtml(s) {
   const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
   return String(s).replace(/[&<>"']/g, ch => map[ch]);
@@ -298,6 +405,9 @@ function startAutoRefresh() {
 }
 
 // Bootstrap
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeLogs();
+});
 loadDashboard();
 startAutoRefresh();
 </script>
