@@ -50,3 +50,41 @@ ROBOTSIX_LIFECYCLE_API_KEY=changeme
 ROBOTSIX_LIFECYCLE_AUTH_USERNAME=admin
 ROBOTSIX_LIFECYCLE_AUTH_PASSWORD=secure-password
 ```
+
+## Docker Socket Proxy
+
+The lifecycle server talks to the Docker daemon to manage containers. For
+defence-in-depth, production deployments route Docker API calls through a
+**[tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy)**
+sidecar instead of mounting the raw Docker socket directly into the
+central-deploy container. The proxy exposes only the API endpoints that
+central-deploy actually needs, blocking everything else at the reverse-proxy
+layer.
+
+### Enabled API scopes
+
+| Scope        | Env         | Reason |
+|-------------|-------------|--------|
+| CONTAINERS  | `CONTAINERS=1` | List, inspect, start, stop, restart, remove, create containers; stream logs |
+| POST        | `POST=1`       | Required for any mutating HTTP method (start/stop/restart/create) |
+| DELETE      | `DELETE=1`     | Required for container removal during deploy |
+| IMAGES      | `IMAGES=1`     | Required for `docker pull` |
+
+All other scopes (`BUILD`, `NETWORKS`, `SWARM`, `SYSTEM`, `EXEC`, …) are
+explicitly disabled (`=0`). This means compromised or buggy central-deploy
+code cannot, for example, create new networks, exec into arbitrary containers,
+or reconfigure the Swarm.
+
+### Configuration
+
+| Env variable | Default | Production |
+|---|---|---|
+| `ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL` | `unix:///var/run/docker.sock` | `tcp://socket-proxy:2375` |
+
+- **Local dev (without compose):** the default `unix:///var/run/docker.sock`
+  works directly against the host Docker daemon — no proxy needed.
+- **Production (via `docker-compose.yml`):** the compose file sets
+  `ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL=tcp://socket-proxy:2375` so the
+  lifecycle server connects through the proxy sidecar. The raw socket
+  (`/var/run/docker.sock`) is mounted **only** into the `socket-proxy`
+  container (read-only) — `central-deploy` never touches it.

@@ -1,0 +1,60 @@
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      # Allow only the Docker API paths central-deploy actually calls:
+      # containers (list/inspect/start/stop/restart/remove/create/logs)
+      # images (pull)
+      CONTAINERS: "1"
+      POST: "1"     # required to allow any POST method
+      DELETE: "1"   # required for container removal during deploy
+      IMAGES: "1"   # required for image pull
+      # Everything else OFF:
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # TCP port 2375 is NOT bound to the host; only reachable within this compose network
+    networks:
+      - internal
+
+  central-deploy:
+    build: .
+    restart: unless-stopped
+    environment:
+      ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL: "tcp://socket-proxy:2375"
+      ROBOTSIX_LIFECYCLE_AUTH_USERNAME: "${ROBOTSIX_LIFECYCLE_AUTH_USERNAME}"
+      ROBOTSIX_LIFECYCLE_AUTH_PASSWORD: "${ROBOTSIX_LIFECYCLE_AUTH_PASSWORD}"
+      ROBOTSIX_LIFECYCLE_STORE_BACKEND: "file"
+      ROBOTSIX_LIFECYCLE_STORE_PATH: "/data/lifecycle_state.yaml"
+      ROBOTSIX_LIFECYCLE_REGISTRY_PATH: "/app/config/components.yaml"
+    volumes:
+      - central_deploy_data:/data
+    ports:
+      - "8100:8100"
+    depends_on:
+      - socket-proxy
+    networks:
+      - internal
+
+volumes:
+  central_deploy_data:
+
+networks:
+  internal:
+    driver: bridge
