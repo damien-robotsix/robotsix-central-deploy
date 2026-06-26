@@ -30,7 +30,7 @@ class LifecycleConfig(BaseSettings):
     store_path: str = "lifecycle_state.yaml"
 
     # Execution backend
-    execution_backend: str = "docker"  # "docker" | "noop"
+    execution_backend: str = "docker_sdk"  # "docker_sdk" | "docker" | "noop"
 
     # Component registry
     registry_path: str = "config/components.yaml"
