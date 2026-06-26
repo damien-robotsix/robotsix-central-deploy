@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hmac
 
 from fastapi import HTTPException, Request, status
 
@@ -18,16 +19,23 @@ async def verify_auth(request: Request) -> None:
     if not config.auth_required:
         return  # No credentials configured — allow all (dev mode).
 
-    # Try X-API-Key
+    # Try X-API-Key (only when api_key is configured).
     api_key = request.headers.get("X-API-Key")
     if api_key and config.api_key and _safe_compare(api_key, config.api_key):
         return
 
-    # Try HTTP Basic Auth — password must equal config.api_key; username is ignored.
+    # Try HTTP Basic Auth.
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Basic "):
-        password = _decode_basic_auth(auth_header)
-        if password and _safe_compare(password, config.api_key):
+        username, password = _decode_basic_auth(auth_header)
+        if config.auth_username and config.auth_password:
+            # Username+password mode — both fields must match.
+            if (username and password
+                    and _safe_compare(username, config.auth_username)
+                    and _safe_compare(password, config.auth_password)):
+                return
+        elif config.api_key and password and _safe_compare(password, config.api_key):
+            # Legacy api_key mode — username is ignored, password == api_key.
             return
 
     raise HTTPException(
@@ -37,26 +45,21 @@ async def verify_auth(request: Request) -> None:
     )
 
 
-def _decode_basic_auth(header: str) -> str:
-    """Decode an HTTP Basic Auth header and return the password portion.
+def _decode_basic_auth(header: str) -> tuple[str, str]:
+    """Decode an HTTP Basic Auth header; returns (username, password).
 
-    Returns ``""`` on malformed input — never raises.
+    Returns ("", "") on malformed input — never raises.
     """
     try:
         decoded = base64.b64decode(header[6:]).decode("utf-8")
-        _, _, password = decoded.partition(":")
-        return password
+        username, _, password = decoded.partition(":")
+        return username, password
     except Exception:
-        return ""
+        return "", ""
 
 
 def _safe_compare(a: str, b: str) -> bool:
-    """Compare two strings in (mostly) constant time."""
-    if len(a) != len(b):
-        return False
-    result = 0
-    for x, y in zip(a, b):
-        result |= ord(x) ^ ord(y)
-    return result == 0
+    """Compare two strings in constant time (no length side-channel)."""
+    return hmac.compare_digest(a, b)
 
 

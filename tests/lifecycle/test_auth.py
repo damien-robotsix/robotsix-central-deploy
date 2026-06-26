@@ -195,6 +195,71 @@ class TestBothCredentials:
 
 
 # ---------------------------------------------------------------------------
+# Test: Username + Password auth (no api_key)
+# ---------------------------------------------------------------------------
+
+
+class TestUsernamePasswordAuth:
+    """HTTP Basic Auth with username+password credentials — api_key is blank."""
+
+    USERNAME = "admin"
+    PASSWORD = "hunter2"
+
+    @pytest.fixture(autouse=True)
+    async def _setup(self):
+        cfg = LifecycleConfig(  # type: ignore[call-arg]
+            store_backend="memory",
+            execution_backend="noop",
+            api_key="",
+            auth_username=self.USERNAME,
+            auth_password=self.PASSWORD,
+        )
+        _wire(cfg)
+        await _seed_store()
+
+    def _basic_header(self, username: str = None, password: str = None) -> dict:
+        u = username if username is not None else self.USERNAME
+        p = password if password is not None else self.PASSWORD
+        encoded = base64.b64encode(f"{u}:{p}".encode()).decode()
+        return {"Authorization": f"Basic {encoded}"}
+
+    async def test_no_credentials_returns_401(self, client: AsyncClient):
+        resp = await client.get("/services")
+        assert resp.status_code == 401
+        assert "www-authenticate" in {k.lower() for k in resp.headers}
+
+    async def test_correct_credentials_returns_200(self, client: AsyncClient):
+        resp = await client.get("/services", headers=self._basic_header())
+        assert resp.status_code == 200
+
+    async def test_wrong_password_returns_401(self, client: AsyncClient):
+        resp = await client.get(
+            "/services", headers=self._basic_header(password="wrong")
+        )
+        assert resp.status_code == 401
+
+    async def test_wrong_username_returns_401(self, client: AsyncClient):
+        resp = await client.get(
+            "/services", headers=self._basic_header(username="wronguser")
+        )
+        assert resp.status_code == 401
+
+    async def test_api_key_header_not_accepted(self, client: AsyncClient):
+        resp = await client.get("/services", headers={"X-API-Key": "hunter2"})
+        assert resp.status_code == 401
+
+    async def test_start_requires_auth(self, client: AsyncClient):
+        resp = await client.post("/services/svc/start")
+        assert resp.status_code == 401
+
+    async def test_start_with_valid_credentials_returns_200(self, client: AsyncClient):
+        resp = await client.post(
+            "/services/svc/start", headers=self._basic_header()
+        )
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # Test: Dev mode — no credentials configured
 # ---------------------------------------------------------------------------
 
