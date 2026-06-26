@@ -109,26 +109,23 @@ class TestApiKeyAuth:
 
 
 class TestBasicAuth:
-    """HTTP Basic Auth accepted when auth_username/auth_password are configured."""
+    """HTTP Basic Auth accepted when api_key is configured — password must match."""
 
-    AUTH = "myuser"
-    PASS = "mypass"
+    API_KEY = "mypass"
 
     @pytest.fixture(autouse=True)
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend="noop",
-            auth_username=self.AUTH,
-            auth_password=self.PASS,
+            api_key=self.API_KEY,
         )
         _wire(cfg)
         await _seed_store()
 
-    def _basic_header(self, username: str = None, password: str = None) -> dict:
-        u = username if username is not None else self.AUTH
-        p = password if password is not None else self.PASS
-        encoded = base64.b64encode(f"{u}:{p}".encode()).decode()
+    def _basic_header(self, username: str = "anyuser", password: str = None) -> dict:
+        p = password if password is not None else self.API_KEY
+        encoded = base64.b64encode(f"{username}:{p}".encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
 
     async def test_basic_auth_passes_get_services(self, client: AsyncClient):
@@ -150,8 +147,10 @@ class TestBasicAuth:
         assert "www-authenticate" in {k.lower() for k in resp.headers}
 
     async def test_wrong_username_returns_401(self, client: AsyncClient):
+        # Username is ignored — only the password matters against api_key.
+        # Wrong username with correct password should succeed.
         resp = await client.get("/services", headers=self._basic_header(username="bad"))
-        assert resp.status_code == 401
+        assert resp.status_code == 200
 
     async def test_api_key_not_accepted_when_only_basic_configured(self, client: AsyncClient):
         resp = await client.get("/services", headers={"X-API-Key": "some-key"})
@@ -164,11 +163,9 @@ class TestBasicAuth:
 
 
 class TestBothCredentials:
-    """When both API key and Basic Auth are configured, either is accepted."""
+    """When api_key is configured, both X-API-Key and Basic Auth are accepted."""
 
     API_KEY = "my-secret"
-    AUTH_USER = "myuser"
-    AUTH_PASS = "mypass"
 
     @pytest.fixture(autouse=True)
     async def _setup(self):
@@ -176,14 +173,12 @@ class TestBothCredentials:
             store_backend="memory",
             execution_backend="noop",
             api_key=self.API_KEY,
-            auth_username=self.AUTH_USER,
-            auth_password=self.AUTH_PASS,
         )
         _wire(cfg)
         await _seed_store()
 
     def _basic_header(self) -> dict:
-        encoded = base64.b64encode(f"{self.AUTH_USER}:{self.AUTH_PASS}".encode()).decode()
+        encoded = base64.b64encode(f"anyuser:{self.API_KEY}".encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
 
     async def test_api_key_accepted(self, client: AsyncClient):

@@ -4,6 +4,17 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Monitoring UI dashboard** — new `GET /ui` endpoint serves a self-contained
+  HTML dashboard at `/ui` showing live component status, image revision (first 12
+  chars), health, and start/stop/restart controls.  Auth-gated via `verify_auth`;
+  auto-refreshes every 30 s.  Logs column placeholder present for future
+  logs-viewer ticket.  No external CDN dependencies (vanilla JS + CSS).
+- **Unified auth** — `verify_auth` now accepts `Authorization: Basic` where the
+  password equals `ROBOTSIX_LIFECYCLE_API_KEY` (username is ignored).  Added
+  `verify_api_key = verify_auth` alias for backward compatibility.  New private
+  helper `_decode_basic_auth`.  Realm changed to `"Robotsix Central Deploy"`.
+  Existing `X-API-Key` header path unchanged.
+
 - **Docker socket proxy** — added `docker_socket_url` config field (`ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL`, default `unix:///var/run/docker.sock`) and a `docker-compose.yml` with `tecnativa/docker-socket-proxy` sidecar scoped to `CONTAINERS`, `POST`, `DELETE`, and `IMAGES` API paths. Raw socket mounted read-only into proxy only; central-deploy talks TCP.
 - **Logs streaming endpoint** — `GET /services/{name}/logs` returns container
   logs as `text/plain` (auth-gated).  Supports `tail` (1–10000, default 100)
