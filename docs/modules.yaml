@@ -27,3 +27,15 @@ modules:
     docs: /docs
     openapi: /openapi.json
     tests: tests/lifecycle/
+
+  registry:
+    name: registry
+    description: >
+      Component registry — declares each managed Docker component (id, image,
+      container name, ports, mounts, env, health check). Loaded from YAML at
+      startup; consumed by the Docker-API backend.
+    package: robotsix_central_deploy.registry
+    dependencies:
+      - pydantic
+      - pyyaml
+    tests: tests/registry/

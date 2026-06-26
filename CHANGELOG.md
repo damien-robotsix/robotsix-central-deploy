@@ -4,6 +4,15 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Component registry** — Pydantic models (`ComponentConfig`, `PortMapping`,
+  `VolumeMount`, `HealthCheck`) and a YAML loader (`ComponentRegistry.from_yaml`)
+  that declares every managed Docker component in a single source of truth.
+- **Seed configuration** (`config/components.yaml`) — stub entries for the six
+  current server services: cost-monitor, calendar-agent, auto-mail, chat, broker
+  (agent-comm), and radicale.
+- **Lifecycle config** — added `registry_path` field and `effective_registry_path`
+  property to `LifecycleConfig`, overridable via `ROBOTSIX_LIFECYCLE_REGISTRY_PATH`.
+
 - Enable periodic analysis workflows: audit, health, test_gap,
   module_curator, completeness_check, copy_paste, state_sync.
 
