@@ -37,6 +37,10 @@ class LifecycleConfig(BaseSettings):
     # Component registry
     registry_path: str = "config/components.yaml"
 
+    # Docker socket URL (env: ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL)
+    # Production value: tcp://socket-proxy:2375
+    docker_socket_url: str = "unix:///var/run/docker.sock"
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)
