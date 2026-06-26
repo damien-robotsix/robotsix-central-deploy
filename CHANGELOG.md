@@ -13,6 +13,11 @@ All notable changes to robotsix-central-deploy.
 - **Lifecycle config** — added `registry_path` field and `effective_registry_path`
   property to `LifecycleConfig`, overridable via `ROBOTSIX_LIFECYCLE_REGISTRY_PATH`.
 
+- **Docker SDK backend** — new `DockerSdkBackend` talks to the Docker daemon
+  directly via the Python Docker SDK (no CLI subprocess).  `status()` returns a
+  `ComponentInspect` with image revision and health; `start`/`stop`/`restart`
+  use the SDK's container API.  The abstract `ExecutionBackend.status()` now
+  returns `ComponentInspect` and the old `DockerBackend` was updated to match.
 - Enable periodic analysis workflows: audit, health, test_gap,
   module_curator, completeness_check, copy_paste, state_sync.
 

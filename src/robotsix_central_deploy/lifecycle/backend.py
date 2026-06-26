@@ -29,7 +29,7 @@ class ExecutionBackend(ABC):
     async def restart(self, service: ServiceRecord) -> ServiceState: ...
 
     @abstractmethod
-    async def status(self, service: ServiceRecord) -> ServiceState: ...
+    async def status(self, service: ServiceRecord) -> ComponentInspect: ...
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +108,9 @@ class DockerBackend(ExecutionBackend):
             return await self.start(service)
         return ServiceState.RUNNING
 
-    async def status(self, service: ServiceRecord) -> ServiceState:
-        return await self._inspect_state(service.name) or ServiceState.UNKNOWN
+    async def status(self, service: ServiceRecord) -> ComponentInspect:
+        state = await self._inspect_state(service.container_name or service.name) or ServiceState.UNKNOWN
+        return ComponentInspect(state=state)
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
