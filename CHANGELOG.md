@@ -5,6 +5,11 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - **Docker socket proxy** — added `docker_socket_url` config field (`ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL`, default `unix:///var/run/docker.sock`) and a `docker-compose.yml` with `tecnativa/docker-socket-proxy` sidecar scoped to `CONTAINERS`, `POST`, `DELETE`, and `IMAGES` API paths. Raw socket mounted read-only into proxy only; central-deploy talks TCP.
+- **Logs streaming endpoint** — `GET /services/{name}/logs` returns container
+  logs as `text/plain` (auth-gated).  Supports `tail` (1–10000, default 100)
+  and `since` (ISO 8601 or Unix timestamp) query parameters.  Implemented for
+  `DockerSdkBackend` (real logs via Docker SDK), `NoopBackend` (stub), and
+  `DockerBackend` (CLI stub).
 - **HTTP Basic Auth support** — `verify_auth` dependency now accepts either
   `X-API-Key` header or `Authorization: Basic` credentials. New config fields
   `auth_username` / `auth_password` (env: `ROBOTSIX_LIFECYCLE_AUTH_USERNAME`,

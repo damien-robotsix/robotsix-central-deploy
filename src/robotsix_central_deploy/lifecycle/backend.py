@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Optional
 
 from .models import ComponentInspect, DeployOutcome, RollbackOutcome, ServiceRecord, ServiceState
@@ -49,6 +50,14 @@ class ExecutionBackend(ABC):
         config: "ComponentConfig",
     ) -> RollbackOutcome: ...
 
+    @abstractmethod
+    async def stream_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 100,
+        since: str | None = None,
+    ) -> AsyncIterator[bytes]: ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -75,6 +84,14 @@ class NoopBackend(ExecutionBackend):
 
     async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
         return RollbackOutcome(deployed_digest=service.previous_image_digest or "sha256:noop", state=ServiceState.RUNNING)
+
+    async def stream_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 100,
+        since: str | None = None,
+    ) -> AsyncIterator[bytes]:
+        yield b"[noop backend]\n"
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +158,14 @@ class DockerBackend(ExecutionBackend):
 
     async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
         raise NotImplementedError("rollback not supported for DockerBackend — use DockerSdkBackend")
+
+    async def stream_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 100,
+        since: str | None = None,
+    ) -> AsyncIterator[bytes]:
+        yield b"[docker-cli backend: use docker_sdk for log streaming]\n"
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -521,3 +546,36 @@ class DockerSdkBackend(ExecutionBackend):
             await self._wait_healthy(name, timeout=60.0)
 
         return RollbackOutcome(deployed_digest=target_digest, state=ServiceState.RUNNING)
+
+    async def stream_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 100,
+        since: str | None = None,
+    ) -> AsyncIterator[bytes]:
+        import docker
+
+        loop = asyncio.get_running_loop()
+        name = self._container_name(service)
+
+        try:
+            container = await self._get_container(name)
+        except docker.errors.APIError as exc:
+            yield f"[docker error: {exc}]\n".encode()
+            return
+
+        if container is None:
+            yield b"[container not found]\n"
+            return
+
+        kwargs: dict[str, object] = {"stream": True, "follow": False, "tail": tail}
+        if since is not None:
+            kwargs["since"] = since
+        try:
+            log_iter = await loop.run_in_executor(
+                None, lambda: container.logs(**kwargs)
+            )
+            for chunk in log_iter:
+                yield chunk if isinstance(chunk, bytes) else chunk.encode()
+        except docker.errors.APIError as exc:
+            yield f"[docker error: {exc}]\n".encode()
