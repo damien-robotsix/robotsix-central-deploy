@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from .models import ServiceRecord, ServiceState
+from .models import ComponentInspect, ServiceRecord, ServiceState
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class ExecutionBackend(ABC):
     async def restart(self, service: ServiceRecord) -> ServiceState: ...
 
     @abstractmethod
-    async def status(self, service: ServiceRecord) -> ServiceState: ...
+    async def status(self, service: ServiceRecord) -> ComponentInspect: ...
 
 
 # ---------------------------------------------------------------------------
@@ -49,8 +49,8 @@ class NoopBackend(ExecutionBackend):
     async def restart(self, service: ServiceRecord) -> ServiceState:
         return ServiceState.RUNNING
 
-    async def status(self, service: ServiceRecord) -> ServiceState:
-        return service.state
+    async def status(self, service: ServiceRecord) -> ComponentInspect:
+        return ComponentInspect(state=service.state)
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +108,9 @@ class DockerBackend(ExecutionBackend):
             return await self.start(service)
         return ServiceState.RUNNING
 
-    async def status(self, service: ServiceRecord) -> ServiceState:
-        return await self._inspect_state(service.name) or ServiceState.UNKNOWN
+    async def status(self, service: ServiceRecord) -> ComponentInspect:
+        state = await self._inspect_state(service.container_name or service.name) or ServiceState.UNKNOWN
+        return ComponentInspect(state=state)
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -162,3 +163,165 @@ async def _run(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
     except Exception as exc:
         logger.exception("Unexpected error running %s", args)
         return (-1, "", str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend
+# ---------------------------------------------------------------------------
+
+
+class DockerSdkBackend(ExecutionBackend):
+    """Executes lifecycle actions via the Docker Python SDK against the local socket."""
+
+    def __init__(self, socket_url: str = "unix:///var/run/docker.sock") -> None:
+        import docker
+
+        self._client = docker.DockerClient(base_url=socket_url)
+
+    # -- helpers ------------------------------------------------------------
+
+    def _container_name(self, service: ServiceRecord) -> str:
+        return service.container_name if service.container_name else service.name
+
+    @staticmethod
+    def _state_from_docker(status: str) -> ServiceState:
+        status = status.lower()
+        mapping: dict[str, ServiceState] = {
+            "running": ServiceState.RUNNING,
+            "paused": ServiceState.RUNNING,
+            "restarting": ServiceState.RESTARTING,
+            "created": ServiceState.STOPPED,
+            "exited": ServiceState.STOPPED,
+            "dead": ServiceState.FAILED,
+            "removing": ServiceState.STOPPING,
+        }
+        return mapping.get(status, ServiceState.UNKNOWN)
+
+    async def _get_container(self, name: str):
+        """Run ``containers.get`` in the default executor and map known errors."""
+        import docker
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(
+                None, self._client.containers.get, name,
+            )
+        except docker.errors.NotFound:
+            return None
+        except docker.errors.APIError:
+            raise
+
+    # -- ExecutionBackend ---------------------------------------------------
+
+    async def status(self, service: ServiceRecord) -> ComponentInspect:
+        name = self._container_name(service)
+        import docker
+
+        try:
+            container = await self._get_container(name)
+        except docker.errors.APIError as exc:
+            logger.error("Docker daemon unreachable during status(%s): %s", name, exc)
+            return ComponentInspect(state=ServiceState.UNKNOWN)
+
+        if container is None:
+            logger.warning("Container %s not found during status", name)
+            return ComponentInspect(state=ServiceState.UNKNOWN)
+
+        loop = asyncio.get_running_loop()
+
+        def _inspect():
+            state_str = container.attrs["State"]["Status"]
+            state = self._state_from_docker(state_str)
+
+            # image revision label from the container's image
+            revision = ""
+            try:
+                revision = container.image.labels.get(
+                    "org.opencontainers.image.revision", "",
+                )
+            except Exception:
+                pass
+
+            # health check result
+            health = ""
+            try:
+                health_obj = container.attrs["State"].get("Health")
+                if health_obj:
+                    health = health_obj.get("Status", "")
+            except Exception:
+                pass
+
+            return ComponentInspect(
+                state=state, image_revision=revision, health=health,
+            )
+
+        return await loop.run_in_executor(None, _inspect)
+
+    async def start(self, service: ServiceRecord) -> ServiceState:
+        name = self._container_name(service)
+        import docker
+
+        try:
+            container = await self._get_container(name)
+        except docker.errors.APIError as exc:
+            logger.error("Docker daemon unreachable during start(%s): %s", name, exc)
+            return ServiceState.FAILED
+
+        if container is None:
+            logger.warning("Container %s not found — deploy first", name)
+            return ServiceState.FAILED
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, container.start)
+        except docker.errors.APIError as exc:
+            logger.error("Docker API error starting %s: %s", name, exc)
+            return ServiceState.FAILED
+
+        return ServiceState.RUNNING
+
+    async def stop(self, service: ServiceRecord) -> ServiceState:
+        name = self._container_name(service)
+        import docker
+
+        try:
+            container = await self._get_container(name)
+        except docker.errors.APIError as exc:
+            logger.error("Docker daemon unreachable during stop(%s): %s", name, exc)
+            return ServiceState.FAILED
+
+        if container is None:
+            logger.debug("Container %s not found — already stopped", name)
+            return ServiceState.STOPPED
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, container.stop)
+        except docker.errors.APIError as exc:
+            logger.error("Docker API error stopping %s: %s", name, exc)
+            return ServiceState.FAILED
+
+        return ServiceState.STOPPED
+
+    async def restart(self, service: ServiceRecord) -> ServiceState:
+        name = self._container_name(service)
+        import docker
+
+        try:
+            container = await self._get_container(name)
+        except docker.errors.APIError as exc:
+            logger.error("Docker daemon unreachable during restart(%s): %s", name, exc)
+            return ServiceState.FAILED
+
+        if container is None:
+            logger.warning("Container %s not found — deploy first", name)
+            return ServiceState.FAILED
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, container.restart)
+        except docker.errors.APIError as exc:
+            logger.error("Docker API error restarting %s: %s", name, exc)
+            return ServiceState.FAILED
+
+        return ServiceState.RUNNING

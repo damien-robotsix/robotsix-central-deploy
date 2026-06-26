@@ -70,6 +70,15 @@ def is_active(current: ServiceState) -> bool:
 
 
 @dataclass
+class ComponentInspect:
+    """Rich status returned by ``ExecutionBackend.status()``."""
+
+    state: ServiceState
+    image_revision: str = ""  # org.opencontainers.image.revision label; empty if absent
+    health: str = ""          # "healthy" | "unhealthy" | "starting" | "" (no health check)
+
+
+@dataclass
 class ServiceRecord:
     """Internal representation of a managed service."""
 
@@ -78,6 +87,9 @@ class ServiceRecord:
     state: ServiceState = ServiceState.UNKNOWN
     last_error: str = ""
     updated_at: float = field(default_factory=time.time)
+    container_name: str = ""     # Docker container name; if blank, falls back to `name`
+    image_revision: str = ""
+    health: str = ""
 
     def to_status(self) -> "ServiceStatus":
         return ServiceStatus(
@@ -86,6 +98,8 @@ class ServiceRecord:
             image=self.image,
             last_error=self.last_error or None,
             updated_at=self.updated_at,
+            image_revision=self.image_revision,
+            health=self.health,
         )
 
     def to_list_item(self) -> "ServiceListItem":
@@ -103,6 +117,8 @@ class ServiceStatus(BaseModel):
     name: str
     state: ServiceState
     image: str = ""
+    image_revision: str = ""
+    health: str = ""
     last_error: Optional[str] = None
     updated_at: float = Field(default_factory=time.time)
 

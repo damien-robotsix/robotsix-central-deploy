@@ -21,7 +21,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from .auth import verify_api_key
-from .backend import DockerBackend, ExecutionBackend, NoopBackend
+from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from .config import LifecycleConfig
 from .models import (
     ActionResponse,
@@ -53,6 +53,8 @@ def _build_store(cfg: LifecycleConfig) -> ServiceStore:
 
 
 def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
+    if cfg.execution_backend == "docker_sdk":
+        return DockerSdkBackend()
     if cfg.execution_backend == "docker":
         return DockerBackend()
     return NoopBackend()
@@ -73,6 +75,29 @@ async def lifespan(app: FastAPI):
         type(_backend).__name__,
         "on" if _config.auth_required else "off",
     )
+
+    # -- Pre-seed store from component registry -----------------------------
+    from ..registry.loader import ComponentRegistry, RegistryLoadError
+
+    registry_path: Path = _config.effective_registry_path
+    try:
+        registry = ComponentRegistry.from_yaml(registry_path)
+    except RegistryLoadError as exc:
+        logger.warning("Could not load component registry: %s", exc)
+        registry = None
+
+    if registry:
+        for component in registry.all():
+            record = ServiceRecord(
+                name=component.id,
+                container_name=component.container_name,
+                image=component.image,
+            )
+            await _store.put(record)
+        logger.info(
+            "Pre-seeded %d components from registry", len(registry.all()),
+        )
+
     yield
     logger.info("lifecycle server shutting down")
 
@@ -173,9 +198,16 @@ async def get_service_status(
 ) -> ServiceStatus:
     record = await _get_or_create_record(name, store)
     # Refresh live state from backend (best-effort).
-    live_state = await backend.status(record)
-    if live_state != record.state:
-        record.state = live_state
+    inspect = await backend.status(record)
+    changed = (
+        inspect.state != record.state
+        or inspect.image_revision != record.image_revision
+        or inspect.health != record.health
+    )
+    if changed:
+        record.state = inspect.state
+        record.image_revision = inspect.image_revision
+        record.health = inspect.health
         await store.put(record)
     return record.to_status()
 
