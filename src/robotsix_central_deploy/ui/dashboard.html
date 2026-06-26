@@ -226,6 +226,7 @@ async function doAction(name, action) {
     } catch (_) { /* ignore */ }
   } finally {
     setButtonsDisabled(name, false);
+    startAutoRefresh();
   }
 }
 

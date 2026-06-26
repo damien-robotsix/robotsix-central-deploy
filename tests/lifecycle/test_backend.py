@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend, NoopBackend
-from robotsix_central_deploy.lifecycle.models import ComponentInspect, ServiceRecord, ServiceState
+from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 
 
 class TestNoopBackend:

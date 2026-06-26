@@ -146,7 +146,7 @@ class TestBasicAuth:
         assert resp.status_code == 401
         assert "www-authenticate" in {k.lower() for k in resp.headers}
 
-    async def test_wrong_username_returns_401(self, client: AsyncClient):
+    async def test_wrong_username_with_correct_password_succeeds(self, client: AsyncClient):
         # Username is ignored — only the password matters against api_key.
         # Wrong username with correct password should succeed.
         resp = await client.get("/services", headers=self._basic_header(username="bad"))
