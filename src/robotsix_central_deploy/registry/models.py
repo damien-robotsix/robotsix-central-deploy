@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+
+class PortMapping(BaseModel):
+    host: int
+    container: int
+    protocol: str = "tcp"  # "tcp" | "udp"
+
+
+class VolumeMount(BaseModel):
+    host: str          # host path or named-volume name
+    container: str     # mount path inside container
+    read_only: bool = False
+
+
+class HealthCheck(BaseModel):
+    """Mirrors the Docker HealthCheck spec."""
+
+    test: list[str]              # e.g. ["CMD", "curl", "-f", "http://localhost:8080/"]
+    interval_seconds: int = 30
+    timeout_seconds: int = 10
+    retries: int = 3
+    start_period_seconds: int = 10
+
+
+class ComponentConfig(BaseModel):
+    """Declares a single managed Docker component."""
+
+    id: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]*$")  # stable slug
+    image: str                    # repo:tag — the target image to run
+    container_name: str           # Docker container name on the host
+    ports: list[PortMapping] = []
+    mounts: list[VolumeMount] = []
+    env: dict[str, str] = {}
+    health_check: Optional[HealthCheck] = None

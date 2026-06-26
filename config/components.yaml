@@ -1,0 +1,101 @@
+# Component registry — single source of truth for the Docker-API deployment manager.
+# All components run on server.robotsix.net against the local Docker socket.
+# Single-host only; no remote Docker endpoints.
+#
+# STUB VALUES: image tags, ports, mounts, and env are placeholders.
+# Confirm each with the operator before onboarding a live service.
+
+components:
+  - id: cost-monitor
+    image: ghcr.io/robotsix/cost-monitor:latest  # TODO: confirm tag
+    container_name: cost-monitor
+    ports:
+      - host: 8200   # TODO: confirm host port
+        container: 8200
+    mounts: []
+    env: {}          # TODO: add any required env vars
+    health_check:
+      test: ["CMD", "curl", "-f", "http://localhost:8200/health"]
+      interval_seconds: 30
+      timeout_seconds: 10
+      retries: 3
+      start_period_seconds: 15
+
+  - id: calendar-agent
+    image: ghcr.io/robotsix/calendar-agent:latest  # TODO: confirm tag
+    container_name: calendar-agent
+    ports:
+      - host: 8201   # TODO: confirm host port
+        container: 8080
+    mounts: []
+    env: {}          # TODO: add any required env vars
+    health_check:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval_seconds: 30
+      timeout_seconds: 10
+      retries: 3
+      start_period_seconds: 15
+
+  - id: auto-mail
+    image: ghcr.io/robotsix/auto-mail:latest  # TODO: confirm tag
+    container_name: auto-mail
+    ports:
+      - host: 8202   # TODO: confirm host port
+        container: 8080
+    mounts: []
+    env: {}          # TODO: add any required env vars
+    health_check:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval_seconds: 30
+      timeout_seconds: 10
+      retries: 3
+      start_period_seconds: 15
+
+  - id: chat
+    image: ghcr.io/robotsix/chat:latest  # TODO: confirm tag
+    container_name: chat
+    ports:
+      - host: 3000   # TODO: confirm host port
+        container: 3000
+    mounts: []
+    env: {}          # TODO: add any required env vars
+    health_check:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval_seconds: 30
+      timeout_seconds: 10
+      retries: 3
+      start_period_seconds: 20
+
+  - id: broker
+    # Also known as agent-comm; the inter-agent communication broker.
+    image: ghcr.io/robotsix/agent-comm:latest  # TODO: confirm image name and tag
+    container_name: agent-comm
+    ports:
+      - host: 8300   # TODO: confirm host port
+        container: 8080
+    mounts: []
+    env: {}          # TODO: add any required env vars
+    health_check:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval_seconds: 30
+      timeout_seconds: 10
+      retries: 3
+      start_period_seconds: 15
+
+  - id: radicale
+    image: tomsquest/docker-radicale:latest  # TODO: confirm pinned version
+    container_name: radicale
+    ports:
+      - host: 5232
+        container: 5232
+    mounts:
+      - host: radicale-data   # TODO: confirm named volume or host path
+        container: /data
+        read_only: false
+    env: {}          # TODO: add any required env vars
+    health_check:
+      test: ["CMD", "curl", "-f", "http://localhost:5232/"]
+      interval_seconds: 30
+      timeout_seconds: 10
+      retries: 3
+      start_period_seconds: 10

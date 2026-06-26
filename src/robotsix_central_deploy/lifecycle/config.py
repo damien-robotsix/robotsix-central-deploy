@@ -32,9 +32,16 @@ class LifecycleConfig(BaseSettings):
     # Execution backend
     execution_backend: str = "docker"  # "docker" | "noop"
 
+    # Component registry
+    registry_path: str = "config/components.yaml"
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)
+
+    @property
+    def effective_registry_path(self) -> Path:
+        return Path(self.registry_path)
 
     @property
     def auth_required(self) -> bool:
