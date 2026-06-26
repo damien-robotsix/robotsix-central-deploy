@@ -4,6 +4,9 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Removed legacy `auth_username`/`auth_password` fields** from
+  `LifecycleConfig` — these env vars were no longer consulted by
+  `verify_auth`, which matches passwords against `api_key` alone.
 - **Removed dead backward-compat alias** — `verify_api_key = verify_auth`
   alias removed from `src/robotsix_central_deploy/lifecycle/auth.py`.  All
   callers already use `verify_auth` directly.

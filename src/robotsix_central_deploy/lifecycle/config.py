@@ -24,9 +24,6 @@ class LifecycleConfig(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8100
     api_key: str = ""
-    auth_username: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_USERNAME
-    auth_password: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_PASSWORD
-
     # Persistence
     store_backend: str = "memory"  # "memory" | "file"
     store_path: str = "lifecycle_state.yaml"
@@ -53,9 +50,6 @@ class LifecycleConfig(BaseSettings):
     def auth_required(self) -> bool:
         """True when credentials are configured — auth is optional for dev.
 
-        Only ``api_key`` gates enforcement.  The legacy ``auth_username`` /
-        ``auth_password`` fields are no longer consulted because ``verify_auth``
-        matches passwords against ``api_key`` alone.  A user with only those
-        legacy vars set would otherwise be locked out with no valid credential.
+        Only ``api_key`` gates enforcement.
         """
         return bool(self.api_key)
