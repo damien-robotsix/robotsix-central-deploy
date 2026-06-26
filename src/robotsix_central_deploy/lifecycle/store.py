@@ -96,6 +96,11 @@ class FileStore(ServiceStore):
                 state=ServiceState(d.get("state", "unknown")),
                 last_error=d.get("last_error", ""),
                 updated_at=d.get("updated_at", 0.0),
+                container_name=d.get("container_name", ""),
+                image_revision=d.get("image_revision", ""),
+                health=d.get("health", ""),
+                deployed_image_digest=d.get("deployed_image_digest", ""),
+                previous_image_digest=d.get("previous_image_digest", ""),
             )
         return records
 
@@ -107,6 +112,11 @@ class FileStore(ServiceStore):
                 "state": r.state.value,
                 "last_error": r.last_error,
                 "updated_at": r.updated_at,
+                "container_name": r.container_name,
+                "image_revision": r.image_revision,
+                "health": r.health,
+                "deployed_image_digest": r.deployed_image_digest,
+                "previous_image_digest": r.previous_image_digest,
             }
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(yaml.safe_dump(raw, default_flow_style=False), encoding="utf-8")

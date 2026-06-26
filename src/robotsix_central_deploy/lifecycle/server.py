@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.params import Body
 from fastapi.responses import JSONResponse
 
 from .auth import verify_api_key
@@ -25,13 +26,17 @@ from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBack
 from .config import LifecycleConfig
 from .models import (
     ActionResponse,
+    DeployRequest,
+    DeployResponse,
     ErrorDetail,
+    RollbackResponse,
     ServiceListResponse,
     ServiceRecord,
     ServiceState,
     ServiceStatus,
     can_transition,
 )
+from ..registry.loader import ComponentRegistry, RegistryLoadError
 from .store import FileStore, InMemoryStore, ServiceStore
 
 logger = logging.getLogger(__name__)
@@ -77,7 +82,6 @@ async def lifespan(app: FastAPI):
     )
 
     # -- Pre-seed store from component registry -----------------------------
-    from ..registry.loader import ComponentRegistry, RegistryLoadError
 
     registry_path: Path = _config.effective_registry_path
     try:
@@ -97,6 +101,8 @@ async def lifespan(app: FastAPI):
         logger.info(
             "Pre-seeded %d components from registry", len(registry.all()),
         )
+
+    app.state.registry = registry  # may be None if load failed
 
     yield
     logger.info("lifecycle server shutting down")
@@ -140,6 +146,14 @@ async def _get_config(request: Request) -> LifecycleConfig:
     config = request.app.state.config
     assert config is not None, "config not initialised"
     return config
+
+
+async def _get_registry(request: Request):
+    """Return the ComponentRegistry from app state, or raise 503."""
+    registry = getattr(request.app.state, "registry", None)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="Component registry not loaded")
+    return registry
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -413,8 +427,137 @@ async def restart_service(
 
 
 # ---------------------------------------------------------------------------
-# Exception handler — structured error responses
+# POST /services/{name}/deploy
 # ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/services/{name}/deploy",
+    response_model=DeployResponse,
+    summary="Deploy a new image version for a service",
+    responses={
+        404: {"model": ErrorDetail, "description": "Service or component config not found"},
+        503: {"model": ErrorDetail, "description": "Registry not loaded"},
+    },
+)
+async def deploy_service(
+    name: str,
+    request: Request,
+    body: DeployRequest = Body(default=None),
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    _auth: None = Depends(verify_api_key),
+) -> DeployResponse:
+    if body is None:
+        body = DeployRequest()
+
+    record = await _get_or_create_record(name, store)
+
+    config = registry.get(name)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No component config for '{name}' — cannot deploy",
+        )
+
+    image_ref = body.image or config.image
+
+    try:
+        outcome = await backend.deploy(record, config, image_ref)
+    except Exception as exc:
+        logger.exception("deploy %s failed", name)
+        record.state = ServiceState.FAILED
+        record.last_error = str(exc)
+        await store.put(record)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Deploy failed: {exc}",
+        )
+
+    record.state = outcome.state
+    record.image = image_ref
+    record.image_revision = outcome.deployed_digest
+    record.deployed_image_digest = outcome.deployed_digest
+    record.previous_image_digest = outcome.previous_digest
+    record.last_error = ""
+    await store.put(record)
+
+    return DeployResponse(
+        name=name,
+        deployed_digest=outcome.deployed_digest,
+        previous_digest=outcome.previous_digest,
+        current_state=record.state,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /services/{name}/rollback
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/services/{name}/rollback",
+    response_model=RollbackResponse,
+    summary="Rollback a service to its prior image digest",
+    responses={
+        404: {"model": ErrorDetail},
+        409: {"model": ErrorDetail, "description": "No prior digest recorded"},
+        503: {"model": ErrorDetail},
+    },
+)
+async def rollback_service(
+    name: str,
+    request: Request,
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    _auth: None = Depends(verify_api_key),
+) -> RollbackResponse:
+    record = await _get_or_create_record(name, store)
+
+    if not record.previous_image_digest:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"No prior image digest recorded for '{name}' — run a deploy first",
+        )
+
+    config = registry.get(name)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No component config for '{name}' — cannot rollback",
+        )
+
+    # Snapshot current digests before mutating
+    old_deployed = record.deployed_image_digest
+    old_previous = record.previous_image_digest
+
+    try:
+        outcome = await backend.rollback(record, config)
+    except Exception as exc:
+        logger.exception("rollback %s failed", name)
+        record.state = ServiceState.FAILED
+        record.last_error = str(exc)
+        await store.put(record)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Rollback failed: {exc}",
+        )
+
+    # Swap digests: rolled-back-to becomes deployed; what-we-had becomes previous
+    record.state = outcome.state
+    record.deployed_image_digest = old_previous
+    record.previous_image_digest = old_deployed
+    record.image_revision = old_previous
+    record.last_error = ""
+    await store.put(record)
+
+    return RollbackResponse(
+        name=name,
+        rolled_back_to_digest=old_previous,
+        current_state=record.state,
+    )
 
 
 @app.exception_handler(HTTPException)
