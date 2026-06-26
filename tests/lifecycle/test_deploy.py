@@ -171,7 +171,7 @@ class TestDeployEndpoint:
     async def test_deploy_requires_auth(self, client: AsyncClient, registry):
         await self._seed("svc-a")
         resp = await client.post("/services/svc-a/deploy")
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
     # -- rollback -----------------------------------------------------------
 
@@ -226,7 +226,7 @@ class TestDeployEndpoint:
     async def test_rollback_requires_auth(self, client: AsyncClient, registry):
         await self._seed("svc-a")
         resp = await client.post("/services/svc-a/rollback")
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------

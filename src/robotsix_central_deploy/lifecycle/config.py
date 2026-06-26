@@ -24,6 +24,8 @@ class LifecycleConfig(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8100
     api_key: str = ""
+    auth_username: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_USERNAME
+    auth_password: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_PASSWORD
 
     # Persistence
     store_backend: str = "memory"  # "memory" | "file"
@@ -45,5 +47,5 @@ class LifecycleConfig(BaseSettings):
 
     @property
     def auth_required(self) -> bool:
-        """True when an API key is configured — auth is optional for dev."""
-        return bool(self.api_key)
+        """True when credentials are configured — auth is optional for dev."""
+        return bool(self.api_key) or bool(self.auth_username and self.auth_password)

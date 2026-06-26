@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **HTTP Basic Auth support** — `verify_auth` dependency now accepts either
+  `X-API-Key` header or `Authorization: Basic` credentials. New config fields
+  `auth_username` / `auth_password` (env: `ROBOTSIX_LIFECYCLE_AUTH_USERNAME`,
+  `ROBOTSIX_LIFECYCLE_AUTH_PASSWORD`). Auth failures return `401` with
+  `WWW-Authenticate: Basic realm="Central Deploy"` to trigger browser login
+  dialogs. `GET /services` and `GET /services/{name}` are now authenticated
+  when credentials are configured. `GET /health` remains open.
 - **Component registry** — Pydantic models (`ComponentConfig`, `PortMapping`,
   `VolumeMount`, `HealthCheck`) and a YAML loader (`ComponentRegistry.from_yaml`)
   that declares every managed Docker component in a single source of truth.

@@ -21,7 +21,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.params import Body
 from fastapi.responses import JSONResponse
 
-from .auth import verify_api_key
+from .auth import verify_auth
 from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from .config import LifecycleConfig
 from .models import (
@@ -120,7 +120,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
     responses={
-        403: {"model": ErrorDetail, "description": "Forbidden — invalid or missing API key"},
+        401: {"model": ErrorDetail, "description": "Unauthorized — invalid or missing credentials"},
     },
 )
 
@@ -187,7 +187,10 @@ async def health() -> dict[str, str]:
     response_model=ServiceListResponse,
     summary="List managed services",
 )
-async def list_services(store: ServiceStore = Depends(_get_store)) -> ServiceListResponse:
+async def list_services(
+    store: ServiceStore = Depends(_get_store),
+    _auth: None = Depends(verify_auth),
+) -> ServiceListResponse:
     records = await store.list_all()
     return ServiceListResponse(
         services=[r.to_list_item() for r in records],
@@ -209,6 +212,7 @@ async def get_service_status(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     record = await _get_or_create_record(name, store)
     # Refresh live state from backend (best-effort).
@@ -244,7 +248,7 @@ async def start_service(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
-    _auth: None = Depends(verify_api_key),
+    _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     record = await _get_or_create_record(name, store)
     previous = record.state
@@ -314,7 +318,7 @@ async def stop_service(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
-    _auth: None = Depends(verify_api_key),
+    _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     record = await _get_or_create_record(name, store)
     previous = record.state
@@ -382,7 +386,7 @@ async def restart_service(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
-    _auth: None = Depends(verify_api_key),
+    _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     record = await _get_or_create_record(name, store)
     previous = record.state
@@ -447,7 +451,7 @@ async def deploy_service(
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
-    _auth: None = Depends(verify_api_key),
+    _auth: None = Depends(verify_auth),
 ) -> DeployResponse:
     if body is None:
         body = DeployRequest()
@@ -512,7 +516,7 @@ async def rollback_service(
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
-    _auth: None = Depends(verify_api_key),
+    _auth: None = Depends(verify_auth),
 ) -> RollbackResponse:
     record = await _get_or_create_record(name, store)
 
@@ -565,6 +569,7 @@ async def http_exception_handler(request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.detail if isinstance(exc.detail, str) else str(exc.detail)},
+        headers=exc.headers if exc.headers else None,
     )
 
 

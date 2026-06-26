@@ -87,15 +87,15 @@ class TestHealth:
 
 
 class TestListServices:
-    async def test_empty_list(self, client: AsyncClient):
-        resp = await client.get("/services")
+    async def test_empty_list(self, client: AsyncClient, auth_headers: dict):
+        resp = await client.get("/services", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data == {"services": []}
 
-    async def test_list_with_items(self, client: AsyncClient):
+    async def test_list_with_items(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("svc-a", "svc-b")
-        resp = await client.get("/services")
+        resp = await client.get("/services", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         names = {s["name"] for s in data["services"]}
@@ -110,13 +110,13 @@ class TestListServices:
 
 
 class TestGetStatus:
-    async def test_not_found(self, client: AsyncClient):
-        resp = await client.get("/services/nonexistent")
+    async def test_not_found(self, client: AsyncClient, auth_headers: dict):
+        resp = await client.get("/services/nonexistent", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_returns_status(self, client: AsyncClient):
+    async def test_returns_status(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("svc-a")
-        resp = await client.get("/services/svc-a")
+        resp = await client.get("/services/svc-a", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["name"] == "svc-a"
