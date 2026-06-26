@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Dashboard "Up to date" column** — the live dashboard now displays an
+  "Up to date" column showing each component's update state as a colored
+  badge (green "up to date", amber "update available" with digest tooltip,
+  grey "unknown").  Column sits between Health and Actions.
 - **Registry image-update detection** — new `registry_check` subpackage with
   `RegistryChecker` that polls the GHCR registry for the latest manifest
   digest and compares against the deployed image digest.
