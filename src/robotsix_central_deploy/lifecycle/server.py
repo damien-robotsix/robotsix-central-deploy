@@ -15,6 +15,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from .models import (
     ActionResponse,
     DeployRequest,
     DeployResponse,
+    DiskUsageResponse,
     ErrorDetail,
     RollbackResponse,
     ServiceHealthResponse,
@@ -180,6 +182,29 @@ async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord
 @app.get("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# GET /disk
+# ---------------------------------------------------------------------------
+
+
+@app.get("/disk", response_model=DiskUsageResponse)
+async def get_disk_usage(
+    _auth: None = Depends(verify_auth),
+    backend: ExecutionBackend = Depends(_get_backend),
+    config: LifecycleConfig = Depends(_get_config),
+) -> DiskUsageResponse:
+    """Host disk usage and Docker storage breakdown."""
+    usage = shutil.disk_usage(config.disk_path)
+    docker_df = await backend.disk_df()
+    return DiskUsageResponse(
+        total_bytes=usage.total,
+        used_bytes=usage.used,
+        free_bytes=usage.free,
+        warn_threshold_bytes=config.disk_warn_bytes,
+        docker=docker_df,
+    )
 
 
 # ---------------------------------------------------------------------------

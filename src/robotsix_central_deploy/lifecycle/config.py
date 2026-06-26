@@ -38,6 +38,10 @@ class LifecycleConfig(BaseSettings):
     # Production value: tcp://socket-proxy:2375
     docker_socket_url: str = "unix:///var/run/docker.sock"
 
+    # Disk usage monitoring
+    disk_path: str = "/"  # env: ROBOTSIX_LIFECYCLE_DISK_PATH — /host_root when containerised
+    disk_warn_bytes: int = 5_368_709_120  # 5 GiB — env: ROBOTSIX_LIFECYCLE_DISK_WARN_BYTES
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

@@ -24,7 +24,7 @@ services:
       SERVICES: "0"
       SESSION: "0"
       SWARM: "0"
-      SYSTEM: "0"
+      SYSTEM: "1"   # enables /system/df for Docker disk-usage reporting
       TASKS: "0"
       VOLUMES: "0"
     volumes:
@@ -43,8 +43,10 @@ services:
       ROBOTSIX_LIFECYCLE_STORE_BACKEND: "file"
       ROBOTSIX_LIFECYCLE_STORE_PATH: "/data/lifecycle_state.yaml"
       ROBOTSIX_LIFECYCLE_REGISTRY_PATH: "/app/config/components.yaml"
+      ROBOTSIX_LIFECYCLE_DISK_PATH: "/host_root"
     volumes:
       - central_deploy_data:/data
+      - /:/host_root:ro      # exposes host filesystem at /host_root (read-only)
     ports:
       - "8100:8100"
     depends_on:
