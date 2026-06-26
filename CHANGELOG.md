@@ -23,6 +23,11 @@ All notable changes to robotsix-central-deploy.
   chars), health, and start/stop/restart controls.  Auth-gated via `verify_auth`;
   auto-refreshes every 30 s.  Logs column placeholder present for future
   logs-viewer ticket.  No external CDN dependencies (vanilla JS + CSS).
+- **Log viewer modal** — clicking "Logs" for any component opens a dark-themed
+  modal that streams container logs via `fetch` + `ReadableStream` (no page
+  reload).  Shows last 200 lines then live-follows new output.  Close via × button
+  or Escape key aborts the fetch cleanly.  Auth credentials included
+  (`credentials: 'same-origin'`); 401 errors surface in the status bar.
 - **Unified auth** — `verify_auth` now accepts `Authorization: Basic` where the
   password equals `ROBOTSIX_LIFECYCLE_API_KEY` (username is ignored).  Added
   `verify_api_key = verify_auth` alias for backward compatibility.  New private
