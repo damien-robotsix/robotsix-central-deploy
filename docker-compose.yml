@@ -48,7 +48,7 @@ services:
       - central_deploy_data:/data
       - /:/host_root:ro      # exposes host filesystem at /host_root (read-only)
     ports:
-      - "8100:8100"
+      - "127.0.0.1:8100:8100"
     depends_on:
       - socket-proxy
     networks:
