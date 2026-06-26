@@ -1,32 +1,50 @@
-"""Auth guard — validates the ``X-API-Key`` header on mutating endpoints."""
+"""Auth guard — validates X-API-Key or HTTP Basic Auth on protected endpoints."""
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, status
+import base64
+
+from fastapi import HTTPException, Request, status
 
 
-async def verify_api_key(request: Request) -> None:
-    """FastAPI dependency that rejects requests missing a valid API key.
+async def verify_auth(request: Request) -> None:
+    """FastAPI dependency that rejects requests missing valid credentials.
 
-    The key is read from the app-scoped ``LifecycleConfig`` stash set up
-    during server startup.
+    Accepts either an ``X-API-Key`` header or ``Authorization: Basic``.
+    The credentials are read from the app-scoped ``LifecycleConfig`` stash
+    set up during server startup.
     """
     config = request.app.state.config
     if not config.auth_required:
-        return  # No key configured — allow all (dev mode).
+        return  # No credentials configured — allow all (dev mode).
 
-    api_key: str | None = request.headers.get("X-API-Key")
-    if api_key is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Missing X-API-Key header",
-        )
-    # Constant-time-ish comparison for timing safety.
-    if not _safe_compare(api_key, config.api_key):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API key",
-        )
+    # Try X-API-Key
+    api_key = request.headers.get("X-API-Key")
+    if api_key and config.api_key and _safe_compare(api_key, config.api_key):
+        return
+
+    # Try HTTP Basic Auth
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+            username, _, password = decoded.partition(":")
+        except Exception:
+            pass
+        else:
+            if (
+                config.auth_username
+                and config.auth_password
+                and _safe_compare(username, config.auth_username)
+                and _safe_compare(password, config.auth_password)
+            ):
+                return
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required",
+        headers={"WWW-Authenticate": 'Basic realm="Central Deploy"'},
+    )
 
 
 def _safe_compare(a: str, b: str) -> bool:
