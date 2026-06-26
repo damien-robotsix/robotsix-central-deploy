@@ -5,6 +5,7 @@ Endpoints:
 * ``GET  /health``                          — liveness probe (no auth).
 * ``GET  /services``                        — list all managed services.
 * ``GET  /services/{name}``                 — full status for one service.
+* ``GET  /services/{name}/logs``            — stream container logs (auth-gated).
 * ``POST /services/{name}/start``           — start a service (idempotent).
 * ``POST /services/{name}/stop``            — stop a service (idempotent).
 * ``POST /services/{name}/restart``         — restart a service (idempotent).
@@ -17,9 +18,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from .auth import verify_auth
 from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
@@ -228,6 +229,36 @@ async def get_service_status(
         record.health = inspect.health
         await store.put(record)
     return record.to_status()
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/logs
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/services/{name}/logs",
+    summary="Stream container logs (auth-gated)",
+    responses={
+        404: {"model": ErrorDetail, "description": "Service not found"},
+        422: {"description": "Validation error (tail out of range 1-10000)"},
+    },
+)
+async def get_service_logs(
+    name: str,
+    tail: int = Query(100, ge=1, le=10000),
+    since: str | None = Query(None, description="ISO 8601 or Unix timestamp"),
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> StreamingResponse:
+    record = await _get_or_create_record(name, store)
+
+    async def log_gen():
+        async for chunk in backend.stream_logs(record, tail=tail, since=since):
+            yield chunk
+
+    return StreamingResponse(log_gen(), media_type="text/plain; charset=utf-8")
 
 
 # ---------------------------------------------------------------------------

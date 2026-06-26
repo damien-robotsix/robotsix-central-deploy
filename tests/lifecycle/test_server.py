@@ -264,3 +264,56 @@ class TestRestart:
         await _seed_store("svc-a")
         resp = await client.post("/services/svc-a/restart", headers=auth_headers)
         assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/logs
+# ---------------------------------------------------------------------------
+
+
+class TestLogsEndpoint:
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        resp = await client.get("/services/svc-a/logs")
+        assert resp.status_code == 401
+
+    async def test_unknown_service_returns_404(self, client: AsyncClient, auth_headers: dict):
+        resp = await client.get("/services/nonexistent/logs", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_noop_backend_returns_stub_body(self, client: AsyncClient, auth_headers: dict):
+        await _seed_store("svc-a")
+        resp = await client.get("/services/svc-a/logs", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        body = resp.content
+        assert b"[noop backend]\n" in body
+
+    async def test_query_params_forwarded_to_backend(self, client: AsyncClient, auth_headers: dict):
+        await _seed_store("svc-a")
+
+        captured: list[dict] = []
+
+        async def _fake_stream(service, tail=100, since=None):
+            captured.append({"tail": tail, "since": since})
+            yield f"tail={tail} since={since}".encode()
+
+        original = server_mod.app.state.backend.stream_logs
+        server_mod.app.state.backend.stream_logs = _fake_stream
+        try:
+            resp = await client.get(
+                "/services/svc-a/logs?tail=50&since=1700000000",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            assert b"tail=50 since=1700000000" in resp.content
+            assert len(captured) == 1
+            assert captured[0] == {"tail": 50, "since": "1700000000"}
+        finally:
+            server_mod.app.state.backend.stream_logs = original
+
+    async def test_tail_out_of_range_returns_422(self, client: AsyncClient, auth_headers: dict):
+        await _seed_store("svc-a")
+        resp = await client.get("/services/svc-a/logs?tail=0", headers=auth_headers)
+        assert resp.status_code == 422
+        resp2 = await client.get("/services/svc-a/logs?tail=10001", headers=auth_headers)
+        assert resp2.status_code == 422
