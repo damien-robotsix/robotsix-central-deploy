@@ -167,3 +167,74 @@ class TestDockerSdkBackend:
         record = ServiceRecord(name="x", container_name="x")
         result = await b.status(record)
         assert result.state == expected
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — running_digest (image RepoDigests)
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendRunningDigest:
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        docker_mock.errors.ImageNotFound = type("ImageNotFound", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def _make_mock_container(self, image_id, repo_digests):
+        container = MagicMock()
+        container.attrs = {
+            "State": {"Status": "running"},
+            "Image": image_id,
+        }
+        container.image = MagicMock()
+        container.image.labels = {}
+        image_mock = MagicMock()
+        image_mock.attrs = {"RepoDigests": repo_digests}
+        return container, image_mock
+
+    async def test_running_digest_from_repo_digests(self, backend):
+        b, client = backend
+        image_id = "sha256:deadbeef"
+        repo_digests = ["ghcr.io/owner/img@sha256:e9f02675cf8a7c09"]
+        container, image_mock = self._make_mock_container(image_id, repo_digests)
+        client.containers.get.return_value = container
+        client.images.get.return_value = image_mock
+
+        record = ServiceRecord(name="cost-monitor", image="ghcr.io/owner/img:main")
+        result = await b.status(record)
+        assert result.running_digest == "sha256:e9f02675cf8a7c09"
+
+    async def test_running_digest_empty_when_image_get_raises(self, backend):
+        import docker
+
+        b, client = backend
+        image_id = "sha256:deadbeef"
+        container, _ = self._make_mock_container(image_id, [])
+        client.containers.get.return_value = container
+        client.images.get.side_effect = docker.errors.ImageNotFound("no img")
+
+        record = ServiceRecord(name="cost-monitor", image="ghcr.io/owner/img:main")
+        result = await b.status(record)
+        assert result.running_digest == ""
+
+    async def test_running_digest_fallback_when_no_matching_prefix(self, backend):
+        b, client = backend
+        image_id = "sha256:deadbeef"
+        repo_digests = ["ghcr.io/other/img@sha256:abc123"]
+        container, image_mock = self._make_mock_container(image_id, repo_digests)
+        client.containers.get.return_value = container
+        client.images.get.return_value = image_mock
+
+        record = ServiceRecord(name="cost-monitor", image="ghcr.io/owner/img:main")
+        result = await b.status(record)
+        assert result.running_digest == "sha256:abc123"

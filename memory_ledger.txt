@@ -10,3 +10,19 @@
 - `DockerSdkBackend.stream_logs` uses `run_in_executor` with a `_next_chunk` helper to avoid `StopIteration` crossing `await`
 - `asyncio.CancelledError` re-raised; `log_iter.close()` in `finally` block
 - Tests replace `backend.stream_logs` via direct attribute assignment on `server_mod.app.state.backend`
+## Doc structure
+- `src/robotsix_central_deploy/lifecycle/` — lifecycle server code
+  - `models.py` — `ServiceState` enum, `ComponentInspect` dataclass, `ServiceRecord`, all Pydantic API schemas (`ServiceStatus`, `ServiceListItem`, `ServiceListResponse`, `ActionResponse`, `DeployResponse`, `RollbackResponse`, `DiskUsageResponse`, etc.)
+  - `backend.py` — three backends: `NoopBackend` (testing), `DockerBackend` (subprocess), `DockerSdkBackend` (Python SDK)
+  - `server.py` — FastAPI lifespan, endpoints (GET /health, GET /services, GET /services/{name}, GET /services/{name}/health, GET /services/{name}/logs, POST start/stop/restart/deploy/rollback, GET /disk)
+  - `store.py` — `InMemoryStore`, `FileStore`
+  - `config.py` — `LifecycleConfig` with env-based settings
+  - `auth.py` — API key + HTTP Basic auth
+- `src/robotsix_central_deploy/registry_check/checker.py` — `RegistryChecker` with GHCR token flow, Accept header with OCI manifest types (multi-arch list, OCI manifest, Docker v2)
+- `src/robotsix_central_deploy/registry/` — component registry loader
+- `tests/` — pytest suites with MagicMock/AsyncMock for SDK mocking, `httpx.AsyncClient` for server integration tests
+## Key fields
+- `ServiceRecord.deployed_image_digest` — sha256 of running container image (populated via image inspect RepoDigests)
+- `ServiceRecord.latest_registry_digest` — last known registry manifest digest (from GHCR)
+- `ServiceStatus.update_state` — tri-state: "unknown" (can't determine), "up-to-date", "update-available"
+- `ComponentInspect.running_digest` — extracted from image RepoDigests in `DockerSdkBackend.status()`
