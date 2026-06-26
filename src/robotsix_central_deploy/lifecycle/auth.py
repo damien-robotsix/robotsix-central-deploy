@@ -60,5 +60,3 @@ def _safe_compare(a: str, b: str) -> bool:
     return result == 0
 
 
-# Backward-compatible alias for callers that import verify_api_key.
-verify_api_key = verify_auth
