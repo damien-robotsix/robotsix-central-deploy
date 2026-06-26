@@ -1,0 +1,12 @@
+## Repo layout
+- `src/robotsix_central_deploy/lifecycle/backend.py` — abstract `ExecutionBackend`, stubs `NoopBackend`/`DockerBackend`, real `DockerSdkBackend`
+- `src/robotsix_central_deploy/lifecycle/server.py` — FastAPI app with all endpoints
+- `tests/lifecycle/test_server.py` — httpx-based integration tests
+- `CHANGELOG.md` — changelog at repo root
+- `docs/modules.yaml` — module registry (no per-query-param docs)
+- `README.md` — top‑level docs (no per-query-param docs)
+## Conventions
+- `follow` added as `follow: bool = False` query param on `GET /services/{name}/logs`
+- `DockerSdkBackend.stream_logs` uses `run_in_executor` with a `_next_chunk` helper to avoid `StopIteration` crossing `await`
+- `asyncio.CancelledError` re-raised; `log_iter.close()` in `finally` block
+- Tests replace `backend.stream_logs` via direct attribute assignment on `server_mod.app.state.backend`

@@ -56,6 +56,7 @@ class ExecutionBackend(ABC):
         service: ServiceRecord,
         tail: int = 100,
         since: str | None = None,
+        follow: bool = False,
     ) -> AsyncIterator[bytes]: ...
 
     @abstractmethod
@@ -95,6 +96,7 @@ class NoopBackend(ExecutionBackend):
         service: ServiceRecord,
         tail: int = 100,
         since: str | None = None,
+        follow: bool = False,
     ) -> AsyncIterator[bytes]:
         yield b"[noop backend]\n"
 
@@ -172,6 +174,7 @@ class DockerBackend(ExecutionBackend):
         service: ServiceRecord,
         tail: int = 100,
         since: str | None = None,
+        follow: bool = False,
     ) -> AsyncIterator[bytes]:
         yield b"[docker-cli backend: use docker_sdk for log streaming]\n"
 
@@ -563,6 +566,7 @@ class DockerSdkBackend(ExecutionBackend):
         service: ServiceRecord,
         tail: int = 100,
         since: str | None = None,
+        follow: bool = False,
     ) -> AsyncIterator[bytes]:
         import docker
 
@@ -579,17 +583,36 @@ class DockerSdkBackend(ExecutionBackend):
             yield b"[container not found]\n"
             return
 
-        kwargs: dict[str, object] = {"stream": True, "follow": False, "tail": tail}
+        kwargs: dict[str, object] = {"stream": True, "follow": follow, "tail": tail}
         if since is not None:
             kwargs["since"] = since
+
+        log_iter = None
         try:
             log_iter = await loop.run_in_executor(
                 None, lambda: container.logs(**kwargs)
             )
-            for chunk in log_iter:
+            while True:
+                def _next_chunk():
+                    try:
+                        return next(log_iter), False
+                    except StopIteration:
+                        return None, True
+
+                chunk, exhausted = await loop.run_in_executor(None, _next_chunk)
+                if exhausted:
+                    break
                 yield chunk if isinstance(chunk, bytes) else chunk.encode()
+        except asyncio.CancelledError:
+            raise
         except docker.errors.APIError as exc:
             yield f"[docker error: {exc}]\n".encode()
+        finally:
+            if log_iter is not None:
+                try:
+                    log_iter.close()
+                except Exception:
+                    pass
 
     async def disk_df(self) -> DockerDfStats:
         import docker  # noqa: PLC0415
