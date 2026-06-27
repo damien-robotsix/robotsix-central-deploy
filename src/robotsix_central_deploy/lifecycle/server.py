@@ -45,7 +45,7 @@ from .models import (
 )
 from ..registry.config_store import ComponentConfigStore
 from ..registry.env_store import EnvStore
-from ..registry.loader import ComponentRegistry, RegistryLoadError
+from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
@@ -171,23 +171,6 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
     return NoopBackend()
 
 
-async def _migrate_yaml_to_store(
-    yaml_registry: "ComponentRegistry",
-    store: "ComponentConfigStore",
-) -> int:
-    """Write yaml-sourced components to *store* for any id not already present.
-
-    Skips ids already in the store so existing UI-managed configs are never
-    overwritten.  Returns the count of entries actually written.
-    """
-    migrated = 0
-    for comp in yaml_registry.all():
-        if store.get(comp.id) is None:
-            await store.put(comp)
-            migrated += 1
-    return migrated
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _config, _store, _backend, _registry_checker, _http_client
@@ -228,62 +211,14 @@ async def lifespan(app: FastAPI):
         "on" if _config.auth_required else "off",
     )
 
-    # -- Pre-seed store from component registry -----------------------------
+    # -- Component registry (in-memory, populated from persisted store) ------
+    registry = ComponentRegistry([])
+    app.state.registry = registry
 
-    registry_path: Path = _config.effective_registry_path
-    try:
-        registry = ComponentRegistry.from_yaml(registry_path)
-    except RegistryLoadError as exc:
-        logger.warning("Could not load component registry: %s", exc)
-        registry = None
-
-    if registry:
-        for component in registry.all():
-            record = ServiceRecord(
-                name=component.id,
-                container_name=component.container_name,
-                image=component.image,
-            )
-            await _store.put(record)
-        logger.info(
-            "Pre-seeded %d components from registry", len(registry.all()),
-        )
-
-    app.state.registry = registry  # may be None if load failed
-
-    # -- Dynamic component config store ---------------------------------
+    # -- Dynamic component config store ------------------------------------
     store_path: Path = _config.effective_component_config_store_path
-    first_run: bool = not store_path.exists()          # sentinel: file absent = never written
-
     component_config_store = ComponentConfigStore(store_path)
     app.state.component_config_store = component_config_store
-
-    # Ensure registry is always a ComponentRegistry (never None after lifespan)
-    if registry is None:
-        registry = ComponentRegistry([])
-        app.state.registry = registry
-
-    # First-run migration: seed the JSON store from yaml so the persisted store
-    # becomes the single source of truth from this point forward.
-    if first_run and registry:
-        migrated = await _migrate_yaml_to_store(registry, component_config_store)
-        if migrated:
-            logger.warning(
-                "DEPRECATION: migrated %d component(s) from legacy components.yaml "
-                "to the persisted store (%s). "
-                "The static components.yaml file will be removed in a future release "
-                "once all deployments have migrated to the UI-driven store.",
-                migrated,
-                store_path,
-            )
-    elif registry and registry.all():
-        # Store already exists but yaml is still present — emit a one-time advisory.
-        logger.warning(
-            "DEPRECATION: components.yaml is present but the persisted store already "
-            "exists at %s — yaml entries are ignored for ids already in the store. "
-            "Remove components.yaml once all services are managed via the UI.",
-            store_path,
-        )
 
     # Merge dynamic store into in-memory registry (unchanged logic)
     for dyn_config in component_config_store.all():

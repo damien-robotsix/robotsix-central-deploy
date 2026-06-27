@@ -44,7 +44,7 @@ services:
       ROBOTSIX_LIFECYCLE_STORE_PATH: "/data/lifecycle_state.yaml"
       ROBOTSIX_LIFECYCLE_ENV_STORE_PATH: "/data/component_env.json"
       ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH: "/data/secrets.key"
-      ROBOTSIX_LIFECYCLE_REGISTRY_PATH: "/app/config/components.yaml"
+
       ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH: "/data/component_configs.json"
       ROBOTSIX_LIFECYCLE_DISK_PATH: "/host_root"
     volumes:
