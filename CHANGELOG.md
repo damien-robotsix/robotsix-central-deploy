@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **`DELETE /services/{name}` endpoint** — removes an onboarded component, its service
+  records, environment variables, secrets, and in-memory registry entry. Supports an
+  optional `?stop_container=false` query parameter to skip container stop/removal
+  (default: `true`). Container stop and remove are best-effort — errors are logged at
+  `WARNING` and do not abort the deletion. Sibling services are also stopped, removed,
+  and cleaned up.
+
 - **Calendar stack contract-conforming compose files** — authored
   `# central-deploy-contract-version: 1` compose files for `robotsix-calendar-agent`
   and `robotsix-radicale` and pushed them to their respective repos.  The calendar-agent

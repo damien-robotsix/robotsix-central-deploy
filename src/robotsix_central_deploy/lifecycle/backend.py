@@ -31,6 +31,11 @@ class ExecutionBackend(ABC):
     async def stop(self, service: ServiceRecord) -> ServiceState: ...
 
     @abstractmethod
+    async def remove_container(self, service: ServiceRecord) -> None:
+        """Remove the managed container for *service* (best-effort, already stopped)."""
+        ...
+
+    @abstractmethod
     async def restart(self, service: ServiceRecord) -> ServiceState: ...
 
     @abstractmethod
@@ -79,6 +84,9 @@ class NoopBackend(ExecutionBackend):
 
     async def stop(self, service: ServiceRecord) -> ServiceState:
         return ServiceState.STOPPED
+
+    async def remove_container(self, service: ServiceRecord) -> None:
+        pass
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
         return ServiceState.RUNNING
@@ -144,6 +152,9 @@ class DockerBackend(ExecutionBackend):
             logger.error("docker stop %s failed: %s", service.name, stderr)
             return ServiceState.FAILED
         return ServiceState.STOPPED
+
+    async def remove_container(self, service: ServiceRecord) -> None:
+        pass
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
         if not service.image:
@@ -396,6 +407,21 @@ class DockerSdkBackend(ExecutionBackend):
             return ServiceState.FAILED
 
         return ServiceState.STOPPED
+
+    async def remove_container(self, service: ServiceRecord) -> None:
+        import docker
+
+        loop = asyncio.get_running_loop()
+        name = self._container_name(service)
+        container = await self._get_container(name)
+        if container is None:
+            return
+        try:
+            await loop.run_in_executor(None, lambda: container.remove(force=True))
+        except docker.errors.NotFound:
+            pass
+        except Exception as exc:
+            logger.warning("remove_container %s: %s", name, exc)
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
         name = self._container_name(service)
