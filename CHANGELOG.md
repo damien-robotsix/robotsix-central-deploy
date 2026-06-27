@@ -23,6 +23,12 @@ All notable changes to robotsix-central-deploy.
   existing `GET/PUT/DELETE /services/{name}/env` API endpoints and matches the
   dashboard's dark theme styling.
 
+- **Parse `container_name` from compose YAML** — `parse_compose()` now reads
+  `container_name` from the service definition and passes it through `DerivedSpec`.
+  `onboard_confirm` uses `spec.container_name or spec.name` to set the container name
+  on both `ComponentConfig` and `ServiceRecord`.  Empty string defaults to the component
+  name, matching the existing broker (agent-comm) behaviour.
+
 - **Encrypted env secrets storage** — new `SecretKeyManager` (Fernet key generation
   and encrypt/decrypt) and `EnvStore` (JSON persistence for per-component env overrides
   and encrypted secret tokens).  Three new API endpoints:

@@ -326,6 +326,39 @@ services:
 # parse_compose — environment
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# parse_compose — container_name
+# ---------------------------------------------------------------------------
+
+
+class TestParseComposeContainerName:
+    def test_container_name_present(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    container_name: agent-comm
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.container_name == "agent-comm"
+
+    def test_container_name_absent_defaults_empty(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.container_name == ""
+
+
+# ---------------------------------------------------------------------------
+# parse_compose — environment
+# ---------------------------------------------------------------------------
+
+
 class TestParseComposeEnv:
     def test_env_list(self):
         y = """\
