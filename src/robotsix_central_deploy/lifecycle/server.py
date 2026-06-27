@@ -171,6 +171,23 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
     return NoopBackend()
 
 
+async def _migrate_yaml_to_store(
+    yaml_registry: "ComponentRegistry",
+    store: "ComponentConfigStore",
+) -> int:
+    """Write yaml-sourced components to *store* for any id not already present.
+
+    Skips ids already in the store so existing UI-managed configs are never
+    overwritten.  Returns the count of entries actually written.
+    """
+    migrated = 0
+    for comp in yaml_registry.all():
+        if store.get(comp.id) is None:
+            await store.put(comp)
+            migrated += 1
+    return migrated
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _config, _store, _backend, _registry_checker, _http_client
@@ -235,7 +252,10 @@ async def lifespan(app: FastAPI):
     app.state.registry = registry  # may be None if load failed
 
     # -- Dynamic component config store ---------------------------------
-    component_config_store = ComponentConfigStore(_config.effective_component_config_store_path)
+    store_path: Path = _config.effective_component_config_store_path
+    first_run: bool = not store_path.exists()          # sentinel: file absent = never written
+
+    component_config_store = ComponentConfigStore(store_path)
     app.state.component_config_store = component_config_store
 
     # Ensure registry is always a ComponentRegistry (never None after lifespan)
@@ -243,10 +263,31 @@ async def lifespan(app: FastAPI):
         registry = ComponentRegistry([])
         app.state.registry = registry
 
-    # Merge dynamic store into in-memory registry
+    # First-run migration: seed the JSON store from yaml so the persisted store
+    # becomes the single source of truth from this point forward.
+    if first_run and registry:
+        migrated = await _migrate_yaml_to_store(registry, component_config_store)
+        if migrated:
+            logger.warning(
+                "DEPRECATION: migrated %d component(s) from legacy components.yaml "
+                "to the persisted store (%s). "
+                "The static components.yaml file will be removed in a future release "
+                "once all deployments have migrated to the UI-driven store.",
+                migrated,
+                store_path,
+            )
+    elif registry and registry.all():
+        # Store already exists but yaml is still present — emit a one-time advisory.
+        logger.warning(
+            "DEPRECATION: components.yaml is present but the persisted store already "
+            "exists at %s — yaml entries are ignored for ids already in the store. "
+            "Remove components.yaml once all services are managed via the UI.",
+            store_path,
+        )
+
+    # Merge dynamic store into in-memory registry (unchanged logic)
     for dyn_config in component_config_store.all():
         registry.register(dyn_config)
-        # Pre-seed ServiceRecord if not already present
         existing = await _store.get(dyn_config.id)
         if existing is None:
             await _store.put(ServiceRecord(
