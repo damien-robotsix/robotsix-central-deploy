@@ -94,6 +94,89 @@
   .disk-bar-wrap { width:200px; height:12px; background:#334155; border-radius:6px; display:inline-block; vertical-align:middle; }
   .disk-bar-fill { height:100%; border-radius:6px; background:#4ade80; }
   .disk-bar-fill.warn { background:#f87171; }
+
+  /* Buttons */
+  .btn-primary { padding: 6px 16px; background: var(--blue); color: #0f172a; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.82rem; }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-secondary { padding: 6px 16px; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 4px; cursor: pointer; font-size: 0.82rem; }
+  .btn-secondary:hover { background: #475569; }
+
+  /* Env modal */
+  .env-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6); z-index: 101;
+    align-items: center; justify-content: center;
+  }
+  .env-overlay.open { display: flex; }
+  .env-panel {
+    background: #1e293b; border-radius: 8px; padding: 1.5rem;
+    width: 600px; max-width: 90vw; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+  .env-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 1rem;
+  }
+  .env-header h2 { font-size: 1rem; color: #e2e8f0; font-weight: 600; }
+  .env-close {
+    background: none; border: none; color: #9e9e9e; font-size: 1.3rem;
+    cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .env-close:hover { color: #fff; }
+  .env-section { margin-bottom: 1.2rem; }
+  .env-section h3 {
+    color: var(--blue); border-bottom: 1px solid #334155;
+    padding-bottom: 4px; margin-bottom: 8px; font-size: 0.9rem;
+  }
+  .env-row {
+    display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
+  }
+  .env-row .env-key {
+    width: 140px; flex-shrink: 0;
+    background: #243044; color: #94a3b8; border: 1px solid #334155;
+    border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
+  }
+  .env-row .env-value {
+    flex: 1;
+    background: #243044; color: #e2e8f0; border: 1px solid #334155;
+    border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
+  }
+  .env-row .env-new-key {
+    width: 140px; flex-shrink: 0;
+    background: #243044; color: #e2e8f0; border: 1px solid #334155;
+    border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
+  }
+  .btn-delete {
+    background: none; border: none; color: var(--red); cursor: pointer;
+    font-size: 0.9rem; padding: 2px 4px; flex-shrink: 0;
+  }
+  .btn-delete:hover { opacity: 0.7; }
+  .btn-add {
+    background: none; border: 1px dashed #475569; color: #94a3b8;
+    border-radius: 4px; padding: 4px 12px; cursor: pointer; font-size: 0.78rem;
+    margin-top: 2px;
+  }
+  .btn-add:hover { border-color: var(--blue); color: var(--blue); }
+  .env-footer {
+    display: flex; gap: 8px; justify-content: flex-end;
+    margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #334155;
+  }
+  .env-row .secret-value-masked {
+    flex: 1; color: #94a3b8; font-size: 0.82rem;
+  }
+  .env-row .secret-new-value {
+    flex: 1;
+    background: #243044; color: #e2e8f0; border: 1px solid #334155;
+    border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
+  }
+  .env-row .inline-error {
+    font-size: 0.72rem; color: var(--red); flex-basis: 100%;
+  }
+  .env-modal-error {
+    background: var(--red-bg); color: var(--red); border: 1px solid var(--red);
+    padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; display: none;
+    font-size: 0.82rem;
+  }
 </style>
 </head>
 <body>
@@ -130,6 +213,30 @@
     <tr><td colspan="7" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
   </tbody>
 </table>
+
+<div id="env-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="env-modal-title">
+  <div class="env-panel">
+    <div class="env-header">
+      <h2 id="env-modal-title">Component Config: <span id="env-modal-component"></span></h2>
+      <button class="env-close" onclick="closeEnvModal()" title="Close">&times;</button>
+    </div>
+    <div id="env-modal-error" class="env-modal-error"></div>
+    <div class="env-section">
+      <h3>Environment Variables</h3>
+      <div id="env-rows"></div>
+      <button class="btn-add" onclick="addEnvRow()">+ Add variable</button>
+    </div>
+    <div class="env-section">
+      <h3>Secrets</h3>
+      <div id="secret-rows"></div>
+      <button class="btn-add" onclick="addSecretRow()">+ Add secret</button>
+    </div>
+    <div class="env-footer">
+      <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
+      <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
+    </div>
+  </div>
+</div>
 
 <div id="log-modal" class="log-overlay" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
   <div class="log-panel">
@@ -209,6 +316,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
+      <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
     <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
@@ -416,6 +524,226 @@ async function streamLogs(name) {
   }
 }
 
+// ── Env / secrets modal ────────────────────────────────────────────
+
+let currentEnvComponent = null;
+
+function openEnvModal(name) {
+  currentEnvComponent = name;
+  document.getElementById('env-modal-component').textContent = name;
+  document.getElementById('env-modal-error').style.display = 'none';
+  document.getElementById('env-rows').innerHTML = '';
+  document.getElementById('secret-rows').innerHTML = '';
+  document.getElementById('env-modal').classList.add('open');
+
+  fetchEnvConfig(name);
+}
+
+function closeEnvModal() {
+  document.getElementById('env-modal').classList.remove('open');
+  currentEnvComponent = null;
+}
+
+async function fetchEnvConfig(name) {
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/env`, {
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    renderEnvRows(data.env || {}, data.secrets || {});
+  } catch (err) {
+    showEnvModalError(err.message);
+  }
+}
+
+function renderEnvRows(env, secrets) {
+  const envContainer = document.getElementById('env-rows');
+  const secretContainer = document.getElementById('secret-rows');
+  envContainer.innerHTML = '';
+  secretContainer.innerHTML = '';
+
+  for (const [key, value] of Object.entries(env)) {
+    envContainer.appendChild(buildEnvRow(key, value));
+  }
+
+  for (const key of Object.keys(secrets)) {
+    secretContainer.appendChild(buildSecretRow(key));
+  }
+}
+
+function buildEnvRow(key, value) {
+  const div = document.createElement('div');
+  div.className = 'env-row';
+  div.dataset.key = key;
+  div.innerHTML = `
+    <input type="text" class="env-key" value="${escAttr(key)}" readonly>
+    <input type="text" class="env-value" value="${escAttr(value)}">
+    <button class="btn-delete" title="Delete" onclick="deleteEnvKey(this)">✕</button>
+    <span class="inline-error" style="display:none;"></span>
+  `;
+  return div;
+}
+
+function buildSecretRow(key) {
+  const div = document.createElement('div');
+  div.className = 'env-row';
+  div.dataset.key = key;
+  div.innerHTML = `
+    <span class="env-key" style="display:flex;align-items:center;">${escHtml(key)}</span>
+    <span class="secret-value-masked">***</span>
+    <input type="password" class="secret-new-value" placeholder="enter new value to update" autocomplete="off">
+    <button class="btn-delete" title="Delete" onclick="deleteSecretKey(this)">✕</button>
+    <span class="inline-error" style="display:none;"></span>
+  `;
+  return div;
+}
+
+function addEnvRow() {
+  const div = document.createElement('div');
+  div.className = 'env-row';
+  div.dataset.new = 'true';
+  div.innerHTML = `
+    <input type="text" class="env-new-key" placeholder="KEY">
+    <input type="text" class="env-value" placeholder="VALUE">
+    <button class="btn-delete" title="Remove" onclick="this.closest('.env-row').remove()">✕</button>
+  `;
+  document.getElementById('env-rows').appendChild(div);
+}
+
+function addSecretRow() {
+  const div = document.createElement('div');
+  div.className = 'env-row';
+  div.dataset.new = 'true';
+  div.innerHTML = `
+    <input type="text" class="env-new-key" placeholder="KEY">
+    <input type="password" class="secret-new-value" placeholder="VALUE" autocomplete="off">
+    <button class="btn-delete" title="Remove" onclick="this.closest('.env-row').remove()">✕</button>
+  `;
+  document.getElementById('secret-rows').appendChild(div);
+}
+
+async function deleteEnvKey(btn) {
+  const row = btn.closest('.env-row');
+  const key = row.dataset.key;
+  if (!key) { row.remove(); return; }
+  if (!window.confirm(`Delete env key "${key}"?`)) return;
+
+  try {
+    const resp = await fetch(
+      `/services/${encodeURIComponent(currentEnvComponent)}/env/${encodeURIComponent(key)}`,
+      { method: 'DELETE', credentials: 'same-origin' }
+    );
+    if (resp.status === 204) {
+      row.remove();
+    } else if (resp.status === 404) {
+      showRowInlineError(row, 'Key not found on server');
+    } else {
+      const body = await resp.json().catch(() => ({}));
+      showRowInlineError(row, body.error || `HTTP ${resp.status}`);
+    }
+  } catch (err) {
+    showRowInlineError(row, err.message);
+  }
+}
+
+async function deleteSecretKey(btn) {
+  const row = btn.closest('.env-row');
+  const key = row.dataset.key;
+  if (!key) { row.remove(); return; }
+  if (!window.confirm(`Delete secret key "${key}"?`)) return;
+
+  try {
+    const resp = await fetch(
+      `/services/${encodeURIComponent(currentEnvComponent)}/env/${encodeURIComponent(key)}`,
+      { method: 'DELETE', credentials: 'same-origin' }
+    );
+    if (resp.status === 204) {
+      row.remove();
+    } else if (resp.status === 404) {
+      showRowInlineError(row, 'Key not found on server');
+    } else {
+      const body = await resp.json().catch(() => ({}));
+      showRowInlineError(row, body.error || `HTTP ${resp.status}`);
+    }
+  } catch (err) {
+    showRowInlineError(row, err.message);
+  }
+}
+
+function showRowInlineError(row, msg) {
+  const errEl = row.querySelector('.inline-error');
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.style.display = 'block';
+  }
+}
+
+async function saveEnvChanges() {
+  hideEnvModalError();
+  const name = currentEnvComponent;
+  if (!name) return;
+
+  // Collect env rows
+  const env = {};
+  const envRows = document.querySelectorAll('#env-rows .env-row');
+  for (const row of envRows) {
+    const keyInput = row.querySelector('.env-key, .env-new-key');
+    const valueInput = row.querySelector('.env-value');
+    const key = (keyInput.value || '').trim();
+    if (!key) continue;
+    env[key] = valueInput ? valueInput.value : '';
+  }
+
+  // Collect secret rows — only include when new-value input is non-empty
+  const secrets = {};
+  const secretRows = document.querySelectorAll('#secret-rows .env-row');
+  for (const row of secretRows) {
+    const keyInput = row.querySelector('.env-key, .env-new-key');
+    const newValueInput = row.querySelector('.secret-new-value');
+    let key;
+    if (keyInput.tagName === 'INPUT') {
+      key = (keyInput.value || '').trim();
+    } else {
+      key = row.dataset.key || '';
+    }
+    if (!key) continue;
+    const newValue = newValueInput ? newValueInput.value : '';
+    if (!newValue) continue; // skip unchanged secrets
+    secrets[key] = newValue;
+  }
+
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/env`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ env, secrets }),
+    });
+    if (resp.status === 204) {
+      closeEnvModal();
+    } else {
+      const body = await resp.json().catch(() => ({}));
+      showEnvModalError(body.error || `HTTP ${resp.status}`);
+    }
+  } catch (err) {
+    showEnvModalError(err.message);
+  }
+}
+
+function showEnvModalError(msg) {
+  const el = document.getElementById('env-modal-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideEnvModalError() {
+  document.getElementById('env-modal-error').style.display = 'none';
+}
+
 function escHtml(s) {
   const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
   return String(s).replace(/[&<>"']/g, ch => map[ch]);
@@ -432,7 +760,10 @@ function startAutoRefresh() {
 
 // Bootstrap
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeLogs();
+  if (e.key === 'Escape') {
+    closeLogs();
+    closeEnvModal();
+  }
 });
 loadDashboard();
 startAutoRefresh();

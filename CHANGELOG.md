@@ -4,6 +4,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Dashboard env/secrets config modal** — added a per-component "Config" button
+  that opens an env/secrets editing modal.  Users can view, add, edit, and delete
+  environment variables and secrets from the UI without SSH.  The modal uses the
+  existing `GET/PUT/DELETE /services/{name}/env` API endpoints and matches the
+  dashboard's dark theme styling.
+
 - **Encrypted env secrets storage** — new `SecretKeyManager` (Fernet key generation
   and encrypt/decrypt) and `EnvStore` (JSON persistence for per-component env overrides
   and encrypted secret tokens).  Three new API endpoints:
