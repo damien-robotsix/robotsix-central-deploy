@@ -1,0 +1,2 @@
+# No hardcoded components. The registry is populated only by onboarding a repo via the UI.
+components: []
