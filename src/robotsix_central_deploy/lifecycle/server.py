@@ -44,8 +44,10 @@ from .models import (
     can_transition,
 )
 from ..registry.config_store import ComponentConfigStore
+from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry, RegistryLoadError
 from ..registry.models import ComponentConfig
+from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
 from ..ui.router import router as ui_router
 from .store import FileStore, InMemoryStore, ServiceStore
@@ -82,6 +84,21 @@ class OnboardConfirmResponse(BaseModel):
     name: str
     image: str
     state: str
+
+
+# ---------------------------------------------------------------------------
+# Env endpoint models
+# ---------------------------------------------------------------------------
+
+
+class EnvResponse(BaseModel):
+    env: dict[str, str]
+    secrets: dict[str, str]  # values are always "***"
+
+
+class EnvUpdate(BaseModel):
+    env: dict[str, str] = {}
+    secrets: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -160,9 +177,13 @@ async def lifespan(app: FastAPI):
     _config = LifecycleConfig()  # type: ignore[call-arg]
     _store = _build_store(_config)
     _backend = _build_backend(_config)
+    _key_manager = SecretKeyManager(Path(_config.secret_key_path))
+    _env_store = EnvStore(Path(_config.env_store_path), _key_manager)
     app.state.config = _config
     app.state.store = _store
     app.state.backend = _backend
+    app.state.key_manager = _key_manager
+    app.state.env_store = _env_store
 
     # -- Registry checker ------------------------------------------------
     http_client = httpx.AsyncClient(timeout=10.0)
@@ -297,6 +318,10 @@ def _get_registry_checker(request: Request) -> RegistryChecker:
 
 async def _get_component_config_store(request: Request) -> ComponentConfigStore:
     return request.app.state.component_config_store
+
+
+async def _get_env_store(request: Request) -> EnvStore:
+    return request.app.state.env_store
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -712,6 +737,10 @@ async def deploy_service(
             detail=f"No component config for '{name}' — cannot deploy",
         )
 
+    env_store: EnvStore = await _get_env_store(request)
+    merged_env = await env_store.get_merged_env(name, config.env)
+    config = config.model_copy(update={"env": merged_env})
+
     image_ref = body.image or config.image
 
     try:
@@ -780,6 +809,10 @@ async def rollback_service(
             detail=f"No component config for '{name}' — cannot rollback",
         )
 
+    env_store: EnvStore = await _get_env_store(request)
+    merged_env = await env_store.get_merged_env(name, config.env)
+    config = config.model_copy(update={"env": merged_env})
+
     # Snapshot current digests before mutating
     old_deployed = record.deployed_image_digest
     old_previous = record.previous_image_digest
@@ -809,6 +842,80 @@ async def rollback_service(
         rolled_back_to_digest=old_previous,
         current_state=record.state,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/env
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/services/{name}/env",
+    response_model=EnvResponse,
+    summary="Get stored environment variables and secret keys for a service",
+    responses={404: {"model": ErrorDetail, "description": "Service not found"}},
+)
+async def get_service_env(
+    name: str,
+    store: ServiceStore = Depends(_get_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    _auth: None = Depends(verify_auth),
+) -> EnvResponse:
+    await _get_or_create_record(name, store)
+    config = await env_store.get(name)
+    secrets_masked = {key: "***" for key in config.secret_tokens}
+    return EnvResponse(env=config.env, secrets=secrets_masked)
+
+
+# ---------------------------------------------------------------------------
+# PUT /services/{name}/env
+# ---------------------------------------------------------------------------
+
+
+@app.put(
+    "/services/{name}/env",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Upsert environment variables and secrets for a service",
+    responses={404: {"model": ErrorDetail, "description": "Service not found"}},
+)
+async def put_service_env(
+    name: str,
+    body: EnvUpdate,
+    store: ServiceStore = Depends(_get_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    _auth: None = Depends(verify_auth),
+) -> None:
+    await _get_or_create_record(name, store)
+    await env_store.upsert(name, body.env, body.secrets)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /services/{name}/env/{key}
+# ---------------------------------------------------------------------------
+
+
+@app.delete(
+    "/services/{name}/env/{key}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an environment variable or secret key for a service",
+    responses={
+        404: {"model": ErrorDetail, "description": "Service or key not found"},
+    },
+)
+async def delete_service_env_key(
+    name: str,
+    key: str,
+    store: ServiceStore = Depends(_get_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    _auth: None = Depends(verify_auth),
+) -> None:
+    await _get_or_create_record(name, store)
+    found = await env_store.delete_key(name, key)
+    if not found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key '{key}' not found in env or secrets for '{name}'",
+        )
 
 
 # ---------------------------------------------------------------------------

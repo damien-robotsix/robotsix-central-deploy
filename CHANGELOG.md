@@ -4,6 +4,19 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Encrypted env secrets storage** — new `SecretKeyManager` (Fernet key generation
+  and encrypt/decrypt) and `EnvStore` (JSON persistence for per-component env overrides
+  and encrypted secret tokens).  Three new API endpoints:
+  `GET /services/{name}/env` (returns plaintext env + masked secrets),
+  `PUT /services/{name}/env` (upsert env values and secrets),
+  `DELETE /services/{name}/env/{key}` (remove a key from env or secrets).
+  Merged env (base YAML + user overrides + decrypted secrets) is injected into
+  container creation at `deploy_service()` and `rollback_service()` time.
+  New config fields: `env_store_path` (`ROBOTSIX_LIFECYCLE_ENV_STORE_PATH`,
+  default `component_env.json`) and `secret_key_path`
+  (`ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH`, default `secrets.key`).
+  Added `cryptography>=41.0` dependency.
+
 - **Onboard API endpoints** — new `POST /onboard/preflight` (fetch+validate a service
   repo's compose) and `POST /onboard/confirm` (persist config, deploy container,
   register component).  Dynamic `ComponentConfigStore` persists onboarded components
