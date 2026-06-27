@@ -33,6 +33,7 @@ _HOP_BY_HOP: frozenset[str] = frozenset({
 #: Response headers to strip from upstream before returning to the client.
 _RESPONSE_STRIP: frozenset[str] = frozenset({
     "connection", "keep-alive", "transfer-encoding",
+    "content-length",  # stale — every response is streamed
 })
 
 
@@ -60,7 +61,10 @@ async def http_proxy(
     forwarded chunk-by-chunk).  All other responses are also streamed to
     avoid buffering large payloads.
     """
+    # Build target URL — include query string so e.g. ?page=2 is forwarded
     url = f"{target_base_url}/{path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
 
     # -- Build forwarded headers --------------------------------------------
     headers = filter_hop_by_hop(dict(request.headers))
@@ -174,13 +178,25 @@ async def ws_proxy(
             except Exception:
                 logger.debug("backend→client task exiting", exc_info=True)
 
-        results = await asyncio.gather(
-            _client_to_backend(),
-            _backend_to_client(),
-            return_exceptions=True,
+        task_a = asyncio.create_task(_client_to_backend())
+        task_b = asyncio.create_task(_backend_to_client())
+
+        done, pending = await asyncio.wait(
+            {task_a, task_b},
+            return_when=asyncio.FIRST_COMPLETED,
         )
-        for r in results:
-            if isinstance(r, Exception) and not isinstance(
-                r, websockets.exceptions.ConnectionClosed
+
+        # Cancel whichever task is still running so the endpoint never hangs
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        for task in done:
+            if task.cancelled():
+                continue
+            exc = task.exception()
+            if exc is not None and not isinstance(
+                exc, websockets.exceptions.ConnectionClosed
             ):
-                logger.warning("ws_proxy task error: %s", r)
+                logger.warning("ws_proxy task error: %s", exc)

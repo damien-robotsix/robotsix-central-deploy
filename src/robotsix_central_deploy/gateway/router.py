@@ -78,8 +78,11 @@ async def gateway_index_redirect(name: str) -> RedirectResponse:
 @gateway_router.websocket("/{name}/{path:path}")
 async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
     config, err_status = _resolve(websocket.app, name)
-    if err_status:
-        await websocket.close(code=err_status)
+    if err_status is not None:
+        # Map HTTP-style status to a valid WebSocket close code (RFC 6455).
+        # 4004 = application-defined "not found"; 4011 = "service unavailable".
+        ws_code: int = 4004 if err_status == 404 else 4011
+        await websocket.close(code=ws_code)
         return
 
     # Build target WebSocket URL — Docker container name resolves via the
