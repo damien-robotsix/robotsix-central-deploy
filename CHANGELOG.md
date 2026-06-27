@@ -4,6 +4,16 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Onboard-from-git compose parser** — new `onboard` package with
+  `fetch_compose_bytes` (shallow git clone + raw bytes) and
+  `parse_compose` (validates against the v1 deploy contract and
+  returns a `DerivedSpec`).  Contract covers: single-service, no-build,
+  named-volume-only, env key extraction, healthcheck Go-duration
+  conversion, and `robotsix.deploy.*` extension labels (claude-mount,
+  stateful-volume flagging).
+  - `docs/deploy-contract.md` updated: missing header = parse error,
+    image accepts any non-empty string, env allows preset defaults,
+    driver enforcement removed.
 - **Enable `VOLUMES=1` on socket-proxy** — named-volume create/list/inspect/remove
   calls now pass through the Docker socket proxy, in preparation for
   managed-service volume creation in the self-service deploy flow.
