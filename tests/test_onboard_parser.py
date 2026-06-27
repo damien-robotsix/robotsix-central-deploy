@@ -189,6 +189,22 @@ services:
             parse_compose(y, name="foo", git_url="https://x.com/r.git")
         assert "not valid YAML" in str(exc.value)
 
+    def test_driver_not_local(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    volumes:
+      - mydata:/data
+volumes:
+  mydata:
+    driver: nfs
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "driver must be 'local'" in str(exc.value)
+
     def test_volume_not_in_top_level(self):
         y = """\
 # central-deploy-contract-version: 1

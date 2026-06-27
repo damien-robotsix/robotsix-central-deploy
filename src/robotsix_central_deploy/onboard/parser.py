@@ -301,10 +301,16 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         if isinstance(val, str) and val.strip().lower() == "true":
             claude_mount = True
 
-    # 12. Top-level volume labels — stateful
+    # 12. Top-level volume labels — stateful, and driver validation
     stateful_volumes: list[str] = []
     for vname, vdef in top_volumes.items():
         if isinstance(vdef, dict):
+            # Validate driver: must be absent or "local"
+            driver = vdef.get("driver", "local")
+            if driver != "local":
+                violations.append(
+                    f"volume {vname!r}: driver must be 'local', got {driver!r}"
+                )
             vlabels = vdef.get("labels")
             if isinstance(vlabels, dict):
                 val = vlabels.get(STATEFUL_LABEL)

@@ -12,7 +12,7 @@ conform to this contract before the UI onboarding flow will accept them.
 ## § 1  Purpose and versioning
 
 Every conforming compose file **must** include a machine-readable version
-header as the very first comment:
+header as a line (conventionally the first line):
 
 ```yaml
 # central-deploy-contract-version: 1
@@ -158,7 +158,9 @@ volumes:
 
 - Each named volume referenced by the contract service MUST be declared here;
   absence is a **parse error**.
-- `driver`, `driver_opts`, and `external` are silently ignored.
+- `driver` (when present) **must** be `"local"`; any other value is a **parse
+  error**.  Omitting `driver` defaults to `local`.
+- `driver_opts` and `external` are silently ignored.
 
 ### Stateful-volume flag
 
@@ -333,5 +335,6 @@ volumes:                                # required iff service has named volumes
 | `services.<name>.build` present | Parse error |
 | Host bind-mount in `services.<name>.volumes` (path starts with `.`, `/`, or `~`) | Parse error |
 | Named volume in service `volumes:` not declared in top-level `volumes:` | Parse error |
+| `volumes.<name>.driver` present and not `"local"` | Parse error |
 | Unsupported top-level keys (`networks:`, `configs:`, `secrets:`, etc.) | Silently ignored |
 | Extra labels (Docker, Traefik, custom, etc.) | Silently ignored |
