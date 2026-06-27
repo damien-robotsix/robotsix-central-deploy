@@ -63,3 +63,15 @@ modules:
     dependencies:
       - httpx
     tests: tests/registry_check/
+
+  onboard:
+    name: onboard
+    description: >
+      Onboard-from-git — fetches a service repo's docker-compose.yml via
+      shallow git clone and parses it into a DerivedSpec against the
+      central-deploy contract (v1).
+    package: robotsix_central_deploy.onboard
+    dependencies:
+      - pydantic
+      - pyyaml
+    tests: tests/test_onboard_parser.py

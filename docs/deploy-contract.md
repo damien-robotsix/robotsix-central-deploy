@@ -26,10 +26,9 @@ header as the very first comment:
 - Additions that are backward-compatible (new optional fields, new labels)
   do **not** require a version bump.
 - **Unknown versions** (e.g. `# central-deploy-contract-version: 99` when the
-  parser only knows `1`) cause the parser to emit a **warning** but proceed
-  — never a hard error.  New contract versions are always backward-compatible
-  with the previous parser.
-- Missing version header → proceed with a warning, assuming version `1`.
+  parser only knows `1`) cause a **parse error** — the exact v1 header line
+  must be present.
+- Missing version header → **parse error**.
 
 ---
 
@@ -56,7 +55,7 @@ header as the very first comment:
 
 | Compose path            | Rule |
 |-------------------------|------|
-| `services.<name>.image` | **Required.** Must be a GHCR image ref in the form `ghcr.io/damien-robotsix/<repo>:<tag>` (e.g. `ghcr.io/damien-robotsix/chat:main`).  Central-deploy pulls this ref verbatim; no local build is performed.  Missing or non-GHCR values are a **parse error**. |
+| `services.<name>.image` | **Required.** Must be a non-empty string (a GHCR image ref such as `ghcr.io/damien-robotsix/<repo>:<tag>` is recommended, but the parser accepts any image reference).  Central-deploy pulls this ref verbatim; no local build is performed.  Missing or blank values are a **parse error**. |
 
 ---
 
@@ -86,11 +85,10 @@ header as the very first comment:
 
 ### `services.<name>.environment`
 
-- Key-value pairs where the value MUST be `""` (empty string) or a clearly
-  non-secret placeholder (e.g. `"enter-in-ui"`).
-- Central-deploy stores **only the keys** from the compose.  Actual secret
-  values are entered via the UI and stored in central-deploy's persisted
-  secret store (not in the compose file).
+- Key-value pairs.  Empty-value entries (e.g. `KEY=` or `{KEY: null}`) are
+  **secret slots** that the operator fills in the review UI.
+- Non-empty values (e.g. `KEY=default`, `{KEY: "default"}`) are **pre-filled
+  defaults** shown in the UI and may be overridden.
 - Maps to `ComponentConfig.env` key set (values are filled at onboarding /
   deploy time from the UI).
 
@@ -160,12 +158,7 @@ volumes:
 
 - Each named volume referenced by the contract service MUST be declared here;
   absence is a **parse error**.
-- `driver: local` is the **only** supported driver.  Any other `driver` value
-  is a **parse error**.
-- `driver_opts` is silently ignored (central-deploy creates volumes with
-  default options).
-- `external: true` on a volume definition is silently ignored — all volumes
-  are managed by central-deploy.
+- `driver`, `driver_opts`, and `external` are silently ignored.
 
 ### Stateful-volume flag
 
@@ -193,13 +186,12 @@ volumes:
 | Compose field                                  | Parser behaviour |
 |------------------------------------------------|------------------|
 | `services.<name>.restart`                      | Silently ignored.  Central-deploy always applies `RestartPolicy: unless-stopped`. |
-| `services.<name>.build`                        | **Parse error.** Only pre-built GHCR images are supported (`BUILD=0` on socket-proxy). |
+| `services.<name>.build`                        | **Parse error.** Only pre-built images are supported (`BUILD=0` on socket-proxy). |
 | `services.<name>.depends_on`                   | Silently ignored. |
 | `services.<name>.networks`                     | Silently ignored.  Central-deploy manages container networking. |
 | `services.<name>.command` / `entrypoint`       | Silently ignored.  Image CMD/entrypoint is used as-is. |
 | Multiple `services:` entries                   | **Parse error.** Exactly one service is required. |
 | Host bind-mount in `volumes` (without `claude-mount` label) | **Parse error.** |
-| `volumes.<name>.driver` ≠ `local`              | **Parse error.** |
 | Top-level keys other than `version`, `services`, `volumes` | Silently ignored. |
 | `version` (top-level compose version string)   | Silently ignored. |
 | Labels outside `robotsix.deploy.*` namespace   | Silently ignored. |
@@ -231,30 +223,33 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 
 ## § 9  Annotated examples
 
-### Example A — Stateless service (cost-monitor)
+### Example A — Stateless service with Claude mount (cost-monitor)
 
 ```yaml
 # central-deploy-contract-version: 1
 services:
   cost-monitor:
-    # image: pulled from GHCR — no local build
     image: ghcr.io/damien-robotsix/cost-monitor:main
+    labels:
+      robotsix.deploy.claude-mount: "true"
     ports:
-      # host:container — host port must be unique across all managed services
       - "8200:8200"
+    volumes:
+      - cost-data:/data
     environment:
-      # Keys only — values are entered via the central-deploy UI
-      OPENAI_API_KEY: ""
-      ANTHROPIC_API_KEY: ""
-    # healthcheck is optional but strongly recommended
+      - OPENAI_API_KEY=
+      - DATABASE_URL=
+      - DEBUG=false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8200/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-    # No volumes — stateless service; safe to recreate empty
-    # No robotsix.deploy.claude-mount label — Claude config not required
+volumes:
+  cost-data:
+    labels:
+      robotsix.deploy.stateful: "true"
 ```
 
 ### Example B — Stateful service with Claude host mount (chat)
@@ -331,13 +326,12 @@ volumes:                                # required iff service has named volumes
 
 | Condition | Result |
 |-----------|--------|
-| Missing `# central-deploy-contract-version` header | Warning, assume v1 |
-| Unknown contract version | Warning, proceed |
+| Missing `# central-deploy-contract-version` header | Parse error |
+| Unknown contract version | Parse error |
 | Multiple `services:` entries | Parse error |
-| `services.<name>.image` missing or non-GHCR | Parse error |
+| `services.<name>.image` missing or blank | Parse error |
 | `services.<name>.build` present | Parse error |
 | Host bind-mount in `services.<name>.volumes` (path starts with `.`, `/`, or `~`) | Parse error |
 | Named volume in service `volumes:` not declared in top-level `volumes:` | Parse error |
-| `volumes.<name>.driver` ≠ `local` | Parse error |
 | Unsupported top-level keys (`networks:`, `configs:`, `secrets:`, etc.) | Silently ignored |
 | Extra labels (Docker, Traefik, custom, etc.) | Silently ignored |
