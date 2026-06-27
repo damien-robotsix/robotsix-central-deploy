@@ -91,6 +91,11 @@ header as a line (conventionally the first line):
   defaults** shown in the UI and may be overridden.
 - Maps to `ComponentConfig.env` key set (values are filled at onboarding /
   deploy time from the UI).
+- After onboarding, operators can view and edit env vars and secrets via
+  the **dashboard env/secrets config modal** (Config button per component
+  row → `GET/PUT/DELETE /services/{name}/env`).  Plaintext env values are
+  shown in editable inputs; secret keys show `***` with a "Set new value"
+  password field.
 
 ### `services.<name>.healthcheck`
 
