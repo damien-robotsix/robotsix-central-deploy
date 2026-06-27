@@ -185,6 +185,18 @@ async def lifespan(app: FastAPI):
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
 
+    # -- System settings store (MUST come before RegistryChecker so that
+    #    the checker sees the overlaid ghcr_token) ------------------------
+    from ..registry.settings_store import SystemSettingsStore
+
+    settings_store = SystemSettingsStore(_config.effective_system_settings_path)
+    app.state.settings_store = settings_store
+    _config = settings_store.overlay(_config)          # returns new LifecycleConfig (or same if no file)
+    app.state.config = _config                         # replace with overlaid version
+
+    # Apply log_level from (possibly overlaid) config
+    logging.getLogger().setLevel(_config.log_level)
+
     # -- Registry checker ------------------------------------------------
     http_client = httpx.AsyncClient(timeout=10.0)
     registry_checker = RegistryChecker(
@@ -259,6 +271,8 @@ app = FastAPI(
 
 app.include_router(ui_router)
 
+from .settings_router import settings_router
+app.include_router(settings_router)
 
 # ---------------------------------------------------------------------------
 # Dependencies
@@ -921,6 +935,14 @@ async def onboard_preflight(
             detail={"error": f"Invalid name '{req.name}': must match ^[a-z0-9][a-z0-9-]*$"},
         )
 
+    # Reserved-name guard
+    from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
+    if req.name in RESERVED_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": f"Component name '{req.name}' is reserved"},
+        )
+
     # Check for duplicate
     existing = await store.get(req.name)
     if existing is not None:
@@ -979,7 +1001,7 @@ async def onboard_confirm(
     from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
     if spec.name in RESERVED_NAMES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_409_CONFLICT,
             detail={"error": f"Component name '{spec.name}' is reserved"},
         )
 

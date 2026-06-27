@@ -211,6 +211,7 @@
 <header>
   <h1>Robotsix Deploy — Component Status</h1>
   <button id="add-component-btn" onclick="openOnboardModal()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">+ Add Component</button>
+  <button id="settings-btn" onclick="showSettingsSection()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Settings</button>
   <span id="refresh-time">Last refreshed: --:--:--</span>
 </header>
 
@@ -332,6 +333,65 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- Settings section -->
+<div id="settings-section" style="display:none;">
+  <h2 style="margin-bottom:16px;color:var(--blue);">System Settings</h2>
+  <form id="settings-form" onsubmit="saveSettings(event)">
+    <table style="margin-bottom:20px;">
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">GHCR Pull Token</td>
+        <td style="padding:6px 12px;">
+          <input id="s-ghcr-token" type="password" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" disabled />
+          <button type="button" class="btn-secondary" onclick="changeSecret('s-ghcr-token')" style="font-size:0.75rem;margin-left:6px;">Change</button>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Dashboard Username</td>
+        <td style="padding:6px 12px;">
+          <input id="s-auth-username" type="text" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Dashboard Password</td>
+        <td style="padding:6px 12px;">
+          <input id="s-auth-password" type="password" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" disabled />
+          <button type="button" class="btn-secondary" onclick="changeSecret('s-auth-password')" style="font-size:0.75rem;margin-left:6px;">Change</button>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Disk Warning (bytes)</td>
+        <td style="padding:6px 12px;">
+          <input id="s-disk-warn" type="number" step="1" min="0" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:200px;" />
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Registry Check Interval (s)</td>
+        <td style="padding:6px 12px;">
+          <input id="s-reg-interval" type="number" step="1" min="0" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:120px;" />
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">0 = disabled</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Log Level</td>
+        <td style="padding:6px 12px;">
+          <select id="s-log-level" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;">
+            <option value="DEBUG">DEBUG</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="CRITICAL">CRITICAL</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn-primary">Save Settings</button>
+      <button type="button" class="btn-secondary" onclick="hideSettingsSection()">Back to Dashboard</button>
+    </div>
+  </form>
+  <div id="settings-toast" style="margin-top:12px;font-size:0.85rem;"></div>
 </div>
 
 <script>
@@ -998,6 +1058,85 @@ async function onboardDeploy() {
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(loadDashboard, REFRESH_INTERVAL_MS);
+}
+
+// ── Settings section ─────────────────────────────────────────────
+
+function showSettingsSection() {
+  document.querySelector('header').style.display = 'none';
+  document.querySelector('.disk-panel').style.display = 'none';
+  document.querySelector('table').style.display = 'none';
+  document.getElementById('settings-section').style.display = '';
+  loadSettings();
+}
+
+function hideSettingsSection() {
+  document.getElementById('settings-section').style.display = 'none';
+  document.querySelector('header').style.display = '';
+  document.querySelector('.disk-panel').style.display = '';
+  document.querySelector('table').style.display = '';
+}
+
+function changeSecret(inputId) {
+  var inp = document.getElementById(inputId);
+  inp.disabled = false;
+  inp.value = '';
+  inp.focus();
+}
+
+function showToast(msg, type) {
+  var el = document.getElementById('settings-toast');
+  el.textContent = msg;
+  el.style.color = type === 'error' ? 'var(--red)' : 'var(--green)';
+  setTimeout(function() { el.textContent = ''; }, 4000);
+}
+
+async function loadSettings() {
+  try {
+    var res = await fetch('/settings', { headers: authHeaders(), credentials: 'same-origin' });
+    if (!res.ok) { showToast('Error loading settings: HTTP ' + res.status, 'error'); return; }
+    var s = await res.json();
+    document.getElementById('s-ghcr-token').value = s.ghcr_token;
+    document.getElementById('s-ghcr-token').disabled = (s.ghcr_token === '***');
+    document.getElementById('s-auth-username').value = s.auth_username;
+    document.getElementById('s-auth-password').value = s.auth_password;
+    document.getElementById('s-auth-password').disabled = (s.auth_password === '***');
+    document.getElementById('s-disk-warn').value = s.disk_warn_bytes;
+    document.getElementById('s-reg-interval').value = s.registry_check_interval;
+    document.getElementById('s-log-level').value = s.log_level;
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+  var body = {
+    ghcr_token: document.getElementById('s-ghcr-token').value,
+    auth_username: document.getElementById('s-auth-username').value,
+    auth_password: document.getElementById('s-auth-password').value,
+    disk_warn_bytes: parseInt(document.getElementById('s-disk-warn').value),
+    registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
+    log_level: document.getElementById('s-log-level').value,
+  };
+  try {
+    var res = await fetch('/settings', {
+      method: 'PUT',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      showToast('Settings saved');
+      // Reload to refresh masked fields
+      loadSettings();
+    } else {
+      var data = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (data.error || 'HTTP ' + res.status), 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 // Bootstrap

@@ -54,6 +54,13 @@ class LifecycleConfig(BaseSettings):
     registry_check_ttl: int = 300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL  (cache TTL, seconds)
     registry_check_interval: int = 300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL (bg task interval; 0 = disabled)
 
+    # Settings store
+    system_settings_path: str = "data/system_settings.json"
+    # env: ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH
+
+    # Logging
+    log_level: str = "INFO"   # env: ROBOTSIX_LIFECYCLE_LOG_LEVEL
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)
@@ -61,6 +68,10 @@ class LifecycleConfig(BaseSettings):
     @property
     def effective_component_config_store_path(self) -> Path:
         return Path(self.component_config_store_path)
+
+    @property
+    def effective_system_settings_path(self) -> Path:
+        return Path(self.system_settings_path)
 
     @property
     def auth_required(self) -> bool:
