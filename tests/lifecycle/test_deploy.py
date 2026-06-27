@@ -269,6 +269,7 @@ class TestDockerSdkBackendDeploy:
         docker_mock.DockerClient = MagicMock(return_value=client_mock)
         docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
         docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        docker_mock.errors.DockerException = type("DockerException", (Exception,), {})
         with patch.dict(sys.modules, {"docker": docker_mock}):
             b = DockerSdkBackend()
             yield b, client_mock
@@ -441,6 +442,82 @@ class TestDockerSdkBackendDeploy:
         assert client.containers.create.called
         # Verify create_kwargs still include the regular mounts (not the named volumes)
         assert create_call.kwargs["volumes"] == {"/data": {"bind": "/data", "mode": "rw"}}
+
+    async def test_deploy_precreates_volume_already_exists(self, backend):
+        """volumes.create raises APIError 409 (Conflict) — handled gracefully, deploy continues."""
+        import docker as docker_mod
+
+        b, client = backend
+        config = self._config()
+        config.named_volumes = ["vol_a"]
+
+        pulled_image = MagicMock()
+        pulled_image.id = "sha256:new123"
+        client.images.pull.return_value = pulled_image
+
+        # First call: no existing container; second call: healthy container for health poll
+        client.containers.get.side_effect = [
+            docker_mod.errors.NotFound("nope"),
+            self._make_container(health_status="healthy"),
+        ]
+
+        # Simulate volume already exists with a real APIError instance
+        api_error = docker_mod.errors.APIError("volume already exists")
+        api_error.status_code = 409
+        api_error.explanation = "volume already exists"
+        client.volumes.create.side_effect = api_error
+
+        record = ServiceRecord(name="svc-a", container_name="svc-a")
+        outcome = await b.deploy(record, config, "repo:v2")
+
+        # Deploy succeeded despite the volume conflict
+        assert outcome.deployed_digest == "sha256:new123"
+        assert outcome.state == ServiceState.RUNNING
+        client.volumes.create.assert_called_once_with("vol_a")
+        client.containers.create.assert_called_once()
+
+    async def test_deploy_precreates_volume_daemon_unreachable(self, backend):
+        """volumes.create raises DockerException — RuntimeError with clear message."""
+        import docker as docker_mod
+
+        b, client = backend
+        config = self._config()
+        config.named_volumes = ["vol_a"]
+
+        pulled_image = MagicMock()
+        pulled_image.id = "sha256:new123"
+        client.images.pull.return_value = pulled_image
+        client.containers.get.side_effect = docker_mod.errors.NotFound("nope")
+
+        client.volumes.create.side_effect = docker_mod.errors.DockerException(
+            "Error while fetching server API version"
+        )
+
+        record = ServiceRecord(name="svc-a", container_name="svc-a")
+        with pytest.raises(RuntimeError, match="Docker daemon unreachable"):
+            await b.deploy(record, config, "repo:v2")
+
+    async def test_deploy_precreates_volume_invalid_name(self, backend):
+        """volumes.create raises APIError 400 — RuntimeError with clear message."""
+        import docker as docker_mod
+
+        b, client = backend
+        config = self._config()
+        config.named_volumes = ["invalid/name"]
+
+        pulled_image = MagicMock()
+        pulled_image.id = "sha256:new123"
+        client.images.pull.return_value = pulled_image
+        client.containers.get.side_effect = docker_mod.errors.NotFound("nope")
+
+        api_error = docker_mod.errors.APIError("invalid volume name")
+        api_error.status_code = 400
+        api_error.explanation = "invalid volume name"
+        client.volumes.create.side_effect = api_error
+
+        record = ServiceRecord(name="svc-a", container_name="svc-a")
+        with pytest.raises(RuntimeError, match="Failed to create volume"):
+            await b.deploy(record, config, "repo:v2")
 
     async def test_deploy_health_unhealthy_raises(self, backend):
         b, client = backend

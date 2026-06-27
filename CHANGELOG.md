@@ -28,6 +28,11 @@ All notable changes to robotsix-central-deploy.
   register component).  Dynamic `ComponentConfigStore` persists onboarded components
   to JSON and re-loads them on server restart.  `DockerSdkBackend` pre-creates named
   volumes before container creation and injects an optional `~/.claude` host mount.
+
+- **Volume error handling** — named volume creation in `DockerSdkBackend.deploy()`
+  is wrapped in try/except with clear error messages for invalid volume names and
+  Docker daemon connectivity issues.  Volume-already-exists (HTTP 409) errors are
+  handled gracefully with a log message.
   Added `claude_mount`, `named_volumes`, and `stateful_volumes` fields to
   `ComponentConfig`.
 - **Onboard-from-git compose parser** — new `onboard` package with

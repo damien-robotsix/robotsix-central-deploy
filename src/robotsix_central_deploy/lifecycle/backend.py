@@ -532,9 +532,21 @@ class DockerSdkBackend(ExecutionBackend):
 
         # Step 4 — create + start new container
         try:
-            # Pre-create named volumes (idempotent — volumes.create() is a no-op if the volume exists)
+            # Pre-create named volumes
             for vol_name in config.named_volumes:
-                await loop.run_in_executor(None, self._client.volumes.create, vol_name)
+                try:
+                    await loop.run_in_executor(None, self._client.volumes.create, vol_name)
+                except docker.errors.APIError as exc:
+                    if exc.status_code == 409:
+                        logger.info("Volume %s already exists, skipping creation", vol_name)
+                    else:
+                        raise RuntimeError(
+                            f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
+                        ) from exc
+                except docker.errors.DockerException as exc:
+                    raise RuntimeError(
+                        f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
+                    ) from exc
 
             new_container = await loop.run_in_executor(
                 None, lambda: self._create_container(config, image_ref)
