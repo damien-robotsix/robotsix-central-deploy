@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import yaml
 
-from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError
+from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
 from robotsix_central_deploy.registry.models import HealthCheck, PortMapping, VolumeMount
 
 # Regex for Go-style duration strings: optional h, m, s, ms components.
@@ -16,6 +16,10 @@ _GO_DURATION_RE = re.compile(
 HEADER = b"# central-deploy-contract-version: 1"
 CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
 STATEFUL_LABEL = "robotsix.deploy.stateful"
+PRIMARY_LABEL = "robotsix.deploy.primary"
+
+# Service-key validation pattern: must match ^[a-z0-9][a-z0-9-]*$
+_SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
 def _parse_go_duration(s: str) -> int:
@@ -211,6 +215,78 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
     )
 
 
+def _parse_one_service(
+    svc: dict,
+    key: str,
+    *,
+    component_name: str,
+    prefix: str = "",
+) -> tuple[dict, list[str]]:
+    """Parse a single service dict (primary or sibling) into a result dict + violations.
+
+    The result dict has keys: image, env, ports, volume_mounts, health_check,
+    claude_mount, container_name.
+    """
+    violations: list[str] = []
+
+    # Build key
+    if "build" in svc:
+        violations.append(f"{prefix}build: is not permitted — only pre-built images are supported")
+
+    # Image
+    image = svc.get("image")
+    if not image or not isinstance(image, str) or not image.strip():
+        violations.append(f"{prefix}image: is required and must be a non-empty string")
+        image = ""
+    else:
+        image = image.strip()
+
+    # Environment
+    env, env_violations = _parse_env(svc.get("environment"))
+    violations.extend(f"{prefix}{v}" for v in env_violations)
+
+    # Ports
+    ports, port_violations = _parse_ports(svc.get("ports"))
+    violations.extend(f"{prefix}{v}" for v in port_violations)
+
+    # Service volumes
+    volume_mounts, vol_violations = _parse_volumes(svc.get("volumes"))
+    violations.extend(f"{prefix}{v}" for v in vol_violations)
+
+    # Healthcheck
+    health_check, hc_violations = _parse_healthcheck(svc.get("healthcheck"))
+    violations.extend(f"{prefix}{v}" for v in hc_violations)
+
+    # Labels — claude-mount
+    claude_mount = False
+    labels = svc.get("labels")
+    if isinstance(labels, dict):
+        val = labels.get(CLAUDE_MOUNT_LABEL)
+        if isinstance(val, str) and val.strip().lower() == "true":
+            claude_mount = True
+
+    # container_name override
+    container_name = svc.get("container_name", "")
+    if container_name is not None and not isinstance(container_name, str):
+        violations.append(
+            f"{prefix}container_name: must be a string, got {type(container_name).__name__}"
+        )
+        container_name = ""
+    # For siblings, derive container_name if absent
+    if not container_name and prefix:
+        container_name = f"{component_name}-{key}"
+
+    return {
+        "image": image,
+        "env": env,
+        "ports": ports,
+        "volume_mounts": volume_mounts,
+        "health_check": health_check,
+        "claude_mount": claude_mount,
+        "container_name": container_name,
+    }, violations
+
+
 def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     """Parse a service repo's docker-compose.yml into a DerivedSpec.
 
@@ -232,82 +308,97 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         violations.append("compose root must be a mapping")
         raise ParseError(violations)
 
-    # 3. Exactly one service
+    # 3. N >= 1 services
     services = doc.get("services")
-    if not isinstance(services, dict) or len(services) != 1:
-        if not isinstance(services, dict):
-            violations.append("services: must be a mapping with exactly one entry")
-        elif len(services) == 0:
-            violations.append("services: must contain exactly one service")
-        else:
+    if not isinstance(services, dict) or len(services) == 0:
+        violations.append("services: must be a mapping with at least one entry")
+        raise ParseError(violations)
+
+    # Validate service keys
+    for svc_key in services:
+        if not _SERVICE_KEY_RE.fullmatch(svc_key):
             violations.append(
-                f"exactly one service required, found {len(services)}: "
-                + ", ".join(services.keys())
+                f"service key {svc_key!r} must match ^[a-z0-9][a-z0-9-]*$"
             )
 
-    # If we can't extract a service dict, raise now
-    if not isinstance(services, dict) or len(services) != 1:
-        raise ParseError(violations)
-
-    service_name = next(iter(services.keys()))
-    svc = services[service_name]
-    if not isinstance(svc, dict):
-        violations.append(f"service {service_name!r} must be a mapping")
-        raise ParseError(violations)
-
-    # 4. No build key
-    if "build" in svc:
-        violations.append("build: is not permitted — only pre-built images are supported")
-
-    # 5. Image required
-    image = svc.get("image")
-    if not image or not isinstance(image, str) or not image.strip():
-        violations.append("image: is required and must be a non-empty string")
-        image = ""
+    # Identify primary service
+    if len(services) == 1:
+        primary_key = next(iter(services))
     else:
-        image = image.strip()
+        primary_keys = [
+            k for k, svc_dict in services.items()
+            if isinstance(svc_dict, dict)
+            and isinstance(svc_dict.get("labels"), dict)
+            and str(svc_dict["labels"].get(PRIMARY_LABEL, "")).strip().lower() == "true"
+        ]
+        if len(primary_keys) == 0:
+            violations.append(
+                f"multi-service compose ({len(services)} services) must designate exactly one "
+                f"primary via label '{PRIMARY_LABEL}: \"true\"'; none found"
+            )
+            raise ParseError(violations)
+        if len(primary_keys) > 1:
+            violations.append(
+                f"exactly one primary allowed; found {len(primary_keys)}: "
+                + ", ".join(primary_keys)
+            )
+            raise ParseError(violations)
+        primary_key = primary_keys[0]
 
-    # 6. Environment
-    env, env_violations = _parse_env(svc.get("environment"))
-    violations.extend(env_violations)
+    # 4-11. Parse primary service
+    primary_svc = services[primary_key]
+    if not isinstance(primary_svc, dict):
+        violations.append(f"service {primary_key!r} must be a mapping")
+        raise ParseError(violations)
 
-    # 7. Ports
-    ports, port_violations = _parse_ports(svc.get("ports"))
-    violations.extend(port_violations)
+    primary_parsed, primary_violations = _parse_one_service(
+        primary_svc, primary_key, component_name=name, prefix=""
+    )
+    violations.extend(primary_violations)
 
-    # 8. Service volumes
-    volume_mounts, vol_violations = _parse_volumes(svc.get("volumes"))
-    violations.extend(vol_violations)
+    # Parse sibling services
+    siblings_parsed: list[SiblingDerivedSpec] = []
+    for sib_key, sib_svc in services.items():
+        if sib_key == primary_key:
+            continue
+        if not isinstance(sib_svc, dict):
+            violations.append(f"service {sib_key!r} must be a mapping")
+            continue
+        sib_prefix = f"[service {sib_key!r}] "
+        sib_parsed, sib_violations = _parse_one_service(
+            sib_svc, sib_key, component_name=name, prefix=sib_prefix
+        )
+        violations.extend(sib_violations)
+        siblings_parsed.append(
+            SiblingDerivedSpec(
+                service_key=sib_key,
+                container_name=sib_parsed["container_name"],
+                image=sib_parsed["image"],
+                ports=sib_parsed["ports"],
+                volume_mounts=sib_parsed["volume_mounts"],
+                env=sib_parsed["env"],
+                claude_mount=sib_parsed["claude_mount"],
+                health_check=sib_parsed["health_check"],
+            )
+        )
 
-    # 9. Verify named volumes exist in top-level volumes:
+    # 9. Verify named volumes exist in top-level volumes (primary + siblings)
     top_volumes = doc.get("volumes")
     if not isinstance(top_volumes, dict):
         top_volumes = {}
-    for vm in volume_mounts:
+    for vm in primary_parsed["volume_mounts"]:
         if vm.host not in top_volumes:
             violations.append(
-                f"volume {vm.host!r} referenced in service but not declared in top-level volumes:"
+                f"volume {vm.host!r} referenced in service {primary_key!r} "
+                f"but not declared in top-level volumes:"
             )
-
-    # 10. Healthcheck
-    health_check, hc_violations = _parse_healthcheck(svc.get("healthcheck"))
-    violations.extend(hc_violations)
-
-    # 11. Labels — claude-mount
-    claude_mount = False
-    labels = svc.get("labels")
-    if isinstance(labels, dict):
-        val = labels.get(CLAUDE_MOUNT_LABEL)
-        if isinstance(val, str) and val.strip().lower() == "true":
-            claude_mount = True
-
-    # 11b. container_name override
-    container_name = svc.get("container_name", "")
-    if container_name is not None and not isinstance(container_name, str):
-        violations.append(
-            f"container_name: must be a string, got {type(container_name).__name__}"
-        )
-        container_name = ""
+    for sib in siblings_parsed:
+        for vm in sib.volume_mounts:
+            if vm.host not in top_volumes:
+                violations.append(
+                    f"[service {sib.service_key!r}] volume {vm.host!r} "
+                    f"referenced in service but not declared in top-level volumes:"
+                )
 
     # 12. Top-level volume labels — stateful, and driver validation
     stateful_volumes: list[str] = []
@@ -332,12 +423,13 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     return DerivedSpec(
         name=name,
         git_url=git_url,
-        image=image,
-        ports=ports,
-        volume_mounts=volume_mounts,
+        image=primary_parsed["image"],
+        ports=primary_parsed["ports"],
+        volume_mounts=primary_parsed["volume_mounts"],
         stateful_volumes=stateful_volumes,
-        env=env,
-        claude_mount=claude_mount,
-        health_check=health_check,
-        container_name=container_name,
+        env=primary_parsed["env"],
+        claude_mount=primary_parsed["claude_mount"],
+        health_check=primary_parsed["health_check"],
+        container_name=primary_parsed["container_name"],
+        siblings=siblings_parsed,
     )

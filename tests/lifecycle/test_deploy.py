@@ -61,9 +61,13 @@ def registry():
 @pytest.fixture(autouse=True)
 def _ensure_registry(monkeypatch, registry):
     """Ensure app.state has store, backend, config, and registry set for every test."""
+    from pathlib import Path
+
     from robotsix_central_deploy.lifecycle.backend import NoopBackend
     from robotsix_central_deploy.lifecycle.config import LifecycleConfig
     from robotsix_central_deploy.lifecycle.store import InMemoryStore
+    from robotsix_central_deploy.registry.env_store import EnvStore
+    from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
     monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
@@ -77,6 +81,9 @@ def _ensure_registry(monkeypatch, registry):
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
 
+    key_manager = SecretKeyManager(Path("/tmp/test_fernet_key"))  # noqa: S108
+    env_store = EnvStore(Path("/tmp/test_env_store.json"), key_manager)  # noqa: S108
+
     server_mod._config = cfg
     server_mod._store = store
     server_mod._backend = backend
@@ -86,6 +93,7 @@ def _ensure_registry(monkeypatch, registry):
     server_mod.app.state.backend = backend
     server_mod.app.state.registry = registry
     server_mod.app.state.registry_checker = mock_checker
+    server_mod.app.state.env_store = env_store
 
 
 # ---------------------------------------------------------------------------

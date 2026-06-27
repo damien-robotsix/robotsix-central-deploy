@@ -102,6 +102,7 @@ class FileStore(ServiceStore):
                 previous_image_digest=d.get("previous_image_digest", ""),
                 update_available=d.get('update_available', False),
                 latest_registry_digest=d.get('latest_registry_digest', ''),
+                component_id=d.get('component_id', ''),
             )
         return records
 
@@ -120,6 +121,7 @@ class FileStore(ServiceStore):
                 "previous_image_digest": r.previous_image_digest,
                 "update_available": r.update_available,
                 "latest_registry_digest": r.latest_registry_digest,
+                "component_id": r.component_id,
             }
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(yaml.safe_dump(raw, default_flow_style=False), encoding="utf-8")
