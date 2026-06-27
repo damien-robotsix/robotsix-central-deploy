@@ -37,3 +37,6 @@ class ComponentConfig(BaseModel):
     mounts: list[VolumeMount] = []
     env: dict[str, str] = {}
     health_check: Optional[HealthCheck] = None
+    claude_mount: bool = False
+    named_volumes: list[str] = []      # volume names to pre-create at deploy time
+    stateful_volumes: list[str] = []   # subset with robotsix.deploy.stateful label (informational)

@@ -74,4 +74,4 @@ modules:
     dependencies:
       - pydantic
       - pyyaml
-    tests: tests/test_onboard_parser.py
+    tests: tests/test_onboard_parser.py tests/test_onboard_api.py

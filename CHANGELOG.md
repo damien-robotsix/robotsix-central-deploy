@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Onboard API endpoints** — new `POST /onboard/preflight` (fetch+validate a service
+  repo's compose) and `POST /onboard/confirm` (persist config, deploy container,
+  register component).  Dynamic `ComponentConfigStore` persists onboarded components
+  to JSON and re-loads them on server restart.  `DockerSdkBackend` pre-creates named
+  volumes before container creation and injects an optional `~/.claude` host mount.
+  Added `claude_mount`, `named_volumes`, and `stateful_volumes` fields to
+  `ComponentConfig`.
 - **Onboard-from-git compose parser** — new `onboard` package with
   `fetch_compose_bytes` (shallow git clone + raw bytes) and
   `parse_compose` (validates against the v1 deploy contract and

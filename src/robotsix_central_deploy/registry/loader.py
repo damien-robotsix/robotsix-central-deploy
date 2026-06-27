@@ -68,6 +68,10 @@ class ComponentRegistry:
 
     # -- query --------------------------------------------------------------
 
+    def register(self, config: ComponentConfig) -> None:
+        """Add or replace a component in the in-memory index."""
+        self._index[config.id] = config
+
     def get(self, component_id: str) -> Optional[ComponentConfig]:
         """Return the component with *component_id*, or ``None``."""
         return self._index.get(component_id)

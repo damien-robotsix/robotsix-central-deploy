@@ -432,6 +432,10 @@ class DockerSdkBackend(ExecutionBackend):
             m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
             for m in config.mounts
         }
+        if config.claude_mount:
+            import os
+            claude_host = os.path.expanduser("~/.claude")
+            volumes[claude_host] = {"bind": "/root/.claude", "mode": "rw"}
         healthcheck = None
         if config.health_check:
             hc = config.health_check
@@ -526,6 +530,10 @@ class DockerSdkBackend(ExecutionBackend):
 
         # Step 4 — create + start new container
         try:
+            # Pre-create named volumes (idempotent — volumes.create() is a no-op if the volume exists)
+            for vol_name in config.named_volumes:
+                await loop.run_in_executor(None, self._client.volumes.create, vol_name)
+
             new_container = await loop.run_in_executor(
                 None, lambda: self._create_container(config, image_ref)
             )

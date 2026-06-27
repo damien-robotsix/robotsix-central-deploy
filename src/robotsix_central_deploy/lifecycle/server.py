@@ -24,6 +24,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from .auth import verify_auth
 from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
@@ -42,7 +43,9 @@ from .models import (
     ServiceStatus,
     can_transition,
 )
+from ..registry.config_store import ComponentConfigStore
 from ..registry.loader import ComponentRegistry, RegistryLoadError
+from ..registry.models import ComponentConfig
 from ..registry_check import RegistryChecker
 from ..ui.router import router as ui_router
 from .store import FileStore, InMemoryStore, ServiceStore
@@ -52,6 +55,33 @@ logger = logging.getLogger(__name__)
 #: Module-level registry checker (set by lifespan, used by endpoints).
 _registry_checker: RegistryChecker | None = None
 _http_client: httpx.AsyncClient | None = None
+
+
+# ---------------------------------------------------------------------------
+# Onboard request / response models
+# ---------------------------------------------------------------------------
+
+
+from robotsix_central_deploy.onboard.models import DerivedSpec  # noqa: E402
+
+
+class OnboardPreflightRequest(BaseModel):
+    git_url: str
+    name: str  # validated: ^[a-z0-9][a-z0-9-]*$
+
+
+class OnboardPreflightResponse(BaseModel):
+    spec: DerivedSpec
+
+
+class OnboardConfirmRequest(BaseModel):
+    spec: DerivedSpec  # env values now user-filled
+
+
+class OnboardConfirmResponse(BaseModel):
+    name: str
+    image: str
+    state: str
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +213,28 @@ async def lifespan(app: FastAPI):
 
     app.state.registry = registry  # may be None if load failed
 
+    # -- Dynamic component config store ---------------------------------
+    component_config_store = ComponentConfigStore(_config.effective_component_config_store_path)
+    app.state.component_config_store = component_config_store
+
+    # Ensure registry is always a ComponentRegistry (never None after lifespan)
+    if registry is None:
+        registry = ComponentRegistry([])
+        app.state.registry = registry
+
+    # Merge dynamic store into in-memory registry
+    for dyn_config in component_config_store.all():
+        registry.register(dyn_config)
+        # Pre-seed ServiceRecord if not already present
+        existing = await _store.get(dyn_config.id)
+        if existing is None:
+            await _store.put(ServiceRecord(
+                name=dyn_config.id,
+                container_name=dyn_config.container_name,
+                image=dyn_config.image,
+            ))
+        logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
+
     yield
 
     if bg_task:
@@ -234,16 +286,17 @@ async def _get_config(request: Request) -> LifecycleConfig:
     return config
 
 
-async def _get_registry(request: Request):
-    """Return the ComponentRegistry from app state, or raise 503."""
-    registry = getattr(request.app.state, "registry", None)
-    if registry is None:
-        raise HTTPException(status_code=503, detail="Component registry not loaded")
-    return registry
+async def _get_registry(request: Request) -> ComponentRegistry:
+    """Return the ComponentRegistry from app state."""
+    return request.app.state.registry
 
 
 def _get_registry_checker(request: Request) -> RegistryChecker:
     return request.app.state.registry_checker
+
+
+async def _get_component_config_store(request: Request) -> ComponentConfigStore:
+    return request.app.state.component_config_store
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -758,11 +811,155 @@ async def rollback_service(
     )
 
 
+# ---------------------------------------------------------------------------
+# POST /onboard/preflight
+# ---------------------------------------------------------------------------
+
+
+@app.post("/onboard/preflight", response_model=OnboardPreflightResponse)
+async def onboard_preflight(
+    req: OnboardPreflightRequest,
+    _: None = Depends(verify_auth),
+    store: ServiceStore = Depends(_get_store),
+) -> OnboardPreflightResponse:
+    """Fetch and parse a service repo's docker-compose.yml, returning a DerivedSpec.
+
+    The caller reviews the spec before confirming onboarding via `/onboard/confirm`.
+    """
+    import re
+
+    from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_compose_bytes
+    from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
+
+    # Validate name slug
+    if not re.fullmatch(r"^[a-z0-9][a-z0-9-]*$", req.name):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": f"Invalid name '{req.name}': must match ^[a-z0-9][a-z0-9-]*$"},
+        )
+
+    # Check for duplicate
+    existing = await store.get(req.name)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": f"component '{req.name}' already exists"},
+        )
+
+    # Fetch compose bytes (git clone is blocking → run in executor)
+    loop = asyncio.get_running_loop()
+    try:
+        compose_bytes = await loop.run_in_executor(
+            None, fetch_compose_bytes, req.git_url,
+        )
+    except FetchError as e:
+        raise HTTPException(status_code=422, detail={"error": str(e)})
+
+    # Parse compose
+    try:
+        derived_spec = parse_compose(compose_bytes, req.name, req.git_url)
+    except ParseError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "compose validation failed", "violations": e.violations},
+        )
+
+    return OnboardPreflightResponse(spec=derived_spec)
+
+
+# ---------------------------------------------------------------------------
+# POST /onboard/confirm
+# ---------------------------------------------------------------------------
+
+
+@app.post("/onboard/confirm", response_model=OnboardConfirmResponse)
+async def onboard_confirm(
+    req: OnboardConfirmRequest,
+    _: None = Depends(verify_auth),
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+) -> OnboardConfirmResponse:
+    """Persist a reviewed DerivedSpec, deploy the container, and register the component."""
+    spec = req.spec
+
+    # Race-condition guard: re-check name not already in store
+    existing = await store.get(spec.name)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": f"component '{spec.name}' already exists"},
+        )
+
+    # Build ComponentConfig from the DerivedSpec
+    config = ComponentConfig(
+        id=spec.name,
+        image=spec.image,
+        container_name=spec.name,
+        ports=spec.ports,
+        mounts=spec.volume_mounts,
+        env=spec.env,
+        health_check=spec.health_check,
+        claude_mount=spec.claude_mount,
+        named_volumes=[m.host for m in spec.volume_mounts],
+        stateful_volumes=spec.stateful_volumes,
+    )
+
+    # Persist config
+    await component_config_store.put(config)
+
+    # Register in-memory
+    registry.register(config)
+
+    # Create and persist ServiceRecord
+    record = ServiceRecord(
+        name=spec.name,
+        container_name=spec.name,
+        image=spec.image,
+    )
+    await store.put(record)
+
+    # Deploy
+    try:
+        outcome = await backend.deploy(record, config, config.image)
+    except Exception as exc:
+        logger.exception("onboard deploy failed for '%s'", spec.name)
+        # Best-effort rollback: remove config, record, and in-memory entry
+        await component_config_store.delete(config.id)
+        registry._index.pop(config.id, None)  # noqa: SLF001
+        await store.delete(spec.name)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": str(exc)},
+        )
+
+    # Update record state from outcome
+    record.state = outcome.state
+    record.image = config.image
+    record.image_revision = outcome.deployed_digest
+    record.deployed_image_digest = outcome.deployed_digest
+    record.previous_image_digest = outcome.previous_digest
+    await store.put(record)
+
+    return OnboardConfirmResponse(
+        name=spec.name,
+        image=spec.image,
+        state=record.state.value,
+    )
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
+    if isinstance(exc.detail, dict):
+        content = exc.detail
+    elif isinstance(exc.detail, str):
+        content = {"error": exc.detail}
+    else:
+        content = {"error": str(exc.detail)}
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.detail if isinstance(exc.detail, str) else str(exc.detail)},
+        content=content,
         headers=exc.headers if exc.headers else None,
     )
 
