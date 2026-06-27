@@ -1035,6 +1035,92 @@ async def delete_service_env_key(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /services/{name}
+# ---------------------------------------------------------------------------
+
+
+@app.delete(
+    "/services/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["services"],
+    summary="Remove an onboarded component and optionally its container",
+)
+async def delete_service(
+    name: str,
+    stop_container: bool = Query(
+        default=True,
+        description="Stop and remove the managed container (true) or leave it running (false)",
+    ),
+    store: ServiceStore = Depends(_get_store),
+    config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    _auth: None = Depends(verify_auth),
+) -> None:
+    # 1. Verify component exists in config store
+    config = config_store.get(name)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Component '{name}' not found",
+        )
+
+    # 2. Resolve sibling pairs
+    pairs = await _get_sibling_pairs(name, config, store)
+
+    # 3. Get primary record (may be None if partially onboarded)
+    record = await store.get(name)
+
+    # 4. Best-effort container stop/remove
+    if stop_container:
+        if record is not None:
+            try:
+                await backend.stop(record)
+            except Exception:
+                logger.warning("stop failed for %s during delete", name, exc_info=True)
+            try:
+                await backend.remove_container(record)
+            except Exception:
+                logger.warning(
+                    "remove_container failed for %s during delete", name, exc_info=True,
+                )
+        for _sib_cfg, sib_record in pairs:
+            try:
+                await backend.stop(sib_record)
+            except Exception:
+                logger.warning(
+                    "stop failed for %s during delete", sib_record.name, exc_info=True,
+                )
+            try:
+                await backend.remove_container(sib_record)
+            except Exception:
+                logger.warning(
+                    "remove_container failed for %s during delete",
+                    sib_record.name,
+                    exc_info=True,
+                )
+
+    # 5. Delete sibling records and env
+    for sib_cfg, sib_record in pairs:
+        await store.delete(sib_record.name)
+        await env_store.delete(f"{name}-{sib_cfg.service_key}")
+
+    # 6. Delete primary record
+    if record is not None:
+        await store.delete(name)
+
+    # 7. Delete primary env/secrets
+    await env_store.delete(name)
+
+    # 8. Delete from config store
+    await config_store.delete(name)
+
+    # 9. Remove from in-memory registry
+    registry.unregister(name)
+
+
+# ---------------------------------------------------------------------------
 # POST /onboard/preflight
 # ---------------------------------------------------------------------------
 
@@ -1180,7 +1266,7 @@ async def onboard_confirm(
         logger.exception("onboard deploy failed for '%s'", spec.name)
         # Best-effort rollback: remove config, record, and in-memory entry
         await component_config_store.delete(config.id)
-        registry._index.pop(config.id, None)  # noqa: SLF001
+        registry.unregister(config.id)
         await store.delete(spec.name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1233,7 +1319,7 @@ async def onboard_confirm(
             await store.delete(sr.name)
         # Undo primary (existing rollback path)
         await component_config_store.delete(config.id)
-        registry._index.pop(config.id, None)  # noqa: SLF001
+        registry.unregister(config.id)
         await store.delete(spec.name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

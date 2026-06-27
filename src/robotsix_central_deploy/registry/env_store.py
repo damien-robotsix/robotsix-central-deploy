@@ -94,6 +94,13 @@ class EnvStore:
                 await self._save(data)
             return found
 
+    async def delete(self, name: str) -> None:
+        """Remove all env and secrets for *name*. No-op if absent."""
+        async with self._lock:
+            store = await self._load()
+            store.pop(name, None)
+            await self._save(store)
+
     async def get_merged_env(self, name: str, base_env: dict[str, str]) -> dict[str, str]:
         """Return the effective environment for *name*.
 

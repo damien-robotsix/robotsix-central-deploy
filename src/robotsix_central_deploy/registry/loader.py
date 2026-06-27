@@ -72,6 +72,10 @@ class ComponentRegistry:
         """Add or replace a component in the in-memory index."""
         self._index[config.id] = config
 
+    def unregister(self, id: str) -> None:
+        """Remove *id* from the in-memory index. No-op if absent."""
+        self._index.pop(id, None)
+
     def get(self, component_id: str) -> Optional[ComponentConfig]:
         """Return the component with *component_id*, or ``None``."""
         return self._index.get(component_id)

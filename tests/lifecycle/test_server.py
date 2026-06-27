@@ -15,7 +15,9 @@ from robotsix_central_deploy.lifecycle.backend import ComponentInspect, NoopBack
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.env_store import EnvStore
+from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
@@ -64,6 +66,10 @@ def _reset_globals(monkeypatch, tmp_path):
     km = SecretKeyManager(tmp_path / "secrets.key")
     env_store = EnvStore(tmp_path / "env.json", km)
 
+    # Config store + registry
+    config_store = ComponentConfigStore(tmp_path / "config_store.json")
+    registry = ComponentRegistry([])
+
     # Set both the module-level globals and app.state so all code paths work.
     server_mod._config = cfg
     server_mod._store = store
@@ -75,6 +81,8 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.key_manager = km
     server_mod.app.state.env_store = env_store
+    server_mod.app.state.component_config_store = config_store
+    server_mod.app.state.registry = registry
 
 
 @pytest.fixture
@@ -625,3 +633,240 @@ class TestEnvEndpoints:
             "OVERRIDE": "user-val",
             "SECRET": "s3cret",
         }
+
+
+# ---------------------------------------------------------------------------
+# DELETE /services/{name}
+# ---------------------------------------------------------------------------
+
+
+async def _seed_config(
+    config_store: ComponentConfigStore, name: str, *, siblings: list = None
+) -> ComponentConfig:
+    """Create and persist a ComponentConfig in the config store, plus register it."""
+    cfg = ComponentConfig(
+        id=name,
+        image=f"{name}:latest",
+        container_name=name,
+        siblings=siblings or [],
+    )
+    await config_store.put(cfg)
+    server_mod.app.state.registry.register(cfg)
+    return cfg
+
+
+class TestDeleteService:
+    async def test_nonexistent_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.delete("/services/nonexistent", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        resp = await client.delete("/services/svc-a")
+        assert resp.status_code == 401
+
+    async def test_delete_existing_returns_204(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+        resp = await client.delete("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 204
+
+    async def test_after_delete_service_list_excludes_name(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+        await client.delete("/services/svc-a", headers=auth_headers)
+
+        resp = await client.get("/services", headers=auth_headers)
+        assert resp.status_code == 200
+        names = {s["name"] for s in resp.json()["services"]}
+        assert "svc-a" not in names
+
+    async def test_after_delete_get_service_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+        await client.delete("/services/svc-a", headers=auth_headers)
+
+        resp = await client.get("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_after_delete_env_store_cleared(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        config_store = server_mod.app.state.component_config_store
+        env_store = server_mod.app.state.env_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+
+        # Put some env data
+        await env_store.upsert("svc-a", {"FOO": "bar"}, {})
+
+        await client.delete("/services/svc-a", headers=auth_headers)
+
+        # Env should be empty
+        cfg = await env_store.get("svc-a")
+        assert cfg.env == {}
+        assert cfg.secret_tokens == {}
+
+    async def test_stop_container_false_backend_not_called(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+
+        stop_called = False
+        remove_called = False
+        original_stop = server_mod.app.state.backend.stop
+        original_remove = server_mod.app.state.backend.remove_container
+
+        async def _fake_stop(service):
+            nonlocal stop_called
+            stop_called = True
+            return await original_stop(service)
+
+        async def _fake_remove(service):
+            nonlocal remove_called
+            remove_called = True
+            return await original_remove(service)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "stop", _fake_stop)
+        monkeypatch.setattr(server_mod.app.state.backend, "remove_container", _fake_remove)
+
+        resp = await client.delete(
+            "/services/svc-a?stop_container=false", headers=auth_headers
+        )
+        assert resp.status_code == 204
+        assert not stop_called
+        assert not remove_called
+
+    async def test_stop_container_true_calls_backend(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+
+        stop_called = False
+        remove_called = False
+        original_stop = server_mod.app.state.backend.stop
+        original_remove = server_mod.app.state.backend.remove_container
+
+        async def _fake_stop(service):
+            nonlocal stop_called
+            stop_called = True
+            return await original_stop(service)
+
+        async def _fake_remove(service):
+            nonlocal remove_called
+            remove_called = True
+            return await original_remove(service)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "stop", _fake_stop)
+        monkeypatch.setattr(server_mod.app.state.backend, "remove_container", _fake_remove)
+
+        # Default stop_container=true
+        resp = await client.delete("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 204
+        assert stop_called
+        assert remove_called
+
+    async def test_backend_stop_error_does_not_abort(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+
+        async def _failing_stop(service):
+            raise RuntimeError("docker daemon down")
+
+        monkeypatch.setattr(server_mod.app.state.backend, "stop", _failing_stop)
+
+        resp = await client.delete("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 204
+
+    async def test_delete_with_sibling(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        from robotsix_central_deploy.registry.models import ServiceConfig
+
+        config_store = server_mod.app.state.component_config_store
+        store = server_mod.app.state.store
+        env_store = server_mod.app.state.env_store
+
+        # Create a component with a sibling
+        sibling = ServiceConfig(
+            service_key="redis",
+            container_name="svc-a-redis",
+            image="redis:7",
+        )
+        cfg = ComponentConfig(
+            id="svc-a",
+            image="svc-a:latest",
+            container_name="svc-a",
+            siblings=[sibling],
+        )
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Seed primary and sibling records
+        prim = ServiceRecord(name="svc-a", image="svc-a:latest")
+        sib_rec = ServiceRecord(name="svc-a-redis", image="redis:7")
+        await store.put(prim)
+        await store.put(sib_rec)
+
+        # Put env for both
+        await env_store.upsert("svc-a", {"PRIMARY": "1"}, {})
+        await env_store.upsert("svc-a-redis", {"SIBLING": "1"}, {})
+
+        # Track backend calls
+        stop_names: list[str] = []
+        remove_names: list[str] = []
+        original_stop = server_mod.app.state.backend.stop
+        original_remove = server_mod.app.state.backend.remove_container
+
+        async def _fake_stop(service):
+            stop_names.append(service.name)
+            return await original_stop(service)
+
+        async def _fake_remove(service):
+            remove_names.append(service.name)
+            return await original_remove(service)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "stop", _fake_stop)
+        monkeypatch.setattr(server_mod.app.state.backend, "remove_container", _fake_remove)
+
+        resp = await client.delete("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 204
+
+        # Both containers were stopped and removed
+        assert "svc-a" in stop_names
+        assert "svc-a-redis" in stop_names
+        assert "svc-a" in remove_names
+        assert "svc-a-redis" in remove_names
+
+        # Both records are gone
+        assert await store.get("svc-a") is None
+        assert await store.get("svc-a-redis") is None
+
+        # Both env entries are cleared
+        prim_env = await env_store.get("svc-a")
+        sib_env = await env_store.get("svc-a-redis")
+        assert prim_env.env == {}
+        assert sib_env.env == {}
+
+        # Config is gone
+        assert config_store.get("svc-a") is None
+
+        # Registry entry is gone
+        assert server_mod.app.state.registry.get("svc-a") is None
