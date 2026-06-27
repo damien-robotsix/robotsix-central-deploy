@@ -44,8 +44,12 @@ modules:
     name: ui
     description: >
       Monitoring dashboard UI — serves a self-contained HTML page at /ui
-      showing live component status, image revision, health, and start/stop/
-      restart controls. Auth-gated via verify_auth.
+      showing live component status, image revision, health, start/stop/
+      restart controls, and a per-component env/secrets config modal.
+      The modal lets operators view, add, edit, and delete environment
+      variables and secrets without SSH access, using the
+      `GET/PUT/DELETE /services/{name}/env` API endpoints.
+      Auth-gated via verify_auth.
     package: robotsix_central_deploy.ui
     dependencies:
       - fastapi
