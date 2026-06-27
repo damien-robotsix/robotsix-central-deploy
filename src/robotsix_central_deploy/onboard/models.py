@@ -25,7 +25,7 @@ class DerivedSpec(BaseModel):
 
     name: str  # user-supplied slug
     git_url: str
-    image: str  # e.g. "ghcr.io/damien-robotsix/cost-monitor:main"
+    image: str  # e.g. "ghcr.io/your-org/your-service:main"
     ports: list[PortMapping]
     volume_mounts: list[VolumeMount]  # host=volume_name (named volumes only)
     stateful_volumes: list[str]  # volume names flagged robotsix.deploy.stateful=true
