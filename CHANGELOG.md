@@ -23,6 +23,10 @@ All notable changes to robotsix-central-deploy.
   (`ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH`, default `secrets.key`).
   Added `cryptography>=41.0` dependency.
 
+- **Onboard UI modal** — "Add Component" button on the dashboard opens a two-step
+  onboard modal: enter git URL + name, fetch+review the derived spec (ports, volumes,
+  env, Claude mount), edit secrets, and deploy.  Stateful volumes show an amber
+  "starts EMPTY" warning.  Validation errors and 409 conflicts are surfaced inline.
 - **Onboard API endpoints** — new `POST /onboard/preflight` (fetch+validate a service
   repo's compose) and `POST /onboard/confirm` (persist config, deploy container,
   register component).  Dynamic `ComponentConfigStore` persists onboarded components

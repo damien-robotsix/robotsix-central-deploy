@@ -49,12 +49,12 @@
   .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: pointer; }
 
   /* Log viewer modal */
-  .log-overlay {
+  .log-overlay, .onboard-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.55); z-index: 100;
     align-items: center; justify-content: center;
   }
-  .log-overlay.open { display: flex; }
+  .log-overlay.open, .onboard-overlay.open { display: flex; }
   .log-panel {
     background: #1e1e1e; color: #d4d4d4;
     border-radius: 6px; width: 85vw; height: 80vh;
@@ -67,11 +67,38 @@
     padding: 10px 16px; background: #2d2d2d; flex-shrink: 0;
   }
   .log-header h2 { font-size: 0.95rem; color: #e0e0e0; font-weight: 600; }
-  .log-close {
+  .log-close, .onboard-close {
     background: none; border: none; color: #9e9e9e; font-size: 1.3rem;
     cursor: pointer; padding: 0 4px; line-height: 1;
   }
-  .log-close:hover { color: #fff; }
+  .log-close:hover, .onboard-close:hover { color: #fff; }
+  .onboard-panel {
+    background: #1e293b; color: #e2e8f0;
+    border-radius: 6px; width: 600px; max-width: 95vw; max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    overflow-y: auto; padding: 20px 24px;
+  }
+  .onboard-panel h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--blue); }
+  .onboard-panel h3 { font-size: 0.95rem; margin: 14px 0 6px; color: #cbd5e1; }
+  .onboard-panel label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: #94a3b8; }
+  .onboard-panel input[type="url"],
+  .onboard-panel input[type="text"],
+  .onboard-panel input[type="number"],
+  .onboard-panel input[type="password"] {
+    display: block; width: 100%; margin-top: 4px; padding: 6px 10px;
+    background: #0f172a; border: 1px solid #475569; border-radius: 4px;
+    color: #e2e8f0; font-size: 0.9rem;
+  }
+  .onboard-panel table { width: 100%; background: #0f172a; border-radius: 4px; margin-bottom: 8px; }
+  .onboard-panel table th,
+  .onboard-panel table td { padding: 5px 8px; font-size: 0.85rem; border-color: #334155; }
+  .ob-error { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 0.85rem; }
+  .ob-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .ob-actions button { padding: 6px 14px; font-size: 0.85rem; border: 1px solid #475569; border-radius: 4px; background: #1e293b; color: #cbd5e1; cursor: pointer; }
+  .ob-actions button:hover:not(:disabled) { background: #334155; border-color: var(--blue); }
+  .ob-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .badge-amber { background: rgba(251,146,60,0.18); color: var(--amber); border-radius:4px; padding:2px 6px; font-size:0.8em; }
   .log-status {
     padding: 4px 16px; font-size: 0.75rem; color: #9e9e9e;
     background: #252525; flex-shrink: 0;
@@ -183,6 +210,7 @@
 
 <header>
   <h1>Robotsix Deploy — Component Status</h1>
+  <button id="add-component-btn" onclick="openOnboardModal()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">+ Add Component</button>
   <span id="refresh-time">Last refreshed: --:--:--</span>
 </header>
 
@@ -247,6 +275,60 @@
     <div id="log-status" class="log-status">Connecting…</div>
     <div class="log-body">
       <pre id="log-output"></pre>
+    </div>
+  </div>
+</div>
+
+<div id="onboard-modal" class="onboard-overlay" role="dialog" aria-modal="true" aria-labelledby="onboard-modal-title">
+  <div class="onboard-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h2 id="onboard-modal-title" style="margin:0;">Add Component</h2>
+      <button class="onboard-close" onclick="closeOnboardModal()" title="Close">&times;</button>
+    </div>
+
+    <!-- Step 1 -->
+    <div id="onboard-step1">
+      <label>Git URL
+        <input id="ob-git-url" type="url" placeholder="https://github.com/damien-robotsix/my-service" />
+      </label>
+      <label>Name (slug)
+        <input id="ob-name" type="text" placeholder="my-service" pattern="[a-z0-9][a-z0-9-]*" />
+      </label>
+      <div id="ob-step1-error" class="ob-error" style="display:none"></div>
+      <div class="ob-actions">
+        <button id="ob-fetch-btn" onclick="onboardFetch()">Fetch Spec</button>
+        <button onclick="closeOnboardModal()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div id="onboard-step2" style="display:none">
+      <p><strong>Image:</strong> <span id="ob-image"></span></p>
+
+      <h3>Ports</h3>
+      <div id="ob-ports"></div>
+
+      <h3>Volumes</h3>
+      <div id="ob-volumes"></div>
+
+      <h3>Environment</h3>
+      <table id="ob-env-table">
+        <thead><tr><th>Key</th><th>Value</th></tr></thead>
+        <tbody id="ob-env-body"></tbody>
+      </table>
+
+      <h3>Options</h3>
+      <label>
+        <input type="checkbox" id="ob-claude-mount" />
+        Mount ~/.claude as /root/.claude (read-write)
+      </label>
+
+      <div id="ob-step2-error" class="ob-error" style="display:none"></div>
+      <div class="ob-actions">
+        <button id="ob-deploy-btn" onclick="onboardDeploy()">Deploy</button>
+        <button onclick="showStep1()">Back</button>
+        <button onclick="closeOnboardModal()">Cancel</button>
+      </div>
     </div>
   </div>
 </div>
@@ -753,6 +835,158 @@ function escAttr(s) {
   return String(s).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
 }
 
+// ── Onboard modal ──────────────────────────────────────────────
+
+let _obSpec = null;
+
+function openOnboardModal() {
+  resetOnboardModal();
+  document.getElementById('onboard-modal').classList.add('open');
+}
+
+function closeOnboardModal() {
+  document.getElementById('onboard-modal').classList.remove('open');
+  resetOnboardModal();
+}
+
+function resetOnboardModal() {
+  _obSpec = null;
+  document.getElementById('ob-git-url').value = '';
+  document.getElementById('ob-name').value = '';
+  showStep1();
+}
+
+function showStep1() {
+  document.getElementById('onboard-step1').style.display = '';
+  document.getElementById('onboard-step2').style.display = 'none';
+  var e = document.getElementById('ob-step1-error');
+  e.style.display = 'none';
+  e.innerHTML = '';
+}
+
+function showOnboardError(el, status, data) {
+  var html = '';
+  if (status === 409) {
+    html = '<p>Conflict: ' + escHtml(data.error || 'Component already exists.') + '</p>';
+  } else if (data.violations && data.violations.length) {
+    html = '<ul>' + data.violations.map(function(v) { return '<li>' + escHtml(v) + '</li>'; }).join('') + '</ul>';
+  } else {
+    html = '<p>' + escHtml(data.error || 'Unexpected error.') + '</p>';
+  }
+  el.innerHTML = html;
+  el.style.display = '';
+}
+
+async function onboardFetch() {
+  var gitUrl = document.getElementById('ob-git-url').value.trim();
+  var name   = document.getElementById('ob-name').value.trim();
+  var errEl  = document.getElementById('ob-step1-error');
+  errEl.style.display = 'none';
+
+  var btn = document.getElementById('ob-fetch-btn');
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+
+  try {
+    var res = await fetch('/onboard/preflight', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify({ git_url: gitUrl, name: name }),
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      showOnboardError(errEl, res.status, data);
+      return;
+    }
+    _obSpec = data.spec;
+    populateStep2(_obSpec);
+    document.getElementById('onboard-step1').style.display = 'none';
+    document.getElementById('onboard-step2').style.display = '';
+  } catch (e) {
+    showOnboardError(errEl, 0, { error: 'Network error — check server logs.' });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Fetch Spec';
+  }
+}
+
+function populateStep2(spec) {
+  document.getElementById('ob-image').textContent = spec.image;
+
+  // Ports
+  var portsEl = document.getElementById('ob-ports');
+  portsEl.innerHTML = spec.ports.map(function(p, i) {
+    return '<div><label>Port ' + (i + 1) + ': <input class="ob-port-host" data-idx="' + i + '" type="number" value="' + escAttr(String(p.host)) + '" style="width:80px" /> → ' + escHtml(String(p.container)) + '/' + escHtml(p.protocol) + '</label></div>';
+  }).join('');
+
+  // Volumes
+  var volsEl = document.getElementById('ob-volumes');
+  volsEl.innerHTML = spec.volume_mounts.map(function(m) {
+    var isStateful = spec.stateful_volumes.indexOf(m.host) !== -1;
+    var warn = isStateful
+      ? ' <span class="badge-amber">⚠ starts EMPTY — migrate data before use</span>'
+      : '';
+    return '<div>📦 <strong>' + escHtml(m.host) + '</strong> → ' + escHtml(m.container) + warn + '</div>';
+  }).join('');
+
+  // Env
+  var tbody = document.getElementById('ob-env-body');
+  tbody.innerHTML = Object.entries(spec.env).map(function(entry) {
+    var k = entry[0], v = entry[1];
+    return '<tr><td>' + escHtml(k) + '</td><td><input class="ob-env-val" data-key="' + escAttr(k) + '" type="' + (v === '' ? 'password' : 'text') + '" value="' + escAttr(v) + '" placeholder="' + (v === '' ? '(required secret)' : '') + '" /></td></tr>';
+  }).join('');
+
+  // Claude mount toggle
+  document.getElementById('ob-claude-mount').checked = !!spec.claude_mount;
+}
+
+async function onboardDeploy() {
+  var errEl = document.getElementById('ob-step2-error');
+  errEl.style.display = 'none';
+
+  // Deep clone the spec
+  var finalSpec = JSON.parse(JSON.stringify(_obSpec));
+
+  // Env values
+  document.querySelectorAll('.ob-env-val').forEach(function(input) {
+    finalSpec.env[input.dataset.key] = input.value;
+  });
+
+  // Port host overrides
+  document.querySelectorAll('.ob-port-host').forEach(function(input) {
+    finalSpec.ports[parseInt(input.dataset.idx)].host = parseInt(input.value);
+  });
+
+  // Claude mount toggle
+  finalSpec.claude_mount = document.getElementById('ob-claude-mount').checked;
+
+  var btn = document.getElementById('ob-deploy-btn');
+  btn.disabled = true;
+  btn.textContent = 'Deploying…';
+
+  try {
+    var res = await fetch('/onboard/confirm', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify({ spec: finalSpec }),
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      showOnboardError(errEl, res.status, data);
+      return;
+    }
+    closeOnboardModal();
+    loadDashboard();
+  } catch (e) {
+    showOnboardError(errEl, 0, { error: 'Network error — check server logs.' });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Deploy';
+  }
+}
+
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(loadDashboard, REFRESH_INTERVAL_MS);
@@ -761,8 +995,13 @@ function startAutoRefresh() {
 // Bootstrap
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    closeLogs();
-    closeEnvModal();
+    if (document.getElementById('onboard-modal').classList.contains('open')) {
+      closeOnboardModal();
+    } else if (document.getElementById('env-modal').classList.contains('open')) {
+      closeEnvModal();
+    } else {
+      closeLogs();
+    }
   }
 });
 loadDashboard();
