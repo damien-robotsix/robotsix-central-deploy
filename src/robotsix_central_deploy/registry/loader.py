@@ -29,7 +29,7 @@ class ComponentRegistry:
 
             components:
               - id: my-service
-                image: ghcr.io/robotsix/my-service:latest
+                image: ghcr.io/your-org/my-service:latest
                 container_name: my-service
                 ports:
                   - host: 8080
