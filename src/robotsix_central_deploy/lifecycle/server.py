@@ -1040,6 +1040,14 @@ async def onboard_confirm(
             detail={"error": f"component '{spec.name}' already exists"},
         )
 
+    # Reserved-name guard: don't allow names that shadow API routes
+    from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
+    if spec.name in RESERVED_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": f"Component name '{spec.name}' is reserved"},
+        )
+
     # Build ComponentConfig from the DerivedSpec
     config = ComponentConfig(
         id=spec.name,
@@ -1110,6 +1118,15 @@ async def http_exception_handler(request, exc: HTTPException):
         content=content,
         headers=exc.headers if exc.headers else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Gateway router — MUST be registered last so its catch-all routes only
+# match after every specific API route has been tried.
+# ---------------------------------------------------------------------------
+
+from ..gateway.router import gateway_router  # noqa: E402
+app.include_router(gateway_router)
 
 
 # ---------------------------------------------------------------------------

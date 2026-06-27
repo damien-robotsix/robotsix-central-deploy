@@ -56,6 +56,7 @@ services:
       - socket-proxy
     networks:
       - internal
+      - central-deploy-proxy
 
 volumes:
   central_deploy_data:
@@ -63,3 +64,6 @@ volumes:
 networks:
   internal:
     driver: bridge
+  central-deploy-proxy:
+    driver: bridge
+    name: central-deploy-proxy
