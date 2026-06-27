@@ -4,6 +4,19 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Calendar stack contract-conforming compose files** — authored
+  `# central-deploy-contract-version: 1` compose files for `robotsix-calendar-agent`
+  and `robotsix-radicale` and pushed them to their respective repos.  The calendar-agent
+  compose removes the `build:` block, `restart:`, `extra_hosts:`, and watchtower labels;
+  converts env vars to the contract `KEY=default` / `KEY=` syntax; and adds a healthcheck
+  matching the Dockerfile (`CMD python /app/healthcheck.py`).  The radicale repo (newly
+  created) wraps `tomsquest/docker-radicale` with a `radicale-data` named volume carrying
+  the `robotsix.deploy.stateful` label.
+
+- Updated `config/components.yaml` baseline entries for `calendar-agent` and `radicale`
+  with correct image refs, env keys, healthcheck commands, and the `stateful_volumes`
+  annotation for `radicale-data`.
+
 - **Dashboard env/secrets config modal** — added a per-component "Config" button
   that opens an env/secrets editing modal.  Users can view, add, edit, and delete
   environment variables and secrets from the UI without SSH.  The modal uses the
