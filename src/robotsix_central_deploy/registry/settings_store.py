@@ -96,7 +96,14 @@ class SystemSettingsStore:
 
         All stored values take precedence over env-var defaults — an entry
         in the store represents an intentional operator choice.
+
+        When the settings file does not exist yet (first boot), the config
+        is returned unchanged so that ``ROBOTSIX_LIFECYCLE_*`` environment
+        variables are preserved.
         """
+        if not self._path.exists():
+            return config
+
         from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 
         stored = self._load()

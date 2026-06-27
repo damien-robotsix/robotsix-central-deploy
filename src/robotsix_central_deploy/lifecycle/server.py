@@ -185,6 +185,18 @@ async def lifespan(app: FastAPI):
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
 
+    # -- System settings store (MUST come before RegistryChecker so that
+    #    the checker sees the overlaid ghcr_token) ------------------------
+    from ..registry.settings_store import SystemSettingsStore
+
+    settings_store = SystemSettingsStore(_config.effective_system_settings_path)
+    app.state.settings_store = settings_store
+    _config = settings_store.overlay(_config)          # returns new LifecycleConfig (or same if no file)
+    app.state.config = _config                         # replace with overlaid version
+
+    # Apply log_level from (possibly overlaid) config
+    logging.getLogger().setLevel(_config.log_level)
+
     # -- Registry checker ------------------------------------------------
     http_client = httpx.AsyncClient(timeout=10.0)
     registry_checker = RegistryChecker(
@@ -231,18 +243,6 @@ async def lifespan(app: FastAPI):
                 image=dyn_config.image,
             ))
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
-
-    # -- System settings store --------------------------------------------
-    from ..registry.settings_store import SystemSettingsStore
-
-    settings_store = SystemSettingsStore(_config.effective_system_settings_path)
-    stored_settings = settings_store._load()          # synchronous at startup
-    _config = settings_store.overlay(_config)          # returns new LifecycleConfig
-    app.state.config = _config                         # replace with overlaid version
-    app.state.settings_store = settings_store
-
-    # Apply log_level from (possibly overlaid) config
-    logging.getLogger().setLevel(_config.log_level)
 
     yield
 
@@ -312,10 +312,6 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
 
 async def _get_env_store(request: Request) -> EnvStore:
     return request.app.state.env_store
-
-
-async def _get_settings_store(request: Request) -> "SystemSettingsStore":
-    return request.app.state.settings_store
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:

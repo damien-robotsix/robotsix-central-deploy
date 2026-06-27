@@ -143,4 +143,10 @@ async def put_settings(
     # Hot-apply log_level immediately
     logging.getLogger().setLevel(new.log_level)
 
+    # Hot-apply ghcr_token to the running RegistryChecker so that
+    # future registry polls use the updated token without restart.
+    checker = getattr(request.app.state, 'registry_checker', None)
+    if checker is not None:
+        checker.set_ghcr_token(new.ghcr_token)
+
     return _mask_response(new)

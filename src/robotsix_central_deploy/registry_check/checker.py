@@ -28,6 +28,10 @@ class RegistryChecker:
         self._ttl = ttl_seconds
         self._cache: dict[str, _CacheEntry] = {}
 
+    def set_ghcr_token(self, token: str) -> None:
+        """Update the GHCR token used as a fallback for authenticated pulls."""
+        self._ghcr_token = token
+
     async def get_latest_digest(self, image_ref: str) -> str | None:
         """Return cached or freshly fetched manifest digest for *image_ref*.
 
