@@ -26,7 +26,7 @@ services:
       SWARM: "0"
       SYSTEM: "1"   # enables /system/df for Docker disk-usage reporting
       TASKS: "0"
-      VOLUMES: "0"
+      VOLUMES: "1"   # required for named-volume create/list/inspect/remove
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     # TCP port 2375 is NOT bound to the host; only reachable within this compose network

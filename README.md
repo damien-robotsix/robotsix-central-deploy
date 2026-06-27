@@ -69,11 +69,11 @@ layer.
 | POST        | `POST=1`       | Required for any mutating HTTP method (start/stop/restart/create) |
 | DELETE      | `DELETE=1`     | Required for container removal during deploy |
 | IMAGES      | `IMAGES=1`     | Required for `docker pull` |
+| VOLUMES     | `VOLUMES=1`    | Create, list, inspect, and remove named volumes for managed services |
 
-All other scopes (`BUILD`, `NETWORKS`, `SWARM`, `SYSTEM`, `EXEC`, …) are
-explicitly disabled (`=0`). This means compromised or buggy central-deploy
-code cannot, for example, create new networks, exec into arbitrary containers,
-or reconfigure the Swarm.
+All other scopes (`BUILD`, `EXEC`, `NETWORKS`, `SWARM`, …) are explicitly
+disabled (`=0`). `BUILD` and `EXEC` remain off — central-deploy pulls
+pre-built images from GHCR and never builds locally or execs into containers.
 
 ### Configuration
 
