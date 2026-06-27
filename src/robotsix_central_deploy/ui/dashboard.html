@@ -127,6 +127,8 @@
   .btn-primary:hover { opacity: 0.85; }
   .btn-secondary { padding: 6px 16px; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 4px; cursor: pointer; font-size: 0.82rem; }
   .btn-secondary:hover { background: #475569; }
+  .btn-danger { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #c0392b; border-radius: 3px; background: #c0392b; color: #fff; cursor: pointer; }
+  .btn-danger:hover { background: #a93226; }
 
   /* Env modal */
   .env-overlay {
@@ -466,6 +468,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
       <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>
+      <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
     <td>${openLink}</td>
@@ -615,6 +618,28 @@ async function doAction(name, action) {
   } finally {
     setButtonsDisabled(name, false);
     startAutoRefresh();
+  }
+}
+
+async function doRemove(name) {
+  const stopContainer = window.confirm(
+    `Remove component "${name}" from the registry?\n\n` +
+    `OK  → also stop and remove the managed container\n` +
+    `Cancel → keep the container running (registry-only removal)`
+  );
+  if (!window.confirm(`Confirm: permanently remove "${name}"? This cannot be undone.`)) return;
+
+  const url = `/services/${encodeURIComponent(name)}?stop_container=${stopContainer}`;
+  try {
+    const resp = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
+    if (resp.status === 204) {
+      await loadDashboard();
+      return;
+    }
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+    alert(`Remove failed (${resp.status}): ${err.detail || resp.statusText}`);
+  } catch (e) {
+    alert(`Remove error: ${e.message}`);
   }
 }
 

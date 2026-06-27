@@ -24,6 +24,11 @@ All notable changes to robotsix-central-deploy.
   with correct image refs, env keys, healthcheck commands, and the `stateful_volumes`
   annotation for `radicale-data`.
 
+- **Dashboard Remove button** — added a per-row "Remove" button to the component
+  dashboard that calls `DELETE /services/{name}?stop_container=<bool>`. Two
+  `window.confirm` prompts guard against accidental removal: the first selects
+  whether to also stop/remove the container, the second is a final confirmation.
+
 - **Dashboard env/secrets config modal** — added a per-component "Config" button
   that opens an env/secrets editing modal.  Users can view, add, edit, and delete
   environment variables and secrets from the UI without SSH.  The modal uses the
