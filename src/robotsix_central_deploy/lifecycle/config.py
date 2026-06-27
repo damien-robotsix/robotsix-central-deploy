@@ -36,6 +36,10 @@ class LifecycleConfig(BaseSettings):
     # Component registry
     registry_path: str = "config/components.yaml"
 
+    # Dynamic component config store
+    component_config_store_path: str = "data/component_configs.json"
+    # env var: ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH
+
     # Docker socket URL (env: ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL)
     # Production value: tcp://socket-proxy:2375
     docker_socket_url: str = "unix:///var/run/docker.sock"
@@ -56,6 +60,10 @@ class LifecycleConfig(BaseSettings):
     @property
     def effective_registry_path(self) -> Path:
         return Path(self.registry_path)
+
+    @property
+    def effective_component_config_store_path(self) -> Path:
+        return Path(self.component_config_store_path)
 
     @property
     def auth_required(self) -> bool:
