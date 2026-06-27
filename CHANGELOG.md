@@ -4,6 +4,9 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Enable `VOLUMES=1` on socket-proxy** — named-volume create/list/inspect/remove
+  calls now pass through the Docker socket proxy, in preparation for
+  managed-service volume creation in the self-service deploy flow.
 - **Dashboard "Up to date" column** — the live dashboard now displays an
   "Up to date" column showing each component's update state as a colored
   badge (green "up to date", amber "update available" with digest tooltip,
