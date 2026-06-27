@@ -22,3 +22,5 @@ RUN pip install --no-cache-dir .
 COPY config/ ./config/
 
 EXPOSE 8100
+
+CMD ["robotsix-lifecycle"]
