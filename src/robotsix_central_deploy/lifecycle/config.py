@@ -33,9 +33,6 @@ class LifecycleConfig(BaseSettings):
     # Execution backend
     execution_backend: str = "docker_sdk"  # "docker_sdk" | "docker" | "noop"
 
-    # Component registry
-    registry_path: str = "config/components.yaml"
-
     # Dynamic component config store
     component_config_store_path: str = "data/component_configs.json"
     # env var: ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH
@@ -60,10 +57,6 @@ class LifecycleConfig(BaseSettings):
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)
-
-    @property
-    def effective_registry_path(self) -> Path:
-        return Path(self.registry_path)
 
     @property
     def effective_component_config_store_path(self) -> Path:

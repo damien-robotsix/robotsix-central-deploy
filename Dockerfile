@@ -17,9 +17,6 @@ COPY src/ ./src/
 # Install the package and its runtime dependencies
 RUN pip install --no-cache-dir .
 
-# Copy the component registry config (expected at /app/config/components.yaml
-# per ROBOTSIX_LIFECYCLE_REGISTRY_PATH in docker-compose.yml)
-COPY config/ ./config/
 
 EXPOSE 8100
 

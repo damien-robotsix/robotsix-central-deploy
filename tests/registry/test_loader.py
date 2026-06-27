@@ -77,10 +77,5 @@ components:
         with pytest.raises(RegistryLoadError, match="Invalid component entry at index 0"):
             ComponentRegistry.from_yaml(path)
 
-    def test_seed_file_loads_all_six_services(self):
-        """The bundled config/components.yaml must load without errors."""
-        path = Path("config/components.yaml")
-        registry = ComponentRegistry.from_yaml(path)
-        ids = {c.id for c in registry.all()}
-        expected = {"cost-monitor", "calendar-agent", "auto-mail", "chat", "broker", "radicale"}
-        assert ids == expected
+
+
