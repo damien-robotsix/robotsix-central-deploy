@@ -206,11 +206,12 @@
       <th>Health</th>
       <th>Up to date</th>
       <th>Actions</th>
+      <th>Open</th>
       <th>Logs</th>
     </tr>
   </thead>
   <tbody id="table-body">
-    <tr><td colspan="7" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
+    <tr><td colspan="8" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
   </tbody>
 </table>
 
@@ -306,6 +307,12 @@ function renderRow(svc) {
     updateBadge = '<span class="badge badge-update-unknown">unknown</span>';
   }
 
+  // Gateway shortcut
+  const openLink = svc.state === 'running'
+    ? `<a href="/${escAttr(svc.name)}/" target="_blank" rel="noopener"
+           style="font-size:0.8rem;color:var(--blue);">↗ Open</a>`
+    : '<span style="color:#666;">—</span>';
+
   return `<tr id="row-${escAttr(svc.name)}">
     <td>${escHtml(svc.name)}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
@@ -319,6 +326,7 @@ function renderRow(svc) {
       <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
+    <td>${openLink}</td>
     <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
   </tr>`;
 }
@@ -421,7 +429,7 @@ async function loadDashboard() {
         rows.push(`<tr id="row-${escAttr(svc.name)}">
           <td>${escHtml(svc.name)}</td>
           <td><span class="badge badge-error">error</span></td>
-          <td>—</td><td>—</td><td>—</td><td></td><td></td>
+          <td>—</td><td>—</td><td>—</td><td></td><td></td><td></td>
         </tr>`);
       }
     }

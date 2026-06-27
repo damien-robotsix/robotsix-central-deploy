@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Optional
 
+from ..gateway.proxy import PROXY_NETWORK
 from .models import ComponentInspect, DeployOutcome, DockerDfStats, RollbackOutcome, ServiceRecord, ServiceState
 
 if TYPE_CHECKING:
@@ -455,6 +456,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             detach=True,
             restart_policy={"Name": "unless-stopped"},
+            network=PROXY_NETWORK,
         )
 
     async def _wait_healthy(self, name: str, timeout: float = 60.0) -> None:
