@@ -15,6 +15,9 @@ from robotsix_central_deploy.lifecycle.backend import ComponentInspect, NoopBack
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.registry.env_store import EnvStore
+from robotsix_central_deploy.registry.models import ComponentConfig
+from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
 # Import the server module itself (not just symbols) so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -42,7 +45,7 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
 
 
 @pytest.fixture(autouse=True)
-def _reset_globals(monkeypatch):
+def _reset_globals(monkeypatch, tmp_path):
     """Wire a fresh store/backend/config into the server module before each test."""
     monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
@@ -57,6 +60,10 @@ def _reset_globals(monkeypatch):
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
 
+    # Env store + secret key
+    km = SecretKeyManager(tmp_path / "secrets.key")
+    env_store = EnvStore(tmp_path / "env.json", km)
+
     # Set both the module-level globals and app.state so all code paths work.
     server_mod._config = cfg
     server_mod._store = store
@@ -66,6 +73,8 @@ def _reset_globals(monkeypatch):
     server_mod.app.state.store = store
     server_mod.app.state.backend = backend
     server_mod.app.state.registry_checker = mock_checker
+    server_mod.app.state.key_manager = km
+    server_mod.app.state.env_store = env_store
 
 
 @pytest.fixture
@@ -480,3 +489,139 @@ class TestUpdateAvailable:
         data = resp.json()
         assert data["running_digest"] == "sha256:e9f0"
         assert data["update_state"] == "unknown"  # latest not yet fetched
+
+
+# ---------------------------------------------------------------------------
+# GET / PUT / DELETE /services/{name}/env
+# ---------------------------------------------------------------------------
+
+
+class TestEnvEndpoints:
+    async def test_get_env_empty_for_fresh_component(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        resp = await client.get("/services/chat/env", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"env": {}, "secrets": {}}
+
+    async def test_put_then_get_returns_env_and_masked_secrets(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        put_body = {"env": {"LOG_LEVEL": "debug"}, "secrets": {"API_KEY": "my-token"}}
+        r = await client.put("/services/chat/env", json=put_body, headers=auth_headers)
+        assert r.status_code == 204
+
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["env"] == {"LOG_LEVEL": "debug"}
+        assert data["secrets"] == {"API_KEY": "***"}
+
+    async def test_put_merges_not_replaces(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        await client.put("/services/chat/env", json={"env": {"A": "1"}}, headers=auth_headers)
+        await client.put("/services/chat/env", json={"env": {"B": "2"}}, headers=auth_headers)
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        data = r.json()
+        assert data["env"] == {"A": "1", "B": "2"}
+
+    async def test_get_env_nonexistent_service_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get("/services/nonexistent/env", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_get_returns_401(self, client: AsyncClient):
+        await _seed_store("chat")
+        resp = await client.get("/services/chat/env")
+        assert resp.status_code == 401
+
+    async def test_unauthenticated_put_returns_401(self, client: AsyncClient):
+        await _seed_store("chat")
+        resp = await client.put("/services/chat/env", json={"env": {"A": "1"}})
+        assert resp.status_code == 401
+
+    async def test_unauthenticated_delete_returns_401(self, client: AsyncClient):
+        await _seed_store("chat")
+        resp = await client.delete("/services/chat/env/A")
+        assert resp.status_code == 401
+
+    async def test_delete_key_removes_from_env(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        await client.put("/services/chat/env", json={"env": {"A": "1", "B": "2"}}, headers=auth_headers)
+        r = await client.delete("/services/chat/env/A", headers=auth_headers)
+        assert r.status_code == 204
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        data = r.json()
+        assert data["env"] == {"B": "2"}
+
+    async def test_delete_key_removes_from_secrets(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        await client.put("/services/chat/env", json={"secrets": {"TOKEN": "val"}}, headers=auth_headers)
+        r = await client.delete("/services/chat/env/TOKEN", headers=auth_headers)
+        assert r.status_code == 204
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        data = r.json()
+        assert data["secrets"] == {}
+
+    async def test_delete_absent_key_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        await client.put("/services/chat/env", json={"env": {"A": "1"}}, headers=auth_headers)
+        r = await client.delete("/services/chat/env/NOTFOUND", headers=auth_headers)
+        assert r.status_code == 404
+
+    async def test_deploy_injects_merged_env(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """deploy_service must call backend.deploy with merged env including secrets."""
+        await _seed_store("chat", image="ghcr.io/o/img:main")
+
+        # Set up a fake registry with a component config that has a base env
+        from robotsix_central_deploy.registry.loader import ComponentRegistry
+        cfg = ComponentConfig(
+            id="chat",
+            image="ghcr.io/o/img:main",
+            container_name="chat",
+            env={"BASE_KEY": "base-val", "OVERRIDE": "base"},
+        )
+        registry = ComponentRegistry([cfg])
+        server_mod.app.state.registry = registry
+
+        # Store a secret and an env override via the API
+        await client.put(
+            "/services/chat/env",
+            json={"env": {"OVERRIDE": "user-val"}, "secrets": {"SECRET": "s3cret"}},
+            headers=auth_headers,
+        )
+
+        # Monkeypatch backend.deploy to capture the config
+        captured_configs: list = []
+        original_deploy = server_mod.app.state.backend.deploy
+
+        async def _fake_deploy(service, config, image_ref):
+            captured_configs.append(config)
+            return await original_deploy(service, config, image_ref)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "deploy", _fake_deploy)
+
+        r = await client.post("/services/chat/deploy", headers=auth_headers)
+        assert r.status_code == 200
+
+        assert len(captured_configs) == 1
+        deployed_env = captured_configs[0].env
+        assert deployed_env == {
+            "BASE_KEY": "base-val",
+            "OVERRIDE": "user-val",
+            "SECRET": "s3cret",
+        }
