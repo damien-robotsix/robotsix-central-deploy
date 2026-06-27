@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 
 from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_compose_bytes
-from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError
+from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
 from robotsix_central_deploy.onboard.parser import _parse_go_duration, parse_compose
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
 
@@ -106,6 +106,41 @@ class TestParseComposeValid:
 
 
 # ---------------------------------------------------------------------------
+# Multi-service compose fixtures
+# ---------------------------------------------------------------------------
+
+TWO_SERVICE_COMPOSE_YAML = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/auto-mail:main
+    labels:
+      robotsix.deploy.primary: "true"
+    ports:
+      - "8202:8080"
+    environment:
+      SMTP_HOST: ""
+      AUTH_TOKEN: ""
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+  ingester:
+    image: ghcr.io/damien-robotsix/auto-mail-ingester:main
+    environment:
+      BOARD_URL: ""
+      IMAP_PASSWORD: ""
+    volumes:
+      - mail-spool:/data
+volumes:
+  mail-spool:
+    labels:
+      robotsix.deploy.stateful: "true"
+"""
+
+# ---------------------------------------------------------------------------
 # parse_compose — invalid
 # ---------------------------------------------------------------------------
 
@@ -120,7 +155,7 @@ services:
             parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert "central-deploy-contract-version" in str(exc.value)
 
-    def test_two_services(self):
+    def test_two_services_no_primary(self):
         y = """\
 # central-deploy-contract-version: 1
 services:
@@ -131,7 +166,7 @@ services:
 """
         with pytest.raises(ParseError) as exc:
             parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
-        assert "exactly one service" in str(exc.value).lower()
+        assert "robotsix.deploy.primary" in str(exc.value).lower()
 
     def test_build_key_present(self):
         y = """\
@@ -414,3 +449,149 @@ class TestFetchComposeBytes:
                 with mock.patch.object(Path, "is_file", return_value=False):
                     with pytest.raises(FetchError, match="docker-compose.yml not found"):
                         fetch_compose_bytes("https://example.com/fake.git")
+
+
+# ---------------------------------------------------------------------------
+# Multi-service parse tests
+# ---------------------------------------------------------------------------
+
+
+class TestMultiServiceParse:
+    def test_multi_service_with_primary_label(self):
+        """Two-service compose with board as primary and ingester as sibling."""
+        spec = parse_compose(
+            _bytes(TWO_SERVICE_COMPOSE_YAML),
+            name="auto-mail",
+            git_url="https://github.com/example/auto-mail.git",
+        )
+        assert isinstance(spec, DerivedSpec)
+        assert spec.name == "auto-mail"
+        assert spec.image == "ghcr.io/damien-robotsix/auto-mail:main"
+        assert len(spec.siblings) == 1
+        sib = spec.siblings[0]
+        assert sib.service_key == "ingester"
+        assert sib.container_name == "auto-mail-ingester"
+        assert sib.image == "ghcr.io/damien-robotsix/auto-mail-ingester:main"
+        assert sib.env == {"BOARD_URL": "", "IMAP_PASSWORD": ""}
+        assert sib.volume_mounts == [
+            VolumeMount(host="mail-spool", container="/data", read_only=False)
+        ]
+        assert spec.stateful_volumes == ["mail-spool"]
+        # Primary still has its own ports
+        assert spec.ports == [PortMapping(host=8202, container=8080, protocol="tcp")]
+        assert spec.health_check is not None
+
+    def test_multi_service_no_primary_raises(self):
+        """2 services, neither has primary label → ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+  bar:
+    image: ghcr.io/damien-robotsix/bar:main
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "robotsix.deploy.primary" in str(exc.value).lower()
+        assert "none found" in str(exc.value).lower()
+
+    def test_multi_service_both_primary_raises(self):
+        """2 services, both have primary label → ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.primary: "true"
+  bar:
+    image: ghcr.io/damien-robotsix/bar:main
+    labels:
+      robotsix.deploy.primary: "true"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "exactly one primary" in str(exc.value).lower()
+
+    def test_single_service_implicit_primary(self):
+        """Existing single-service YAML parses as before with siblings=[]."""
+        spec = parse_compose(
+            _bytes(VALID_COMPOSE_YAML),
+            name="cost-monitor",
+            git_url="https://github.com/example/repo.git",
+        )
+        assert isinstance(spec, DerivedSpec)
+        assert spec.siblings == []
+        assert spec.image == "ghcr.io/damien-robotsix/cost-monitor:main"
+        assert spec.claude_mount is True
+
+    def test_sibling_container_name_defaults(self):
+        """Sibling without container_name: derives from <name>-<service_key>."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/myapp:main
+    labels:
+      robotsix.deploy.primary: "true"
+  ingester:
+    image: ghcr.io/damien-robotsix/myapp-ingester:main
+"""
+        spec = parse_compose(_bytes(y), name="myapp", git_url="https://x.com/r.git")
+        assert len(spec.siblings) == 1
+        assert spec.siblings[0].container_name == "myapp-ingester"
+
+    def test_sibling_container_name_override(self):
+        """Sibling with container_name: overrides the default."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/myapp:main
+    labels:
+      robotsix.deploy.primary: "true"
+  ingester:
+    image: ghcr.io/damien-robotsix/myapp-ingester:main
+    container_name: custom-worker
+"""
+        spec = parse_compose(_bytes(y), name="myapp", git_url="https://x.com/r.git")
+        assert len(spec.siblings) == 1
+        assert spec.siblings[0].container_name == "custom-worker"
+
+    def test_named_volumes_cross_service_validated(self):
+        """Volume declared only in sibling but not in top-level volumes: → ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/myapp:main
+    labels:
+      robotsix.deploy.primary: "true"
+  ingester:
+    image: ghcr.io/damien-robotsix/myapp-ingester:main
+    volumes:
+      - undeclared-vol:/data
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="myapp", git_url="https://x.com/r.git")
+        assert "undeclared-vol" in str(exc.value)
+        assert "not declared in top-level volumes" in str(exc.value).lower()
+
+    def test_multi_service_sibling_build_key_raises(self):
+        """Sibling has build: field → ParseError mentioning sibling service key."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/myapp:main
+    labels:
+      robotsix.deploy.primary: "true"
+  ingester:
+    build: .
+    image: ghcr.io/damien-robotsix/myapp-ingester:main
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="myapp", git_url="https://x.com/r.git")
+        assert "build:" in str(exc.value)
+        assert "ingester" in str(exc.value)

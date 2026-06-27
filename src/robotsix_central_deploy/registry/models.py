@@ -27,6 +27,19 @@ class HealthCheck(BaseModel):
     start_period_seconds: int = 10
 
 
+class ServiceConfig(BaseModel):
+    """Persisted config for one non-primary (sibling) service in a multi-service component."""
+
+    service_key: str
+    container_name: str
+    image: str
+    ports: list[PortMapping] = []
+    mounts: list[VolumeMount] = []
+    env: dict[str, str] = {}
+    claude_mount: bool = False
+    health_check: Optional[HealthCheck] = None
+
+
 class ComponentConfig(BaseModel):
     """Declares a single managed Docker component."""
 
@@ -40,3 +53,4 @@ class ComponentConfig(BaseModel):
     claude_mount: bool = False
     named_volumes: list[str] = []      # volume names to pre-create at deploy time
     stateful_volumes: list[str] = []   # subset with robotsix.deploy.stateful label (informational)
+    siblings: list[ServiceConfig] = []  # empty = single-service (backward compat)

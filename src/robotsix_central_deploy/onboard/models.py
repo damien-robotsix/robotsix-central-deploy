@@ -7,6 +7,19 @@ from pydantic import BaseModel
 from robotsix_central_deploy.registry.models import HealthCheck, PortMapping, VolumeMount
 
 
+class SiblingDerivedSpec(BaseModel):
+    """Parsed config for a non-primary service in a multi-service compose."""
+
+    service_key: str       # compose services: key (e.g. "ingester")
+    container_name: str    # derived name ("<component>-<service_key>") or container_name: override
+    image: str
+    ports: list[PortMapping] = []
+    volume_mounts: list[VolumeMount] = []
+    env: dict[str, str] = {}
+    claude_mount: bool = False
+    health_check: Optional[HealthCheck] = None
+
+
 class DerivedSpec(BaseModel):
     """Parsed output from a service repo's docker-compose.yml."""
 
@@ -20,6 +33,7 @@ class DerivedSpec(BaseModel):
     claude_mount: bool
     health_check: Optional[HealthCheck] = None
     container_name: str = ""  # override from compose; empty means "use spec.name"
+    siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
 
 
 class ParseError(Exception):

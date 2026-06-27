@@ -46,7 +46,7 @@ from .models import (
 from ..registry.config_store import ComponentConfigStore
 from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry
-from ..registry.models import ComponentConfig
+from ..registry.models import ComponentConfig, ServiceConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
 from ..ui.router import router as ui_router
@@ -242,6 +242,17 @@ async def lifespan(app: FastAPI):
                 container_name=dyn_config.container_name,
                 image=dyn_config.image,
             ))
+        # Seed sibling records
+        for sib in dyn_config.siblings:
+            sib_name = f"{dyn_config.id}-{sib.service_key}"
+            existing_sib = await _store.get(sib_name)
+            if existing_sib is None:
+                await _store.put(ServiceRecord(
+                    name=sib_name,
+                    container_name=sib.container_name,
+                    image=sib.image,
+                    component_id=dyn_config.id,
+                ))
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
 
     yield
@@ -323,6 +334,25 @@ async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord
             detail=f"Service '{name}' not found",
         )
     return record
+
+
+async def _get_sibling_pairs(
+    name: str,
+    config: ComponentConfig,
+    store: ServiceStore,
+) -> list[tuple[ServiceConfig, ServiceRecord]]:
+    """Return (ServiceConfig, ServiceRecord) pairs for siblings of `name`.
+    Missing sibling records are logged and skipped (best-effort).
+    """
+    pairs = []
+    for sib in config.siblings:
+        sib_name = f"{name}-{sib.service_key}"
+        sib_record = await store.get(sib_name)
+        if sib_record is None:
+            logger.warning("sibling record '%s' not found; skipping", sib_name)
+            continue
+        pairs.append((sib, sib_record))
+    return pairs
 
 
 # ---------------------------------------------------------------------------
@@ -510,6 +540,7 @@ async def start_service(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     record = await _get_or_create_record(name, store)
@@ -556,6 +587,17 @@ async def start_service(
     record.last_error = "" if final_state == ServiceState.RUNNING else "backend reported failure"
     await store.put(record)
 
+    # Fan out to siblings (best-effort per sibling)
+    config = registry.get(name)
+    if config and config.siblings:
+        for sib, sib_record in await _get_sibling_pairs(name, config, store):
+            try:
+                final = await backend.start(sib_record)
+                sib_record.state = final
+                await store.put(sib_record)
+            except Exception:
+                logger.warning("start sibling '%s-%s' failed", name, sib.service_key)
+
     return ActionResponse(
         name=name, action="start",
         previous_state=previous, current_state=record.state,
@@ -580,6 +622,7 @@ async def stop_service(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     record = await _get_or_create_record(name, store)
@@ -624,6 +667,17 @@ async def stop_service(
     record.last_error = "" if final_state == ServiceState.STOPPED else "backend reported failure"
     await store.put(record)
 
+    # Stop siblings (best-effort per sibling)
+    config = registry.get(name)
+    if config and config.siblings:
+        for sib, sib_record in await _get_sibling_pairs(name, config, store):
+            try:
+                final = await backend.stop(sib_record)
+                sib_record.state = final
+                await store.put(sib_record)
+            except Exception:
+                logger.warning("stop sibling '%s-%s' failed", name, sib.service_key)
+
     return ActionResponse(
         name=name, action="stop",
         previous_state=previous, current_state=record.state,
@@ -648,6 +702,7 @@ async def restart_service(
     name: str,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     record = await _get_or_create_record(name, store)
@@ -685,6 +740,17 @@ async def restart_service(
     record.state = final_state
     record.last_error = "" if final_state == ServiceState.RUNNING else "backend reported failure"
     await store.put(record)
+
+    # Restart siblings (best-effort per sibling)
+    config = registry.get(name)
+    if config and config.siblings:
+        for sib, sib_record in await _get_sibling_pairs(name, config, store):
+            try:
+                final = await backend.restart(sib_record)
+                sib_record.state = final
+                await store.put(sib_record)
+            except Exception:
+                logger.warning("restart sibling '%s-%s' failed", name, sib.service_key)
 
     return ActionResponse(
         name=name, action="restart",
@@ -752,6 +818,33 @@ async def deploy_service(
     record.previous_image_digest = outcome.previous_digest
     record.last_error = ""
     await store.put(record)
+
+    # Deploy siblings
+    config_fresh = registry.get(name)  # re-read for sibling env
+    if config_fresh and config_fresh.siblings:
+        for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
+            sib_name = f"{name}-{sib_config.service_key}"
+            merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
+            effective_sib = ComponentConfig(
+                id=sib_name,
+                image=sib_config.image,
+                container_name=sib_config.container_name,
+                ports=sib_config.ports,
+                mounts=sib_config.mounts,
+                env=merged_env,
+                health_check=sib_config.health_check,
+                claude_mount=sib_config.claude_mount,
+                named_volumes=[m.host for m in sib_config.mounts],
+            )
+            try:
+                sib_outcome = await backend.deploy(sib_record, effective_sib, sib_config.image)
+                sib_record.state = sib_outcome.state
+                sib_record.image = sib_config.image
+                sib_record.deployed_image_digest = sib_outcome.deployed_digest
+                sib_record.previous_image_digest = sib_outcome.previous_digest
+                await store.put(sib_record)
+            except Exception:
+                logger.warning("deploy sibling '%s' failed", sib_name)
 
     return DeployResponse(
         name=name,
@@ -826,6 +919,39 @@ async def rollback_service(
     record.image_revision = old_previous
     record.last_error = ""
     await store.put(record)
+
+    # Rollback siblings using each sibling's previous_image_digest
+    config_fresh = registry.get(name)
+    if config_fresh and config_fresh.siblings:
+        for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
+            if not sib_record.previous_image_digest:
+                logger.warning("rollback sibling '%s-%s': no prior digest — skipping",
+                               name, sib_config.service_key)
+                continue
+            sib_name = f"{name}-{sib_config.service_key}"
+            merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
+            effective_sib = ComponentConfig(
+                id=sib_name,
+                image=sib_config.image,
+                container_name=sib_config.container_name,
+                ports=sib_config.ports,
+                mounts=sib_config.mounts,
+                env=merged_env,
+                health_check=sib_config.health_check,
+                claude_mount=sib_config.claude_mount,
+                named_volumes=[m.host for m in sib_config.mounts],
+            )
+            try:
+                sib_outcome = await backend.rollback(sib_record, effective_sib)
+                sib_old_deployed = sib_record.deployed_image_digest
+                sib_old_previous = sib_record.previous_image_digest
+                sib_record.state = sib_outcome.state
+                sib_record.deployed_image_digest = sib_old_previous
+                sib_record.previous_image_digest = sib_old_deployed
+                sib_record.image_revision = sib_old_previous
+                await store.put(sib_record)
+            except Exception:
+                logger.warning("rollback sibling '%s' failed", sib_name)
 
     return RollbackResponse(
         name=name,
@@ -1015,8 +1141,22 @@ async def onboard_confirm(
         env=spec.env,
         health_check=spec.health_check,
         claude_mount=spec.claude_mount,
-        named_volumes=[m.host for m in spec.volume_mounts],
+        named_volumes=[m.host for m in spec.volume_mounts]
+                      + [m.host for sib in spec.siblings for m in sib.volume_mounts],
         stateful_volumes=spec.stateful_volumes,
+        siblings=[
+            ServiceConfig(
+                service_key=sib.service_key,
+                container_name=sib.container_name,
+                image=sib.image,
+                ports=sib.ports,
+                mounts=sib.volume_mounts,
+                env=sib.env,
+                claude_mount=sib.claude_mount,
+                health_check=sib.health_check,
+            )
+            for sib in spec.siblings
+        ],
     )
 
     # Persist config
@@ -1033,7 +1173,7 @@ async def onboard_confirm(
     )
     await store.put(record)
 
-    # Deploy
+    # Deploy primary
     try:
         outcome = await backend.deploy(record, config, config.image)
     except Exception as exc:
@@ -1047,13 +1187,58 @@ async def onboard_confirm(
             detail={"error": str(exc)},
         )
 
-    # Update record state from outcome
+    # Update primary record state from outcome
     record.state = outcome.state
     record.image = config.image
     record.image_revision = outcome.deployed_digest
     record.deployed_image_digest = outcome.deployed_digest
     record.previous_image_digest = outcome.previous_digest
     await store.put(record)
+
+    # Deploy siblings
+    sibling_records_created: list[ServiceRecord] = []
+    try:
+        for sib in spec.siblings:
+            sib_name = f"{spec.name}-{sib.service_key}"
+            sib_component_config = ComponentConfig(
+                id=sib_name,
+                image=sib.image,
+                container_name=sib.container_name,
+                ports=sib.ports,
+                mounts=sib.volume_mounts,
+                env=sib.env,
+                health_check=sib.health_check,
+                claude_mount=sib.claude_mount,
+                named_volumes=[m.host for m in sib.volume_mounts],
+            )
+            sib_record = ServiceRecord(
+                name=sib_name,
+                container_name=sib.container_name,
+                image=sib.image,
+                component_id=spec.name,
+            )
+            await store.put(sib_record)
+            sibling_records_created.append(sib_record)
+
+            sib_outcome = await backend.deploy(sib_record, sib_component_config, sib.image)
+            sib_record.state = sib_outcome.state
+            sib_record.image = sib.image
+            sib_record.deployed_image_digest = sib_outcome.deployed_digest
+            sib_record.previous_image_digest = sib_outcome.previous_digest
+            await store.put(sib_record)
+    except Exception as exc:
+        logger.exception("onboard sibling deploy failed for '%s'", spec.name)
+        # Delete all sibling records from store
+        for sr in sibling_records_created:
+            await store.delete(sr.name)
+        # Undo primary (existing rollback path)
+        await component_config_store.delete(config.id)
+        registry._index.pop(config.id, None)  # noqa: SLF001
+        await store.delete(spec.name)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": str(exc)},
+        )
 
     return OnboardConfirmResponse(
         name=spec.name,

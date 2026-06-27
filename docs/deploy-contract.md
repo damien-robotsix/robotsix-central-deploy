@@ -34,19 +34,31 @@ header as a line (conventionally the first line):
 
 ## § 2  Structural rules
 
-1. **Exactly one service.**  The compose file MUST contain exactly **one**
-   entry under `services:`.  Multiple service entries are a **parse error**.
+1. **One or more services.**  A compose file MUST contain at least one
+   `services:` entry.  When exactly one service is present it is implicitly
+   the **primary** — no label is required.  When two or more services are
+   present, exactly one service MUST carry the label
+   `robotsix.deploy.primary: "true"`; zero or more than one primary label
+   is a **parse error**.
 
-2. **Service key = component id.**  The service key (e.g. `chat`,
+2. **Sibling container naming.** For each non-primary service the derived
+   container name is `<component-id>-<service-key>` (e.g. component
+   `auto-mail`, service key `ingester` → container `auto-mail-ingester`).
+   A `container_name:` override on the service replaces this default. The
+   primary service container name defaults to the component id
+   (user-supplied `name`) or its own `container_name:` override.
+
+3. **Service key = component id.**  The primary service key (e.g. `chat`,
    `cost-monitor`) becomes the component `id` and is used as the default
    `container_name`.  Must match: `^[a-z0-9][a-z0-9-]*$` (same constraint as
-   `ComponentConfig.id`).
+   `ComponentConfig.id`).  All sibling service keys must also match this
+   pattern.
 
-3. **container_name override.**  If the compose also declares
+4. **container_name override.**  If the compose also declares
    `container_name:` on the service, **that value** overrides the default
    `container_name`; the service key remains the component `id`.
 
-4. **Permitted top-level keys.**  `version` (optional, silently ignored),
+5. **Permitted top-level keys.**  `version` (optional, silently ignored),
    `services`, `volumes`.  All other top-level keys are silently ignored.
 
 ---
@@ -125,6 +137,15 @@ header as a line (conventionally the first line):
 
 ## § 5  Extension labels (`robotsix.deploy.*`)
 
+### `robotsix.deploy.primary: "true"` (service-level)
+
+Required when the compose file contains more than one service. Designates
+this service as the primary: its first host port receives path-based gateway
+traffic (`deploy.robotsix.net/<name>/*`), and its Docker health state is the
+component health reported in the dashboard. Exactly one service may carry
+this label; presence on multiple services or absence when N>1 are **parse
+errors**. Silently ignored when the compose file has only one service.
+
 ### `robotsix.deploy.claude-mount: "true"` (service-level)
 
 This is the **single permitted host bind-mount** in the contract.
@@ -197,7 +218,8 @@ volumes:
 | `services.<name>.depends_on`                   | Silently ignored. |
 | `services.<name>.networks`                     | Silently ignored.  Central-deploy manages container networking. |
 | `services.<name>.command` / `entrypoint`       | Silently ignored.  Image CMD/entrypoint is used as-is. |
-| Multiple `services:` entries                   | **Parse error.** Exactly one service is required. |
+| N>1 services, no service has `robotsix.deploy.primary: "true"` | **Parse error.** |
+| N>1 services, multiple services have `robotsix.deploy.primary: "true"` | **Parse error.** |
 | Host bind-mount in `volumes` (without `claude-mount` label) | **Parse error.** |
 | Top-level keys other than `version`, `services`, `volumes` | Silently ignored. |
 | `version` (top-level compose version string)   | Silently ignored. |
@@ -224,6 +246,8 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `services.<name>.environment` keys | `env: dict[str, str]` | Values stored as `""` until set via UI. |
 | `services.<name>.healthcheck` | `health_check: Optional[HealthCheck]` | Durations (Go strings) → integer seconds.  `HealthCheck(test, interval_seconds, timeout_seconds, retries, start_period_seconds)`. |
 | `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/root/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
+| `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
+| Non-primary service entire block | `ComponentConfig.siblings[*]` (`ServiceConfig`) | One `ServiceConfig` per sibling. |
 | `volumes.<name>.labels.robotsix.deploy.stateful: "true"` | *(onboarding gate)* | Triggers blocking UI warning per volume.  Stored on the component spec as a per-volume flag. |
 
 ---
@@ -295,6 +319,48 @@ volumes:
       robotsix.deploy.stateful: "true"
 ```
 
+### Example C — Two-service compose with primary label (auto-mail)
+
+```yaml
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/auto-mail:main
+    labels:
+      robotsix.deploy.primary: "true"
+    ports:
+      - "8202:8080"
+    environment:
+      SMTP_HOST: ""
+      AUTH_TOKEN: ""
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  ingester:
+    image: ghcr.io/damien-robotsix/auto-mail-ingester:main
+    environment:
+      BOARD_URL: ""
+      IMAP_PASSWORD: ""
+    volumes:
+      - mail-spool:/data
+
+volumes:
+  mail-spool:
+    labels:
+      robotsix.deploy.stateful: "true"
+```
+
+In this example:
+- Component id: `auto-mail` (user-supplied `name` from the preflight request).
+- Primary container: `auto-mail` (or overridden by `container_name:` on `board`).
+- Sibling container: `auto-mail-ingester` (derived from `<name>-ingester`).
+- Gateway route: `deploy.robotsix.net/auto-mail/*` → primary's port 8202.
+- `mail-spool` volume declared at top level and flagged stateful → UI warning at onboard.
+
 ---
 
 ## Appendix A — Quick reference
@@ -306,6 +372,9 @@ volumes:
 services:
   <id>:
     image: ghcr.io/damien-robotsix/<repo>:<tag>
+    labels:                             # optional
+      robotsix.deploy.primary: "true"   # required when N>1 services
+      robotsix.deploy.claude-mount: "true"
     container_name: <override>          # optional
     ports:                              # optional
       - "<host>:<container>"
@@ -319,10 +388,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    labels:                             # optional (robotsix.deploy.* only)
-      robotsix.deploy.claude-mount: "true"
 
-volumes:                                # required iff service has named volumes
+  <sibling>:                            # optional (any number of siblings)
+    image: ghcr.io/damien-robotsix/<sibling-repo>:<tag>
+    # ... same optional fields as primary (ports, volumes, env, etc.)
+
+volumes:                                # required iff any service has named volumes
   <volume-name>:
     driver: local
     labels:
@@ -335,7 +406,8 @@ volumes:                                # required iff service has named volumes
 |-----------|--------|
 | Missing `# central-deploy-contract-version` header | Parse error |
 | Unknown contract version | Parse error |
-| Multiple `services:` entries | Parse error |
+| N>1 services, no `robotsix.deploy.primary: "true"` | Parse error |
+| N>1 services, multiple `robotsix.deploy.primary: "true"` | Parse error |
 | `services.<name>.image` missing or blank | Parse error |
 | `services.<name>.build` present | Parse error |
 | Host bind-mount in `services.<name>.volumes` (path starts with `.`, `/`, or `~`) | Parse error |

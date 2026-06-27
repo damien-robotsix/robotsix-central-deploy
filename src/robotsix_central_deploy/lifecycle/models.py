@@ -95,6 +95,7 @@ class ServiceRecord:
     previous_image_digest: str = ""  # sha256 digest of the image before the last deploy (enables rollback)
     update_available: bool = False
     latest_registry_digest: str = ""
+    component_id: str = ""  # non-empty for sibling records; set to primary component name
 
     def to_status(self) -> "ServiceStatus":
         if not self.deployed_image_digest or not self.latest_registry_digest:
