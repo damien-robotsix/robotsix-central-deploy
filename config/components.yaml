@@ -22,19 +22,28 @@ components:
       start_period_seconds: 15
 
   - id: calendar-agent
-    image: ghcr.io/robotsix/calendar-agent:latest  # TODO: confirm tag
+    image: ghcr.io/damien-robotsix/robotsix-calendar-agent:main
     container_name: calendar-agent
     ports:
-      - host: 8201   # TODO: confirm host port
+      - host: 8201
         container: 8080
     mounts: []
-    env: {}          # TODO: add any required env vars
+    env:
+      CALENDAR_AGENT_TRANSPORT: brokered
+      CALENDAR_AGENT_ID: robotsix-calendar
+      BROKER_HOST: ai-broker.robotsix.net
+      BROKER_PORT: "443"
+      BROKER_SCHEME: https
+      BROKER_AGENT_TOKEN: ""
+      RADICALE_URL: http://radicale:5232
+      RADICALE_USERNAME: ""
+      RADICALE_PASSWORD: ""
     health_check:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "python", "/app/healthcheck.py"]
       interval_seconds: 30
       timeout_seconds: 10
       retries: 3
-      start_period_seconds: 15
+      start_period_seconds: 30
 
   - id: auto-mail
     image: ghcr.io/robotsix/auto-mail:latest  # TODO: confirm tag
@@ -83,16 +92,18 @@ components:
       start_period_seconds: 15
 
   - id: radicale
-    image: tomsquest/docker-radicale:latest  # TODO: confirm pinned version
+    image: tomsquest/docker-radicale:latest
     container_name: radicale
+    stateful_volumes:
+      - radicale-data
     ports:
       - host: 5232
         container: 5232
     mounts:
-      - host: radicale-data   # TODO: confirm named volume or host path
+      - host: radicale-data
         container: /data
         read_only: false
-    env: {}          # TODO: add any required env vars
+    env: {}
     health_check:
       test: ["CMD", "curl", "-f", "http://localhost:5232/"]
       interval_seconds: 30
