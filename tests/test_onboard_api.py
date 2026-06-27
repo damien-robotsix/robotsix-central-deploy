@@ -273,3 +273,31 @@ class TestOnboardConfirm:
         # Registry should not contain the entry
         registry: ComponentRegistry = server_mod.app.state.registry
         assert registry.get("fail-svc") is None
+
+    async def test_confirm_uses_container_name_override(
+        self, client: AsyncClient, auth_headers: dict,
+    ):
+        """The created ServiceRecord should use container_name from DerivedSpec when set."""
+        spec = _make_derived_spec("broker")
+        spec.container_name = "agent-comm"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+
+        # Verify ServiceRecord uses container_name override
+        store: InMemoryStore = server_mod.app.state.store
+        record = await store.get("broker")
+        assert record is not None
+        assert record.container_name == "agent-comm"
+
+        # Verify ComponentConfig also uses the override
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        all_configs = config_store.all()
+        assert len(all_configs) == 1
+        assert all_configs[0].id == "broker"
+        assert all_configs[0].container_name == "agent-comm"

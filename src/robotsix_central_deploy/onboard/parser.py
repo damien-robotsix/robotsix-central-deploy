@@ -301,6 +301,14 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         if isinstance(val, str) and val.strip().lower() == "true":
             claude_mount = True
 
+    # 11b. container_name override
+    container_name = svc.get("container_name", "")
+    if container_name is not None and not isinstance(container_name, str):
+        violations.append(
+            f"container_name: must be a string, got {type(container_name).__name__}"
+        )
+        container_name = ""
+
     # 12. Top-level volume labels — stateful, and driver validation
     stateful_volumes: list[str] = []
     for vname, vdef in top_volumes.items():
@@ -331,4 +339,5 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         env=env,
         claude_mount=claude_mount,
         health_check=health_check,
+        container_name=container_name,
     )

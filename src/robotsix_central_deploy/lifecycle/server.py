@@ -987,7 +987,7 @@ async def onboard_confirm(
     config = ComponentConfig(
         id=spec.name,
         image=spec.image,
-        container_name=spec.name,
+        container_name=spec.container_name or spec.name,
         ports=spec.ports,
         mounts=spec.volume_mounts,
         env=spec.env,
@@ -1006,7 +1006,7 @@ async def onboard_confirm(
     # Create and persist ServiceRecord
     record = ServiceRecord(
         name=spec.name,
-        container_name=spec.name,
+        container_name=spec.container_name or spec.name,
         image=spec.image,
     )
     await store.put(record)

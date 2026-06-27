@@ -19,6 +19,7 @@ class DerivedSpec(BaseModel):
     env: dict[str, str]  # keys from compose; "" for secrets, preset string for defaults
     claude_mount: bool
     health_check: Optional[HealthCheck] = None
+    container_name: str = ""  # override from compose; empty means "use spec.name"
 
 
 class ParseError(Exception):
