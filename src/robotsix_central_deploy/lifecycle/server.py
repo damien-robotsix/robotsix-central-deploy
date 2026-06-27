@@ -232,6 +232,18 @@ async def lifespan(app: FastAPI):
             ))
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
 
+    # -- System settings store --------------------------------------------
+    from ..registry.settings_store import SystemSettingsStore
+
+    settings_store = SystemSettingsStore(_config.effective_system_settings_path)
+    stored_settings = settings_store._load()          # synchronous at startup
+    _config = settings_store.overlay(_config)          # returns new LifecycleConfig
+    app.state.config = _config                         # replace with overlaid version
+    app.state.settings_store = settings_store
+
+    # Apply log_level from (possibly overlaid) config
+    logging.getLogger().setLevel(_config.log_level)
+
     yield
 
     if bg_task:
@@ -259,6 +271,8 @@ app = FastAPI(
 
 app.include_router(ui_router)
 
+from .settings_router import settings_router
+app.include_router(settings_router)
 
 # ---------------------------------------------------------------------------
 # Dependencies
@@ -298,6 +312,10 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
 
 async def _get_env_store(request: Request) -> EnvStore:
     return request.app.state.env_store
+
+
+async def _get_settings_store(request: Request) -> "SystemSettingsStore":
+    return request.app.state.settings_store
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -921,6 +939,14 @@ async def onboard_preflight(
             detail={"error": f"Invalid name '{req.name}': must match ^[a-z0-9][a-z0-9-]*$"},
         )
 
+    # Reserved-name guard
+    from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
+    if req.name in RESERVED_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": f"Component name '{req.name}' is reserved"},
+        )
+
     # Check for duplicate
     existing = await store.get(req.name)
     if existing is not None:
@@ -979,7 +1005,7 @@ async def onboard_confirm(
     from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
     if spec.name in RESERVED_NAMES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_409_CONFLICT,
             detail={"error": f"Component name '{spec.name}' is reserved"},
         )
 
