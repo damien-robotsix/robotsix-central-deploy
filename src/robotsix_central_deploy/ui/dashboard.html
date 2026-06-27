@@ -6,38 +6,45 @@
 <title>Robotsix Deploy — Component Status</title>
 <style>
   :root {
-    --green: #2e7d32; --green-bg: #e8f5e9;
-    --red: #c62828; --red-bg: #ffebee;
-    --grey: #616161; --grey-bg: #f5f5f5;
-    --amber: #e65100; --amber-bg: #fff8e1;
-    --blue: #0d47a1;
+    color-scheme: dark;
+    --green:      #4ade80;                    /* was #2e7d32 */
+    --green-bg:   rgba(74,222,128,0.15);      /* was #e8f5e9 */
+    --red:        #f87171;                    /* was #c62828 */
+    --red-bg:     rgba(248,113,113,0.15);     /* was #ffebee */
+    --grey:       #94a3b8;                    /* was #616161 */
+    --grey-bg:    rgba(148,163,184,0.15);     /* was #f5f5f5 */
+    --amber:      #fb923c;                    /* was #e65100 */
+    --amber-bg:   rgba(251,146,60,0.15);      /* was #fff8e1 */
+    --blue:       #60a5fa;                    /* was #0d47a1 */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafafa; color: #212121; padding: 24px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
   header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
   h1 { font-size: 1.4rem; color: var(--blue); }
   #refresh-time { font-size: 0.8rem; color: var(--grey); }
   .error-banner { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); padding: 10px 16px; border-radius: 4px; margin-bottom: 16px; display: none; }
-  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); overflow: hidden; }
-  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e0e0e0; font-size: 0.9rem; }
-  th { background: #f5f5f5; font-weight: 600; color: #424242; }
+  table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.4); overflow: hidden; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+  th { background: #243044; font-weight: 600; color: #cbd5e1; }
   tr:last-child td { border-bottom: none; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; color: #fff; }
-  .badge-running { background: var(--green); }
-  .badge-stopped { background: var(--grey); }
-  .badge-failed { background: var(--red); }
-  .badge-starting, .badge-stopping, .badge-restarting { background: var(--amber); }
-  .badge-error { background: var(--red); }
-  .badge-update-ok { background: var(--green); }
-  .badge-update-avail { background: var(--amber); }
-  .badge-update-unknown { background: var(--grey); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; color: inherit; }
+  .badge-running               { background: rgba(74,222,128,0.18);  color: var(--green); }
+  .badge-stopped               { background: rgba(148,163,184,0.18); color: var(--grey);  }
+  .badge-failed                { background: rgba(248,113,113,0.18); color: var(--red);   }
+  .badge-starting,
+  .badge-stopping,
+  .badge-restarting            { background: rgba(251,146,60,0.18);  color: var(--amber); }
+  .badge-error                 { background: rgba(248,113,113,0.18); color: var(--red);   }
+  .badge-update-ok             { background: rgba(74,222,128,0.18);  color: var(--green); }
+  .badge-update-avail          { background: rgba(251,146,60,0.18);  color: var(--amber); }
+  .badge-update-unknown        { background: rgba(148,163,184,0.18); color: var(--grey);  }
   .health-healthy { color: var(--green); font-weight: 600; }
   .health-unhealthy { color: var(--red); font-weight: 600; }
   .health-unknown { color: var(--grey); }
   .revision { font-family: monospace; font-size: 0.82rem; cursor: default; }
   .actions { display: flex; gap: 4px; }
-  .actions button { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #bdbdbd; border-radius: 3px; background: #fff; cursor: pointer; }
-  .actions button:hover:not(:disabled) { background: #e3f2fd; border-color: var(--blue); }
+  .actions button { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #475569; border-radius: 3px; background: #1e293b; color: #cbd5e1; cursor: pointer; }
+  .actions button:hover:not(:disabled) { background: #334155; border-color: var(--blue); }
   .actions button:disabled { opacity: 0.45; cursor: not-allowed; }
   .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: pointer; }
 
@@ -83,10 +90,10 @@
   .disk-panel { margin-bottom:20px; }
   .disk-panel table { border-collapse:collapse; min-width:400px; }
   .disk-panel td, .disk-panel th { padding:4px 12px; text-align:right; }
-  .disk-panel th { text-align:left; font-weight:normal; color:#888; }
-  .disk-bar-wrap { width:200px; height:12px; background:#ddd; border-radius:6px; display:inline-block; vertical-align:middle; }
-  .disk-bar-fill { height:100%; border-radius:6px; background:#27ae60; }
-  .disk-bar-fill.warn { background:#c0392b; }
+  .disk-panel th { text-align:left; font-weight:normal; color:#94a3b8; }
+  .disk-bar-wrap { width:200px; height:12px; background:#334155; border-radius:6px; display:inline-block; vertical-align:middle; }
+  .disk-bar-fill { height:100%; border-radius:6px; background:#4ade80; }
+  .disk-bar-fill.warn { background:#f87171; }
 </style>
 </head>
 <body>
@@ -433,3 +440,4 @@ startAutoRefresh();
 
 </body>
 </html>
+
