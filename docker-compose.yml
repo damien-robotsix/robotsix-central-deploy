@@ -43,7 +43,7 @@ services:
       ROBOTSIX_LIFECYCLE_STORE_BACKEND: "file"
       ROBOTSIX_LIFECYCLE_STORE_PATH: "/data/lifecycle_state.yaml"
       ROBOTSIX_LIFECYCLE_REGISTRY_PATH: "/app/config/components.yaml"
-      ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH: "/app/data/component_configs.json"
+      ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH: "/data/component_configs.json"
       ROBOTSIX_LIFECYCLE_DISK_PATH: "/host_root"
     volumes:
       - central_deploy_data:/data

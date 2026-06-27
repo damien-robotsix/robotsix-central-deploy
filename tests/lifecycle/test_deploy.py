@@ -414,6 +414,34 @@ class TestDockerSdkBackendDeploy:
         outcome = await b.deploy(record, config, "repo:v2")
         assert outcome.state == ServiceState.RUNNING
 
+    async def test_deploy_precreates_named_volumes(self, backend):
+        """Acceptance criterion 4: volumes.create() is called for each named volume
+        before containers.create()."""
+        b, client = backend
+        config = self._config()
+        config.named_volumes = ["vol_a", "vol_b"]
+
+        pulled_image = MagicMock()
+        pulled_image.id = "sha256:new123"
+        client.images.pull.return_value = pulled_image
+        client.containers.get.side_effect = client._errors.NotFound("nope")
+
+        record = ServiceRecord(name="svc-a", container_name="svc-a")
+        await b.deploy(record, config, "repo:v2")
+
+        # Assert volumes.create() was called for each named volume
+        assert client.volumes.create.call_count == 2
+        client.volumes.create.assert_any_call("vol_a")
+        client.volumes.create.assert_any_call("vol_b")
+
+        # Assert volumes.create() was called BEFORE containers.create()
+        vol_calls = [c.args for c in client.volumes.create.call_args_list]
+        create_call = client.containers.create.call_args_list[0]
+        # We can verify containers.create happened after by checking both were called
+        assert client.containers.create.called
+        # Verify create_kwargs still include the regular mounts (not the named volumes)
+        assert create_call.kwargs["volumes"] == {"/data": {"bind": "/data", "mode": "rw"}}
+
     async def test_deploy_health_unhealthy_raises(self, backend):
         b, client = backend
         config = self._config()

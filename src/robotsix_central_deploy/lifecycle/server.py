@@ -857,7 +857,7 @@ async def onboard_preflight(
 
     # Parse compose
     try:
-        derived_spec = parse_compose(compose_bytes, req.git_url, req.name)
+        derived_spec = parse_compose(compose_bytes, req.name, req.git_url)
     except ParseError as e:
         raise HTTPException(
             status_code=422,
