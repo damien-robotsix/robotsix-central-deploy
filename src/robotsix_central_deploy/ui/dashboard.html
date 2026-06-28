@@ -270,6 +270,22 @@
   </div>
 </div>
 
+<div id="config-modal" class="env-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="config-modal-title" style="display:none">
+  <div class="env-panel">
+    <div class="env-header">
+      <span id="config-modal-title">Configure</span>
+      <span id="config-modal-component"></span>
+    </div>
+    <div id="config-modal-error" class="env-modal-error"></div>
+    <div id="config-form-body"></div>
+    <div class="env-footer">
+      <button class="btn-primary" onclick="saveConfigValues()">Save</button>
+      <button class="btn-secondary" onclick="closeConfigModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="log-modal" class="log-overlay" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
   <div class="log-panel">
     <div class="log-header">
@@ -468,6 +484,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
       <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>
+      <button onclick="openConfigModal('${escAttr(svc.name)}')">Configure</button>
       <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
@@ -919,6 +936,172 @@ function hideEnvModalError() {
   document.getElementById('env-modal-error').style.display = 'none';
 }
 
+// ── Config modal ───────────────────────────────────────────────────
+
+let _configComponent = null;
+let _configSchema = null;
+
+function openConfigModal(name) {
+  _configComponent = name;
+  _configSchema = null;
+  document.getElementById('config-modal-component').textContent = name;
+  document.getElementById('config-modal-error').style.display = 'none';
+  document.getElementById('config-form-body').innerHTML = '';
+  document.getElementById('config-modal').style.display = 'flex';
+
+  fetchConfigSchema(name);
+}
+
+function closeConfigModal() {
+  document.getElementById('config-modal').style.display = 'none';
+  _configComponent = null;
+  _configSchema = null;
+}
+
+async function fetchConfigSchema(name) {
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/config`, {
+      headers: authHeaders(),
+      credentials: 'same-origin',
+    });
+    if (resp.status === 404) {
+      document.getElementById('config-form-body').innerHTML =
+        '<p style="color:#94a3b8;padding:1rem 0;">No configuration schema available for this component.</p>';
+      document.querySelector('#config-modal .btn-primary').disabled = true;
+      return;
+    }
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    _configSchema = data.schema || {};
+    document.querySelector('#config-modal .btn-primary').disabled = false;
+    generateConfigForm(_configSchema, data.current || {});
+  } catch (err) {
+    showConfigModalError(err.message);
+  }
+}
+
+function generateConfigForm(schema, current) {
+  const container = document.getElementById('config-form-body');
+  container.innerHTML = '';
+
+  for (const [key, val] of Object.entries(schema)) {
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      // Nested section
+      const section = document.createElement('div');
+      section.className = 'env-section';
+      section.innerHTML = `<h3>${escHtml(key)}</h3>`;
+      const currentSub = (current && typeof current[key] === 'object' && !Array.isArray(current[key]))
+        ? current[key] : {};
+      for (const [subKey, subVal] of Object.entries(val)) {
+        const fullKey = key + '.' + subKey;
+        if (subVal !== null && typeof subVal === 'object' && !Array.isArray(subVal)) {
+          // Deeper nesting (3+ levels) — escape hatch: render as JSON string
+          section.appendChild(buildConfigRow(
+            fullKey, subKey, JSON.stringify(subVal),
+            currentSub[subKey] !== undefined ? String(currentSub[subKey]) : JSON.stringify(subVal),
+            false
+          ));
+        } else {
+          const isSecret = (subVal === '' || subVal === null);
+          const currentVal = currentSub[subKey];
+          section.appendChild(buildConfigRow(fullKey, subKey, subVal, currentVal, isSecret));
+        }
+      }
+      container.appendChild(section);
+    } else {
+      // Top-level scalar
+      const isSecret = (val === '' || val === null);
+      const currentVal = current[key];
+      container.appendChild(buildConfigRow(key, key, val, currentVal, isSecret));
+    }
+  }
+}
+
+function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
+  const div = document.createElement('div');
+  div.className = 'env-row';
+
+  let inputHtml;
+  if (isSecret) {
+    const alreadySet = (currentVal === '***');
+    const placeholder = alreadySet
+      ? '(already set — enter new value to change)'
+      : '(not set)';
+    inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
+      value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
+  } else {
+    const displayVal = (currentVal !== undefined && currentVal !== null)
+      ? String(currentVal) : String(schemaVal ?? '');
+    inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
+      value="${escAttr(displayVal)}">`;
+  }
+
+  div.innerHTML = `
+    <span class="env-key">${escHtml(labelKey)}</span>
+    ${inputHtml}
+    ${isSecret ? '<span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>' : ''}
+  `;
+  return div;
+}
+
+function collectConfigValues(schema) {
+  const result = {};
+  document.querySelectorAll('#config-form-body [data-key]').forEach(input => {
+    const parts = input.dataset.key.split('.');
+    let obj = result;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!obj[parts[i]]) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+    const key = parts[parts.length - 1];
+    const isSecret = input.type === 'password';
+    if (isSecret && input.value === '') {
+      obj[key] = '***';  // sentinel: preserve existing
+    } else {
+      obj[key] = input.value;
+    }
+  });
+  return result;
+}
+
+async function saveConfigValues() {
+  hideConfigModalError();
+  if (!_configComponent || !_configSchema) return;
+
+  const values = collectConfigValues(_configSchema);
+
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(_configComponent)}/config`, {
+      method: 'PUT',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify({ values }),
+    });
+    if (resp.status === 204) {
+      // Refresh the form to reflect saved state
+      openConfigModal(_configComponent);
+    } else {
+      const body = await resp.json().catch(() => ({}));
+      showConfigModalError(body.error || `HTTP ${resp.status}`);
+    }
+  } catch (err) {
+    showConfigModalError(err.message);
+  }
+}
+
+function showConfigModalError(msg) {
+  const el = document.getElementById('config-modal-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideConfigModalError() {
+  document.getElementById('config-modal-error').style.display = 'none';
+}
+
 function escHtml(s) {
   const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
   return String(s).replace(/[&<>"']/g, ch => map[ch]);
@@ -1169,6 +1352,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.getElementById('onboard-modal').classList.contains('open')) {
       closeOnboardModal();
+    } else if (document.getElementById('config-modal').style.display === 'flex') {
+      closeConfigModal();
     } else if (document.getElementById('env-modal').classList.contains('open')) {
       closeEnvModal();
     } else {
