@@ -4,6 +4,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Document 16 missing lifecycle environment variables** — added
+  `Auth`, `Docker`, `Disk`, `Registry`, `Logging`, `Gateway`, and
+  `Claude Integration` sections to `docs/configuration.md`, and extended
+  the `Persistence` table with store-path variables. All 22
+  `ROBOTSIX_LIFECYCLE_*` env vars defined in `LifecycleConfig` are now
+  documented.
 - **Enable `env_doc_sync` periodic workflow** — added
   `.robotsix-mill/periodic/env_doc_sync.yaml` stub so that the
   `env_doc_sync` periodic workflow cross-references Pydantic Settings
