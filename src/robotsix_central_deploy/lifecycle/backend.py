@@ -469,6 +469,7 @@ class DockerSdkBackend(ExecutionBackend):
         # container_name:container_port (gateway/router.py). Publishing host
         # ports caused "port is already allocated" conflicts with existing
         # host-bound services.
+        ports: dict = {}
         volumes = {
             m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
             for m in config.mounts
@@ -493,6 +494,7 @@ class DockerSdkBackend(ExecutionBackend):
             environment=config.env,
             volumes=volumes,
             healthcheck=healthcheck,
+            ports=ports,
             detach=True,
             restart_policy={"Name": "unless-stopped"},
             network=PROXY_NETWORK,

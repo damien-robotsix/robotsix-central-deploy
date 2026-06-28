@@ -7,6 +7,7 @@ import pytest
 
 from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend, NoopBackend
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
+from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping, ServiceConfig
 
 
 class TestNoopBackend:
@@ -238,3 +239,88 @@ class TestDockerSdkBackendRunningDigest:
         record = ServiceRecord(name="cost-monitor", image="ghcr.io/owner/img:main")
         result = await b.status(record)
         assert result.running_digest == "sha256:abc123"
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — host-port publishing (ports={})
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendNoHostPorts:
+    """_create_container must never publish host ports — the gateway routes
+    via the Docker bridge network."""
+
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def test_create_container_does_not_publish_host_ports(self, backend):
+        """_create_container passes ports={} regardless of config.ports."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            ports=[PortMapping(host=8080, container=8080)],
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["ports"] == {}
+
+    def test_sibling_deploy_passes_empty_ports(self, backend):
+        """Sibling-shaped ComponentConfig also gets ports={}."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            ports=[PortMapping(host=9000, container=9000)],
+            siblings=[
+                ServiceConfig(
+                    service_key="worker",
+                    container_name="mail-worker",
+                    image="x:latest",
+                    ports=[PortMapping(host=9000, container=9000)],
+                )
+            ],
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["ports"] == {}
+
+    async def test_deploy_succeeds_when_host_port_already_bound(self, backend):
+        """deploy() succeeds because _create_container passes ports={},
+        so Docker never attempts a host-port bind that could conflict."""
+        import docker
+
+        b, client = backend
+        client.containers.get.side_effect = docker.errors.NotFound("gone")
+        mock_image = MagicMock()
+        mock_image.attrs = {"RepoDigests": ["ghcr.io/o/img@sha256:abc"]}
+        client.images.pull.return_value = mock_image
+        mock_container = MagicMock()
+        client.containers.create.return_value = mock_container
+
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            ports=[PortMapping(host=8080, container=8080)],
+        )
+        record = ServiceRecord(name="test-svc", container_name="test-svc", state=ServiceState.STOPPED)
+
+        outcome = await b.deploy(record, config, "test:latest")
+        assert outcome.state == ServiceState.RUNNING
+        client.containers.create.assert_called_once()
+        _, kwargs = client.containers.create.call_args
+        assert kwargs.get("ports") == {} or "ports" not in kwargs
