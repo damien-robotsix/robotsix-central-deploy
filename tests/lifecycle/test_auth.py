@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import base64
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
-from robotsix_central_deploy.lifecycle.backend import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
-from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.lifecycle import server as server_mod
-from robotsix_central_deploy.registry.config_store import ComponentConfigStore
-from robotsix_central_deploy.registry.loader import ComponentRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -27,33 +21,6 @@ async def _seed_store() -> None:
     s = server_mod.app.state.store
     assert s is not None
     await s.put(ServiceRecord(name="svc", state=ServiceState.RUNNING, image="img"))
-
-
-def _wire(cfg: LifecycleConfig) -> None:
-    """Wire config + fresh store/backend into the server module."""
-    store = InMemoryStore()
-    backend = NoopBackend()
-    mock_checker = MagicMock()
-    mock_checker.get_latest_digest = AsyncMock(return_value=None)
-    registry = ComponentRegistry([])
-    config_store = ComponentConfigStore(Path("/tmp/test_component_configs"))
-    server_mod._config = cfg
-    server_mod._store = store
-    server_mod._backend = backend
-    server_mod._registry_checker = mock_checker
-    server_mod.app.state.config = cfg
-    server_mod.app.state.store = store
-    server_mod.app.state.backend = backend
-    server_mod.app.state.registry = registry
-    server_mod.app.state.registry_checker = mock_checker
-    server_mod.app.state.component_config_store = config_store
-
-
-@pytest.fixture
-async def client() -> AsyncClient:
-    transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +44,8 @@ class TestApiKeyAuth:
             execution_backend="noop",
             api_key="my-secret",
         )
-        _wire(cfg)
+        server_mod._config = cfg
+        server_mod.app.state.config = cfg
         await _seed_store()
 
     @pytest.mark.parametrize("method,path", MUTATING_PATHS)
@@ -132,7 +100,8 @@ class TestBasicAuth:
             execution_backend="noop",
             api_key=self.API_KEY,
         )
-        _wire(cfg)
+        server_mod._config = cfg
+        server_mod.app.state.config = cfg
         await _seed_store()
 
     def _basic_header(self, username: str = "anyuser", password: str = None) -> dict:
@@ -186,7 +155,8 @@ class TestBothCredentials:
             execution_backend="noop",
             api_key=self.API_KEY,
         )
-        _wire(cfg)
+        server_mod._config = cfg
+        server_mod.app.state.config = cfg
         await _seed_store()
 
     def _basic_header(self) -> dict:
@@ -226,7 +196,8 @@ class TestUsernamePasswordAuth:
             auth_username=self.USERNAME,
             auth_password=self.PASSWORD,
         )
-        _wire(cfg)
+        server_mod._config = cfg
+        server_mod.app.state.config = cfg
         await _seed_store()
 
     def _basic_header(self, username: str = None, password: str = None) -> dict:
@@ -288,7 +259,8 @@ class TestDevMode:
             auth_username="",
             auth_password="",
         )
-        _wire(cfg)
+        server_mod._config = cfg
+        server_mod.app.state.config = cfg
         await _seed_store()
 
     async def test_start_without_auth_succeeds(self, client: AsyncClient):
@@ -333,7 +305,8 @@ class TestHealthUnauthenticated:
             auth_username="myuser",
             auth_password="mypass",
         )
-        _wire(cfg)
+        server_mod._config = cfg
+        server_mod.app.state.config = cfg
         await _seed_store()
 
     async def test_health_no_auth_succeeds(self, client: AsyncClient):
