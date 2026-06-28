@@ -4,6 +4,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Fix OpenAPI/runtime mismatch in error responses** — the global
+  `http_exception_handler` now returns `ErrorDetail` instances instead of raw dicts,
+  ensuring runtime error bodies match the OpenAPI-declared `ErrorDetail` schema
+  (`{"error": "...", "detail": "..."}`).
+
 - **`DELETE /services/{name}` endpoint** — removes an onboarded component, its service
   records, environment variables, secrets, and in-memory registry entry. Supports an
   optional `?stop_container=false` query parameter to skip container stop/removal

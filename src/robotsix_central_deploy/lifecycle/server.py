@@ -1336,11 +1336,15 @@ async def onboard_confirm(
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
     if isinstance(exc.detail, dict):
-        content = exc.detail
+        error = exc.detail.get("error", str(exc.detail))
+        detail = exc.detail.get("detail", "")
     elif isinstance(exc.detail, str):
-        content = {"error": exc.detail}
+        error = exc.detail
+        detail = ""
     else:
-        content = {"error": str(exc.detail)}
+        error = str(exc.detail)
+        detail = ""
+    content = ErrorDetail(error=error, detail=detail).model_dump()
     return JSONResponse(
         status_code=exc.status_code,
         content=content,
