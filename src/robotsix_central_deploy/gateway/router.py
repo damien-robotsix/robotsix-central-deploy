@@ -27,6 +27,7 @@ RESERVED_NAMES: frozenset[str] = frozenset({
     "docs", "openapi.json", "redoc",
     "disk",  # GET /disk
     "settings",  # GET/PUT /settings
+    "help",  # GET /help/deploy-contract
 })
 
 
