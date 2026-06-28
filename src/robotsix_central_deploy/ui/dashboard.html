@@ -207,6 +207,12 @@
     font-size: 0.82rem;
   }
   .stateful-warn { color: #f59e0b; cursor: help; font-size: 1rem; }
+  .seed-required { border-left: 3px solid #f90 !important; }
+  .config-assist-output {
+    background: #1e1e1e; color: #d4d4d4; font-size: 0.8rem;
+    padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow-y: auto;
+    white-space: pre-wrap; margin-top: 0.5rem;
+  }
 </style>
 </head>
 <body>
@@ -982,10 +988,14 @@ function hideEnvModalError() {
 
 let _configComponent = null;
 let _configSchema = null;
+let _configAssistCommand = null;   // string|null
+let _configAssistSeeds = [];       // string[]
 
 function openConfigModal(name) {
   _configComponent = name;
   _configSchema = null;
+  _configAssistCommand = null;
+  _configAssistSeeds = [];
   document.getElementById('config-modal-component').textContent = name;
   document.getElementById('config-modal-error').style.display = 'none';
   document.getElementById('config-form-body').innerHTML = '';
@@ -998,6 +1008,8 @@ function closeConfigModal() {
   document.getElementById('config-modal').style.display = 'none';
   _configComponent = null;
   _configSchema = null;
+  _configAssistCommand = null;
+  _configAssistSeeds = [];
 }
 
 async function fetchConfigSchema(name) {
@@ -1018,8 +1030,11 @@ async function fetchConfigSchema(name) {
     }
     const data = await resp.json();
     _configSchema = data.schema || {};
+    _configAssistCommand = data.config_assist_command || null;
+    _configAssistSeeds   = data.config_assist_seeds   || [];
     document.querySelector('#config-modal .btn-primary').disabled = false;
     generateConfigForm(_configSchema, data.current || {});
+    _injectConfigAssistUI();
   } catch (err) {
     showConfigModalError(err.message);
   }
@@ -1110,6 +1125,78 @@ function collectConfigValues(schema, containerEl) {
     }
   });
   return result;
+}
+
+function _injectConfigAssistUI() {
+  // Apply seed-field indicators
+  for (const key of _configAssistSeeds) {
+    const el = document.querySelector(`#config-form-body [data-key="${escAttr(key)}"]`);
+    if (el) el.classList.add('seed-required');
+  }
+  // Remove any existing assist bar to avoid duplicates on re-render
+  const existingBar = document.getElementById('config-assist-bar');
+  if (existingBar) existingBar.remove();
+  const existingOut = document.getElementById('config-assist-output');
+  if (existingOut) existingOut.remove();
+
+  if (_configAssistCommand) {
+    const bar = document.createElement('div');
+    bar.id = 'config-assist-bar';
+    bar.innerHTML = `
+      <button id="config-assist-btn" class="btn-secondary"
+              onclick="runConfigAssist()">Auto-detect / Assist</button>
+      <span id="config-assist-spinner" style="display:none">⟳ Running…</span>
+    `;
+    document.getElementById('config-form-body').appendChild(bar);
+
+    const out = document.createElement('pre');
+    out.id = 'config-assist-output';
+    out.className = 'config-assist-output';
+    out.style.display = 'none';
+    document.getElementById('config-form-body').appendChild(out);
+  }
+}
+
+async function runConfigAssist() {
+  if (!_configComponent || !_configSchema || !_configAssistCommand) return;
+  const btn = document.getElementById('config-assist-btn');
+  const spinner = document.getElementById('config-assist-spinner');
+  const out = document.getElementById('config-assist-output');
+  btn.disabled = true;
+  spinner.style.display = 'inline';
+  out.style.display = 'none';
+
+  const values = collectConfigValues(_configSchema);
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(_configComponent)}/config/assist`, {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      body: JSON.stringify({ values }),
+    });
+    const data = await resp.json();
+    out.style.display = 'block';
+    if (!resp.ok) {
+      out.textContent = `Error ${resp.status}: ${data.detail || JSON.stringify(data)}`;
+    } else {
+      out.textContent = data.output || '';
+      generateConfigForm(_configSchema, data.config);  // re-render with auto-filled values
+      _injectConfigAssistUI();                          // re-inject button + seed highlighting
+    }
+    // preserve output panel after re-inject
+    const out2 = document.getElementById('config-assist-output');
+    if (out2) {
+      out2.style.display = 'block';
+      out2.textContent = data.output || (data.detail ?? '');
+    }
+  } catch (err) {
+    out.style.display = 'block';
+    out.textContent = `Network error: ${err}`;
+  } finally {
+    const btn2 = document.getElementById('config-assist-btn');
+    if (btn2) { btn2.disabled = false; }
+    const sp2 = document.getElementById('config-assist-spinner');
+    if (sp2) { sp2.style.display = 'none'; }
+  }
 }
 
 async function saveConfigValues() {

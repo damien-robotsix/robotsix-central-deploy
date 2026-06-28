@@ -15,7 +15,7 @@ from robotsix_central_deploy.lifecycle.backend import ComponentInspect
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
-from robotsix_central_deploy.registry.models import ComponentConfig
+from robotsix_central_deploy.registry.models import ComponentConfig, VolumeMount
 
 # Import the server module itself (not just symbols) so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -1429,3 +1429,279 @@ class TestPutServiceConfig:
         )
         assert resp.status_code == 204
         assert restarted == []  # no restart for stopped component
+
+
+# ---------------------------------------------------------------------------
+# POST /services/{name}/config/assist
+# ---------------------------------------------------------------------------
+
+
+class TestGetServiceConfigAssistFields:
+    """GET /services/{name}/config returns config_assist_* fields correctly."""
+
+    async def test_returns_assist_fields_when_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"account": {"email": "", "password": ""}}
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_assist_command="detect",
+            config_assist_seeds=["account.email", "account.password"],
+        )
+        await config_store.put(cfg)
+
+        resp = await client.get("/services/auto-mail/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config_assist_command"] == "detect"
+        assert data["config_assist_seeds"] == ["account.email", "account.password"]
+
+    async def test_returns_null_and_empty_when_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config_assist_command"] is None
+        assert data["config_assist_seeds"] == []
+
+    async def test_returns_null_and_empty_when_no_component_config(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Even without any ComponentConfig registered, the fields default safely."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config_assist_command"] is None
+        assert data["config_assist_seeds"] == []
+
+
+class TestConfigAssist:
+    """POST /services/{name}/config/assist endpoint."""
+
+    async def test_success_path(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "account": {"email": "", "password": ""},
+            "imap": {"host": "", "port": 993, "tls": True},
+        }
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect",
+            config_assist_seeds=["account.email", "account.password"],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+            env={"APP_ENV": "prod"},
+        )
+        await config_store.put(cfg)
+
+        # Mock the backend to return auto-filled config and output
+        async def _fake_run_assist(
+            image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+        ) -> str:
+            return "detect: found imap.gmail.com:993, smtp.gmail.com:587"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "account": {"email": "user@example.com", "password": "***"},
+                "imap": {"host": "imap.gmail.com", "port": 993, "tls": True},
+                "smtp": {"host": "smtp.gmail.com", "port": 587, "tls": True},
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "read_config_from_volume", _fake_read_config
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={"values": {"account": {"email": "user@example.com", "password": "s3cret"}}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "config" in data
+        assert data["config"]["imap"]["host"] == "imap.gmail.com"
+        assert data["config"]["smtp"]["host"] == "smtp.gmail.com"
+        assert "output" in data
+        assert "detect:" in data["output"]
+
+        # Verify we did NOT persist to config_yaml_store
+        current = await store.get_current("auto-mail")
+        assert current is None or current == template
+
+    async def test_404_when_component_not_found(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/services/nonexistent/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_400_when_no_assist_command(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chat",
+            image="chat:latest",
+            container_name="chat",
+            has_config_yaml=True,
+            config_volume="chat-config",
+            config_assist_command=None,
+        )
+        await config_store.put(cfg)
+
+        resp = await client.post(
+            "/services/chat/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        assert "No config-assist command" in resp.json()["error"]
+
+    async def test_400_when_no_config_volume(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chat",
+            image="chat:latest",
+            container_name="chat",
+            has_config_yaml=True,
+            config_volume=None,
+            config_assist_command="detect",
+        )
+        await config_store.put(cfg)
+
+        resp = await client.post(
+            "/services/chat/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        assert "config volume" in resp.json()["error"].lower()
+
+    async def test_504_on_timeout(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect",
+        )
+        await config_store.put(cfg)
+
+        async def _fake_timeout(*args, **kwargs):
+            raise TimeoutError("timed out after 60s")
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_timeout
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 504
+
+    async def test_nonzero_exit_returns_200_with_output(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect",
+        )
+        await config_store.put(cfg)
+
+        async def _fake_runtime_error(*args, **kwargs):
+            raise RuntimeError("config-assist exited with code 1:\nsome error output")
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {"host": "partial-result"}
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_runtime_error
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "read_config_from_volume", _fake_read_config
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "config" in data
+        assert data["config"]["host"] == "partial-result"
+        assert "exited with code 1" in data["output"]
+
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        resp = await client.post(
+            "/services/chat/config/assist",
+            json={"values": {}},
+        )
+        assert resp.status_code == 401
