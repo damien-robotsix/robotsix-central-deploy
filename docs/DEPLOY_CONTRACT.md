@@ -9,6 +9,23 @@ conform to this contract before the UI onboarding flow will accept them.
 
 ---
 
+## § 0  Repository layout
+
+centrally-deploy expects the following files in a conforming service repo:
+
+| Path | Role |
+|------|------|
+| `deploy/docker-compose.yml` | **Deploy compose** (this contract). Required. |
+| `config/config.yaml` | Runtime config schema (§ 8). Optional. |
+| `docker-compose.yml` (repo root) | Dev compose — **ignored by central-deploy**. |
+
+The root `docker-compose.yml` is every repo's local-dev compose (may contain
+`build:`, host bind-mounts, env-var ports). central-deploy never reads it.
+Service repos keep it untouched; only `deploy/docker-compose.yml` must be
+contract-compliant.
+
+---
+
 ## § 1  Purpose and versioning
 
 Every conforming compose file **must** include a machine-readable version
@@ -236,7 +253,7 @@ volumes:
 
 ### Presence
 Optional. If `config/config.yaml` exists at the repo root, central-deploy fetches it at
-`POST /onboard/preflight` (alongside `docker-compose.yml`) and returns the parsed schema
+`POST /onboard/preflight` (alongside `deploy/docker-compose.yml`) and returns the parsed schema
 in the preflight response.
 
 ### Structure
@@ -424,6 +441,9 @@ In this example:
 ---
 
 ## Appendix A — Quick reference
+
+> **File location:** `deploy/docker-compose.yml` inside the service repo
+> (the repo root `docker-compose.yml` is the dev compose and is ignored).
 
 ### Valid compose skeleton
 
