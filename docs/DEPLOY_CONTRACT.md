@@ -184,6 +184,25 @@ This is the **single permitted host bind-mount** in the contract.
   in central-deploy's persisted component spec and takes effect on the next
   start.
 
+### `robotsix.deploy.config-target` (service-level)
+
+Full in-container path to the config file the app reads (e.g.
+`/home/mailbot/config/config.yaml`). **Required** when the repo contains
+`config/config.yaml`. The dirname must match the `container:` path of a
+named-volume mount in the same service — central-deploy resolves the volume
+name from that mount and writes the merged config into it before starting the
+container. Preflight returns an error if this label is missing.
+
+Example:
+```yaml
+services:
+  mailbot:
+    labels:
+      robotsix.deploy.config-target: "/home/mailbot/config/config.yaml"
+    volumes:
+      - mailbot-config:/home/mailbot/config
+```
+
 ---
 
 ## § 6  Volume declarations and stateful-volume flagging
@@ -281,11 +300,13 @@ log_level: info
 ```
 
 ### Deploy compose requirement
-The deploy compose MUST mount a named volume at the config directory.
-The volume name MUST be `{component-id}-config` (e.g. `auto-mail-config`).
-central-deploy pre-creates this volume and writes `config.yaml` into it
-before starting the container. The service reads `/app/config/config.yaml`
-(or whichever path the volume is mounted at) — no host bind-mounts.
+The deploy compose MUST include the `robotsix.deploy.config-target` label (see §5) on the
+primary service when `config/config.yaml` is present. The label value is the full
+in-container path of the config file (e.g. `/home/mailbot/config/config.yaml`). The
+dirname must match the container-side path of exactly one named-volume mount in that
+service. Central-deploy resolves the volume name from this mount and writes
+`config.yaml` into it before starting the container. Preflight returns an error if
+the label is missing or mismatched.
 
 ### Example deploy compose snippet
 
@@ -293,11 +314,12 @@ before starting the container. The service reads `/app/config/config.yaml`
 services:
   myapp:
     image: ghcr.io/org/myapp:latest
+    labels:
+      robotsix.deploy.config-target: "/app/config/config.yaml"
     volumes:
       - myapp-config:/app/config
 volumes:
   myapp-config:
-    name: myapp-config
     labels:
       robotsix.deploy.stateful: "true"
 ```
@@ -324,6 +346,7 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `services.<name>.healthcheck` | `health_check: Optional[HealthCheck]` | Durations (Go strings) → integer seconds.  `HealthCheck(test, interval_seconds, timeout_seconds, retries, start_period_seconds)`. |
 | `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/root/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
 | `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
+| `labels.robotsix.deploy.config-target` | `ComponentConfig.config_volume` | Full in-container path to config.yaml. Resolved to the named-volume name from the matching volume mount. Required when `config/config.yaml` is present. |
 | Non-primary service entire block | `ComponentConfig.siblings[*]` (`ServiceConfig`) | One `ServiceConfig` per sibling. |
 | `volumes.<name>.labels.robotsix.deploy.stateful: "true"` | *(onboarding gate)* | Triggers blocking UI warning per volume.  Stored on the component spec as a per-volume flag. |
 

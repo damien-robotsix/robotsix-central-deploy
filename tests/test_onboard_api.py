@@ -489,6 +489,7 @@ class TestOnboardPreflightWithConfig:
         self, client: AsyncClient, auth_headers: dict
     ):
         spec = _make_derived_spec("cool-app")
+        spec.config_volume = "cool-app-config"  # required by preflight gate when config.yaml present
         config_yaml_bytes = yaml.dump(
             {"host": "localhost", "port": 8080, "password": ""}
         ).encode()
@@ -586,6 +587,10 @@ class TestOnboardConfirmWithConfig:
     ):
         spec = _make_derived_spec("cfg-svc")
         spec.config_schema = {"host": "localhost", "password": ""}
+        # Simulate a real compose: config-target label resolves to a volume
+        # that's also declared as a named-volume mount.
+        spec.config_volume = "cfg-svc-data"
+        spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
 
         # Track write_config_to_volume calls
         captured: list[tuple] = []
@@ -612,18 +617,16 @@ class TestOnboardConfirmWithConfig:
         template = await store.get_template("cfg-svc")
         assert template == {"host": "localhost", "password": ""}
 
-        # Volume written via backend
+        # Volume written via backend — uses the real config volume, not synthetic
         assert len(captured) == 1
-        assert captured[0][0] == "cfg-svc-config"
+        assert captured[0][0] == "cfg-svc-data"
         assert captured[0][1] == {"host": "localhost", "password": ""}
 
-        # named_volumes includes the config volume (in-memory registry —
-        # the persisted ComponentConfigStore copy may not yet have it due to
-        # append-after-put ordering; this is a known minor data-consistency drift)
+        # named_volumes includes the config volume (from spec.volume_mounts)
         registry_obj: ComponentRegistry = server_mod.app.state.registry
         in_memory_config = registry_obj.get("cfg-svc")
         assert in_memory_config is not None
-        assert "cfg-svc-config" in in_memory_config.named_volumes
+        assert "cfg-svc-data" in in_memory_config.named_volumes
 
     async def test_confirm_deploy_failure_cleans_up_config_yaml_store(
         self, client: AsyncClient, auth_headers: dict

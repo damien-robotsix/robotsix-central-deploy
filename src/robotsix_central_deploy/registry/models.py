@@ -58,3 +58,4 @@ class ComponentConfig(BaseModel):
     command: Optional[list[str]] = None  # container command (from compose 'command:')
     git_url: str = ""                   # source repo URL from onboard
     has_config_yaml: bool = False       # True when the repo declared config/config.yaml
+    config_volume: Optional[str] = None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)

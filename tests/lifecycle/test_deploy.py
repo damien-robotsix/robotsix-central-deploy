@@ -66,6 +66,8 @@ def _ensure_registry(monkeypatch, registry):
     from robotsix_central_deploy.lifecycle.backend import NoopBackend
     from robotsix_central_deploy.lifecycle.config import LifecycleConfig
     from robotsix_central_deploy.lifecycle.store import InMemoryStore
+    from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+    from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
     from robotsix_central_deploy.registry.env_store import EnvStore
     from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
@@ -83,6 +85,8 @@ def _ensure_registry(monkeypatch, registry):
 
     key_manager = SecretKeyManager(Path("/tmp/test_fernet_key"))  # noqa: S108
     env_store = EnvStore(Path("/tmp/test_env_store.json"), key_manager)  # noqa: S108
+    config_store = ComponentConfigStore(Path("/tmp/test_config_store.json"))  # noqa: S108
+    config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
 
     server_mod._config = cfg
     server_mod._store = store
@@ -94,6 +98,8 @@ def _ensure_registry(monkeypatch, registry):
     server_mod.app.state.registry = registry
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.env_store = env_store
+    server_mod.app.state.component_config_store = config_store
+    server_mod.app.state.config_yaml_store = config_yaml_store
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +316,8 @@ class TestDockerSdkBackendDeploy:
         assert create_kwargs["image"] == "repo:v2"
         assert create_kwargs["name"] == "svc-a"
         assert create_kwargs["environment"] == {"KEY": "val"}
-        assert create_kwargs["ports"] == {"8080/tcp": 8080}
+        # Host ports are intentionally NOT published (port-conflict fix)
+        assert create_kwargs["ports"] == {}
         assert create_kwargs["volumes"] == {"/data": {"bind": "/data", "mode": "rw"}}
         assert create_kwargs["restart_policy"] == {"Name": "unless-stopped"}
 

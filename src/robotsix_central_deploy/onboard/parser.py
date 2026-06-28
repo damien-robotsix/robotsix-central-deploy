@@ -3,6 +3,7 @@ from __future__ import annotations
 import shlex
 
 import re
+from pathlib import Path
 from typing import Any, Optional
 
 import yaml
@@ -19,6 +20,7 @@ HEADER = b"# central-deploy-contract-version: 1"
 CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
 STATEFUL_LABEL = "robotsix.deploy.stateful"
 PRIMARY_LABEL = "robotsix.deploy.primary"
+LABEL_CONFIG_TARGET = "robotsix.deploy.config-target"
 
 # Service-key validation pattern: must match ^[a-z0-9][a-z0-9-]*$
 _SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -267,6 +269,23 @@ def _parse_one_service(
         if isinstance(val, str) and val.strip().lower() == "true":
             claude_mount = True
 
+    # Labels — config-target (resolve to named-volume name)
+    config_volume: str | None = None
+    if isinstance(labels, dict):
+        config_target = labels.get(LABEL_CONFIG_TARGET)
+        if isinstance(config_target, str) and config_target.strip():
+            config_dir = str(Path(config_target.strip()).parent)  # e.g. "/home/mailbot/config"
+            match = next(
+                (m for m in volume_mounts if m.container == config_dir), None
+            )
+            if match is None:
+                violations.append(
+                    f"{prefix}{LABEL_CONFIG_TARGET} '{config_target}' has no matching "
+                    f"volume mount at '{config_dir}' in this service"
+                )
+            else:
+                config_volume = match.host  # e.g. "mailbot-config"
+
     # container_name override
     container_name = svc.get("container_name", "")
     if container_name is not None and not isinstance(container_name, str):
@@ -295,6 +314,7 @@ def _parse_one_service(
         "claude_mount": claude_mount,
         "container_name": container_name,
         "command": command,
+        "config_volume": config_volume,
     }, violations
 
 
@@ -445,6 +465,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         command=primary_parsed["command"],
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
+        config_volume=primary_parsed["config_volume"],
     )
 
 

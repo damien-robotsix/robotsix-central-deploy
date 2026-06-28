@@ -1330,6 +1330,17 @@ class TestPutServiceConfig:
         template = {"host": "localhost"}
         await store.save_template("chat", template)
 
+        # Seed a ComponentConfig so put_service_config finds config_volume
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chat",
+            image="chat:latest",
+            container_name="chat",
+            has_config_yaml=True,
+            config_volume="chat-config",
+        )
+        await config_store.put(cfg)
+
         captured: list[tuple] = []
         original = server_mod.app.state.backend.write_config_to_volume
 

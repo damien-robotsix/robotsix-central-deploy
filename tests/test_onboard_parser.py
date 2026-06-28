@@ -312,10 +312,74 @@ volumes:
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.stateful_volumes == []
 
+    def test_config_target_resolves_volume_name(self):
+        """robotsix.deploy.config-target resolves to the matching named-volume host name."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.config-target: "/home/app/config/config.yaml"
+    volumes:
+      - app-config:/home/app/config
+volumes:
+  app-config: {}
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.config_volume == "app-config"
 
-# ---------------------------------------------------------------------------
-# parse_compose — healthcheck
-# ---------------------------------------------------------------------------
+    def test_config_target_no_match_adds_violation(self):
+        """config-target dirname with no matching volume mount → ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.config-target: "/home/app/config/config.yaml"
+    volumes:
+      - other-vol:/data
+volumes:
+  other-vol: {}
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "robotsix.deploy.config-target" in str(exc.value)
+        assert "no matching volume mount" in str(exc.value)
+        assert "/home/app/config" in str(exc.value)
+
+    def test_no_config_target_yields_none(self):
+        """When the label is absent, config_volume is None."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    volumes:
+      - app-config:/app/config
+volumes:
+  app-config: {}
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.config_volume is None
+
+    def test_config_target_with_subdir_path(self):
+        """config-target can have deep paths; only the dirname must match the mount."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.config-target: "/etc/myapp/conf.d/config.yaml"
+    volumes:
+      - myapp-conf:/etc/myapp/conf.d
+volumes:
+  myapp-conf: {}
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.config_volume == "myapp-conf"
 
 class TestParseComposeHealthcheck:
     def test_interval_30s(self):
