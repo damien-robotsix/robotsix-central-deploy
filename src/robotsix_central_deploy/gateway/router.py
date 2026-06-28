@@ -9,12 +9,13 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
 from ..registry.models import ComponentConfig
 from .proxy import filter_hop_by_hop, http_proxy, ws_proxy
+from ..lifecycle.auth import verify_session
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,9 @@ def _resolve(
 
 
 @gateway_router.get("/{name}")
-async def gateway_index_redirect(name: str) -> RedirectResponse:
+async def gateway_index_redirect(
+    name: str, _auth: None = Depends(verify_session)
+) -> RedirectResponse:
     """Redirect bare ``/<name>`` → ``/<name>/`` so relative asset paths resolve."""
     return RedirectResponse(url=f"/{name}/", status_code=307)
 
@@ -79,6 +82,16 @@ async def gateway_index_redirect(name: str) -> RedirectResponse:
 
 @gateway_router.websocket("/{name}/{path:path}")
 async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
+    # --- Session auth ---
+    app_cfg = websocket.app.state.config
+    if app_cfg.auth_required:
+        session_token = websocket.cookies.get("session_token")
+        session_store = websocket.app.state.session_store
+        if not session_token or not session_store.validate(session_token):
+            await websocket.close(code=4008)  # RFC 6455 policy violation
+            return
+
+    # --- Component resolution (unchanged) ---
     config, err_status = _resolve(websocket.app, name)
     if err_status is not None:
         # Map HTTP-style status to a valid WebSocket close code (RFC 6455).
@@ -107,7 +120,10 @@ async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
     "/{name}/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
-async def gateway_http(request: Request, name: str, path: str) -> Response:
+async def gateway_http(
+    request: Request, name: str, path: str,
+    _auth: None = Depends(verify_session),
+) -> Response:
     config, err_status = _resolve(request.app, name)
     if err_status:
         raise HTTPException(status_code=err_status)

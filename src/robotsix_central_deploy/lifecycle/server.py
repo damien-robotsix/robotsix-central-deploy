@@ -202,6 +202,10 @@ async def lifespan(app: FastAPI):
     _config = settings_store.overlay(_config)          # returns new LifecycleConfig (or same if no file)
     app.state.config = _config                         # replace with overlaid version
 
+    # -- Session store (in-memory, no I/O) ------------------------------
+    from .session import SessionStore
+    app.state.session_store = SessionStore()
+
     # Apply log_level from (possibly overlaid) config
     logging.getLogger().setLevel(_config.log_level)
 
