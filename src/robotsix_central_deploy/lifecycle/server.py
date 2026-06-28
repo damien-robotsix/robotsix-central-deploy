@@ -41,6 +41,7 @@ from .models import (
     ErrorDetail,
     RollbackResponse,
     ServiceHealthResponse,
+    ServiceListItem,
     ServiceListResponse,
     ServiceRecord,
     ServiceState,
