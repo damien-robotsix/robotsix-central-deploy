@@ -491,6 +491,7 @@ class DockerSdkBackend(ExecutionBackend):
         return self._client.containers.create(
             image=image_ref,
             name=config.container_name,
+            command=config.command,
             environment=config.env,
             volumes=volumes,
             healthcheck=healthcheck,
