@@ -494,6 +494,7 @@ class DockerSdkBackend(ExecutionBackend):
             environment=config.env,
             volumes=volumes,
             healthcheck=healthcheck,
+            ports=ports,
             detach=True,
             restart_policy={"Name": "unless-stopped"},
             network=PROXY_NETWORK,
