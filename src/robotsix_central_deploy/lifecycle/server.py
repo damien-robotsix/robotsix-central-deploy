@@ -407,12 +407,19 @@ async def get_disk_usage(
 )
 async def list_services(
     store: ServiceStore = Depends(_get_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ServiceListResponse:
     records = await store.list_all()
-    return ServiceListResponse(
-        services=[r.to_list_item() for r in records],
-    )
+    items: list[ServiceListItem] = []
+    for r in records:
+        item = r.to_list_item()
+        config = component_config_store.get(r.name)
+        if config is not None:
+            item.stateful_volumes = config.stateful_volumes
+            item.has_config_yaml = config.has_config_yaml
+        items.append(item)
+    return ServiceListResponse(services=items)
 
 
 # ---------------------------------------------------------------------------
@@ -1348,6 +1355,7 @@ async def onboard_confirm(
     registry: ComponentRegistry = Depends(_get_registry),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    env_store: EnvStore = Depends(_get_env_store),
 ) -> OnboardConfirmResponse:
     """Persist a reviewed DerivedSpec, deploy the container, and register the component."""
     spec = req.spec
@@ -1394,6 +1402,8 @@ async def onboard_confirm(
             )
             for sib in spec.siblings
         ],
+        git_url=spec.git_url,
+        has_config_yaml=(spec.config_schema is not None),
     )
 
     # Persist config
@@ -1401,6 +1411,14 @@ async def onboard_confirm(
 
     # Register in-memory
     registry.register(config)
+
+    # Seed EnvStore from the repo's env contract — first onboard only
+    existing_env = await env_store.get(spec.name)
+    if not existing_env.env and not existing_env.secret_tokens:
+        seeded_env = {k: v for k, v in spec.env.items() if v}
+        seeded_secrets = {k: "" for k, v in spec.env.items() if not v}
+        if seeded_env or seeded_secrets:
+            await env_store.upsert(spec.name, seeded_env, seeded_secrets)
 
     # If config schema present, save template and write config.yaml to volume
     if spec.config_schema is not None:

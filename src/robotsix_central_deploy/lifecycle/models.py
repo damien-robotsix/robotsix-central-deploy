@@ -149,6 +149,8 @@ class ServiceListItem(BaseModel):
     name: str
     state: ServiceState
     update_available: bool = False
+    stateful_volumes: list[str] = []
+    has_config_yaml: bool = False
 
 
 class ServiceListResponse(BaseModel):

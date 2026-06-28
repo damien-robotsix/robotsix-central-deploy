@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,6 +14,7 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.lifecycle import server as server_mod
+from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 
 
@@ -34,6 +36,7 @@ def _wire(cfg: LifecycleConfig) -> None:
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
     registry = ComponentRegistry([])
+    config_store = ComponentConfigStore(Path("/tmp/test_component_configs"))
     server_mod._config = cfg
     server_mod._store = store
     server_mod._backend = backend
@@ -43,6 +46,7 @@ def _wire(cfg: LifecycleConfig) -> None:
     server_mod.app.state.backend = backend
     server_mod.app.state.registry = registry
     server_mod.app.state.registry_checker = mock_checker
+    server_mod.app.state.component_config_store = config_store
 
 
 @pytest.fixture
