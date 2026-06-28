@@ -31,7 +31,9 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
     s = server_mod.app.state.store
     assert s is not None
     for name in names:
-        rec = ServiceRecord(name=name, state=ServiceState.STOPPED, image=image or f"{name}:latest")
+        rec = ServiceRecord(
+            name=name, state=ServiceState.STOPPED, image=image or f"{name}:latest"
+        )
         if deployed_digest:
             rec.deployed_image_digest = deployed_digest
         await s.put(rec)
@@ -164,7 +166,9 @@ class TestStart:
         assert data["previous_state"] == ServiceState.STOPPED.value
         assert data["current_state"] == ServiceState.RUNNING.value
 
-    async def test_start_already_running_is_idempotent(self, client: AsyncClient, auth_headers: dict):
+    async def test_start_already_running_is_idempotent(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         s = server_mod.app.state.store
         rec = await s.get("svc-a")
@@ -181,7 +185,9 @@ class TestStart:
         resp = await client.post("/services/nonexistent/start", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_start_from_failed_state(self, client: AsyncClient, auth_headers: dict):
+    async def test_start_from_failed_state(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         s = server_mod.app.state.store
         rec = await s.get("svc-a")
@@ -194,7 +200,9 @@ class TestStart:
         assert data["previous_state"] == ServiceState.FAILED.value
         assert data["current_state"] == ServiceState.RUNNING.value
 
-    async def test_start_conflict_from_stopping(self, client: AsyncClient, auth_headers: dict):
+    async def test_start_conflict_from_stopping(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         s = server_mod.app.state.store
         rec = await s.get("svc-a")
@@ -225,7 +233,9 @@ class TestStop:
         assert data["previous_state"] == ServiceState.RUNNING.value
         assert data["current_state"] == ServiceState.STOPPED.value
 
-    async def test_stop_already_stopped_is_idempotent(self, client: AsyncClient, auth_headers: dict):
+    async def test_stop_already_stopped_is_idempotent(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         resp = await client.post("/services/svc-a/stop", headers=auth_headers)
         assert resp.status_code == 200
@@ -237,7 +247,9 @@ class TestStop:
         resp = await client.post("/services/nonexistent/stop", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_stop_conflict_from_starting(self, client: AsyncClient, auth_headers: dict):
+    async def test_stop_conflict_from_starting(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         s = server_mod.app.state.store
         rec = await s.get("svc-a")
@@ -254,7 +266,9 @@ class TestStop:
 
 
 class TestRestart:
-    async def test_restart_running_service(self, client: AsyncClient, auth_headers: dict):
+    async def test_restart_running_service(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         s = server_mod.app.state.store
         rec = await s.get("svc-a")
@@ -268,7 +282,9 @@ class TestRestart:
         assert data["previous_state"] == ServiceState.RUNNING.value
         assert data["current_state"] == ServiceState.RUNNING.value
 
-    async def test_restart_already_restarting_is_idempotent(self, client: AsyncClient, auth_headers: dict):
+    async def test_restart_already_restarting_is_idempotent(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         s = server_mod.app.state.store
         rec = await s.get("svc-a")
@@ -285,7 +301,9 @@ class TestRestart:
         resp = await client.post("/services/nonexistent/restart", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_restart_conflict_from_stopped(self, client: AsyncClient, auth_headers: dict):
+    async def test_restart_conflict_from_stopped(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         resp = await client.post("/services/svc-a/restart", headers=auth_headers)
         assert resp.status_code == 409
@@ -301,11 +319,15 @@ class TestLogsEndpoint:
         resp = await client.get("/services/svc-a/logs")
         assert resp.status_code == 401
 
-    async def test_unknown_service_returns_404(self, client: AsyncClient, auth_headers: dict):
+    async def test_unknown_service_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         resp = await client.get("/services/nonexistent/logs", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_noop_backend_returns_stub_body(self, client: AsyncClient, auth_headers: dict):
+    async def test_noop_backend_returns_stub_body(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         resp = await client.get("/services/svc-a/logs", headers=auth_headers)
         assert resp.status_code == 200
@@ -313,7 +335,9 @@ class TestLogsEndpoint:
         body = resp.content
         assert b"[noop backend]\n" in body
 
-    async def test_query_params_forwarded_to_backend(self, client: AsyncClient, auth_headers: dict):
+    async def test_query_params_forwarded_to_backend(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
 
         captured: list[dict] = []
@@ -359,11 +383,15 @@ class TestLogsEndpoint:
         finally:
             server_mod.app.state.backend.stream_logs = original
 
-    async def test_tail_out_of_range_returns_422(self, client: AsyncClient, auth_headers: dict):
+    async def test_tail_out_of_range_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         await _seed_store("svc-a")
         resp = await client.get("/services/svc-a/logs?tail=0", headers=auth_headers)
         assert resp.status_code == 422
-        resp2 = await client.get("/services/svc-a/logs?tail=10001", headers=auth_headers)
+        resp2 = await client.get(
+            "/services/svc-a/logs?tail=10001", headers=auth_headers
+        )
         assert resp2.status_code == 422
 
 
@@ -376,7 +404,9 @@ class TestUpdateAvailable:
     async def test_up_to_date_when_digests_match(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa")
+        await _seed_store(
+            "svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa"
+        )
         mock_checker = MagicMock()
         mock_checker.get_latest_digest = AsyncMock(return_value="sha256:aaa")
         monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
@@ -391,7 +421,9 @@ class TestUpdateAvailable:
     async def test_update_available_when_digests_differ(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa")
+        await _seed_store(
+            "svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa"
+        )
         mock_checker = MagicMock()
         mock_checker.get_latest_digest = AsyncMock(return_value="sha256:bbb")
         monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
@@ -406,7 +438,9 @@ class TestUpdateAvailable:
     async def test_registry_unreachable_degrades_gracefully(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        await _seed_store("svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa")
+        await _seed_store(
+            "svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa"
+        )
         mock_checker = MagicMock()
         mock_checker.get_latest_digest = AsyncMock(return_value=None)
         monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
@@ -434,7 +468,8 @@ class TestUpdateAvailable:
             state=ServiceState.RUNNING, running_digest="sha256:e9f0"
         )
         monkeypatch.setattr(
-            server_mod.app.state.backend, "status",
+            server_mod.app.state.backend,
+            "status",
             AsyncMock(return_value=inspect),
         )
         resp = await client.get("/services/svc-a", headers=auth_headers)
@@ -477,8 +512,12 @@ class TestEnvEndpoints:
         self, client: AsyncClient, auth_headers: dict
     ):
         await _seed_store("chat")
-        await client.put("/services/chat/env", json={"env": {"A": "1"}}, headers=auth_headers)
-        await client.put("/services/chat/env", json={"env": {"B": "2"}}, headers=auth_headers)
+        await client.put(
+            "/services/chat/env", json={"env": {"A": "1"}}, headers=auth_headers
+        )
+        await client.put(
+            "/services/chat/env", json={"env": {"B": "2"}}, headers=auth_headers
+        )
         r = await client.get("/services/chat/env", headers=auth_headers)
         data = r.json()
         assert data["env"] == {"A": "1", "B": "2"}
@@ -508,7 +547,11 @@ class TestEnvEndpoints:
         self, client: AsyncClient, auth_headers: dict
     ):
         await _seed_store("chat")
-        await client.put("/services/chat/env", json={"env": {"A": "1", "B": "2"}}, headers=auth_headers)
+        await client.put(
+            "/services/chat/env",
+            json={"env": {"A": "1", "B": "2"}},
+            headers=auth_headers,
+        )
         r = await client.delete("/services/chat/env/A", headers=auth_headers)
         assert r.status_code == 204
         r = await client.get("/services/chat/env", headers=auth_headers)
@@ -519,7 +562,11 @@ class TestEnvEndpoints:
         self, client: AsyncClient, auth_headers: dict
     ):
         await _seed_store("chat")
-        await client.put("/services/chat/env", json={"secrets": {"TOKEN": "val"}}, headers=auth_headers)
+        await client.put(
+            "/services/chat/env",
+            json={"secrets": {"TOKEN": "val"}},
+            headers=auth_headers,
+        )
         r = await client.delete("/services/chat/env/TOKEN", headers=auth_headers)
         assert r.status_code == 204
         r = await client.get("/services/chat/env", headers=auth_headers)
@@ -530,7 +577,9 @@ class TestEnvEndpoints:
         self, client: AsyncClient, auth_headers: dict
     ):
         await _seed_store("chat")
-        await client.put("/services/chat/env", json={"env": {"A": "1"}}, headers=auth_headers)
+        await client.put(
+            "/services/chat/env", json={"env": {"A": "1"}}, headers=auth_headers
+        )
         r = await client.delete("/services/chat/env/NOTFOUND", headers=auth_headers)
         assert r.status_code == 404
 
@@ -542,6 +591,7 @@ class TestEnvEndpoints:
 
         # Set up a fake registry with a component config that has a base env
         from robotsix_central_deploy.registry.loader import ComponentRegistry
+
         cfg = ComponentConfig(
             id="chat",
             image="ghcr.io/o/img:main",
@@ -685,7 +735,9 @@ class TestDeleteService:
             return await original_remove(service)
 
         monkeypatch.setattr(server_mod.app.state.backend, "stop", _fake_stop)
-        monkeypatch.setattr(server_mod.app.state.backend, "remove_container", _fake_remove)
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "remove_container", _fake_remove
+        )
 
         resp = await client.delete(
             "/services/svc-a?stop_container=false", headers=auth_headers
@@ -717,7 +769,9 @@ class TestDeleteService:
             return await original_remove(service)
 
         monkeypatch.setattr(server_mod.app.state.backend, "stop", _fake_stop)
-        monkeypatch.setattr(server_mod.app.state.backend, "remove_container", _fake_remove)
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "remove_container", _fake_remove
+        )
 
         # Default stop_container=true
         resp = await client.delete("/services/svc-a", headers=auth_headers)
@@ -789,7 +843,9 @@ class TestDeleteService:
             return await original_remove(service)
 
         monkeypatch.setattr(server_mod.app.state.backend, "stop", _fake_stop)
-        monkeypatch.setattr(server_mod.app.state.backend, "remove_container", _fake_remove)
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "remove_container", _fake_remove
+        )
 
         resp = await client.delete("/services/svc-a", headers=auth_headers)
         assert resp.status_code == 204
@@ -846,8 +902,12 @@ class TestStartWithSibling:
         await config_store.put(cfg)
         server_mod.app.state.registry.register(cfg)
 
-        prim = ServiceRecord(name="svc-a", image="svc-a:latest", state=ServiceState.STOPPED)
-        sib_rec = ServiceRecord(name="svc-a-redis", image="redis:7", state=ServiceState.STOPPED)
+        prim = ServiceRecord(
+            name="svc-a", image="svc-a:latest", state=ServiceState.STOPPED
+        )
+        sib_rec = ServiceRecord(
+            name="svc-a-redis", image="redis:7", state=ServiceState.STOPPED
+        )
         await store.put(prim)
         await store.put(sib_rec)
 
@@ -887,8 +947,12 @@ class TestStopWithSibling:
         await config_store.put(cfg)
         server_mod.app.state.registry.register(cfg)
 
-        prim = ServiceRecord(name="svc-a", image="svc-a:latest", state=ServiceState.RUNNING)
-        sib_rec = ServiceRecord(name="svc-a-redis", image="redis:7", state=ServiceState.RUNNING)
+        prim = ServiceRecord(
+            name="svc-a", image="svc-a:latest", state=ServiceState.RUNNING
+        )
+        sib_rec = ServiceRecord(
+            name="svc-a-redis", image="redis:7", state=ServiceState.RUNNING
+        )
         await store.put(prim)
         await store.put(sib_rec)
 
@@ -926,8 +990,12 @@ class TestRestartWithSibling:
         await config_store.put(cfg)
         server_mod.app.state.registry.register(cfg)
 
-        prim = ServiceRecord(name="svc-a", image="svc-a:latest", state=ServiceState.RUNNING)
-        sib_rec = ServiceRecord(name="svc-a-redis", image="redis:7", state=ServiceState.RUNNING)
+        prim = ServiceRecord(
+            name="svc-a", image="svc-a:latest", state=ServiceState.RUNNING
+        )
+        sib_rec = ServiceRecord(
+            name="svc-a-redis", image="redis:7", state=ServiceState.RUNNING
+        )
         await store.put(prim)
         await store.put(sib_rec)
 
@@ -1125,7 +1193,9 @@ class TestGetServiceConfig:
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = {"server": {"host": "localhost", "password": ""}}
         await store.save_template("chat", template)
-        await store.update_current("chat", {"server": {"host": "0.0.0.0", "password": "s3cret"}})
+        await store.update_current(
+            "chat", {"server": {"host": "0.0.0.0", "password": "s3cret"}}
+        )
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
         assert resp.status_code == 200
@@ -1154,9 +1224,7 @@ class TestGetServiceConfig:
 
 
 class TestPutServiceConfig:
-    async def test_merge_and_return_204(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_merge_and_return_204(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = {"host": "localhost", "port": 8080}
@@ -1179,7 +1247,9 @@ class TestPutServiceConfig:
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = {"host": "localhost", "password": ""}
         await store.save_template("chat", template)
-        await store.update_current("chat", {"host": "localhost", "password": "realpass"})
+        await store.update_current(
+            "chat", {"host": "localhost", "password": "realpass"}
+        )
 
         # Submit "***" for the secret — existing value should be preserved
         resp = await client.put(
@@ -1239,9 +1309,7 @@ class TestPutServiceConfig:
         resp = await client.put("/services/chat/config", json={"values": {}})
         assert resp.status_code == 401
 
-    async def test_merge_nested_config(
-        self, client: AsyncClient, auth_headers: dict
-    ):
+    async def test_merge_nested_config(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = {"server": {"host": "localhost", "port": 8080, "password": ""}}
@@ -1291,7 +1359,9 @@ class TestPutServiceConfig:
             return await original(volume_name, config_dict)
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
         )
 
         resp = await client.put(
@@ -1339,7 +1409,9 @@ class TestPutServiceConfig:
             return await original_restart(rec)
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "restart", _fake_restart,
+            server_mod.app.state.backend,
+            "restart",
+            _fake_restart,
         )
 
         resp = await client.put(
@@ -1379,7 +1451,9 @@ class TestPutServiceConfig:
             raise RuntimeError("simulated restart failure")
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "restart", _failing_restart,
+            server_mod.app.state.backend,
+            "restart",
+            _failing_restart,
         )
 
         resp = await client.put(
@@ -1419,7 +1493,9 @@ class TestPutServiceConfig:
             return await original_restart(rec)
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "restart", _fake_restart,
+            server_mod.app.state.backend,
+            "restart",
+            _fake_restart,
         )
 
         resp = await client.put(
@@ -1524,7 +1600,12 @@ class TestConfigAssist:
 
         # Mock the backend to return auto-filled config and output
         async def _fake_run_assist(
-            image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
         ) -> str:
             return "detect: found imap.gmail.com:993, smtp.gmail.com:587"
 
@@ -1544,7 +1625,11 @@ class TestConfigAssist:
 
         resp = await client.post(
             "/services/auto-mail/config/assist",
-            json={"values": {"account": {"email": "user@example.com", "password": "s3cret"}}},
+            json={
+                "values": {
+                    "account": {"email": "user@example.com", "password": "s3cret"}
+                }
+            },
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -1698,6 +1783,134 @@ class TestConfigAssist:
         assert "config" in data
         assert data["config"]["host"] == "partial-result"
         assert "exited with code 1" in data["output"]
+
+    async def test_seed_placeholder_substitution(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """{seed} placeholders in the command get substituted from submitted values."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "account": {"email": "", "password": ""},
+            "imap": {"host": "", "port": 993},
+        }
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect {account.email} --no-verify --output /config/config.yaml",
+            config_assist_seeds=["account.email", "account.password"],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {"imap": {"host": "imap.gmail.com"}}
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "read_config_from_volume", _fake_read_config
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {"account": {"email": "test@gmail.com", "password": "s3cret"}}
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert len(received_command) == 1
+        # Placeholder should be substituted with the actual value
+        assert "test@gmail.com" in received_command[0]
+        assert "{account.email}" not in received_command[0]
+
+    async def test_detected_output_merged_not_clobbered(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Detected fields are merged into the submitted config — other fields preserved."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "account": {"email": "", "password": ""},
+            "imap": {"host": "", "port": 993, "tls": True},
+        }
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect {account.email} --no-verify --output /config/config.yaml",
+            config_assist_seeds=["account.email"],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            # Simulate detect only returning the fields it knows about
+            return {"imap": {"host": "imap.gmail.com"}}
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "read_config_from_volume", _fake_read_config
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "account": {"email": "test@gmail.com", "password": "s3cret"},
+                    "imap": {"port": 993, "tls": True},
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        config = data["config"]
+        # Detected fields
+        assert config["imap"]["host"] == "imap.gmail.com"
+        # User-entered fields preserved
+        assert config["account"]["email"] == "test@gmail.com"
+        assert config["account"]["password"] == "s3cret"
+        assert config["imap"]["port"] == 993
+        assert config["imap"]["tls"] is True
 
     async def test_unauthenticated_returns_401(self, client: AsyncClient):
         resp = await client.post(

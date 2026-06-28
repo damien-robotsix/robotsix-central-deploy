@@ -17,6 +17,12 @@ All notable changes to robotsix-central-deploy.
   `config_assist_seeds` fields. The config modal now shows an "Auto-detect /
   Assist" button and orange-bordered seed fields for components that declare
   the `robotsix.deploy.config-assist` label.
+- **Config-assist seed-value placeholder substitution** — the config-assist
+  command template now supports `{dotted.path}` placeholders that are
+  substituted with the user's submitted seed values (navigated from the
+  form body via dotted-path notation including list indices).  Detected
+  output is deep-merged into the submitted config so the assist command
+  never clobbers fields the user already entered.
 
 - **Settings page: gateway base domain and Claude mount path** — added
   `gateway_base_domain` and `claude_host_mount_path` to `SystemSettings`,
