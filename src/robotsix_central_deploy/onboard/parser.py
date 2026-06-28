@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shlex
+
 import re
 from typing import Any, Optional
 
@@ -276,6 +278,14 @@ def _parse_one_service(
     if not container_name and prefix:
         container_name = f"{component_name}-{key}"
 
+    _raw_cmd = svc.get("command")
+    if isinstance(_raw_cmd, str):
+        command = shlex.split(_raw_cmd)
+    elif isinstance(_raw_cmd, list):
+        command = [str(x) for x in _raw_cmd]
+    else:
+        command = None
+
     return {
         "image": image,
         "env": env,
@@ -284,6 +294,7 @@ def _parse_one_service(
         "health_check": health_check,
         "claude_mount": claude_mount,
         "container_name": container_name,
+        "command": command,
     }, violations
 
 
@@ -379,6 +390,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 env=sib_parsed["env"],
                 claude_mount=sib_parsed["claude_mount"],
                 health_check=sib_parsed["health_check"],
+                command=sib_parsed["command"],
             )
         )
 
@@ -430,6 +442,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         env=primary_parsed["env"],
         claude_mount=primary_parsed["claude_mount"],
         health_check=primary_parsed["health_check"],
+        command=primary_parsed["command"],
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
     )
