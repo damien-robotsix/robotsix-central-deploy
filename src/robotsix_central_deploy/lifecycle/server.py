@@ -850,6 +850,7 @@ async def deploy_service(
                 health_check=sib_config.health_check,
                 claude_mount=sib_config.claude_mount,
                 named_volumes=[m.host for m in sib_config.mounts],
+                command=sib_config.command,
             )
             try:
                 sib_outcome = await backend.deploy(sib_record, effective_sib, sib_config.image)
@@ -955,6 +956,7 @@ async def rollback_service(
                 health_check=sib_config.health_check,
                 claude_mount=sib_config.claude_mount,
                 named_volumes=[m.host for m in sib_config.mounts],
+                command=sib_config.command,
             )
             try:
                 sib_outcome = await backend.rollback(sib_record, effective_sib)
@@ -1431,6 +1433,7 @@ async def onboard_confirm(
         mounts=spec.volume_mounts,
         env=spec.env,
         health_check=spec.health_check,
+        command=spec.command,
         claude_mount=spec.claude_mount,
         named_volumes=[m.host for m in spec.volume_mounts]
                       + [m.host for sib in spec.siblings for m in sib.volume_mounts],
@@ -1445,6 +1448,7 @@ async def onboard_confirm(
                 env=sib.env,
                 claude_mount=sib.claude_mount,
                 health_check=sib.health_check,
+                command=sib.command,
             )
             for sib in spec.siblings
         ],
