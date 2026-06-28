@@ -1403,8 +1403,11 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
-loadDashboard();
-startAutoRefresh();
+(async () => {
+  await loadSettings();
+  loadDashboard();
+  startAutoRefresh();
+})();
 </script>
 
 </body>
