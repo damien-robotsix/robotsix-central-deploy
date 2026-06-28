@@ -75,6 +75,27 @@ class ExecutionBackend(ABC):
         """Write *config_dict* as YAML into a Docker named volume."""
         ...
 
+    @abstractmethod
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        """Read /config/config.yaml from a named volume; return parsed dict (empty if absent)."""
+        ...
+
+    @abstractmethod
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        """Run a one-shot container from *image* executing *command_str* with the config
+        volume mounted at *volume_mount_path*. Returns captured stdout+stderr.
+        Raises TimeoutError if the container does not exit within *timeout_seconds*.
+        Always removes the container on exit or timeout."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -119,6 +140,14 @@ class NoopBackend(ExecutionBackend):
 
     async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
         pass
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        return {}
+
+    async def run_config_assist(
+        self, image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+    ) -> str:
+        return "[noop backend]"
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +234,18 @@ class DockerBackend(ExecutionBackend):
     async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
         raise NotImplementedError(
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        raise NotImplementedError(
+            "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def run_config_assist(
+        self, image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+    ) -> str:
+        raise NotImplementedError(
+            "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
@@ -690,6 +731,77 @@ class DockerSdkBackend(ExecutionBackend):
                 raise RuntimeError(f"write_config_to_volume failed for {volume_name}: {exc}") from exc
 
         await loop.run_in_executor(None, _run)
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        """Read /config/config.yaml from a named volume via a temporary busybox container."""
+        import yaml
+        loop = asyncio.get_running_loop()
+
+        def _run() -> dict:
+            import docker
+            try:
+                raw = self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", "cat /config/config.yaml 2>/dev/null || true"],
+                    volumes={volume_name: {"bind": "/config", "mode": "ro"}},
+                    remove=True,
+                )
+                text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
+                return yaml.safe_load(text) or {}
+            except docker.errors.APIError as exc:
+                raise RuntimeError(
+                    f"read_config_from_volume failed for {volume_name}: {exc}"
+                ) from exc
+
+        return await loop.run_in_executor(None, _run)
+
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        """Run a one-shot container from *image*, mount config volume at *volume_mount_path*."""
+        import requests.exceptions
+        loop = asyncio.get_running_loop()
+
+        def _run() -> str:
+            container = self._client.containers.create(
+                image,
+                command=["sh", "-c", command_str],
+                volumes={volume_name: {"bind": volume_mount_path, "mode": "rw"}},
+                environment=env_dict,
+            )
+            try:
+                container.start()
+                result = container.wait(timeout=timeout_seconds)
+                logs: str = container.logs(
+                    stdout=True, stderr=True
+                ).decode(errors="replace")
+                exit_code = result.get("StatusCode", 0)
+                if exit_code != 0:
+                    raise RuntimeError(
+                        f"config-assist exited with code {exit_code}:\n{logs}"
+                    )
+                return logs
+            except requests.exceptions.ReadTimeout:
+                try:
+                    container.kill()
+                except Exception:
+                    pass
+                raise TimeoutError(
+                    f"config-assist timed out after {timeout_seconds}s"
+                )
+            finally:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+
+        return await loop.run_in_executor(None, _run)
 
     async def stream_logs(
         self,

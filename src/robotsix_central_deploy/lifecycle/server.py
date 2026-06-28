@@ -1540,6 +1540,8 @@ async def onboard_confirm(
     )
     # Wire the real config volume name (resolved by parser from the label)
     config.config_volume = spec.config_volume  # None if no config-target label
+    config.config_assist_command = spec.config_assist_command
+    config.config_assist_seeds   = spec.config_assist_seeds
 
     # Persist config
     await component_config_store.put(config)
