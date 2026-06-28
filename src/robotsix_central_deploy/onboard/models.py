@@ -37,6 +37,7 @@ class DerivedSpec(BaseModel):
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
     config_schema: dict | None = None  # parsed config/config.yaml, null when absent
+    config_volume: Optional[str] = None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)
 
 
 class ParseError(Exception):

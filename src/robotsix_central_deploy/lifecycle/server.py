@@ -794,6 +794,8 @@ async def deploy_service(
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     _auth: None = Depends(verify_auth),
 ) -> DeployResponse:
     if body is None:
@@ -813,6 +815,22 @@ async def deploy_service(
     config = config.model_copy(update={"env": merged_env})
 
     image_ref = body.image or config.image
+
+    # Write merged config.yaml into the config volume before starting the container.
+    if config.has_config_yaml and config.config_volume:
+        merged_cfg = (
+            await config_yaml_store.get_current(name)
+            or await config_yaml_store.get_template(name)
+        )
+        if merged_cfg:
+            try:
+                await backend.write_config_to_volume(config.config_volume, merged_cfg)
+            except Exception as exc:
+                logger.warning(
+                    "deploy %s: could not write config.yaml to volume %s: %s",
+                    name, config.config_volume, exc,
+                )
+                # non-fatal: container may still start if config was written earlier
 
     try:
         outcome = await backend.deploy(record, config, image_ref)
@@ -1211,6 +1229,7 @@ async def put_service_config(
     body: ConfigUpdate,
     store: ServiceStore = Depends(_get_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
@@ -1224,8 +1243,24 @@ async def put_service_config(
     existing = await config_yaml_store.get_current(name) or template
     merged = _merge_config(template, existing, body.values)
     await config_yaml_store.update_current(name, merged)
-    config_vol = f"{name}-config"
-    await backend.write_config_to_volume(config_vol, merged)
+
+    # Write to the actual config volume (not synthetic "{name}-config")
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg and comp_cfg.config_volume:
+        await backend.write_config_to_volume(comp_cfg.config_volume, merged)
+        # Restart so the running container picks up the new values immediately
+        record = await store.get(name)
+        if record and record.state == ServiceState.RUNNING:
+            try:
+                await backend.restart(record)
+            except Exception as exc:
+                logger.warning(
+                    "config saved for %s but restart failed: %s", name, exc
+                )
+    else:
+        logger.warning(
+            "put_service_config: no config_volume for %s — config written to store only", name
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1386,6 +1421,20 @@ async def onboard_preflight(
         except ConfigParseError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Preflight gate: config/config.yaml present but no config-target label
+    if derived_spec.config_schema is not None and derived_spec.config_volume is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": (
+                    "repo has config/config.yaml but no service declares "
+                    "`robotsix.deploy.config-target` — add the label to "
+                    "deploy/docker-compose.yml pointing to the full in-container "
+                    "path of the config file (e.g. /home/mailbot/config/config.yaml)"
+                ),
+            },
+        )
+
     return OnboardPreflightResponse(spec=derived_spec)
 
 
@@ -1455,6 +1504,8 @@ async def onboard_confirm(
         git_url=spec.git_url,
         has_config_yaml=(spec.config_schema is not None),
     )
+    # Wire the real config volume name (resolved by parser from the label)
+    config.config_volume = spec.config_volume  # None if no config-target label
 
     # Persist config
     await component_config_store.put(config)
@@ -1472,15 +1523,15 @@ async def onboard_confirm(
 
     # If config schema present, save template and write config.yaml to volume
     if spec.config_schema is not None:
-        config_vol = f"{spec.name}-config"
-        if config_vol not in config.named_volumes:
-            config.named_volumes.append(config_vol)
         await config_yaml_store.save_template(spec.name, spec.config_schema)
-        try:
-            await backend.write_config_to_volume(config_vol, spec.config_schema)
-        except Exception:
-            await config_yaml_store.delete(spec.name)
-            raise
+        if spec.config_volume is not None:
+            try:
+                await backend.write_config_to_volume(spec.config_volume, spec.config_schema)
+            except Exception:
+                await config_yaml_store.delete(spec.name)
+                raise
+        # Do NOT add a synthetic "{name}-config" volume — the real volume
+        # is already in config.named_volumes (it came from spec.volume_mounts).
 
     # Create and persist ServiceRecord
     record = ServiceRecord(
