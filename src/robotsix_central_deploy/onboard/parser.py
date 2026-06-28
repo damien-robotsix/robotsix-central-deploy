@@ -21,6 +21,8 @@ CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
 STATEFUL_LABEL = "robotsix.deploy.stateful"
 PRIMARY_LABEL = "robotsix.deploy.primary"
 LABEL_CONFIG_TARGET = "robotsix.deploy.config-target"
+LABEL_CONFIG_ASSIST       = "robotsix.deploy.config-assist"        # shell command string
+LABEL_CONFIG_ASSIST_SEEDS = "robotsix.deploy.config-assist-seeds"  # comma-separated config keys
 
 # Service-key validation pattern: must match ^[a-z0-9][a-z0-9-]*$
 _SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -286,6 +288,17 @@ def _parse_one_service(
             else:
                 config_volume = match.host  # e.g. "mailbot-config"
 
+    # Labels — config-assist (command + seed fields)
+    config_assist_command: str | None = None
+    config_assist_seeds: list[str] = []
+    if isinstance(labels, dict):
+        raw_cmd = labels.get(LABEL_CONFIG_ASSIST)
+        if isinstance(raw_cmd, str) and raw_cmd.strip():
+            config_assist_command = raw_cmd.strip()
+        _seeds_raw = labels.get(LABEL_CONFIG_ASSIST_SEEDS, "")
+        if isinstance(_seeds_raw, str) and _seeds_raw.strip():
+            config_assist_seeds = [s.strip() for s in _seeds_raw.split(",") if s.strip()]
+
     # container_name override
     container_name = svc.get("container_name", "")
     if container_name is not None and not isinstance(container_name, str):
@@ -334,6 +347,8 @@ def _parse_one_service(
         "command": command,
         "entrypoint": entrypoint,
         "config_volume": config_volume,
+        "config_assist_command": config_assist_command,
+        "config_assist_seeds": config_assist_seeds,
     }, violations
 
 
@@ -487,6 +502,8 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
         config_volume=primary_parsed["config_volume"],
+        config_assist_command=primary_parsed["config_assist_command"],
+        config_assist_seeds=primary_parsed["config_assist_seeds"],
     )
 
 
