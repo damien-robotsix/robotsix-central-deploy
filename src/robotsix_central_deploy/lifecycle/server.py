@@ -24,7 +24,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .auth import verify_auth
 from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
@@ -1103,7 +1103,7 @@ def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
 
 
 class ConfigResponse(BaseModel):
-    config_schema: dict
+    config_schema: dict = Field(serialization_alias="schema")
     current: dict
 
 
@@ -1501,15 +1501,13 @@ async def onboard_confirm(
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
     if isinstance(exc.detail, dict):
-        error = exc.detail.get("error", str(exc.detail))
-        detail = exc.detail.get("detail", "")
+        content = dict(exc.detail)
+        content.setdefault("error", str(exc.detail))
+        content.setdefault("detail", "")
     elif isinstance(exc.detail, str):
-        error = exc.detail
-        detail = ""
+        content = ErrorDetail(error=exc.detail, detail="").model_dump()
     else:
-        error = str(exc.detail)
-        detail = ""
-    content = ErrorDetail(error=error, detail=detail).model_dump()
+        content = ErrorDetail(error=str(exc.detail), detail="").model_dump()
     return JSONResponse(
         status_code=exc.status_code,
         content=content,

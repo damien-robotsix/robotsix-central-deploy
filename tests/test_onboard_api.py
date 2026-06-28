@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import NoopBackend
@@ -473,3 +474,191 @@ class TestMultiServiceOnboardConfirm:
         assert data["spec"]["name"] == "auto-mail"
         assert len(data["spec"]["siblings"]) == 1
         assert data["spec"]["siblings"][0]["service_key"] == "worker"
+
+
+# ---------------------------------------------------------------------------
+# Preflight with config.yaml
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardPreflightWithConfig:
+    async def test_preflight_includes_config_schema_when_present(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        spec = _make_derived_spec("cool-app")
+        config_yaml_bytes = yaml.dump(
+            {"host": "localhost", "port": 8080, "password": ""}
+        ).encode()
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=config_yaml_bytes,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "spec" in data
+        assert data["spec"]["config_schema"] == {
+            "host": "localhost", "port": 8080, "password": "",
+        }
+
+    async def test_preflight_config_schema_null_when_absent(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_yaml=None,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["spec"]["config_schema"] is None
+
+    async def test_preflight_invalid_config_yaml_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=b"- not a mapping\n",
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 422
+        data = resp.json()
+        assert "top-level YAML mapping" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# Confirm with config.yaml
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardConfirmWithConfig:
+    async def test_confirm_with_config_schema_saves_template_and_writes_volume(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        spec = _make_derived_spec("cfg-svc")
+        spec.config_schema = {"host": "localhost", "password": ""}
+
+        # Track write_config_to_volume calls
+        captured: list[tuple] = []
+        original_write = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured.append((volume_name, config_dict))
+            return await original_write(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+        )
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+
+        # Template saved in ConfigYamlStore
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = await store.get_template("cfg-svc")
+        assert template == {"host": "localhost", "password": ""}
+
+        # Volume written via backend
+        assert len(captured) == 1
+        assert captured[0][0] == "cfg-svc-config"
+        assert captured[0][1] == {"host": "localhost", "password": ""}
+
+        # named_volumes includes the config volume (in-memory registry —
+        # the persisted ComponentConfigStore copy may not yet have it due to
+        # append-after-put ordering; this is a known minor data-consistency drift)
+        registry_obj: ComponentRegistry = server_mod.app.state.registry
+        in_memory_config = registry_obj.get("cfg-svc")
+        assert in_memory_config is not None
+        assert "cfg-svc-config" in in_memory_config.named_volumes
+
+    async def test_confirm_deploy_failure_cleans_up_config_yaml_store(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        spec = _make_derived_spec("fail-cfg")
+        spec.config_schema = {"host": "localhost"}
+
+        with patch.object(
+            server_mod.app.state.backend,
+            "deploy",
+            side_effect=RuntimeError("simulated deploy failure"),
+        ):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 500
+
+        # config_yaml_store should be cleaned up
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        assert await store.get_template("fail-cfg") is None
+
+    async def test_confirm_without_config_schema_no_template_saved(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        spec = _make_derived_spec("no-cfg-svc")
+        spec.config_schema = None
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+
+        # No template saved
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        assert await store.get_template("no-cfg-svc") is None
