@@ -718,7 +718,7 @@ class DockerSdkBackend(ExecutionBackend):
         yaml_content = yaml.dump(config_dict, default_flow_style=False, allow_unicode=True)
         encoded = base64.b64encode(yaml_content.encode()).decode()
         # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
-        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.yaml"
+        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.yaml && chmod 777 /config && chmod 666 /config/config.yaml"
         loop = asyncio.get_running_loop()
 
         def _run() -> None:
