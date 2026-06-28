@@ -344,6 +344,11 @@
         <tbody id="ob-env-body"></tbody>
       </table>
 
+      <div id="ob-config-section" style="display:none">
+        <h3>Configuration (config.yaml)</h3>
+        <div id="ob-config-form-body"></div>
+      </div>
+
       <h3>Options</h3>
       <label>
         <input type="checkbox" id="ob-claude-mount" />
@@ -519,8 +524,8 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
-      <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>
-      ${svc.has_config_yaml ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-secondary">Edit Config</button>` : ''}
+      <button onclick="openEnvModal('${escAttr(svc.name)}')" class="${svc.has_config_yaml ? 'btn-secondary' : 'btn-secondary'}"${svc.has_config_yaml ? ` style="font-size:0.72rem;opacity:0.7;"` : ''}>${svc.has_config_yaml ? 'Advanced: Env/Secrets' : 'Config'}</button>
+      ${svc.has_config_yaml ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>` : ''}
       <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
@@ -1019,8 +1024,10 @@ async function fetchConfigSchema(name) {
   }
 }
 
-function generateConfigForm(schema, current) {
-  const container = document.getElementById('config-form-body');
+function generateConfigForm(schema, current, targetId) {
+  const container = typeof targetId === 'string'
+    ? document.getElementById(targetId)
+    : (targetId || document.getElementById('config-form-body'));
   container.innerHTML = '';
 
   for (const [key, val] of Object.entries(schema)) {
@@ -1083,9 +1090,10 @@ function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
   return div;
 }
 
-function collectConfigValues(schema) {
+function collectConfigValues(schema, containerEl) {
   const result = {};
-  document.querySelectorAll('#config-form-body [data-key]').forEach(input => {
+  const root = containerEl || document.getElementById('config-form-body');
+  root.querySelectorAll('[data-key]').forEach(input => {
     const parts = input.dataset.key.split('.');
     let obj = result;
     for (let i = 0; i < parts.length - 1; i++) {
@@ -1108,6 +1116,7 @@ async function saveConfigValues() {
   if (!_configComponent || !_configSchema) return;
 
   const values = collectConfigValues(_configSchema);
+  // ^ uses the default container (#config-form-body)
 
   try {
     const resp = await fetch(`/services/${encodeURIComponent(_configComponent)}/config`, {
@@ -1242,12 +1251,26 @@ function populateStep2(spec) {
     return '<div>📦 <strong>' + escHtml(m.host) + '</strong> → ' + escHtml(m.container) + warn + '</div>';
   }).join('');
 
-  // Env
-  var tbody = document.getElementById('ob-env-body');
-  tbody.innerHTML = Object.entries(spec.env).map(function(entry) {
-    var k = entry[0], v = entry[1];
-    return '<tr><td>' + escHtml(k) + '</td><td><input class="ob-env-val" data-key="' + escAttr(k) + '" type="' + (v === '' ? 'password' : 'text') + '" value="' + escAttr(v) + '" placeholder="' + (v === '' ? '(required secret)' : '') + '" /></td></tr>';
-  }).join('');
+  // Env — show only for repos WITHOUT config.yaml
+  var hasConfig = spec.config_schema && Object.keys(spec.config_schema).length > 0;
+  var envTable = document.getElementById('ob-env-table');
+  var configSection = document.getElementById('ob-config-section');
+
+  if (hasConfig) {
+    // Hide env table; show the full config.yaml mirror
+    envTable.style.display = 'none';
+    configSection.style.display = '';
+    generateConfigForm(spec.config_schema, spec.config_schema /* template = current for fresh onboard */, 'ob-config-form-body');
+  } else {
+    // Show env table; hide config section
+    envTable.style.display = '';
+    configSection.style.display = 'none';
+    var tbody = document.getElementById('ob-env-body');
+    tbody.innerHTML = Object.entries(spec.env).map(function(entry) {
+      var k = entry[0], v = entry[1];
+      return '<tr><td>' + escHtml(k) + '</td><td><input class="ob-env-val" data-key="' + escAttr(k) + '" type="' + (v === '' ? 'password' : 'text') + '" value="' + escAttr(v) + '" placeholder="' + (v === '' ? '(required secret)' : '') + '" /></td></tr>';
+    }).join('');
+  }
 
   // Claude mount toggle
   document.getElementById('ob-claude-mount').checked = !!spec.claude_mount;
@@ -1260,7 +1283,7 @@ async function onboardDeploy() {
   // Deep clone the spec
   var finalSpec = JSON.parse(JSON.stringify(_obSpec));
 
-  // Env values
+  // Env values (only for repos without config.yaml)
   document.querySelectorAll('.ob-env-val').forEach(function(input) {
     finalSpec.env[input.dataset.key] = input.value;
   });
@@ -1273,6 +1296,15 @@ async function onboardDeploy() {
   // Claude mount toggle
   finalSpec.claude_mount = document.getElementById('ob-claude-mount').checked;
 
+  // Build the confirm body
+  var body = { spec: finalSpec };
+
+  // When config.yaml schema is present, collect the filled-in values
+  if (finalSpec.config_schema && Object.keys(finalSpec.config_schema).length > 0) {
+    var configFormContainer = document.getElementById('ob-config-form-body');
+    body.config_values = collectConfigValues(finalSpec.config_schema, configFormContainer);
+  }
+
   var btn = document.getElementById('ob-deploy-btn');
   btn.disabled = true;
   btn.textContent = 'Deploying…';
@@ -1282,7 +1314,7 @@ async function onboardDeploy() {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
       credentials: 'same-origin',
-      body: JSON.stringify({ spec: finalSpec }),
+      body: JSON.stringify(body),
     });
     var data = await res.json();
     if (!res.ok) {

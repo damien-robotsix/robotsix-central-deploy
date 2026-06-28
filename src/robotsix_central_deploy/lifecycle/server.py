@@ -80,6 +80,7 @@ class OnboardPreflightResponse(BaseModel):
 
 class OnboardConfirmRequest(BaseModel):
     spec: DerivedSpec  # env values now user-filled
+    config_values: dict | None = None  # optional, for config.yaml repos
 
 
 class OnboardConfirmResponse(BaseModel):
@@ -442,6 +443,7 @@ async def get_service_status(
     request: Request,
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     record = await _get_or_create_record(name, store)
@@ -480,7 +482,11 @@ async def get_service_status(
         except Exception:  # noqa: BLE001
             pass  # degrade gracefully; return last known update_available
 
-    return record.to_status()
+    result = record.to_status()
+    cfg = component_config_store.get(name)
+    if cfg is not None:
+        result.has_config_yaml = cfg.has_config_yaml
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1232,6 +1238,7 @@ async def get_service_config(
 async def put_service_config(
     name: str,
     body: ConfigUpdate,
+    request: Request,
     store: ServiceStore = Depends(_get_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
@@ -1253,8 +1260,11 @@ async def put_service_config(
     comp_cfg = component_config_store.get(name)
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, merged)
-        # Restart so the running container picks up the new values immediately
-        record = await store.get(name)
+        # Restart primary + siblings sharing the same config volume so the
+        # running container(s) pick up the new values immediately.
+        registry: ComponentRegistry = request.app.state.registry
+        store2: ServiceStore = store  # local alias for clarity
+        record = await store2.get(name)
         if record and record.state == ServiceState.RUNNING:
             try:
                 await backend.restart(record)
@@ -1262,6 +1272,19 @@ async def put_service_config(
                 logger.warning(
                     "config saved for %s but restart failed: %s", name, exc
                 )
+        # Fan out to siblings that share the same config volume
+        config = registry.get(name) if registry else None
+        if config and config.siblings:
+            for sib, sib_record in await _get_sibling_pairs(name, config, store2):
+                if sib_record.state != ServiceState.RUNNING:
+                    continue
+                try:
+                    await backend.restart(sib_record)
+                except Exception as exc:
+                    logger.warning(
+                        "config saved for %s but sibling '%s' restart failed: %s",
+                        name, sib_record.name, exc,
+                    )
     else:
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only", name
@@ -1528,12 +1551,15 @@ async def onboard_confirm(
         if seeded_env or seeded_secrets:
             await env_store.upsert(spec.name, seeded_env, seeded_secrets)
 
-    # If config schema present, save template and write config.yaml to volume
+    # If config schema present, save template + user values and write merged
+    # config.yaml to the real config volume so the container starts healthy.
     if spec.config_schema is not None:
         await config_yaml_store.save_template(spec.name, spec.config_schema)
+        merged = _merge_config(spec.config_schema, {}, req.config_values or {})
+        await config_yaml_store.update_current(spec.name, merged)
         if spec.config_volume is not None:
             try:
-                await backend.write_config_to_volume(spec.config_volume, spec.config_schema)
+                await backend.write_config_to_volume(spec.config_volume, merged)
             except Exception:
                 await config_yaml_store.delete(spec.name)
                 raise
