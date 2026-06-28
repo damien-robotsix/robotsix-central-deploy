@@ -232,7 +232,67 @@ volumes:
 
 ---
 
-## § 8  Field → ComponentConfig mapping table
+## § 8  config/config.yaml — unified configuration schema
+
+### Presence
+Optional. If `config/config.yaml` exists at the repo root, central-deploy fetches it at
+`POST /onboard/preflight` (alongside `docker-compose.yml`) and returns the parsed schema
+in the preflight response.
+
+### Structure
+Must be a YAML mapping (dict) at the top level. Nested mappings become UI sections.
+Scalar leaf values are runtime defaults.
+
+### Secret-field convention
+A leaf with value `""` (empty string) or `null`/`~` is a **secret field**:
+- Rendered as a masked password input in the configuration UI
+- Stored in central-deploy's data volume; never echoed back in GET responses
+  (masked as `"***"` in the `current` dict)
+- Preserved on save if the submitted value is the sentinel `"***"` (unchanged)
+
+### Example `config/config.yaml`
+
+```yaml
+server:
+  host: localhost
+  port: 8080
+smtp:
+  host: smtp.example.com
+  user: ""      # secret — blank → masked input
+  password: "" # secret — blank → masked input
+log_level: info
+```
+
+### Deploy compose requirement
+The deploy compose MUST mount a named volume at the config directory.
+The volume name MUST be `{component-id}-config` (e.g. `auto-mail-config`).
+central-deploy pre-creates this volume and writes `config.yaml` into it
+before starting the container. The service reads `/app/config/config.yaml`
+(or whichever path the volume is mounted at) — no host bind-mounts.
+
+### Example deploy compose snippet
+
+```yaml
+services:
+  myapp:
+    image: ghcr.io/org/myapp:latest
+    volumes:
+      - myapp-config:/app/config
+volumes:
+  myapp-config:
+    name: myapp-config
+    labels:
+      robotsix.deploy.stateful: "true"
+```
+
+### Round-trip guarantee
+At onboard: template defaults written to volume.
+On each config save: merged values (defaults + user edits) re-written to volume.
+Service reads only from the mounted volume; central-deploy never uses host bind-mounts.
+
+---
+
+## § 9  Field → ComponentConfig mapping table
 
 Reference: `src/robotsix_central_deploy/registry/models.py`
 
@@ -252,7 +312,7 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 
 ---
 
-## § 9  Annotated examples
+## § 10  Annotated examples
 
 ### Example A — Stateless service with Claude mount (cost-monitor)
 

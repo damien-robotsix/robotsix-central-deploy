@@ -34,6 +34,7 @@ class DerivedSpec(BaseModel):
     health_check: Optional[HealthCheck] = None
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
+    config_schema: dict | None = None  # parsed config/config.yaml, null when absent
 
 
 class ParseError(Exception):
@@ -46,3 +47,7 @@ class ParseError(Exception):
 
 class FetchError(Exception):
     """Raised when docker-compose.yml cannot be fetched from the git URL."""
+
+
+class ConfigParseError(Exception):
+    """Raised when config/config.yaml cannot be parsed."""

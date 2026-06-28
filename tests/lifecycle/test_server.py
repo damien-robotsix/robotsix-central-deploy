@@ -16,6 +16,7 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
@@ -68,6 +69,7 @@ def _reset_globals(monkeypatch, tmp_path):
 
     # Config store + registry
     config_store = ComponentConfigStore(tmp_path / "config_store.json")
+    config_yaml_store = ConfigYamlStore(tmp_path / "config_yaml.json")
     registry = ComponentRegistry([])
 
     # Set both the module-level globals and app.state so all code paths work.
@@ -81,6 +83,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.key_manager = km
     server_mod.app.state.env_store = env_store
+    server_mod.app.state.config_yaml_store = config_yaml_store
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
 
@@ -1111,3 +1114,239 @@ class TestRollbackWithSibling:
         assert sib_after.deployed_image_digest == "sha256:sib-prior"
         assert sib_after.previous_image_digest == "sha256:sib-current"
         assert sib_after.image_revision == "sha256:sib-prior"
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/config
+# ---------------------------------------------------------------------------
+
+
+class TestGetServiceConfig:
+    async def test_returns_schema_and_masked_current(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost", "password": ""}
+        await store.save_template("chat", template)
+        await store.update_current("chat", {"host": "0.0.0.0", "password": "realpass"})
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "schema" in data
+        assert data["schema"] == template
+        assert "current" in data
+        assert data["current"]["host"] == "0.0.0.0"
+        assert data["current"]["password"] == "***"
+
+    async def test_returns_template_as_current_when_no_current_stored(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost", "port": 8080}
+        await store.save_template("chat", template)
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["schema"] == template
+        assert data["current"] == template  # no current stored → template is current
+
+    async def test_no_config_schema_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        # No template saved for "chat"
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 404
+        assert "No config schema" in resp.json()["error"]
+
+    async def test_nonexistent_service_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get("/services/nonexistent/config", headers=auth_headers)
+        assert resp.status_code == 404
+        # Service not found takes priority
+        assert "not found" in resp.json()["error"].lower()
+
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        resp = await client.get("/services/chat/config")
+        assert resp.status_code == 401
+
+    async def test_nested_secrets_are_masked(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"server": {"host": "localhost", "password": ""}}
+        await store.save_template("chat", template)
+        await store.update_current("chat", {"server": {"host": "0.0.0.0", "password": "s3cret"}})
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current"]["server"]["host"] == "0.0.0.0"
+        assert data["current"]["server"]["password"] == "***"
+
+    async def test_null_template_secret_is_masked(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"api_key": None}
+        await store.save_template("chat", template)
+        await store.update_current("chat", {"api_key": "real-key"})
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current"]["api_key"] == "***"
+
+
+# ---------------------------------------------------------------------------
+# PUT /services/{name}/config
+# ---------------------------------------------------------------------------
+
+
+class TestPutServiceConfig:
+    async def test_merge_and_return_204(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost", "port": 8080}
+        await store.save_template("chat", template)
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"host": "10.0.0.1", "port": 3000}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        current = await store.get_current("chat")
+        assert current == {"host": "10.0.0.1", "port": 3000}
+
+    async def test_preserves_masked_secret(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost", "password": ""}
+        await store.save_template("chat", template)
+        await store.update_current("chat", {"host": "localhost", "password": "realpass"})
+
+        # Submit "***" for the secret — existing value should be preserved
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"host": "10.0.0.1", "password": "***"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        current = await store.get_current("chat")
+        assert current == {"host": "10.0.0.1", "password": "realpass"}
+
+    async def test_replaces_secret_with_new_value(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"password": ""}
+        await store.save_template("chat", template)
+        await store.update_current("chat", {"password": "oldpass"})
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"password": "newpass"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        current = await store.get_current("chat")
+        assert current == {"password": "newpass"}
+
+    async def test_no_config_schema_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        # No template saved
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"key": "val"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+        assert "No config schema" in resp.json()["error"]
+
+    async def test_nonexistent_service_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.put(
+            "/services/nonexistent/config",
+            json={"values": {"key": "val"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        resp = await client.put("/services/chat/config", json={"values": {}})
+        assert resp.status_code == 401
+
+    async def test_merge_nested_config(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"server": {"host": "localhost", "port": 8080, "password": ""}}
+        await store.save_template("chat", template)
+        await store.update_current(
+            "chat",
+            {"server": {"host": "0.0.0.0", "port": 3000, "password": "realpass"}},
+        )
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"server": {"host": "10.0.0.1", "password": "***"}}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        current = await store.get_current("chat")
+        # port not in submitted → falls back to template default (8080), not existing (3000)
+        assert current == {
+            "server": {"host": "10.0.0.1", "port": 8080, "password": "realpass"},
+        }
+
+    async def test_write_config_to_volume_called_on_put(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        captured: list[tuple] = []
+        original = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured.append((volume_name, config_dict))
+            return await original(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+        )
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"host": "10.0.0.1"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+        assert len(captured) == 1
+        assert captured[0][0] == "chat-config"
+        assert captured[0][1] == {"host": "10.0.0.1"}

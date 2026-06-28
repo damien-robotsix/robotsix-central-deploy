@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Per-component config.yaml support** — central-deploy now fetches and parses
+  `config/config.yaml` from onboarded repos at preflight time, persists the schema
+  and user-saved values in `ConfigYamlStore`, exposes `GET`/`PUT /services/{name}/config`
+  endpoints with secret masking, and writes merged YAML into a `{name}-config` Docker
+  named volume at onboard and on every save. The deploy-contract docs are updated with
+  the new `config/config.yaml` convention.
+
 - **Fix OpenAPI/runtime mismatch in error responses** — the global
   `http_exception_handler` now returns `ErrorDetail` instances instead of raw dicts,
   ensuring runtime error bodies match the OpenAPI-declared `ErrorDetail` schema

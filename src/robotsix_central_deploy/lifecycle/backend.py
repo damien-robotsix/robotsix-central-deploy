@@ -70,6 +70,11 @@ class ExecutionBackend(ABC):
         """Return Docker storage breakdown (images, build cache, reclaimable)."""
         ...
 
+    @abstractmethod
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+        """Write *config_dict* as YAML into a Docker named volume."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -111,6 +116,9 @@ class NoopBackend(ExecutionBackend):
 
     async def disk_df(self) -> DockerDfStats:
         return DockerDfStats()
+
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +201,11 @@ class DockerBackend(ExecutionBackend):
     async def disk_df(self) -> DockerDfStats:
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()
+
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+        raise NotImplementedError(
+            "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -638,6 +651,36 @@ class DockerSdkBackend(ExecutionBackend):
             await self._wait_healthy(name, timeout=60.0)
 
         return RollbackOutcome(deployed_digest=target_digest, state=ServiceState.RUNNING)
+
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+        """Write *config_dict* as YAML into a Docker named volume via a
+        temporary busybox container.
+
+        The volume **must** already exist; this method only writes to it.
+        """
+        import base64
+
+        import docker
+        import yaml
+
+        yaml_content = yaml.dump(config_dict, default_flow_style=False, allow_unicode=True)
+        encoded = base64.b64encode(yaml_content.encode()).decode()
+        # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
+        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.yaml"
+        loop = asyncio.get_running_loop()
+
+        def _run() -> None:
+            try:
+                self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", cmd],
+                    volumes={volume_name: {"bind": "/config", "mode": "rw"}},
+                    remove=True,
+                )
+            except docker.errors.APIError as exc:
+                raise RuntimeError(f"write_config_to_volume failed for {volume_name}: {exc}") from exc
+
+        await loop.run_in_executor(None, _run)
 
     async def stream_logs(
         self,
