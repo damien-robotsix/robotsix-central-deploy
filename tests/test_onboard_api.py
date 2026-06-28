@@ -575,6 +575,39 @@ class TestOnboardPreflightWithConfig:
         data = resp.json()
         assert "top-level YAML mapping" in data["error"]
 
+    async def test_preflight_gate_missing_config_target_label(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Preflight returns 422 when config.yaml is present but no robotsix.deploy.config-target label."""
+        spec = _make_derived_spec("cool-app")
+        # config_volume NOT set — simulates missing config-target label
+        config_yaml_bytes = yaml.dump(
+            {"host": "localhost", "port": 8080}
+        ).encode()
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=config_yaml_bytes,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 422
+        data = resp.json()
+        assert "robotsix.deploy.config-target" in data["error"]
+
 
 # ---------------------------------------------------------------------------
 # Confirm with config.yaml

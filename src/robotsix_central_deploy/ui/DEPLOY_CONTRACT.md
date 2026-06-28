@@ -326,7 +326,6 @@ volumes:
 
 ### Round-trip guarantee
 At onboard: template defaults written to volume.
-At onboard: template defaults written to volume.
 On each config save: merged values (defaults + user edits) re-written to volume.
 Service reads only from the mounted volume; central-deploy never uses host bind-mounts.
 
