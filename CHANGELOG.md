@@ -4,6 +4,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Populated `config/components.yaml`** — pinned all six components to non-`:latest`
+  image tags (`:main` for robotsix services, `:3.3.0.0` for radicale), filled every
+  `env` block with required environment keys, assigned non-conflicting host ports
+  (8200–8202, 8300, 3000, 5232), confirmed named volumes and stateful-volume
+  annotations, and removed all 18 `TODO` placeholder markers.
+
 - **Configuration documentation** — added `docs/configuration.md` documenting
   all `ROBOTSIX_LIFECYCLE_*` environment variables (host, port, API key, store
   backend/path, execution backend).
