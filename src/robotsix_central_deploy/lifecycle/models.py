@@ -141,6 +141,7 @@ class ServiceStatus(BaseModel):
     running_digest: str = ""   # deployed_image_digest short-form (full sha256)
     latest_digest: str = ""    # last known registry manifest digest
     update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
+    has_config_yaml: bool = False
 
 
 class ServiceListItem(BaseModel):

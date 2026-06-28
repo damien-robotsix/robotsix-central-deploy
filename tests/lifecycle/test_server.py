@@ -1303,3 +1303,129 @@ class TestPutServiceConfig:
         assert len(captured) == 1
         assert captured[0][0] == "chat-config"
         assert captured[0][1] == {"host": "10.0.0.1"}
+
+    async def test_put_config_restarts_primary_when_running(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """PUT /services/{name}/config restarts the primary component when it's RUNNING."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        # Seed ComponentConfig with config_volume
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chat",
+            image="chat:latest",
+            container_name="chat",
+            has_config_yaml=True,
+            config_volume="chat-config",
+        )
+        await config_store.put(cfg)
+
+        # Set the record to RUNNING so restart is triggered
+        svc_store = server_mod.app.state.store
+        record = await svc_store.get("chat")
+        record.state = ServiceState.RUNNING
+        await svc_store.put(record)
+
+        # Track restart calls
+        restarted: list[str] = []
+        original_restart = server_mod.app.state.backend.restart
+
+        async def _fake_restart(rec):
+            restarted.append(rec.name)
+            return await original_restart(rec)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "restart", _fake_restart,
+        )
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"host": "10.0.0.1"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+        assert restarted == ["chat"]
+
+    async def test_put_config_restart_failure_does_not_fail_request(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A failed restart after a successful config write does NOT fail the PUT request."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chat",
+            image="chat:latest",
+            container_name="chat",
+            has_config_yaml=True,
+            config_volume="chat-config",
+        )
+        await config_store.put(cfg)
+
+        svc_store = server_mod.app.state.store
+        record = await svc_store.get("chat")
+        record.state = ServiceState.RUNNING
+        await svc_store.put(record)
+
+        # Make restart raise
+        async def _failing_restart(rec):
+            raise RuntimeError("simulated restart failure")
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "restart", _failing_restart,
+        )
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"host": "10.0.0.1"}},
+            headers=auth_headers,
+        )
+        # Still 204 — config was written successfully
+        assert resp.status_code == 204
+
+    async def test_put_config_does_not_restart_when_not_running(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """PUT /services/{name}/config does NOT restart a STOPPED component."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("chat", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chat",
+            image="chat:latest",
+            container_name="chat",
+            has_config_yaml=True,
+            config_volume="chat-config",
+        )
+        await config_store.put(cfg)
+
+        # Record stays STOPPED (default from _seed_store)
+
+        restarted: list[str] = []
+        original_restart = server_mod.app.state.backend.restart
+
+        async def _fake_restart(rec):
+            restarted.append(rec.name)
+            return await original_restart(rec)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "restart", _fake_restart,
+        )
+
+        resp = await client.put(
+            "/services/chat/config",
+            json={"values": {"host": "10.0.0.1"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+        assert restarted == []  # no restart for stopped component

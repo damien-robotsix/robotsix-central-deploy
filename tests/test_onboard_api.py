@@ -701,3 +701,83 @@ class TestOnboardConfirmWithConfig:
         # No template saved
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         assert await store.get_template("no-cfg-svc") is None
+
+    async def test_confirm_with_config_values_merges_and_writes_volume(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """config_values from the UI are merged with template and written to volume."""
+        spec = _make_derived_spec("cfg-svc")
+        spec.config_schema = {"host": "localhost", "password": "", "port": 8080}
+        spec.config_volume = "cfg-svc-data"
+        spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
+
+        # Track write_config_to_volume calls
+        captured: list[tuple] = []
+        original_write = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured.append((volume_name, config_dict))
+            return await original_write(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+        )
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"host": "10.0.0.1", "password": "s3cret"},
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+
+        # Merged config written to volume — user values overlay template defaults
+        assert len(captured) == 1
+        assert captured[0][0] == "cfg-svc-data"
+        assert captured[0][1] == {"host": "10.0.0.1", "password": "s3cret", "port": 8080}
+
+        # current stored in ConfigYamlStore reflects entered values
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        current = await store.get_current("cfg-svc")
+        assert current == {"host": "10.0.0.1", "password": "s3cret", "port": 8080}
+
+    async def test_confirm_without_config_values_writes_template_only(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Without config_values, the template is written as-is (back-compat)."""
+        spec = _make_derived_spec("cfg-svc2")
+        spec.config_schema = {"host": "localhost", "password": ""}
+        spec.config_volume = "cfg-svc2-data"
+        spec.volume_mounts.append(VolumeMount(host="cfg-svc2-data", container="/cfg"))
+
+        captured: list[tuple] = []
+        original_write = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured.append((volume_name, config_dict))
+            return await original_write(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+        )
+
+        # No config_values field at all
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+
+        # Template written as-is
+        assert len(captured) == 1
+        assert captured[0][1] == {"host": "localhost", "password": ""}
+
+        # current still stored (equals template since no user values)
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        current = await store.get_current("cfg-svc2")
+        assert current == {"host": "localhost", "password": ""}
