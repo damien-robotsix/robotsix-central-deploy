@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -199,11 +200,14 @@ async def lifespan(app: FastAPI):
 
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
     app.state.settings_store = settings_store
-    _config = settings_store.overlay(_config)          # returns new LifecycleConfig (or same if no file)
-    app.state.config = _config                         # replace with overlaid version
+    _config = settings_store.overlay(
+        _config
+    )  # returns new LifecycleConfig (or same if no file)
+    app.state.config = _config  # replace with overlaid version
 
     # -- Session store (in-memory, no I/O) ------------------------------
     from .session import SessionStore
+
     app.state.session_store = SessionStore()
 
     # Apply log_level from (possibly overlaid) config
@@ -224,7 +228,10 @@ async def lifespan(app: FastAPI):
     if _config.registry_check_interval > 0:
         bg_task = asyncio.create_task(
             _registry_check_loop(
-                _store, registry_checker, _backend, _config.registry_check_interval,
+                _store,
+                registry_checker,
+                _backend,
+                _config.registry_check_interval,
             )
         )
 
@@ -249,22 +256,26 @@ async def lifespan(app: FastAPI):
         registry.register(dyn_config)
         existing = await _store.get(dyn_config.id)
         if existing is None:
-            await _store.put(ServiceRecord(
-                name=dyn_config.id,
-                container_name=dyn_config.container_name,
-                image=dyn_config.image,
-            ))
+            await _store.put(
+                ServiceRecord(
+                    name=dyn_config.id,
+                    container_name=dyn_config.container_name,
+                    image=dyn_config.image,
+                )
+            )
         # Seed sibling records
         for sib in dyn_config.siblings:
             sib_name = f"{dyn_config.id}-{sib.service_key}"
             existing_sib = await _store.get(sib_name)
             if existing_sib is None:
-                await _store.put(ServiceRecord(
-                    name=sib_name,
-                    container_name=sib.container_name,
-                    image=sib.image,
-                    component_id=dyn_config.id,
-                ))
+                await _store.put(
+                    ServiceRecord(
+                        name=sib_name,
+                        container_name=sib.container_name,
+                        image=sib.image,
+                        component_id=dyn_config.id,
+                    )
+                )
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
 
     yield
@@ -288,13 +299,17 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
     responses={
-        401: {"model": ErrorDetail, "description": "Unauthorized — invalid or missing credentials"},
+        401: {
+            "model": ErrorDetail,
+            "description": "Unauthorized — invalid or missing credentials",
+        },
     },
 )
 
 app.include_router(ui_router)
 
 from .settings_router import settings_router
+
 app.include_router(settings_router)
 
 # ---------------------------------------------------------------------------
@@ -465,7 +480,10 @@ async def get_service_status(
         await store.put(record)
 
     # Persist running_digest from image inspect if available
-    if inspect.running_digest and inspect.running_digest != record.deployed_image_digest:
+    if (
+        inspect.running_digest
+        and inspect.running_digest != record.deployed_image_digest
+    ):
         record.deployed_image_digest = inspect.running_digest
         await store.put(record)
 
@@ -536,7 +554,9 @@ async def get_service_logs(
     name: str,
     tail: int = Query(100, ge=1, le=10000),
     since: str | None = Query(None, description="ISO 8601 or Unix timestamp"),
-    follow: bool = Query(False, description="If true, stream new log lines as they arrive"),
+    follow: bool = Query(
+        False, description="If true, stream new log lines as they arrive"
+    ),
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
@@ -544,7 +564,9 @@ async def get_service_logs(
     record = await _get_or_create_record(name, store)
 
     async def log_gen():
-        async for chunk in backend.stream_logs(record, tail=tail, since=since, follow=follow):
+        async for chunk in backend.stream_logs(
+            record, tail=tail, since=since, follow=follow
+        ):
             yield chunk
 
     return StreamingResponse(log_gen(), media_type="text/plain; charset=utf-8")
@@ -577,14 +599,18 @@ async def start_service(
     # Idempotency: already running (or starting).
     if record.state == ServiceState.RUNNING:
         return ActionResponse(
-            name=name, action="start",
-            previous_state=previous, current_state=ServiceState.RUNNING,
+            name=name,
+            action="start",
+            previous_state=previous,
+            current_state=ServiceState.RUNNING,
             detail="Service is already running",
         )
     if record.state == ServiceState.STARTING:
         return ActionResponse(
-            name=name, action="start",
-            previous_state=previous, current_state=ServiceState.STARTING,
+            name=name,
+            action="start",
+            previous_state=previous,
+            current_state=ServiceState.STARTING,
             detail="Start already in progress",
         )
 
@@ -612,7 +638,9 @@ async def start_service(
         )
 
     record.state = final_state
-    record.last_error = "" if final_state == ServiceState.RUNNING else "backend reported failure"
+    record.last_error = (
+        "" if final_state == ServiceState.RUNNING else "backend reported failure"
+    )
     await store.put(record)
 
     # Fan out to siblings (best-effort per sibling)
@@ -627,8 +655,10 @@ async def start_service(
                 logger.warning("start sibling '%s-%s' failed", name, sib.service_key)
 
     return ActionResponse(
-        name=name, action="start",
-        previous_state=previous, current_state=record.state,
+        name=name,
+        action="start",
+        previous_state=previous,
+        current_state=record.state,
     )
 
 
@@ -659,14 +689,18 @@ async def stop_service(
     # Idempotency.
     if record.state == ServiceState.STOPPED:
         return ActionResponse(
-            name=name, action="stop",
-            previous_state=previous, current_state=ServiceState.STOPPED,
+            name=name,
+            action="stop",
+            previous_state=previous,
+            current_state=ServiceState.STOPPED,
             detail="Service is already stopped",
         )
     if record.state == ServiceState.STOPPING:
         return ActionResponse(
-            name=name, action="stop",
-            previous_state=previous, current_state=ServiceState.STOPPING,
+            name=name,
+            action="stop",
+            previous_state=previous,
+            current_state=ServiceState.STOPPING,
             detail="Stop already in progress",
         )
 
@@ -692,7 +726,9 @@ async def stop_service(
         )
 
     record.state = final_state
-    record.last_error = "" if final_state == ServiceState.STOPPED else "backend reported failure"
+    record.last_error = (
+        "" if final_state == ServiceState.STOPPED else "backend reported failure"
+    )
     await store.put(record)
 
     # Stop siblings (best-effort per sibling)
@@ -707,8 +743,10 @@ async def stop_service(
                 logger.warning("stop sibling '%s-%s' failed", name, sib.service_key)
 
     return ActionResponse(
-        name=name, action="stop",
-        previous_state=previous, current_state=record.state,
+        name=name,
+        action="stop",
+        previous_state=previous,
+        current_state=record.state,
     )
 
 
@@ -739,8 +777,10 @@ async def restart_service(
     # Idempotency — if already restarting, let it continue.
     if record.state == ServiceState.RESTARTING:
         return ActionResponse(
-            name=name, action="restart",
-            previous_state=previous, current_state=ServiceState.RESTARTING,
+            name=name,
+            action="restart",
+            previous_state=previous,
+            current_state=ServiceState.RESTARTING,
             detail="Restart already in progress",
         )
 
@@ -766,7 +806,9 @@ async def restart_service(
         )
 
     record.state = final_state
-    record.last_error = "" if final_state == ServiceState.RUNNING else "backend reported failure"
+    record.last_error = (
+        "" if final_state == ServiceState.RUNNING else "backend reported failure"
+    )
     await store.put(record)
 
     # Restart siblings (best-effort per sibling)
@@ -781,8 +823,10 @@ async def restart_service(
                 logger.warning("restart sibling '%s-%s' failed", name, sib.service_key)
 
     return ActionResponse(
-        name=name, action="restart",
-        previous_state=previous, current_state=record.state,
+        name=name,
+        action="restart",
+        previous_state=previous,
+        current_state=record.state,
     )
 
 
@@ -796,7 +840,10 @@ async def restart_service(
     response_model=DeployResponse,
     summary="Deploy a new image version for a service",
     responses={
-        404: {"model": ErrorDetail, "description": "Service or component config not found"},
+        404: {
+            "model": ErrorDetail,
+            "description": "Service or component config not found",
+        },
         503: {"model": ErrorDetail, "description": "Registry not loaded"},
     },
 )
@@ -831,17 +878,18 @@ async def deploy_service(
 
     # Write merged config.yaml into the config volume before starting the container.
     if config.has_config_yaml and config.config_volume:
-        merged_cfg = (
-            await config_yaml_store.get_current(name)
-            or await config_yaml_store.get_template(name)
-        )
+        merged_cfg = await config_yaml_store.get_current(
+            name
+        ) or await config_yaml_store.get_template(name)
         if merged_cfg:
             try:
                 await backend.write_config_to_volume(config.config_volume, merged_cfg)
             except Exception as exc:
                 logger.warning(
                     "deploy %s: could not write config.yaml to volume %s: %s",
-                    name, config.config_volume, exc,
+                    name,
+                    config.config_volume,
+                    exc,
                 )
                 # non-fatal: container may still start if config was written earlier
 
@@ -868,7 +916,9 @@ async def deploy_service(
     # Deploy siblings
     config_fresh = registry.get(name)  # re-read for sibling env
     if config_fresh and config_fresh.siblings:
-        for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
+        for sib_config, sib_record in await _get_sibling_pairs(
+            name, config_fresh, store
+        ):
             sib_name = f"{name}-{sib_config.service_key}"
             merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
             effective_sib = ComponentConfig(
@@ -885,7 +935,9 @@ async def deploy_service(
                 entrypoint=sib_config.entrypoint,
             )
             try:
-                sib_outcome = await backend.deploy(sib_record, effective_sib, sib_config.image)
+                sib_outcome = await backend.deploy(
+                    sib_record, effective_sib, sib_config.image
+                )
                 sib_record.state = sib_outcome.state
                 sib_record.image = sib_config.image
                 sib_record.deployed_image_digest = sib_outcome.deployed_digest
@@ -971,10 +1023,15 @@ async def rollback_service(
     # Rollback siblings using each sibling's previous_image_digest
     config_fresh = registry.get(name)
     if config_fresh and config_fresh.siblings:
-        for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
+        for sib_config, sib_record in await _get_sibling_pairs(
+            name, config_fresh, store
+        ):
             if not sib_record.previous_image_digest:
-                logger.warning("rollback sibling '%s-%s': no prior digest — skipping",
-                               name, sib_config.service_key)
+                logger.warning(
+                    "rollback sibling '%s-%s': no prior digest — skipping",
+                    name,
+                    sib_config.service_key,
+                )
                 continue
             sib_name = f"{name}-{sib_config.service_key}"
             merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
@@ -1185,6 +1242,60 @@ def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
     return _recursive(template, existing, submitted)
 
 
+def _resolve_placeholders(command_str: str, values: dict) -> str:
+    """Substitute ``{dotted.path}`` placeholders in *command_str* from *values*.
+
+    Each placeholder is a dot-separated path of dict keys and list indices
+    (e.g. ``accounts.0.auth.username``) into the nested *values* dict.
+    Unresolvable placeholders are left as-is.
+    """
+
+    def _navigate(path: str) -> str | None:
+        parts = path.split(".")
+        node: object = values
+        for part in parts:
+            if isinstance(node, dict):
+                node = node.get(part, _MISSING)
+            elif isinstance(node, list):
+                try:
+                    idx = int(part)
+                except ValueError:
+                    return None
+                if idx < 0 or idx >= len(node):
+                    return None
+                node = node[idx]
+            else:
+                return None
+            if node is _MISSING:
+                return None
+        if isinstance(node, (str, int, float, bool)):
+            return str(node)
+        return None
+
+    _MISSING = object()
+
+    def _replacer(m: re.Match[str]) -> str:
+        resolved = _navigate(m.group(1))
+        return resolved if resolved is not None else m.group(0)
+
+    return re.sub(r"\{([^{}]+)\}", _replacer, command_str)
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge *overlay* into *base*, returning a new dict.
+
+    Leaf values from *overlay* overwrite *base*; nested dicts are merged
+    recursively.  Keys only in *base* are preserved.
+    """
+    result = dict(base)
+    for key, val in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Config endpoint models
 # ---------------------------------------------------------------------------
@@ -1219,7 +1330,9 @@ class ConfigAssistResponse(BaseModel):
     "/services/{name}/config",
     response_model=ConfigResponse,
     summary="Get config.yaml schema and current values for a service",
-    responses={404: {"model": ErrorDetail, "description": "Service has no config schema"}},
+    responses={
+        404: {"model": ErrorDetail, "description": "Service has no config schema"}
+    },
 )
 async def get_service_config(
     name: str,
@@ -1255,7 +1368,9 @@ async def get_service_config(
     "/services/{name}/config",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Merge and save config.yaml values for a service",
-    responses={404: {"model": ErrorDetail, "description": "Service has no config schema"}},
+    responses={
+        404: {"model": ErrorDetail, "description": "Service has no config schema"}
+    },
 )
 async def put_service_config(
     name: str,
@@ -1291,9 +1406,7 @@ async def put_service_config(
             try:
                 await backend.restart(record)
             except Exception as exc:
-                logger.warning(
-                    "config saved for %s but restart failed: %s", name, exc
-                )
+                logger.warning("config saved for %s but restart failed: %s", name, exc)
         # Fan out to siblings that share the same config volume
         config = registry.get(name) if registry else None
         if config and config.siblings:
@@ -1305,11 +1418,14 @@ async def put_service_config(
                 except Exception as exc:
                     logger.warning(
                         "config saved for %s but sibling '%s' restart failed: %s",
-                        name, sib_record.name, exc,
+                        name,
+                        sib_record.name,
+                        exc,
                     )
     else:
         logger.warning(
-            "put_service_config: no config_volume for %s — config written to store only", name
+            "put_service_config: no config_volume for %s — config written to store only",
+            name,
         )
 
 
@@ -1323,7 +1439,10 @@ async def put_service_config(
     response_model=ConfigAssistResponse,
     summary="Run a repo-declared config-assist command in a one-shot container and return auto-filled config",
     responses={
-        400: {"model": ErrorDetail, "description": "No config-assist command or config volume configured"},
+        400: {
+            "model": ErrorDetail,
+            "description": "No config-assist command or config volume configured",
+        },
         404: {"model": ErrorDetail, "description": "Component not found"},
         504: {"model": ErrorDetail, "description": "Assist command timed out"},
     },
@@ -1371,25 +1490,36 @@ async def run_config_assist(
     # Fetch decrypted env+secrets
     merged_env = await env_store.get_merged_env(name, comp_cfg.env)
 
+    # Substitute {seed} placeholders in the command with submitted values
+    resolved_command = _resolve_placeholders(
+        comp_cfg.config_assist_command, body.values
+    )
+
     # Run the one-shot container (60 s timeout)
     try:
         output = await backend.run_config_assist(
             image=comp_cfg.image,
-            command_str=comp_cfg.config_assist_command,
+            command_str=resolved_command,
             volume_name=comp_cfg.config_volume,
             volume_mount_path=volume_mount_path,
             env_dict=merged_env,
             timeout_seconds=60,
         )
     except TimeoutError as exc:
-        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(exc)
+        )
     except RuntimeError as exc:
         output = str(exc)
 
     # Read back the updated config from the volume
     filled = await backend.read_config_from_volume(comp_cfg.config_volume)
 
-    return ConfigAssistResponse(config=filled, output=output)
+    # Merge detected fields into the submitted config so the detected
+    # output never clobbers other fields the user already entered.
+    merged = _deep_merge(partial, filled)
+
+    return ConfigAssistResponse(config=merged, output=output)
 
 
 # ---------------------------------------------------------------------------
@@ -1442,14 +1572,18 @@ async def delete_service(
                 await backend.remove_container(record)
             except Exception:
                 logger.warning(
-                    "remove_container failed for %s during delete", name, exc_info=True,
+                    "remove_container failed for %s during delete",
+                    name,
+                    exc_info=True,
                 )
         for _sib_cfg, sib_record in pairs:
             try:
                 await backend.stop(sib_record)
             except Exception:
                 logger.warning(
-                    "stop failed for %s during delete", sib_record.name, exc_info=True,
+                    "stop failed for %s during delete",
+                    sib_record.name,
+                    exc_info=True,
                 )
             try:
                 await backend.remove_container(sib_record)
@@ -1500,17 +1634,25 @@ async def onboard_preflight(
     import re
 
     from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
-    from robotsix_central_deploy.onboard.parser import ConfigParseError, ParseError, parse_compose, parse_config_yaml
+    from robotsix_central_deploy.onboard.parser import (
+        ConfigParseError,
+        ParseError,
+        parse_compose,
+        parse_config_yaml,
+    )
 
     # Validate name slug
     if not re.fullmatch(r"^[a-z0-9][a-z0-9-]*$", req.name):
         raise HTTPException(
             status_code=422,
-            detail={"error": f"Invalid name '{req.name}': must match ^[a-z0-9][a-z0-9-]*$"},
+            detail={
+                "error": f"Invalid name '{req.name}': must match ^[a-z0-9][a-z0-9-]*$"
+            },
         )
 
     # Reserved-name guard
     from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
+
     if req.name in RESERVED_NAMES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1529,7 +1671,9 @@ async def onboard_preflight(
     loop = asyncio.get_running_loop()
     try:
         repo_files = await loop.run_in_executor(
-            None, fetch_repo_files, req.git_url,
+            None,
+            fetch_repo_files,
+            req.git_url,
         )
     except FetchError as e:
         raise HTTPException(status_code=422, detail={"error": str(e)})
@@ -1596,6 +1740,7 @@ async def onboard_confirm(
 
     # Reserved-name guard: don't allow names that shadow API routes
     from ..gateway.router import RESERVED_NAMES  # noqa: PLC0415
+
     if spec.name in RESERVED_NAMES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1615,7 +1760,7 @@ async def onboard_confirm(
         entrypoint=spec.entrypoint,
         claude_mount=spec.claude_mount,
         named_volumes=[m.host for m in spec.volume_mounts]
-                      + [m.host for sib in spec.siblings for m in sib.volume_mounts],
+        + [m.host for sib in spec.siblings for m in sib.volume_mounts],
         stateful_volumes=spec.stateful_volumes,
         siblings=[
             ServiceConfig(
@@ -1638,7 +1783,7 @@ async def onboard_confirm(
     # Wire the real config volume name (resolved by parser from the label)
     config.config_volume = spec.config_volume  # None if no config-target label
     config.config_assist_command = spec.config_assist_command
-    config.config_assist_seeds   = spec.config_assist_seeds
+    config.config_assist_seeds = spec.config_assist_seeds
 
     # Persist config
     await component_config_store.put(config)
@@ -1727,7 +1872,9 @@ async def onboard_confirm(
             await store.put(sib_record)
             sibling_records_created.append(sib_record)
 
-            sib_outcome = await backend.deploy(sib_record, sib_component_config, sib.image)
+            sib_outcome = await backend.deploy(
+                sib_record, sib_component_config, sib.image
+            )
             sib_record.state = sib_outcome.state
             sib_record.image = sib.image
             sib_record.deployed_image_digest = sib_outcome.deployed_digest
@@ -1778,6 +1925,7 @@ async def http_exception_handler(request, exc: HTTPException):
 # ---------------------------------------------------------------------------
 
 from ..gateway.router import gateway_router  # noqa: E402
+
 app.include_router(gateway_router)
 
 
