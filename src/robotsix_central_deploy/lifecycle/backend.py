@@ -236,6 +236,18 @@ class DockerBackend(ExecutionBackend):
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        raise NotImplementedError(
+            "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def run_config_assist(
+        self, image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+    ) -> str:
+        raise NotImplementedError(
+            "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
         rc, stdout, _stderr = await _run(
