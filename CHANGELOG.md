@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Configuration documentation** — added `docs/configuration.md` documenting
+  all `ROBOTSIX_LIFECYCLE_*` environment variables (host, port, API key, store
+  backend/path, execution backend).
+
 - **Per-component config.yaml support** — central-deploy now fetches and parses
   `config/config.yaml` from onboarded repos at preflight time, persists the schema
   and user-saved values in `ConfigYamlStore`, exposes `GET`/`PUT /services/{name}/config`
