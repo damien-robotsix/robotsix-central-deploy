@@ -15,6 +15,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shutil
 from contextlib import asynccontextmanager
@@ -1076,6 +1077,47 @@ def _mask_secrets(template: dict, current: dict) -> dict:
     return _recursive(template, current)
 
 
+def _coerce_to_template(tval: object, sval: object) -> object:
+    """Coerce a submitted form value back to the template leaf's type.
+
+    The config UI renders every leaf as a text/password ``<input>`` and
+    therefore submits all values as strings.  Without coercion, typed
+    scalars in ``config.yaml`` (``port: 8080``, ``enabled: true``) would
+    be silently rewritten as strings on the next Save.  This re-derives
+    the intended type from the template leaf.
+
+    Best-effort: a value that cannot be parsed into the template type is
+    returned unchanged (the submitted string) rather than raising, so a
+    Save never fails on an unexpected value.
+    """
+    if not isinstance(sval, str):
+        return sval
+    # bool is a subclass of int — must be checked before int.
+    if isinstance(tval, bool):
+        low = sval.strip().lower()
+        if low in ("true", "1", "yes", "on"):
+            return True
+        if low in ("false", "0", "no", "off", ""):
+            return False
+        return sval
+    if isinstance(tval, int):
+        try:
+            return int(sval)
+        except ValueError:
+            return sval
+    if isinstance(tval, float):
+        try:
+            return float(sval)
+        except ValueError:
+            return sval
+    if isinstance(tval, (list, dict)):
+        try:
+            return json.loads(sval)
+        except (ValueError, TypeError):
+            return sval
+    return sval
+
+
 def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
     """Deep-merge *submitted* over *existing*, respecting secret sentinel.
 
@@ -1083,7 +1125,9 @@ def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
     - If the key is a nested dict in all three, recurse.
     - If the template leaf is a secret (``""`` or ``None``) AND
       ``submitted[key] == "***"``: keep ``existing[key]`` unchanged.
-    - Else: use ``submitted.get(key, template[key])``.
+    - Else: use the submitted value (coerced back to the template leaf's
+      type, since the UI submits everything as strings) or, when the key
+      was not submitted, the template default.
     """
 
     def _recursive(i_template: dict, i_existing: dict, i_submitted: dict) -> dict:
@@ -1097,8 +1141,10 @@ def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
                 result[key] = _recursive(tval, i_existing[key], i_submitted[key])
             elif tval in ("", None) and i_submitted.get(key) == "***":
                 result[key] = i_existing.get(key, tval)
+            elif key in i_submitted:
+                result[key] = _coerce_to_template(tval, i_submitted[key])
             else:
-                result[key] = i_submitted.get(key, tval)
+                result[key] = tval
         return result
 
     return _recursive(template, existing, submitted)

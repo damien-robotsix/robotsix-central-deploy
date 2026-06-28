@@ -176,3 +176,40 @@ class TestMergeConfig:
         submitted = {"password": "***"}
         result = _merge_config(template, existing, submitted)
         assert result == {"password": "real"}
+
+    def test_merge_coerces_int_from_string(self):
+        # The UI submits everything as strings; an int template leaf must
+        # round-trip as an int, not "8080".
+        result = _merge_config({"port": 8080}, {"port": 8080}, {"port": "9090"})
+        assert result == {"port": 9090}
+        assert isinstance(result["port"], int)
+
+    def test_merge_coerces_bool_from_string(self):
+        result = _merge_config({"enabled": True}, {"enabled": True}, {"enabled": "false"})
+        assert result == {"enabled": False}
+        assert isinstance(result["enabled"], bool)
+
+    def test_merge_coerces_float_from_string(self):
+        result = _merge_config({"ratio": 0.5}, {"ratio": 0.5}, {"ratio": "1.25"})
+        assert result == {"ratio": 1.25}
+
+    def test_merge_string_leaf_unchanged(self):
+        result = _merge_config({"host": "localhost"}, {"host": "localhost"}, {"host": "10.0.0.1"})
+        assert result == {"host": "10.0.0.1"}
+
+    def test_merge_coerces_nested_typed_leaf(self):
+        template = {"server": {"host": "localhost", "port": 8080}}
+        existing = {"server": {"host": "0.0.0.0", "port": 8080}}
+        submitted = {"server": {"host": "10.0.0.1", "port": "443"}}
+        result = _merge_config(template, existing, submitted)
+        assert result == {"server": {"host": "10.0.0.1", "port": 443}}
+        assert isinstance(result["server"]["port"], int)
+
+    def test_merge_unparseable_int_kept_as_string(self):
+        # Never raise on a bad value — keep the submitted string.
+        result = _merge_config({"port": 8080}, {"port": 8080}, {"port": "not-a-number"})
+        assert result == {"port": "not-a-number"}
+
+    def test_merge_coerces_list_from_json_string(self):
+        result = _merge_config({"hosts": ["a"]}, {"hosts": ["a"]}, {"hosts": '["x", "y"]'})
+        assert result == {"hosts": ["x", "y"]}
