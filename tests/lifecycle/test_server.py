@@ -7,20 +7,15 @@ full request/response pipeline including middleware, auth, and error handlers.
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from unittest.mock import AsyncMock, MagicMock
 
-from robotsix_central_deploy.lifecycle.backend import ComponentInspect, NoopBackend
-from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+from robotsix_central_deploy.lifecycle.backend import ComponentInspect
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
-from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
-from robotsix_central_deploy.registry.env_store import EnvStore
-from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
-from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
 # Import the server module itself (not just symbols) so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -40,59 +35,6 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
         if deployed_digest:
             rec.deployed_image_digest = deployed_digest
         await s.put(rec)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_globals(monkeypatch, tmp_path):
-    """Wire a fresh store/backend/config into the server module before each test."""
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
-    cfg = LifecycleConfig(  # type: ignore[call-arg]
-        store_backend="memory",
-        execution_backend="noop",
-        api_key="test-key",
-    )
-    store = InMemoryStore()
-    backend = NoopBackend()
-
-    # Registry checker mock
-    mock_checker = MagicMock()
-    mock_checker.get_latest_digest = AsyncMock(return_value=None)
-
-    # Env store + secret key
-    km = SecretKeyManager(tmp_path / "secrets.key")
-    env_store = EnvStore(tmp_path / "env.json", km)
-
-    # Config store + registry
-    config_store = ComponentConfigStore(tmp_path / "config_store.json")
-    config_yaml_store = ConfigYamlStore(tmp_path / "config_yaml.json")
-    registry = ComponentRegistry([])
-
-    # Set both the module-level globals and app.state so all code paths work.
-    server_mod._config = cfg
-    server_mod._store = store
-    server_mod._backend = backend
-    server_mod._registry_checker = mock_checker
-    server_mod.app.state.config = cfg
-    server_mod.app.state.store = store
-    server_mod.app.state.backend = backend
-    server_mod.app.state.registry_checker = mock_checker
-    server_mod.app.state.key_manager = km
-    server_mod.app.state.env_store = env_store
-    server_mod.app.state.config_yaml_store = config_yaml_store
-    server_mod.app.state.component_config_store = config_store
-    server_mod.app.state.registry = registry
-
-
-@pytest.fixture
-async def client() -> AsyncClient:
-    transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
 
 
 @pytest.fixture
