@@ -15,12 +15,16 @@ class RepoFiles:
 
 
 def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
-    """Clone a repo shallowly and return the bytes of docker-compose.yml
+    """Clone a repo shallowly and return the bytes of deploy/docker-compose.yml
     and (if present) config/config.yaml.
+
+    The repo root ``docker-compose.yml`` (dev compose) is **ignored**.
+    Only ``deploy/docker-compose.yml`` is read — this is the deploy-
+    contract-compliant compose.
 
     Raises:
         FetchError: if the URL is not https://, git clone fails, or
-            docker-compose.yml is absent from the repo root.
+            ``deploy/docker-compose.yml`` is absent from the cloned repo.
     """
     if not git_url.startswith("https://"):
         raise FetchError("only https:// git URLs are supported")
@@ -36,9 +40,11 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
             stderr_tail = proc.stderr.decode(errors="replace")[:500]
             raise FetchError(f"git clone failed: {stderr_tail}")
 
-        compose_path = Path(tmpdir) / "docker-compose.yml"
+        compose_path = Path(tmpdir) / "deploy" / "docker-compose.yml"
         if not compose_path.is_file():
-            raise FetchError("docker-compose.yml not found in repo root")
+            raise FetchError(
+                "no deploy/docker-compose.yml found — see the deploy contract"
+            )
 
         config_path = Path(tmpdir) / "config" / "config.yaml"
         config_yaml = config_path.read_bytes() if config_path.is_file() else None
@@ -50,13 +56,15 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
 
 
 def fetch_compose_bytes(git_url: str, timeout_sec: int = 30) -> bytes:
-    """Clone a repo shallowly and return the raw bytes of its docker-compose.yml.
+    """Clone a repo shallowly and return the raw bytes of its
+    ``deploy/docker-compose.yml``.
 
     Convenience wrapper around ``fetch_repo_files`` for callers that only
-    need the compose file.
+    need the compose file.  The repo root ``docker-compose.yml`` (dev
+    compose) is ignored — only ``deploy/docker-compose.yml`` is read.
 
     Raises:
         FetchError: if the URL is not https://, git clone fails, or
-            docker-compose.yml is absent from the repo root.
+            ``deploy/docker-compose.yml`` is absent from the cloned repo.
     """
     return fetch_repo_files(git_url, timeout_sec).compose_bytes

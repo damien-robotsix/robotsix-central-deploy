@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_compose_bytes
+from robotsix_central_deploy.onboard.fetcher import FetchError, RepoFiles, fetch_compose_bytes, fetch_repo_files
 from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
 from robotsix_central_deploy.onboard.parser import _parse_go_duration, parse_compose
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
@@ -422,6 +422,96 @@ services:
 
 
 # ---------------------------------------------------------------------------
+# fetch_repo_files — path-based tests
+# ---------------------------------------------------------------------------
+
+
+class TestFetchRepoFiles:
+    """Tests that exercise fetch_repo_files against real temp directories.
+
+    ``tmp_path`` is used as the fake clone target; ``subprocess.run`` and
+    ``tempfile.TemporaryDirectory`` are patched so no actual git clone runs.
+    """
+
+    def test_fetches_deploy_subdir_compose(self, tmp_path: Path):
+        """fetch_repo_files reads deploy/docker-compose.yml, not the root compose."""
+        deploy_dir = tmp_path / "deploy"
+        deploy_dir.mkdir()
+        compose_yaml = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
+        (deploy_dir / "docker-compose.yml").write_bytes(compose_yaml)
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        config_yaml = b"host: localhost\nport: 8080\n"
+        (config_dir / "config.yaml").write_bytes(config_yaml)
+
+        with mock.patch("subprocess.run") as m_run:
+            m_run.return_value = mock.Mock(returncode=0, stderr=b"")
+            with mock.patch(
+                "robotsix_central_deploy.onboard.fetcher.tempfile.TemporaryDirectory"
+            ) as m_tmp:
+                m_tmp.return_value.__enter__.return_value = str(tmp_path)
+                result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.compose_bytes == compose_yaml
+        assert result.config_yaml == config_yaml
+
+    def test_missing_deploy_compose_raises_fetch_error(self, tmp_path: Path):
+        """Root docker-compose.yml present but deploy/ absent → FetchError."""
+        # Only root compose; no deploy/ subdir
+        (tmp_path / "docker-compose.yml").write_text(
+            "services:\n  dev:\n    build: .\n"
+        )
+
+        with mock.patch("subprocess.run") as m_run:
+            m_run.return_value = mock.Mock(returncode=0, stderr=b"")
+            with mock.patch(
+                "robotsix_central_deploy.onboard.fetcher.tempfile.TemporaryDirectory"
+            ) as m_tmp:
+                m_tmp.return_value.__enter__.return_value = str(tmp_path)
+                with pytest.raises(
+                    FetchError, match="no deploy/docker-compose.yml found"
+                ):
+                    fetch_repo_files("https://example.com/repo.git")
+
+    def test_root_compose_is_ignored(self, tmp_path: Path):
+        """Root compose exists but onboarding fails because deploy/ compose is required."""
+        (tmp_path / "docker-compose.yml").write_text(
+            "services:\n  dev:\n    build: .\n"
+        )
+
+        with mock.patch("subprocess.run") as m_run:
+            m_run.return_value = mock.Mock(returncode=0, stderr=b"")
+            with mock.patch(
+                "robotsix_central_deploy.onboard.fetcher.tempfile.TemporaryDirectory"
+            ) as m_tmp:
+                m_tmp.return_value.__enter__.return_value = str(tmp_path)
+                with pytest.raises(
+                    FetchError, match="no deploy/docker-compose.yml found"
+                ):
+                    fetch_repo_files("https://example.com/repo.git")
+
+    def test_no_config_yaml_gives_none(self, tmp_path: Path):
+        """When config/config.yaml is absent, result.config_yaml is None."""
+        deploy_dir = tmp_path / "deploy"
+        deploy_dir.mkdir()
+        compose_yaml = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
+        (deploy_dir / "docker-compose.yml").write_bytes(compose_yaml)
+
+        # No config/config.yaml created
+
+        with mock.patch("subprocess.run") as m_run:
+            m_run.return_value = mock.Mock(returncode=0, stderr=b"")
+            with mock.patch(
+                "robotsix_central_deploy.onboard.fetcher.tempfile.TemporaryDirectory"
+            ) as m_tmp:
+                m_tmp.return_value.__enter__.return_value = str(tmp_path)
+                result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.config_yaml is None
+
+
+# ---------------------------------------------------------------------------
 # fetch_compose_bytes
 # ---------------------------------------------------------------------------
 
@@ -447,7 +537,9 @@ class TestFetchComposeBytes:
             ) as m_tmp:
                 m_tmp.return_value.__enter__.return_value = "/tmp/fake_dir"
                 with mock.patch.object(Path, "is_file", return_value=False):
-                    with pytest.raises(FetchError, match="docker-compose.yml not found"):
+                    with pytest.raises(
+                        FetchError, match="no deploy/docker-compose.yml found"
+                    ):
                         fetch_compose_bytes("https://example.com/fake.git")
 
 
