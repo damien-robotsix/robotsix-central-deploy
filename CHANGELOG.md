@@ -11,6 +11,10 @@ All notable changes to robotsix-central-deploy.
   named volume at onboard and on every save. The deploy-contract docs are updated with
   the new `config/config.yaml` convention.
 
+- **Config modal UI** — each component card now has a "Configure" button that opens
+  an auto-generated form based on the config schema. Supports nested sections,
+  secret fields with sentinel preservation (`***`), and safe refresh on save.
+
 - **Fix OpenAPI/runtime mismatch in error responses** — the global
   `http_exception_handler` now returns `ErrorDetail` instances instead of raw dicts,
   ensuring runtime error bodies match the OpenAPI-declared `ErrorDetail` schema
