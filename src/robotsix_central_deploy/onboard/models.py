@@ -19,6 +19,7 @@ class SiblingDerivedSpec(BaseModel):
     claude_mount: bool = False
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
+    entrypoint: Optional[list[str]] = None
 
 
 class DerivedSpec(BaseModel):
@@ -34,6 +35,7 @@ class DerivedSpec(BaseModel):
     claude_mount: bool
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
+    entrypoint: Optional[list[str]] = None
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
     config_schema: dict | None = None  # parsed config/config.yaml, null when absent

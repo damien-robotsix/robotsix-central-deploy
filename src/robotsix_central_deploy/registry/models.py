@@ -39,6 +39,7 @@ class ServiceConfig(BaseModel):
     claude_mount: bool = False
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
+    entrypoint: Optional[list[str]] = None
 
 
 class ComponentConfig(BaseModel):
@@ -56,6 +57,7 @@ class ComponentConfig(BaseModel):
     stateful_volumes: list[str] = []   # subset with robotsix.deploy.stateful label (informational)
     siblings: list[ServiceConfig] = []  # empty = single-service (backward compat)
     command: Optional[list[str]] = None  # container command (from compose 'command:')
+    entrypoint: Optional[list[str]] = None  # container entrypoint (from compose 'entrypoint:')
     git_url: str = ""                   # source repo URL from onboard
     has_config_yaml: bool = False       # True when the repo declared config/config.yaml
     config_volume: Optional[str] = None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)
