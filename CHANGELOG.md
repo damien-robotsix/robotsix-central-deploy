@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Settings page: gateway base domain and Claude mount path** — added
+  `gateway_base_domain` and `claude_host_mount_path` to `SystemSettings`,
+  `LifecycleConfig`, the settings API (`GET`/`PUT /settings`), and the dashboard
+  Settings UI. The `gateway_base_domain` is used at startup to build absolute
+  `↗ Open` shortcut URLs for proxied services. The `claude_host_mount_path`
+  replaces the hardcoded `~/.claude` default when set (requires service restart).
+
 - **Populated `config/components.yaml`** — pinned all six components to non-`:latest`
   image tags (`:main` for robotsix services, `:3.3.0.0` for radicale), filled every
   `env` block with required environment keys, assigned non-conflicting host ports

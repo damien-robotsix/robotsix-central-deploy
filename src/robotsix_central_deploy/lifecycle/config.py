@@ -65,6 +65,12 @@ class LifecycleConfig(BaseSettings):
     # Logging
     log_level: str = "INFO"   # env: ROBOTSIX_LIFECYCLE_LOG_LEVEL
 
+    # Gateway
+    gateway_base_domain: str = ""  # ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN
+
+    # Claude mount
+    claude_host_mount_path: str = ""  # ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

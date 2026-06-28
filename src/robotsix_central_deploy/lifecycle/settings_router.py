@@ -36,6 +36,8 @@ class SystemSettingsResponse(BaseModel):
     disk_warn_bytes: int = 5_368_709_120
     registry_check_interval: int = 300
     log_level: str = "INFO"
+    gateway_base_domain: str = ""
+    claude_host_mount_path: str = ""
 
 
 class SystemSettingsUpdate(BaseModel):
@@ -45,6 +47,8 @@ class SystemSettingsUpdate(BaseModel):
     disk_warn_bytes: int = 5_368_709_120
     registry_check_interval: int = 300
     log_level: str = "INFO"
+    gateway_base_domain: str = ""
+    claude_host_mount_path: str = ""
 
     @field_validator("log_level")
     @classmethod
@@ -71,6 +75,8 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         disk_warn_bytes=settings.disk_warn_bytes,
         registry_check_interval=settings.registry_check_interval,
         log_level=settings.log_level,
+        gateway_base_domain=settings.gateway_base_domain,
+        claude_host_mount_path=settings.claude_host_mount_path,
     )
 
 
@@ -110,8 +116,8 @@ async def put_settings(
 
     - Secret fields sent as ``"***"`` preserve the existing stored value.
     - ``log_level`` is validated via Pydantic; an invalid value returns 422.
-    - All settings *except* ``registry_check_interval`` take effect
-      immediately without restart.
+    - All settings *except* ``registry_check_interval`` and
+      ``claude_host_mount_path`` take effect immediately without restart.
 
     # NOTE: ``registry_check_interval`` changes are persisted and reflected
       in ``app.state.config``, but the background ``_registry_check_loop``
@@ -119,6 +125,11 @@ async def put_settings(
       the config alone does **not** alter the running task's sleep period.
       A full service restart is required for an interval change to take
       effect on the background loop.
+
+    # NOTE: ``claude_host_mount_path`` is captured by ``DockerSdkBackend``
+      at construction time.  Updating the config alone does **not** alter
+      the running backend's mount path.  A full service restart is required
+      for a change to take effect.
     """
     SECRET = SECRET_MASK
     current = await settings_store.get()
@@ -131,6 +142,8 @@ async def put_settings(
         disk_warn_bytes=body.disk_warn_bytes,
         registry_check_interval=body.registry_check_interval,
         log_level=body.log_level,
+        gateway_base_domain=body.gateway_base_domain,
+        claude_host_mount_path=body.claude_host_mount_path,
     )
 
     await settings_store.put(new)

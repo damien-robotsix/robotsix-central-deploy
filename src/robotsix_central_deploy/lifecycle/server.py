@@ -167,7 +167,10 @@ def _build_store(cfg: LifecycleConfig) -> ServiceStore:
 
 def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
     if cfg.execution_backend == "docker_sdk":
-        return DockerSdkBackend(socket_url=cfg.docker_socket_url)
+        return DockerSdkBackend(
+            socket_url=cfg.docker_socket_url,
+            claude_host_mount_path=cfg.claude_host_mount_path,
+        )
     if cfg.execution_backend == "docker":
         return DockerBackend()
     return NoopBackend()

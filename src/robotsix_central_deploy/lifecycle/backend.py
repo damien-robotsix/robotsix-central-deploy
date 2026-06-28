@@ -268,10 +268,15 @@ async def _run(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
 class DockerSdkBackend(ExecutionBackend):
     """Executes lifecycle actions via the Docker Python SDK against the local socket."""
 
-    def __init__(self, socket_url: str = "unix:///var/run/docker.sock") -> None:
+    def __init__(
+        self,
+        socket_url: str = "unix:///var/run/docker.sock",
+        claude_host_mount_path: str = "",
+    ) -> None:
         import docker
 
         self._client = docker.DockerClient(base_url=socket_url)
+        self._claude_host_mount_path = claude_host_mount_path
 
     # -- helpers ------------------------------------------------------------
 
@@ -476,7 +481,7 @@ class DockerSdkBackend(ExecutionBackend):
         }
         if config.claude_mount:
             import os
-            claude_host = os.path.expanduser("~/.claude")
+            claude_host = self._claude_host_mount_path or os.path.expanduser("~/.claude")
             volumes[claude_host] = {"bind": "/root/.claude", "mode": "rw"}
         healthcheck = None
         if config.health_check:

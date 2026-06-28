@@ -27,6 +27,8 @@ class SystemSettings(BaseModel):
     disk_warn_bytes: int = 5_368_709_120  # 5 GiB
     registry_check_interval: int = 300  # seconds; 0 = disabled
     log_level: str = "INFO"
+    gateway_base_domain: str = ""  # e.g. "deploy.robotsix.net"
+    claude_host_mount_path: str = ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
 
     @field_validator("log_level")
     @classmethod
@@ -115,5 +117,7 @@ class SystemSettingsStore:
                 "disk_warn_bytes": stored.disk_warn_bytes,
                 "registry_check_interval": stored.registry_check_interval,
                 "log_level": stored.log_level,
+                "gateway_base_domain": stored.gateway_base_domain,
+                "claude_host_mount_path": stored.claude_host_mount_path,
             }
         )
