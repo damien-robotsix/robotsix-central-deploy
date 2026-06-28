@@ -324,3 +324,73 @@ class TestDockerSdkBackendNoHostPorts:
         client.containers.create.assert_called_once()
         _, kwargs = client.containers.create.call_args
         assert kwargs.get("ports") == {} or "ports" not in kwargs
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — command and entrypoint passthrough
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendCommandAndEntrypoint:
+    """_create_container must pass command and entrypoint through to the
+    Docker SDK, with None meaning "use image default"."""
+
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def test_create_container_passes_command(self, backend):
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            command=["serve", "--port", "8080"],
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["command"] == ["serve", "--port", "8080"]
+
+    def test_create_container_none_command(self, backend):
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["command"] is None
+
+    def test_create_container_passes_entrypoint(self, backend):
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            entrypoint=["/usr/bin/env", "python", "-m", "app"],
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["entrypoint"] == ["/usr/bin/env", "python", "-m", "app"]
+
+    def test_create_container_none_entrypoint(self, backend):
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["entrypoint"] is None

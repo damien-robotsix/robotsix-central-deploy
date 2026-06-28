@@ -254,6 +254,30 @@ services:
         assert "missing-vol" in str(exc.value)
         assert "not declared in top-level volumes" in str(exc.value)
 
+    def test_command_invalid_type(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    command: 42
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "command:" in str(exc.value)
+
+    def test_entrypoint_invalid_type(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    entrypoint: 42
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "entrypoint:" in str(exc.value)
+
 
 # ---------------------------------------------------------------------------
 # parse_compose — labels
@@ -751,3 +775,92 @@ services:
             parse_compose(_bytes(y), name="myapp", git_url="https://x.com/r.git")
         assert "build:" in str(exc.value)
         assert "ingester" in str(exc.value)
+
+    def test_sibling_command_propagated(self):
+        """Multi-service compose with command on primary and sibling."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/auto-mail:main
+    labels:
+      robotsix.deploy.primary: "true"
+    command: "serve --port 8080"
+  ingester:
+    image: ghcr.io/damien-robotsix/auto-mail-ingester:main
+    command: ["ingest", "--watch"]
+"""
+        spec = parse_compose(_bytes(y), name="auto-mail", git_url="https://x.com/r.git")
+        assert spec.command == ["serve", "--port", "8080"]
+        assert len(spec.siblings) == 1
+        assert spec.siblings[0].command == ["ingest", "--watch"]
+
+
+# ---------------------------------------------------------------------------
+# parse_compose — command and entrypoint
+# ---------------------------------------------------------------------------
+
+class TestParseComposeCommandAndEntrypoint:
+    def test_command_string_is_split(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    command: "serve --port 8080"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.command == ["serve", "--port", "8080"]
+
+    def test_command_list_is_kept(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    command: ["ingest", "--watch"]
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.command == ["ingest", "--watch"]
+
+    def test_command_absent_is_none(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.command is None
+
+    def test_entrypoint_string_is_split(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    entrypoint: "/usr/bin/env python -m app"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.entrypoint == ["/usr/bin/env", "python", "-m", "app"]
+
+    def test_entrypoint_absent_is_none(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.entrypoint is None
+
+    def test_entrypoint_list_is_kept(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    entrypoint: ["python", "-m", "app"]
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.entrypoint == ["python", "-m", "app"]

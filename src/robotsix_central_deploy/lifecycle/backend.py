@@ -497,6 +497,7 @@ class DockerSdkBackend(ExecutionBackend):
             image=image_ref,
             name=config.container_name,
             command=config.command,
+            entrypoint=config.entrypoint,
             environment=config.env,
             volumes=volumes,
             healthcheck=healthcheck,

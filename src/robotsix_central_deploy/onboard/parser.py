@@ -297,13 +297,31 @@ def _parse_one_service(
     if not container_name and prefix:
         container_name = f"{component_name}-{key}"
 
-    _raw_cmd = svc.get("command")
-    if isinstance(_raw_cmd, str):
-        command = shlex.split(_raw_cmd)
-    elif isinstance(_raw_cmd, list):
-        command = [str(x) for x in _raw_cmd]
+    raw_command = svc.get("command")
+    if raw_command is None:
+        command: list[str] | None = None
+    elif isinstance(raw_command, str):
+        command = shlex.split(raw_command)
+    elif isinstance(raw_command, list):
+        command = [str(item) for item in raw_command]
     else:
+        violations.append(
+            f"{prefix}command: must be a string or list, got {type(raw_command).__name__}"
+        )
         command = None
+
+    raw_entrypoint = svc.get("entrypoint")
+    if raw_entrypoint is None:
+        entrypoint: list[str] | None = None
+    elif isinstance(raw_entrypoint, str):
+        entrypoint = shlex.split(raw_entrypoint)
+    elif isinstance(raw_entrypoint, list):
+        entrypoint = [str(item) for item in raw_entrypoint]
+    else:
+        violations.append(
+            f"{prefix}entrypoint: must be a string or list, got {type(raw_entrypoint).__name__}"
+        )
+        entrypoint = None
 
     return {
         "image": image,
@@ -314,6 +332,7 @@ def _parse_one_service(
         "claude_mount": claude_mount,
         "container_name": container_name,
         "command": command,
+        "entrypoint": entrypoint,
         "config_volume": config_volume,
     }, violations
 
@@ -411,6 +430,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 claude_mount=sib_parsed["claude_mount"],
                 health_check=sib_parsed["health_check"],
                 command=sib_parsed["command"],
+                entrypoint=sib_parsed["entrypoint"],
             )
         )
 
@@ -463,6 +483,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         claude_mount=primary_parsed["claude_mount"],
         health_check=primary_parsed["health_check"],
         command=primary_parsed["command"],
+        entrypoint=primary_parsed["entrypoint"],
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
         config_volume=primary_parsed["config_volume"],
