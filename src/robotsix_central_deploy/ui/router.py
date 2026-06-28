@@ -12,7 +12,7 @@ from ..lifecycle.auth import verify_auth
 router = APIRouter()
 
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
-_DOCS_ROOT = Path(__file__).parent.parent.parent.parent
+_CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
 
 
 @router.get("/ui", response_class=HTMLResponse, include_in_schema=False)
@@ -22,7 +22,6 @@ async def dashboard(_auth: None = Depends(verify_auth)) -> str:
 
 @router.get("/help/deploy-contract", include_in_schema=False)
 def get_deploy_contract() -> Response:
-    contract = (_DOCS_ROOT / "docs" / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
     html = (
         "<!DOCTYPE html><html><head><meta charset=utf-8>"
         "<title>Deploy Contract</title>"
@@ -34,7 +33,7 @@ def get_deploy_contract() -> Response:
         ".nav{margin-bottom:16px}"
         "</style></head><body>"
         '<div class="nav"><a href="/ui">← Dashboard</a></div>'
-        f"<pre>{_escape_html(contract)}</pre>"
+        f"<pre>{_escape_html(_CONTRACT)}</pre>"
         "</body></html>"
     )
     return Response(content=html, media_type="text/html; charset=utf-8")
