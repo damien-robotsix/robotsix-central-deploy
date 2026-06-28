@@ -410,6 +410,26 @@
           </select>
         </td>
       </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Gateway Base Domain</td>
+        <td style="padding:6px 12px;">
+          <input id="s-gateway-domain" type="text"
+                 placeholder="e.g. deploy.example.com"
+                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
+                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">used for service shortcut links</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Claude Host Mount Path</td>
+        <td style="padding:6px 12px;">
+          <input id="s-claude-mount" type="text"
+                 placeholder="default: ~/.claude"
+                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
+                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">requires restart to take effect</span>
+        </td>
+      </tr>
     </table>
     <div style="display:flex;gap:8px;">
       <button type="submit" class="btn-primary">Save Settings</button>
@@ -421,6 +441,7 @@
 
 <script>
 let logAbortController = null;
+let gatewayBaseDomain = '';
 const REFRESH_INTERVAL_MS = 30000;
 let refreshTimer = null;
 
@@ -480,8 +501,11 @@ function renderRow(svc) {
     : '';
 
   // Gateway shortcut
+  const gatewayHref = gatewayBaseDomain
+    ? `https://${gatewayBaseDomain}/${escAttr(svc.name)}/`
+    : `/${escAttr(svc.name)}/`;
   const openLink = svc.state === 'running'
-    ? `<a href="/${escAttr(svc.name)}/" target="_blank" rel="noopener"
+    ? `<a href="${gatewayHref}" target="_blank" rel="noopener"
            style="font-size:0.8rem;color:var(--blue);">↗ Open</a>`
     : '<span style="color:#666;">—</span>';
 
@@ -1324,6 +1348,10 @@ async function loadSettings() {
     document.getElementById('s-disk-warn').value = s.disk_warn_bytes;
     document.getElementById('s-reg-interval').value = s.registry_check_interval;
     document.getElementById('s-log-level').value = s.log_level;
+    document.getElementById('s-gateway-domain').value = s.gateway_base_domain || '';
+    document.getElementById('s-claude-mount').value = s.claude_host_mount_path || '';
+    // Also update module-level variable used for service shortcut links
+    gatewayBaseDomain = s.gateway_base_domain || '';
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -1338,6 +1366,8 @@ async function saveSettings(event) {
     disk_warn_bytes: parseInt(document.getElementById('s-disk-warn').value),
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
     log_level: document.getElementById('s-log-level').value,
+    gateway_base_domain: document.getElementById('s-gateway-domain').value,
+    claude_host_mount_path: document.getElementById('s-claude-mount').value,
   };
   try {
     var res = await fetch('/settings', {
