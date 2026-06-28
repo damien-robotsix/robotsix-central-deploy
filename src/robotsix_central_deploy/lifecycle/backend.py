@@ -464,10 +464,11 @@ class DockerSdkBackend(ExecutionBackend):
     def _create_container(self, config: "ComponentConfig", image_ref: str):
         """Create a Docker container from a ComponentConfig spec (synchronous)."""
 
-        ports = {
-            f"{p.container}/{p.protocol}": p.host
-            for p in config.ports
-        }
+        # Host ports are intentionally NOT published: the gateway reaches
+        # managed containers over the central-deploy-proxy network by
+        # container_name:container_port (gateway/router.py). Publishing host
+        # ports caused "port is already allocated" conflicts with existing
+        # host-bound services.
         volumes = {
             m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
             for m in config.mounts
@@ -490,7 +491,6 @@ class DockerSdkBackend(ExecutionBackend):
             image=image_ref,
             name=config.container_name,
             environment=config.env,
-            ports=ports,
             volumes=volumes,
             healthcheck=healthcheck,
             detach=True,
