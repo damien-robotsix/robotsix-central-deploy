@@ -109,6 +109,12 @@ class TestUiRouter:
         assert "text/html" in resp.headers.get("content-type", "")
         assert "Robotsix Deploy" in resp.text
 
+    async def test_get_deploy_contract_returns_html_with_contract(self, client: AsyncClient):
+        resp = await client.get("/help/deploy-contract")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert "central-deploy Docker Compose Contract" in resp.text
+
     async def test_verify_auth_basic_ignores_username(self, client: AsyncClient):
         """verify_auth accepts any username as long as the password is correct."""
         resp = await client.get("/ui", headers=_basic_header(self.API_KEY, username="random-user"))

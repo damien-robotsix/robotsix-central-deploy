@@ -33,4 +33,4 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-"robotsix_central_deploy" = ["ui/*.html"]
+"robotsix_central_deploy" = ["ui/*.html", "ui/*.md"]
