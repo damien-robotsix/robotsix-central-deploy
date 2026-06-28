@@ -6,6 +6,8 @@ drives ``docker`` / ``docker-compose`` via subprocess.
 
 from __future__ import annotations
 
+import shlex
+
 import asyncio
 import logging
 from abc import ABC, abstractmethod
@@ -771,7 +773,7 @@ class DockerSdkBackend(ExecutionBackend):
         def _run() -> str:
             container = self._client.containers.create(
                 image,
-                command=["sh", "-c", command_str],
+                command=shlex.split(command_str),
                 volumes={volume_name: {"bind": volume_mount_path, "mode": "rw"}},
                 environment=env_dict,
             )
