@@ -44,6 +44,7 @@ from .models import (
     can_transition,
 )
 from ..registry.config_store import ComponentConfigStore
+from ..registry.config_yaml_store import ConfigYamlStore
 from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig, ServiceConfig
@@ -179,11 +180,13 @@ async def lifespan(app: FastAPI):
     _backend = _build_backend(_config)
     _key_manager = SecretKeyManager(Path(_config.secret_key_path))
     _env_store = EnvStore(Path(_config.env_store_path), _key_manager)
+    _config_yaml_store = ConfigYamlStore(Path(_config.config_yaml_store_path))
     app.state.config = _config
     app.state.store = _store
     app.state.backend = _backend
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
+    app.state.config_yaml_store = _config_yaml_store
 
     # -- System settings store (MUST come before RegistryChecker so that
     #    the checker sees the overlaid ghcr_token) ------------------------
@@ -323,6 +326,10 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
 
 async def _get_env_store(request: Request) -> EnvStore:
     return request.app.state.env_store
+
+
+async def _get_config_yaml_store(request: Request) -> ConfigYamlStore:
+    return request.app.state.config_yaml_store
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -1035,6 +1042,138 @@ async def delete_service_env_key(
 
 
 # ---------------------------------------------------------------------------
+# Config helpers
+# ---------------------------------------------------------------------------
+
+
+def _mask_secrets(template: dict, current: dict) -> dict:
+    """Return *current* with secret leaf values replaced by ``"***"``.
+
+    A leaf in *template* is a secret if its value is ``""`` or ``None``.
+    Corresponding non-empty string values in *current* are masked.
+    Non-secret and nested branches are preserved as-is from *current*.
+    """
+
+    def _recursive(i_template: dict, i_current: dict) -> dict:
+        result: dict = {}
+        for key, tval in i_template.items():
+            cval = i_current.get(key)
+            if isinstance(tval, dict) and isinstance(cval, dict):
+                result[key] = _recursive(tval, cval)
+            elif tval in ("", None) and isinstance(cval, str) and cval:
+                result[key] = "***"
+            else:
+                result[key] = cval if key in i_current else tval
+        return result
+
+    return _recursive(template, current)
+
+
+def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
+    """Deep-merge *submitted* over *existing*, respecting secret sentinel.
+
+    For each key in *template*:
+    - If the key is a nested dict in all three, recurse.
+    - If the template leaf is a secret (``""`` or ``None``) AND
+      ``submitted[key] == "***"``: keep ``existing[key]`` unchanged.
+    - Else: use ``submitted.get(key, template[key])``.
+    """
+
+    def _recursive(i_template: dict, i_existing: dict, i_submitted: dict) -> dict:
+        result: dict = {}
+        for key, tval in i_template.items():
+            if (
+                isinstance(tval, dict)
+                and isinstance(i_existing.get(key), dict)
+                and isinstance(i_submitted.get(key), dict)
+            ):
+                result[key] = _recursive(tval, i_existing[key], i_submitted[key])
+            elif tval in ("", None) and i_submitted.get(key) == "***":
+                result[key] = i_existing.get(key, tval)
+            else:
+                result[key] = i_submitted.get(key, tval)
+        return result
+
+    return _recursive(template, existing, submitted)
+
+
+# ---------------------------------------------------------------------------
+# Config endpoint models
+# ---------------------------------------------------------------------------
+
+
+class ConfigResponse(BaseModel):
+    config_schema: dict
+    current: dict
+
+
+class ConfigUpdate(BaseModel):
+    values: dict
+
+
+# ---------------------------------------------------------------------------
+# GET /services/{name}/config
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/services/{name}/config",
+    response_model=ConfigResponse,
+    summary="Get config.yaml schema and current values for a service",
+    responses={404: {"model": ErrorDetail, "description": "Service has no config schema"}},
+)
+async def get_service_config(
+    name: str,
+    store: ServiceStore = Depends(_get_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    _auth: None = Depends(verify_auth),
+) -> ConfigResponse:
+    await _get_or_create_record(name, store)
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for component '{name}'",
+        )
+    current_raw = await config_yaml_store.get_current(name) or template
+    current_masked = _mask_secrets(template, current_raw)
+    return ConfigResponse(config_schema=template, current=current_masked)
+
+
+# ---------------------------------------------------------------------------
+# PUT /services/{name}/config
+# ---------------------------------------------------------------------------
+
+
+@app.put(
+    "/services/{name}/config",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Merge and save config.yaml values for a service",
+    responses={404: {"model": ErrorDetail, "description": "Service has no config schema"}},
+)
+async def put_service_config(
+    name: str,
+    body: ConfigUpdate,
+    store: ServiceStore = Depends(_get_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> None:
+    await _get_or_create_record(name, store)
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for component '{name}'",
+        )
+    existing = await config_yaml_store.get_current(name) or template
+    merged = _merge_config(template, existing, body.values)
+    await config_yaml_store.update_current(name, merged)
+    config_vol = f"{name}-config"
+    await backend.write_config_to_volume(config_vol, merged)
+
+
+# ---------------------------------------------------------------------------
 # DELETE /services/{name}
 # ---------------------------------------------------------------------------
 
@@ -1054,6 +1193,7 @@ async def delete_service(
     store: ServiceStore = Depends(_get_store),
     config_store: ComponentConfigStore = Depends(_get_component_config_store),
     env_store: EnvStore = Depends(_get_env_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
@@ -1113,10 +1253,13 @@ async def delete_service(
     # 7. Delete primary env/secrets
     await env_store.delete(name)
 
-    # 8. Delete from config store
+    # 8. Delete primary config.yaml
+    await config_yaml_store.delete(name)
+
+    # 9. Delete from config store
     await config_store.delete(name)
 
-    # 9. Remove from in-memory registry
+    # 10. Remove from in-memory registry
     registry.unregister(name)
 
 
@@ -1137,8 +1280,8 @@ async def onboard_preflight(
     """
     import re
 
-    from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_compose_bytes
-    from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
+    from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
+    from robotsix_central_deploy.onboard.parser import ConfigParseError, ParseError, parse_compose, parse_config_yaml
 
     # Validate name slug
     if not re.fullmatch(r"^[a-z0-9][a-z0-9-]*$", req.name):
@@ -1163,23 +1306,30 @@ async def onboard_preflight(
             detail={"error": f"component '{req.name}' already exists"},
         )
 
-    # Fetch compose bytes (git clone is blocking → run in executor)
+    # Fetch repo files (git clone is blocking → run in executor)
     loop = asyncio.get_running_loop()
     try:
-        compose_bytes = await loop.run_in_executor(
-            None, fetch_compose_bytes, req.git_url,
+        repo_files = await loop.run_in_executor(
+            None, fetch_repo_files, req.git_url,
         )
     except FetchError as e:
         raise HTTPException(status_code=422, detail={"error": str(e)})
 
     # Parse compose
     try:
-        derived_spec = parse_compose(compose_bytes, req.name, req.git_url)
+        derived_spec = parse_compose(repo_files.compose_bytes, req.name, req.git_url)
     except ParseError as e:
         raise HTTPException(
             status_code=422,
             detail={"error": "compose validation failed", "violations": e.violations},
         )
+
+    # Parse config/config.yaml if present
+    if repo_files.config_yaml is not None:
+        try:
+            derived_spec.config_schema = parse_config_yaml(repo_files.config_yaml)
+        except ConfigParseError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return OnboardPreflightResponse(spec=derived_spec)
 
@@ -1197,6 +1347,7 @@ async def onboard_confirm(
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
 ) -> OnboardConfirmResponse:
     """Persist a reviewed DerivedSpec, deploy the container, and register the component."""
     spec = req.spec
@@ -1251,6 +1402,18 @@ async def onboard_confirm(
     # Register in-memory
     registry.register(config)
 
+    # If config schema present, save template and write config.yaml to volume
+    if spec.config_schema is not None:
+        config_vol = f"{spec.name}-config"
+        if config_vol not in config.named_volumes:
+            config.named_volumes.append(config_vol)
+        await config_yaml_store.save_template(spec.name, spec.config_schema)
+        try:
+            await backend.write_config_to_volume(config_vol, spec.config_schema)
+        except Exception:
+            await config_yaml_store.delete(spec.name)
+            raise
+
     # Create and persist ServiceRecord
     record = ServiceRecord(
         name=spec.name,
@@ -1265,6 +1428,7 @@ async def onboard_confirm(
     except Exception as exc:
         logger.exception("onboard deploy failed for '%s'", spec.name)
         # Best-effort rollback: remove config, record, and in-memory entry
+        await config_yaml_store.delete(spec.name)
         await component_config_store.delete(config.id)
         registry.unregister(config.id)
         await store.delete(spec.name)
@@ -1318,6 +1482,7 @@ async def onboard_confirm(
         for sr in sibling_records_created:
             await store.delete(sr.name)
         # Undo primary (existing rollback path)
+        await config_yaml_store.delete(spec.name)
         await component_config_store.delete(config.id)
         registry.unregister(config.id)
         await store.delete(spec.name)

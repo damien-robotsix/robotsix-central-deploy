@@ -16,6 +16,7 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
@@ -68,6 +69,7 @@ def _reset_globals(monkeypatch, tmp_path):
 
     # Config store + registry
     config_store = ComponentConfigStore(tmp_path / "config_store.json")
+    config_yaml_store = ConfigYamlStore(tmp_path / "config_yaml.json")
     registry = ComponentRegistry([])
 
     # Set both the module-level globals and app.state so all code paths work.
@@ -81,6 +83,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.key_manager = km
     server_mod.app.state.env_store = env_store
+    server_mod.app.state.config_yaml_store = config_yaml_store
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
 

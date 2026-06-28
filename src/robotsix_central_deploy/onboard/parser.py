@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import yaml
 
-from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
+from robotsix_central_deploy.onboard.models import ConfigParseError, DerivedSpec, ParseError, SiblingDerivedSpec
 from robotsix_central_deploy.registry.models import HealthCheck, PortMapping, VolumeMount
 
 # Regex for Go-style duration strings: optional h, m, s, ms components.
@@ -433,3 +433,18 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
     )
+
+
+def parse_config_yaml(config_bytes: bytes) -> dict:
+    """Parse config/config.yaml from raw bytes; return parsed mapping.
+
+    Raises:
+        ConfigParseError: if the YAML is malformed or not a top-level mapping.
+    """
+    try:
+        doc = yaml.safe_load(config_bytes)
+    except yaml.YAMLError as exc:
+        raise ConfigParseError(f"config/config.yaml parse error: {exc}") from exc
+    if not isinstance(doc, dict):
+        raise ConfigParseError("config/config.yaml must be a top-level YAML mapping")
+    return doc

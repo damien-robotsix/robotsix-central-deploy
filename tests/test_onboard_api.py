@@ -17,7 +17,9 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
+from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
 
@@ -85,6 +87,7 @@ def _reset_globals(monkeypatch):
     server_mod.app.state.registry = registry
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.component_config_store = config_store
+    server_mod.app.state.config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
 
 
 @pytest.fixture
@@ -110,8 +113,8 @@ class TestOnboardPreflight:
 
         with (
             patch(
-                "robotsix_central_deploy.onboard.fetcher.fetch_compose_bytes",
-                return_value=b"fake compose bytes",
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(compose_bytes=b"fake compose bytes", config_yaml=None),
             ),
             patch(
                 "robotsix_central_deploy.onboard.parser.parse_compose",
@@ -147,8 +150,8 @@ class TestOnboardPreflight:
     ):
         with (
             patch(
-                "robotsix_central_deploy.onboard.fetcher.fetch_compose_bytes",
-                return_value=b"bad compose",
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(compose_bytes=b"bad compose", config_yaml=None),
             ),
             patch(
                 "robotsix_central_deploy.onboard.parser.parse_compose",
@@ -450,8 +453,8 @@ class TestMultiServiceOnboardConfirm:
 
         with (
             patch(
-                "robotsix_central_deploy.onboard.fetcher.fetch_compose_bytes",
-                return_value=b"fake compose bytes",
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(compose_bytes=b"fake compose bytes", config_yaml=None),
             ),
             patch(
                 "robotsix_central_deploy.onboard.parser.parse_compose",
