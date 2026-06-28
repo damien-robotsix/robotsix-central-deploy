@@ -310,8 +310,7 @@ app = FastAPI(
 
 app.include_router(ui_router)
 
-from .settings_router import settings_router
-
+from .settings_router import settings_router  # noqa: E402
 app.include_router(settings_router)
 
 # ---------------------------------------------------------------------------

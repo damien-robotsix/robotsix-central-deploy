@@ -107,7 +107,6 @@ class SystemSettingsStore:
         if not self._path.exists():
             return config
 
-        from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 
         stored = self._load()
         return config.model_copy(

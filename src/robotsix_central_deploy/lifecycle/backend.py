@@ -12,7 +12,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..gateway.proxy import PROXY_NETWORK
 from .models import ComponentInspect, DeployOutcome, DockerDfStats, RollbackOutcome, ServiceRecord, ServiceState
