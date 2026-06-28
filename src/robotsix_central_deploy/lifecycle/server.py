@@ -1193,10 +1193,21 @@ def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
 class ConfigResponse(BaseModel):
     config_schema: dict = Field(serialization_alias="schema")
     current: dict
+    config_assist_command: str | None = None
+    config_assist_seeds: list[str] = []
 
 
 class ConfigUpdate(BaseModel):
     values: dict
+
+
+class ConfigAssistRequest(BaseModel):
+    values: dict  # current (partial) form values — same shape as ConfigUpdate.values
+
+
+class ConfigAssistResponse(BaseModel):
+    config: dict  # the auto-filled config dict read back from the volume after the command ran
+    output: str  # captured stdout+stderr from the one-shot container
 
 
 # ---------------------------------------------------------------------------
@@ -1214,6 +1225,7 @@ async def get_service_config(
     name: str,
     store: ServiceStore = Depends(_get_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ConfigResponse:
     await _get_or_create_record(name, store)
@@ -1225,7 +1237,13 @@ async def get_service_config(
         )
     current_raw = await config_yaml_store.get_current(name) or template
     current_masked = _mask_secrets(template, current_raw)
-    return ConfigResponse(config_schema=template, current=current_masked)
+    comp_cfg = component_config_store.get(name)
+    return ConfigResponse(
+        config_schema=template,
+        current=current_masked,
+        config_assist_command=comp_cfg.config_assist_command if comp_cfg else None,
+        config_assist_seeds=comp_cfg.config_assist_seeds if comp_cfg else [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1293,6 +1311,85 @@ async def put_service_config(
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only", name
         )
+
+
+# ---------------------------------------------------------------------------
+# POST /services/{name}/config/assist
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/services/{name}/config/assist",
+    response_model=ConfigAssistResponse,
+    summary="Run a repo-declared config-assist command in a one-shot container and return auto-filled config",
+    responses={
+        400: {"model": ErrorDetail, "description": "No config-assist command or config volume configured"},
+        404: {"model": ErrorDetail, "description": "Component not found"},
+        504: {"model": ErrorDetail, "description": "Assist command timed out"},
+    },
+)
+async def run_config_assist(
+    name: str,
+    body: ConfigAssistRequest,
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> ConfigAssistResponse:
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Component '{name}' not found",
+        )
+    if comp_cfg.config_assist_command is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No config-assist command configured for '{name}'",
+        )
+    if comp_cfg.config_volume is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No config volume for '{name}' — add robotsix.deploy.config-target label",
+        )
+
+    # Fetch config template + existing current
+    template = await config_yaml_store.get_template(name) or {}
+    existing = await config_yaml_store.get_current(name) or template
+    partial = _merge_config(template, existing, body.values)
+
+    # Write partial merged config into the volume
+    await backend.write_config_to_volume(comp_cfg.config_volume, partial)
+
+    # Resolve the container-side mount path for the config volume
+    volume_mount_path = next(
+        (m.container for m in comp_cfg.mounts if m.host == comp_cfg.config_volume),
+        "/config",  # safe fallback (matches busybox writer convention)
+    )
+
+    # Fetch decrypted env+secrets
+    merged_env = await env_store.get_merged_env(name, comp_cfg.env)
+
+    # Run the one-shot container (60 s timeout)
+    try:
+        output = await backend.run_config_assist(
+            image=comp_cfg.image,
+            command_str=comp_cfg.config_assist_command,
+            volume_name=comp_cfg.config_volume,
+            volume_mount_path=volume_mount_path,
+            env_dict=merged_env,
+            timeout_seconds=60,
+        )
+    except TimeoutError as exc:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(exc))
+    except RuntimeError as exc:
+        output = str(exc)
+
+    # Read back the updated config from the volume
+    filled = await backend.read_config_from_volume(comp_cfg.config_volume)
+
+    return ConfigAssistResponse(config=filled, output=output)
 
 
 # ---------------------------------------------------------------------------

@@ -4,11 +4,14 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
-- **Config-assist backend infrastructure** — added `robotsix.deploy.config-assist`
-  and `robotsix.deploy.config-assist-seeds` label constants, `DerivedSpec` and
-  `ComponentConfig` fields, `ExecutionBackend.read_config_from_volume` and
-  `run_config_assist` ABC methods with `DockerBackend` and `NoopBackend`
-  implementations, and `onboard_confirm` wiring.
+- **Config-assist API endpoint and dashboard UI** — added
+  `POST /services/{name}/config/assist` endpoint that runs a component's
+  repo-declared config-assist command in a one-shot container and returns
+  auto-filled config values without persisting to the config store. Extended
+  `GET /services/{name}/config` to return `config_assist_command` and
+  `config_assist_seeds` fields. The config modal now shows an "Auto-detect /
+  Assist" button and orange-bordered seed fields for components that declare
+  the `robotsix.deploy.config-assist` label.
 
 - **Settings page: gateway base domain and Claude mount path** — added
   `gateway_base_domain` and `claude_host_mount_path` to `SystemSettings`,
