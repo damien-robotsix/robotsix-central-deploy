@@ -4,6 +4,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Enable `env_doc_sync` periodic workflow** — added
+  `.robotsix-mill/periodic/env_doc_sync.yaml` stub so that the
+  `env_doc_sync` periodic workflow cross-references Pydantic Settings
+  env vars against `docs/configuration.md` and files draft tickets for
+  documentation gaps.
 - **Config-assist API endpoint and dashboard UI** — added
   `POST /services/{name}/config/assist` endpoint that runs a component's
   repo-declared config-assist command in a one-shot container and returns
