@@ -21,8 +21,10 @@ from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, Sibl
 from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
+from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
+from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
 # Import the server module itself so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -89,6 +91,7 @@ def _reset_globals(monkeypatch):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
+    server_mod.app.state.env_store = EnvStore(Path("/tmp/test_env_store.json"), SecretKeyManager(Path("/tmp/test_secret_key")))  # noqa: S108
 
 
 @pytest.fixture

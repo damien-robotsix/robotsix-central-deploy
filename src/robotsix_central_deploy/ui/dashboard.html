@@ -206,6 +206,7 @@
     padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; display: none;
     font-size: 0.82rem;
   }
+  .stateful-warn { color: #f59e0b; cursor: help; font-size: 1rem; }
 </style>
 </head>
 <body>
@@ -473,6 +474,11 @@ function renderRow(svc) {
     updateBadge = '<span class="badge badge-update-unknown">unknown</span>';
   }
 
+  // Stateful volumes warning
+  const statefulWarning = (svc.stateful_volumes && svc.stateful_volumes.length > 0)
+    ? ` <span class="stateful-warn" title="Stateful volumes (${escAttr(svc.stateful_volumes.join(', '))}) start empty — data does not migrate automatically.">&#9888;</span>`
+    : '';
+
   // Gateway shortcut
   const openLink = svc.state === 'running'
     ? `<a href="/${escAttr(svc.name)}/" target="_blank" rel="noopener"
@@ -480,7 +486,7 @@ function renderRow(svc) {
     : '<span style="color:#666;">—</span>';
 
   return `<tr id="row-${escAttr(svc.name)}">
-    <td>${escHtml(svc.name)}</td>
+    <td>${escHtml(svc.name)}${statefulWarning}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
     <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
     <td><span class="${healthClass}">${escHtml(healthDisplay)}</span></td>
@@ -490,7 +496,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
       <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>
-      <button onclick="openConfigModal('${escAttr(svc.name)}')">Configure</button>
+      ${svc.has_config_yaml ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-secondary">Edit Config</button>` : ''}
       <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
