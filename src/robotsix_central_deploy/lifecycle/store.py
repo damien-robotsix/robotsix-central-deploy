@@ -107,7 +107,7 @@ class FileStore(ServiceStore):
         return records
 
     async def _save(self, records: dict[str, ServiceRecord]) -> None:
-        raw: dict[str, dict] = {}
+        raw: dict[str, dict[str, object]] = {}
         for name, r in records.items():
             raw[name] = {
                 "image": r.image,

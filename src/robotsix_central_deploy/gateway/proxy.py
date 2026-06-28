@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 import httpx
 from fastapi import HTTPException, WebSocket
@@ -107,7 +107,7 @@ async def http_proxy(
     content_type: str = upstream_resp.headers.get("content-type", "")
 
     # -- Stream response body (and close client when done) ------------------
-    async def _stream_and_close():
+    async def _stream_and_close() -> AsyncIterator[bytes]:
         try:
             async for chunk in upstream_resp.aiter_bytes():
                 yield chunk

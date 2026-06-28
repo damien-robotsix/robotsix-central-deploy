@@ -81,7 +81,8 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
 
 
 async def _get_settings_store(request: Request) -> SystemSettingsStore:
-    return request.app.state.settings_store
+    store: object = request.app.state.settings_store
+    return store  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------

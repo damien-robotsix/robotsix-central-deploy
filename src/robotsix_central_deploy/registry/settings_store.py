@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, field_validator
 
@@ -60,7 +61,7 @@ class SystemSettingsStore:
         if not self._path.exists():
             return SystemSettings()
         try:
-            raw: dict = json.loads(self._path.read_text(encoding="utf-8"))
+            raw: dict[str, object] = json.loads(self._path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             logger.error(
                 "SystemSettingsStore: failed to read %s — %s; treating store as empty",
@@ -93,7 +94,7 @@ class SystemSettingsStore:
     # Overlay stored settings onto a LifecycleConfig
     # ------------------------------------------------------------------
 
-    def overlay(self, config):
+    def overlay(self, config: Any) -> Any:
         """Return a *copy* of *config* with every stored setting overlaid.
 
         All stored values take precedence over env-var defaults — an entry

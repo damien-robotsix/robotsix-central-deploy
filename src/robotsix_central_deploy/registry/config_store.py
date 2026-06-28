@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from robotsix_central_deploy.registry.models import ComponentConfig
 
@@ -31,7 +31,7 @@ class ComponentConfigStore:
         if not self._path.exists():
             return {}
         try:
-            raw: dict = json.loads(self._path.read_text(encoding="utf-8"))
+            raw: dict[str, Any] = json.loads(self._path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             logger.error(
                 "ComponentConfigStore: failed to read %s — %s; treating store as empty",

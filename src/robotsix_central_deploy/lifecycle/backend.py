@@ -12,7 +12,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from ..gateway.proxy import PROXY_NETWORK
 from .models import ComponentInspect, DeployOutcome, DockerDfStats, RollbackOutcome, ServiceRecord, ServiceState
@@ -59,7 +59,7 @@ class ExecutionBackend(ABC):
     ) -> RollbackOutcome: ...
 
     @abstractmethod
-    async def stream_logs(
+    def stream_logs(
         self,
         service: ServiceRecord,
         tail: int = 100,
@@ -73,7 +73,7 @@ class ExecutionBackend(ABC):
         ...
 
     @abstractmethod
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict[str, Any]) -> None:
         """Write *config_dict* as YAML into a Docker named volume."""
         ...
 
@@ -122,10 +122,10 @@ class NoopBackend(ExecutionBackend):
     async def status(self, service: ServiceRecord) -> ComponentInspect:
         return ComponentInspect(state=service.state)
 
-    async def deploy(self, service: ServiceRecord, config, image_ref: str) -> DeployOutcome:
+    async def deploy(self, service: ServiceRecord, config: "ComponentConfig", image_ref: str) -> DeployOutcome:
         return DeployOutcome(deployed_digest="sha256:noop", previous_digest="", state=ServiceState.RUNNING)
 
-    async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
+    async def rollback(self, service: ServiceRecord, config: "ComponentConfig") -> RollbackOutcome:
         return RollbackOutcome(deployed_digest=service.previous_image_digest or "sha256:noop", state=ServiceState.RUNNING)
 
     async def stream_logs(
@@ -140,7 +140,7 @@ class NoopBackend(ExecutionBackend):
     async def disk_df(self) -> DockerDfStats:
         return DockerDfStats()
 
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict[str, Any]) -> None:
         pass
 
     async def read_config_from_volume(self, volume_name: str) -> dict:
@@ -214,10 +214,10 @@ class DockerBackend(ExecutionBackend):
         state = await self._inspect_state(service.container_name or service.name) or ServiceState.UNKNOWN
         return ComponentInspect(state=state)
 
-    async def deploy(self, service: ServiceRecord, config, image_ref: str) -> DeployOutcome:
+    async def deploy(self, service: ServiceRecord, config: "ComponentConfig", image_ref: str) -> DeployOutcome:
         raise NotImplementedError("deploy not supported for DockerBackend — use DockerSdkBackend")
 
-    async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
+    async def rollback(self, service: ServiceRecord, config: "ComponentConfig") -> RollbackOutcome:
         raise NotImplementedError("rollback not supported for DockerBackend — use DockerSdkBackend")
 
     async def stream_logs(
@@ -233,7 +233,7 @@ class DockerBackend(ExecutionBackend):
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()
 
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict[str, Any]) -> None:
         raise NotImplementedError(
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -340,7 +340,7 @@ class DockerSdkBackend(ExecutionBackend):
         }
         return mapping.get(status, ServiceState.UNKNOWN)
 
-    async def _get_container(self, name: str):
+    async def _get_container(self, name: str) -> Any:
         """Run ``containers.get`` in the default executor and map known errors."""
         import docker
 
@@ -372,7 +372,7 @@ class DockerSdkBackend(ExecutionBackend):
 
         loop = asyncio.get_running_loop()
 
-        def _inspect():
+        def _inspect() -> ComponentInspect:
             state_str = container.attrs["State"]["Status"]
             state = self._state_from_docker(state_str)
 
@@ -509,7 +509,7 @@ class DockerSdkBackend(ExecutionBackend):
 
     # -- deploy / rollback --------------------------------------------------
 
-    def _create_container(self, config: "ComponentConfig", image_ref: str):
+    def _create_container(self, config: "ComponentConfig", image_ref: str) -> Any:
         """Create a Docker container from a ComponentConfig spec (synchronous)."""
 
         # Host ports are intentionally NOT published: the gateway reaches
@@ -546,7 +546,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             detach=True,
-            restart_policy={"Name": "unless-stopped"},
+            restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]
             network=PROXY_NETWORK,
         )
 
@@ -559,7 +559,7 @@ class DockerSdkBackend(ExecutionBackend):
             if container is None:
                 raise RuntimeError(f"Container {name} disappeared during health wait")
 
-            def _poll():
+            def _poll() -> str:
                 container.reload()
                 h = container.attrs["State"].get("Health")
                 return h["Status"] if h else "healthy"  # no healthcheck → treat as healthy
@@ -572,7 +572,7 @@ class DockerSdkBackend(ExecutionBackend):
             await asyncio.sleep(2)
         logger.warning("Health wait timed out for %s after %.0fs — proceeding", name, timeout)
 
-    def _stop_and_remove(self, container) -> None:
+    def _stop_and_remove(self, container: Any) -> None:
         """Stop and force-remove a container (synchronous, best-effort stop)."""
         try:
             container.stop(timeout=30)
@@ -602,7 +602,7 @@ class DockerSdkBackend(ExecutionBackend):
         repo_digests = image.attrs.get('RepoDigests', [])
         new_digest: str = next(
             (rd.split('@')[1] for rd in repo_digests if rd.startswith(repo_without_tag + '@')),
-            image.id,
+            image.id or "",
         )
 
         # Step 2 — snapshot current container's image digest (for rollback)
@@ -704,7 +704,7 @@ class DockerSdkBackend(ExecutionBackend):
 
         return RollbackOutcome(deployed_digest=target_digest, state=ServiceState.RUNNING)
 
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(self, volume_name: str, config_dict: dict[str, Any]) -> None:
         """Write *config_dict* as YAML into a Docker named volume via a
         temporary busybox container.
 
@@ -837,7 +837,7 @@ class DockerSdkBackend(ExecutionBackend):
                 None, lambda: container.logs(**kwargs)
             )
             while True:
-                def _next_chunk():
+                def _next_chunk() -> tuple[bytes | None, bool]:
                     try:
                         return next(log_iter), False
                     except StopIteration:
@@ -846,7 +846,7 @@ class DockerSdkBackend(ExecutionBackend):
                 chunk, exhausted = await loop.run_in_executor(None, _next_chunk)
                 if exhausted:
                     break
-                yield chunk if isinstance(chunk, bytes) else chunk.encode()
+                yield chunk if isinstance(chunk, bytes) else (chunk.encode() if chunk is not None else b"")
         except asyncio.CancelledError:
             raise
         except docker.errors.APIError as exc:

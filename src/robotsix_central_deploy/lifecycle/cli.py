@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--api-key", default=None, help="API key for mutating endpoints")
     args = parser.parse_args(argv)
 
-    cfg = LifecycleConfig()  # type: ignore[call-arg]
+    cfg = LifecycleConfig()
 
     # Override from CLI when provided.
     if args.host is not None:

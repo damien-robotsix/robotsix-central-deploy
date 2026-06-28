@@ -40,7 +40,8 @@ class EnvStore:
         raw = self._path.read_text(encoding="utf-8").strip()
         if not raw:
             return {}
-        return json.loads(raw)
+        data: dict[str, Any] = json.loads(raw)
+        return data
 
     async def _save(self, data: dict[str, Any]) -> None:
         tmp = self._path.with_suffix(".tmp")

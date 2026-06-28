@@ -11,6 +11,8 @@ import yaml
 from robotsix_central_deploy.onboard.models import ConfigParseError, DerivedSpec, ParseError, SiblingDerivedSpec
 from robotsix_central_deploy.registry.models import HealthCheck, PortMapping, VolumeMount
 
+__all__ = ["ConfigParseError", "ParseError", "parse_compose", "parse_config_yaml"]
+
 # Regex for Go-style duration strings: optional h, m, s, ms components.
 _GO_DURATION_RE = re.compile(
     r"(?:(\d+)h)?" r"(?:(\d+)m(?!s))?" r"(?:(\d+)s)?" r"(?:(\d+)ms)?"
@@ -222,12 +224,12 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
 
 
 def _parse_one_service(
-    svc: dict,
+    svc: dict[str, Any],
     key: str,
     *,
     component_name: str,
     prefix: str = "",
-) -> tuple[dict, list[str]]:
+) -> tuple[dict[str, Any], list[str]]:
     """Parse a single service dict (primary or sibling) into a result dict + violations.
 
     The result dict has keys: image, env, ports, volume_mounts, health_check,
@@ -507,7 +509,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     )
 
 
-def parse_config_yaml(config_bytes: bytes) -> dict:
+def parse_config_yaml(config_bytes: bytes) -> dict[str, Any]:
     """Parse config/config.yaml from raw bytes; return parsed mapping.
 
     Raises:
