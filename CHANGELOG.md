@@ -30,6 +30,14 @@ All notable changes to robotsix-central-deploy.
   already exist, the new `add_new` mode injects a derived account ID and
   strips `--overwrite` from the detect command so existing accounts are not
   destroyed.  Backward-compatible: first-setup behaviour is unchanged.
+- **Fix: auto-detect add-account corrupts existing account and leaks
+  placeholders** — the seed bar in the config form collects values under
+  `accounts.0.*`, but `add_new` mode rewrites placeholders to `accounts.N.*`.
+  The server now relocates seed values from the template index (0) to the
+  target slot so the volume seed write does not overwrite an existing account's
+  username, `{accounts.N.*}` placeholders resolve to the submitted email rather
+  than staying literal, and the account ID is derived from the email instead
+  of falling back to `accounts-N`.
 - **Fix: `_mask_secrets` no longer filters by secret-name heuristic** — removed
   the `_is_secret_name(key)` guard so that any leaf whose template value is
   `""` or `None` is treated as a secret and masked as `"***"`, matching the

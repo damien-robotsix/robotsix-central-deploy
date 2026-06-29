@@ -2473,6 +2473,127 @@ class TestConfigAssist:
         assert "new@example.com" in cmd
         assert "accounts.0." not in cmd  # old placeholder index absent
 
+    async def test_add_account_seed_bar_relocates_to_new_index(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Real frontend flow: seed bar writes to accounts.0.*, but
+        add_new mode relocates values to accounts[N] so the existing
+        account is not corrupted and {accounts.N.*} resolves."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "auth": {"username": "", "password": ""},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+        await store.update_current(
+            "auto-mail",
+            {
+                "accounts": [
+                    {
+                        "id": "ovh",
+                        "auth": {"username": "ovh-user@ovh.com"},
+                        "imap": {"host": "imap.ovh.com"},
+                    }
+                ]
+            },
+        )
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "ovh",
+                        "auth": {"username": "ovh-user@ovh.com"},
+                        "imap": {"host": "imap.ovh.com"},
+                    },
+                    {
+                        "id": "damien-robotsix-gmail-com",
+                        "auth": {"username": "damien.robotsix@gmail.com"},
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        # Simulate the real frontend: only accounts[0] is submitted (the
+        # seed bar writes the new email to accounts.0.auth.username).
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "id": "ovh",
+                            "auth": {"username": "damien.robotsix@gmail.com"},
+                        },
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 2
+        # Existing account untouched.
+        assert accounts[0]["id"] == "ovh"
+        assert accounts[0]["auth"]["username"] == "ovh-user@ovh.com"
+        # New account has ID derived from email (not "accounts-1" fallback).
+        assert accounts[1]["id"] == "damien-robotsix-gmail-com"
+        assert accounts[1]["auth"]["username"] == "damien.robotsix@gmail.com"
+
+        assert len(received_command) == 1
+        cmd = received_command[0]
+        assert "--overwrite" not in cmd
+        # Placeholders resolved to the new email, not left as literal
+        # {accounts.1.auth.username}.
+        assert "damien.robotsix@gmail.com" in cmd
+        assert "{accounts.1." not in cmd
+
     async def test_update_nth_account_uses_overwrite(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
