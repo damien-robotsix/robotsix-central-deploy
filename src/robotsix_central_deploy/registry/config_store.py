@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
+from pydantic import ValidationError
+
 from robotsix_central_deploy.registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,17 @@ class ComponentConfigStore:
                 exc,
             )
             return {}
-        return {k: ComponentConfig.model_validate(v) for k, v in raw.items()}
+        configs: dict[str, ComponentConfig] = {}
+        for k, v in raw.items():
+            try:
+                configs[k] = ComponentConfig.model_validate(v)
+            except ValidationError as exc:
+                logger.warning(
+                    "ComponentConfigStore: skipping entry %r — validation error: %s",
+                    k,
+                    exc,
+                )
+        return configs
 
     def _save(self, configs: dict[str, ComponentConfig]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)

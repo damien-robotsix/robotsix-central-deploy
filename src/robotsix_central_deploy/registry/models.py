@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PortMapping(BaseModel):
@@ -45,6 +45,13 @@ class ServiceConfig(BaseModel):
 class ConfigAssistSeed(BaseModel):
     key: str  # dotted config path, e.g. "accounts.0.auth.username"
     label: str | None = None  # optional human-readable label; None → derive from key
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_string(cls, v: object) -> object:
+        if isinstance(v, str):
+            return {"key": v, "label": None}
+        return v
 
 
 class ComponentConfig(BaseModel):
