@@ -555,7 +555,7 @@ function renderRow(svc) {
 
   // Gateway shortcut
   const gatewayHref = gatewayBaseDomain
-    ? `https://${gatewayBaseDomain}/${escAttr(svc.name)}/`
+    ? `https://${escAttr(svc.name)}.${gatewayBaseDomain}/`
     : `/${escAttr(svc.name)}/`;
   const openLink = svc.state === 'running'
     ? `<a href="${gatewayHref}" target="_blank" rel="noopener"
@@ -609,7 +609,7 @@ function renderSiblingRow(svc) {
   }
 
   const gatewayHref = gatewayBaseDomain
-    ? `https://${gatewayBaseDomain}/${escAttr(svc.name)}/`
+    ? `https://${escAttr(svc.name)}.${gatewayBaseDomain}/`
     : `/${escAttr(svc.name)}/`;
   const openLink = svc.state === 'running'
     ? `<a href="${gatewayHref}" target="_blank" rel="noopener"
