@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 
 from robotsix_central_deploy.onboard.models import ConfigParseError
 from robotsix_central_deploy.onboard.parser import parse_config_yaml
@@ -329,7 +329,10 @@ class TestMergeConfig:
         existing = {
             "accounts": [
                 {"id": "ovh", "imap": {"host": "ssl0.ovh.net", "password": "secret1"}},
-                {"id": "gmail", "imap": {"host": "imap.gmail.com", "password": "secret2"}},
+                {
+                    "id": "gmail",
+                    "imap": {"host": "imap.gmail.com", "password": "secret2"},
+                },
             ]
         }
         # Simulate collectConfigValues output: password inputs masked as "***"
@@ -342,22 +345,35 @@ class TestMergeConfig:
         result = _merge_config(template, existing, submitted)
         assert len(result["accounts"]) == 2
         assert result["accounts"][0]["id"] == "ovh"
-        assert result["accounts"][0]["imap"]["password"] == "secret1"  # sentinel resolved
+        assert (
+            result["accounts"][0]["imap"]["password"] == "secret1"
+        )  # sentinel resolved
         assert result["accounts"][1]["id"] == "gmail"
-        assert result["accounts"][1]["imap"]["password"] == "secret2"  # sentinel resolved
+        assert (
+            result["accounts"][1]["imap"]["password"] == "secret2"
+        )  # sentinel resolved
 
     def test_merge_editing_account0_does_not_touch_account1(self):
         template = {"accounts": [{"id": "", "imap": {"host": "", "password": ""}}]}
         existing = {
             "accounts": [
                 {"id": "ovh", "imap": {"host": "ssl0.ovh.net", "password": "secret1"}},
-                {"id": "gmail", "imap": {"host": "imap.gmail.com", "password": "secret2"}},
+                {
+                    "id": "gmail",
+                    "imap": {"host": "imap.gmail.com", "password": "secret2"},
+                },
             ]
         }
         submitted = {
             "accounts": [
-                {"id": "ovh", "imap": {"host": "new.host.net", "password": "***"}},  # edited
-                {"id": "gmail", "imap": {"host": "imap.gmail.com", "password": "***"}},  # unchanged
+                {
+                    "id": "ovh",
+                    "imap": {"host": "new.host.net", "password": "***"},
+                },  # edited
+                {
+                    "id": "gmail",
+                    "imap": {"host": "imap.gmail.com", "password": "***"},
+                },  # unchanged
             ]
         }
         result = _merge_config(template, existing, submitted)
@@ -528,8 +544,12 @@ class TestValidateAccountIds:
         assert "@" in exc_info.value.detail
 
     def test_validate_account_ids_accepts_slug(self):
-        merged = {"accounts": [{"id": "ovh", "imap": {"host": "x"}},
-                                 {"id": "gmail-work", "imap": {"host": "y"}}]}
+        merged = {
+            "accounts": [
+                {"id": "ovh", "imap": {"host": "x"}},
+                {"id": "gmail-work", "imap": {"host": "y"}},
+            ]
+        }
         # Must not raise
         _validate_account_ids(merged)
 
@@ -552,7 +572,10 @@ class TestMergeConfigBug3:
         """***  must not survive to the stored config when existing doesn't have the key."""
         template = {"archive": {"namespace": ""}, "calendar": {"broker_password": ""}}
         existing: dict = {}
-        submitted = {"archive": {"namespace": ""}, "calendar": {"broker_password": "***"}}
+        submitted = {
+            "archive": {"namespace": ""},
+            "calendar": {"broker_password": "***"},
+        }
         result = _merge_config(template, existing, submitted)
         assert result.get("calendar", {}).get("broker_password") != "***"
         assert result.get("archive", {}).get("namespace") != "***"
@@ -561,11 +584,13 @@ class TestMergeConfigBug3:
         """When existing lacks a dict key, submitted dict is merged recursively not passed through."""
         template = {"smtp": {"host": "", "port": 587, "password": ""}}
         existing: dict = {}
-        submitted = {"smtp": {"host": "smtp.gmail.com", "port": "587", "password": "***"}}
+        submitted = {
+            "smtp": {"host": "smtp.gmail.com", "port": "587", "password": "***"}
+        }
         result = _merge_config(template, existing, submitted)
         assert result["smtp"]["host"] == "smtp.gmail.com"
-        assert result["smtp"]["port"] == 587          # coerced from string
-        assert result["smtp"]["password"] == ""        # *** with no existing → ""
+        assert result["smtp"]["port"] == 587  # coerced from string
+        assert result["smtp"]["password"] == ""  # *** with no existing → ""
         assert result["smtp"]["password"] != "***"
 
 
@@ -585,7 +610,7 @@ class TestPruneUnset:
         merged = {"host": "imap.example.com", "port": 993}
         existing = {"host": "old.host"}
         result = _prune_unset(merged, existing)
-        assert result["port"] == 993   # non-empty default, not pruned
+        assert result["port"] == 993  # non-empty default, not pruned
 
     def test_prune_preserves_empty_clear_when_field_was_in_existing(self):
         """User explicitly clearing a field that was previously set must not be pruned."""
@@ -618,8 +643,11 @@ class TestConfigRoundTrip:
         }
         existing = {
             "accounts": [
-                {"id": "ovh",   "imap": {"host": "ssl0.ovh.net",    "password": "secret1"}},
-                {"id": "gmail", "imap": {"host": "imap.gmail.com", "password": "secret2"}},
+                {"id": "ovh", "imap": {"host": "ssl0.ovh.net", "password": "secret1"}},
+                {
+                    "id": "gmail",
+                    "imap": {"host": "imap.gmail.com", "password": "secret2"},
+                },
             ]
             # archive and calendar deliberately absent from existing
         }
@@ -645,6 +673,7 @@ class TestConfigRoundTrip:
         assert result["accounts"][1]["imap"]["password"] == "secret2"
         # No *** literals anywhere:
         import json
+
         serialised = json.dumps(result)
         assert "***" not in serialised
         # Resurrected template-only fields are absent or empty (not ***)
