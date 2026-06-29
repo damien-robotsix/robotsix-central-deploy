@@ -151,6 +151,7 @@ async def gateway_ws(websocket: WebSocket, path: str) -> None:
         name = parts[0]
         path = parts[1] if len(parts) > 1 else ""
 
+    assert name is not None  # narrowed above via is_subdomain / path split
     config, err_status = _resolve(websocket.app, name)
     if err_status is not None:
         ws_code: int = 4004 if err_status == 404 else 4011
