@@ -38,6 +38,8 @@
   .badge-update-ok             { background: rgba(74,222,128,0.18);  color: var(--green); }
   .badge-update-avail          { background: rgba(251,146,60,0.18);  color: var(--amber); }
   .badge-update-unknown        { background: rgba(148,163,184,0.18); color: var(--grey);  }
+  .badge-ok                    { color: #4caf50; font-weight: bold; }
+  .badge-warn                  { color: #ff9800; font-weight: bold; }
   .health-healthy { color: var(--green); font-weight: 600; }
   .health-unhealthy { color: var(--red); font-weight: 600; }
   .health-unknown { color: var(--grey); }
@@ -118,6 +120,9 @@
   .disk-panel table { border-collapse:collapse; min-width:400px; }
   .disk-panel td, .disk-panel th { padding:4px 12px; text-align:right; }
   .disk-panel th { text-align:left; font-weight:normal; color:#94a3b8; }
+  .disk-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .disk-title { font-size: 1.1rem; color: var(--blue); }
+  .disk-meta  { font-size: 0.8rem; color: var(--grey); }
   .disk-bar-wrap { width:200px; height:12px; background:#334155; border-radius:6px; display:inline-block; vertical-align:middle; }
   .disk-bar-fill { height:100%; border-radius:6px; background:#4ade80; }
   .disk-bar-fill.warn { background:#f87171; }
@@ -307,6 +312,18 @@
 <section class="disk-panel">
   <h2>Disk Usage</h2>
   <div id="disk-content">Loading…</div>
+</section>
+
+<section class="disk-panel" id="volume-audit-panel" style="display:none">
+  <div class="disk-header">
+    <span class="disk-title">Volume Audit</span>
+    <span id="volume-audit-timestamp" class="disk-meta"></span>
+  </div>
+  <div id="volume-audit-content"></div>
+  <div id="volume-audit-findings" style="display:none">
+    <strong>Recent findings:</strong>
+    <ul id="volume-audit-findings-list"></ul>
+  </div>
 </section>
 
 <table>
@@ -740,9 +757,87 @@ function renderDiskPanel(data) {
         </table>${volTable}`;
 }
 
+function fmt_mb(bytes) { return (bytes / 1048576).toFixed(1) + ' MiB'; }
+
+async function fetchVolumeAudit() {
+  try {
+    const resp = await fetch('/volumes/audit', {
+      headers: authHeaders(),
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const panel = document.getElementById('volume-audit-panel');
+    if (!data.enabled) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = '';
+    renderVolumeAuditPanel(data);
+  } catch (_e) {
+    // silently skip — audit panel is optional
+  }
+}
+
+function renderVolumeAuditPanel(data) {
+  // Timestamp
+  const ts = document.getElementById('volume-audit-timestamp');
+  ts.textContent = data.last_scan_at
+    ? 'Last scan: ' + new Date(data.last_scan_at).toLocaleString()
+    : 'No scan yet';
+
+  // Volume table
+  const content = document.getElementById('volume-audit-content');
+  if (!data.volumes || data.volumes.length === 0) {
+    content.textContent = 'No volume data yet.';
+  } else {
+    const rows = data.volumes.map(v => {
+      const size = fmt_mb(v.size_bytes);
+      const delta = v.delta_bytes !== null
+        ? (v.delta_bytes >= 0 ? '+' : '') + fmt_mb(v.delta_bytes)
+        : '\u2014';
+      const pct = v.growth_pct !== null ? v.growth_pct.toFixed(1) + '%' : '\u2014';
+      const status = v.flagged
+        ? '<span class="badge badge-warn">\u26A0 FLAGGED</span>'
+        : '<span class="badge badge-ok">OK</span>';
+      return `<tr>
+        <td>${escHtml(v.volume_name)}</td>
+        <td>${escHtml(v.component_id || '\u2014')}</td>
+        <td>${size}</td>
+        <td>${delta}</td>
+        <td>${pct}</td>
+        <td>${status}</td>
+      </tr>`;
+    }).join('');
+    content.innerHTML = `
+      <table class="disk-table">
+        <thead><tr>
+          <th>Volume</th><th>Component</th><th>Size</th>
+          <th>Delta</th><th>Growth %</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  // Recent findings section
+  const findingsDiv = document.getElementById('volume-audit-findings');
+  const findingsList = document.getElementById('volume-audit-findings-list');
+  const findings = (data.recent_findings || []).slice(-5);
+  if (findings.length > 0) {
+    findingsDiv.style.display = '';
+    findingsList.innerHTML = findings.map(f =>
+      `<li>${escHtml(f.finding_at ? new Date(f.finding_at).toLocaleString() : '')} \u2014 
+           ${escHtml(f.detail || f.volume_name)}</li>`
+    ).join('');
+  } else {
+    findingsDiv.style.display = 'none';
+  }
+}
+
 async function loadDashboard() {
   hideError();
   fetchDiskUsage(); // fire-and-forget disk refresh alongside services
+  fetchVolumeAudit(); // fire-and-forget volume audit refresh
   try {
     const resp = await fetch('/services', { credentials: 'same-origin' });
     if (!resp.ok) {
@@ -1830,7 +1925,7 @@ async function doLogout() {
 
 function showSettingsSection() {
   document.querySelector('header').style.display = 'none';
-  document.querySelector('.disk-panel').style.display = 'none';
+  document.querySelectorAll('.disk-panel').forEach(el => el.style.display = 'none');
   document.querySelector('table').style.display = 'none';
   document.getElementById('settings-section').style.display = '';
   loadSettings();
@@ -1839,7 +1934,7 @@ function showSettingsSection() {
 function hideSettingsSection() {
   document.getElementById('settings-section').style.display = 'none';
   document.querySelector('header').style.display = '';
-  document.querySelector('.disk-panel').style.display = '';
+  document.querySelectorAll('.disk-panel').forEach(el => el.style.display = '');
   document.querySelector('table').style.display = '';
 }
 
