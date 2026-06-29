@@ -4,6 +4,17 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Config assist: persist detected config and normalise default_account** —
+  `POST /services/{name}/config/assist` now persists the detected config to
+  the `config_yaml_store` so that `GET /services/{name}/config` shows the
+  detected values and clicking Save is idempotent (no longer clobbers working
+  settings).  `_seed_for_detect` no longer writes template-default empty
+  strings into the config volume, fixing blank config-assist forms.  When
+  `merged["accounts"][0]["id"]` is set and `default_account` is absent/empty,
+  `default_account` is normalised to that id.
+- **Gateway: forward `x-forwarded-prefix`** — HTTP and WebSocket gateway
+  proxies now set `x-forwarded-prefix: /{name}` so that upstream apps served
+  under a subpath can construct correct absolute URLs.
 - **Add MkDocs documentation infrastructure** — added `mkdocs.yml` with
   mkdocs-material theme and mkdocstrings[python] plugin for auto-generated
   API reference. New `docs/` dependency group in `pyproject.toml`

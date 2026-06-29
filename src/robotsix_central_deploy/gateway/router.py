@@ -113,6 +113,7 @@ async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
 
     # Forward non-hop-by-hop handshake headers
     fwd_headers = filter_hop_by_hop(dict(websocket.headers))
+    fwd_headers["x-forwarded-prefix"] = f"/{name}"
 
     await websocket.accept()
     await ws_proxy(websocket, target, additional_headers=fwd_headers)
@@ -138,4 +139,4 @@ async def gateway_http(
         raise HTTPException(status_code=err_status)
     assert config is not None
     target_base = f"http://{config.container_name}:{config.ports[0].container}"
-    return await http_proxy(request, target_base, path)
+    return await http_proxy(request, target_base, path, prefix=f"/{name}")

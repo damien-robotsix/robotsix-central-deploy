@@ -1682,9 +1682,11 @@ class TestConfigAssist:
         assert "output" in data
         assert "detect:" in data["output"]
 
-        # Verify we did NOT persist to config_yaml_store
+        # Verify we persisted the detected config to config_yaml_store
         current = await store.get_current("auto-mail")
-        assert current is None or current == template
+        assert current is not None
+        assert current["imap"]["host"] == "imap.gmail.com"
+        assert current["smtp"]["host"] == "smtp.gmail.com"
 
     async def test_404_when_component_not_found(
         self, client: AsyncClient, auth_headers: dict
@@ -2063,3 +2065,155 @@ class TestConfigAssist:
         assert len(seed["accounts"]) == 1
         assert "imap" not in seed["accounts"][0]
         assert "smtp" not in seed["accounts"][0]
+
+    async def test_config_assist_persists_to_store(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """After a successful auto-detect, config_yaml_store.get_current()
+        returns the detected config — GET /services/{name}/config works."""
+        await _seed_store("mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        await store.save_template("mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="mail",
+            image="mail:latest",
+            container_name="mail",
+            has_config_yaml=True,
+            config_volume="mail-config",
+            config_assist_command="detect",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+                ConfigAssistSeed(key="accounts.0.auth.password"),
+            ],
+            mounts=[VolumeMount(host="mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        detected = {
+            "accounts": [
+                {
+                    "imap": {"host": "ssl0.ovh.net"},
+                    "smtp": {"host": "ssl0.ovh.net"},
+                    "auth": {"username": "u@x.com", "password": "x"},
+                }
+            ],
+            "default_account": "main",
+        }
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return detected
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [{"auth": {"username": "u@x.com", "password": "x"}}]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        # Store was updated — GET /config returns the detected data
+        current = await store.get_current("mail")
+        assert current is not None
+        assert current["accounts"][0]["imap"]["host"] == "ssl0.ovh.net"
+        assert current["accounts"][0]["smtp"]["host"] == "ssl0.ovh.net"
+
+    async def test_config_assist_normalizes_default_account(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When detected config has accounts[0].id but no default_account,
+        default_account is set to that id."""
+        await _seed_store("mail2")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        await store.save_template("mail2", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="mail2",
+            image="mail:latest",
+            container_name="mail2",
+            has_config_yaml=True,
+            config_volume="mail2-config",
+            config_assist_command="detect",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="mail2-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        detected = {
+            "accounts": [
+                {
+                    "id": "acct-1",
+                    "imap": {"host": "imap.example.com"},
+                    "smtp": {"host": "smtp.example.com"},
+                }
+            ]
+            # No default_account — should be normalized
+        }
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return detected
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/mail2/config/assist",
+            json={"values": {"accounts": [{"id": "acct-1"}]}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config"]["default_account"] == "acct-1"
+
+        # Also persisted
+        current = await store.get_current("mail2")
+        assert current is not None
+        assert current["default_account"] == "acct-1"
