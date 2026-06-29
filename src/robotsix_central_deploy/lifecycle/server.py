@@ -351,7 +351,9 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
     return request.app.state.component_config_store  # type: ignore[no-any-return]
 
 
-def _fetch_fresh_config_assist(git_url: str, name: str) -> tuple[str | None, list[str]]:
+def _fetch_fresh_config_assist(
+    git_url: str, name: str
+) -> tuple[str | None, list[ConfigAssistSeed]]:
     """Re-fetch config-assist fields from the repo's compose at HEAD.
 
     Blocking (runs git clone). Call via run_in_executor.
