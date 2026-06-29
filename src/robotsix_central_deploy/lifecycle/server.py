@@ -1214,7 +1214,6 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                 tval in ("", None)
                 and isinstance(cval, str)
                 and cval
-                and _is_secret_name(key)
             ):
                 result[key] = "***"
             else:
