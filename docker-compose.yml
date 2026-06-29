@@ -47,6 +47,7 @@ services:
 
       ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH: "/data/component_configs.json"
       ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH: "/data/component_config_yaml.json"
+      ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH: "/data/system_settings.json"  # persist dashboard settings (gateway_base_domain etc.) on the /data volume — default is ephemeral relative path
       ROBOTSIX_LIFECYCLE_DISK_PATH: "/host_root"
     volumes:
       - central_deploy_data:/data
