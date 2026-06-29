@@ -276,6 +276,33 @@ class TestHttpProxy:
         assert "boom" in exc_info.value.detail
         client.aclose.assert_awaited_once()
 
+    async def test_x_forwarded_prefix_injected_when_prefix_set(self):
+        """When *prefix* is passed, x-forwarded-prefix is included in
+        the upstream request headers."""
+        upstream = _make_upstream()
+        client = _make_client(upstream)
+        request = _make_request()
+
+        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
+            await http_proxy(
+                request, "http://backend:9000", "api/items", prefix="/mail"
+            )
+
+        fwd = client.build_request.call_args.kwargs["headers"]
+        assert fwd["x-forwarded-prefix"] == "/mail"
+
+    async def test_x_forwarded_prefix_absent_when_prefix_empty(self):
+        """When *prefix* is empty (default), x-forwarded-prefix is NOT set."""
+        upstream = _make_upstream()
+        client = _make_client(upstream)
+        request = _make_request()
+
+        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
+            await http_proxy(request, "http://backend:9000", "x")
+
+        fwd = client.build_request.call_args.kwargs["headers"]
+        assert "x-forwarded-prefix" not in fwd
+
 
 # ---------------------------------------------------------------------------
 # ws_proxy — fakes for the optional ``websockets`` dependency
@@ -482,7 +509,7 @@ class TestGatewayHttpRoutes:
     async def test_http_path_dispatches_to_http_proxy(self):
         app = _build_app(_make_config("svc", container_name="svc-ctr"))
 
-        async def _fake_proxy(req, target_base, path):
+        async def _fake_proxy(req, target_base, path, *, prefix=""):
             return StreamingResponse(iter([b"proxied"]), status_code=299)
 
         with patch.object(router_mod, "http_proxy", side_effect=_fake_proxy) as mock:
@@ -492,10 +519,12 @@ class TestGatewayHttpRoutes:
 
         assert resp.status_code == 299
         assert resp.content == b"proxied"
-        # http_proxy got the container-derived base URL and the sub-path.
+        # http_proxy got the container-derived base URL, the sub-path, and the
+        # gateway prefix for x-forwarded-prefix.
         _, target_base, path = mock.call_args.args
         assert target_base == "http://svc-ctr:9000"
         assert path == "api/thing"
+        assert mock.call_args.kwargs["prefix"] == "/svc"
 
     async def test_unknown_component_returns_404(self):
         app = _build_app(_make_config("svc"))
@@ -530,7 +559,9 @@ class TestGatewayHttpUnit:
             result = await gateway_http(request, "svc", "deep/path", _auth=None)
 
         assert result is sentinel
-        mock.assert_awaited_once_with(request, "http://svc-ctr:9000", "deep/path")
+        mock.assert_awaited_once_with(
+            request, "http://svc-ctr:9000", "deep/path", prefix="/svc"
+        )
 
     async def test_error_status_raises_http_exception(self):
         request = MagicMock()

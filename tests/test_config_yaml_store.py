@@ -391,3 +391,47 @@ class TestSeedForDetect:
         assert result == {"port": 443}
         assert "host" not in result
         assert "tls" not in result
+
+    def test_skips_empty_string_values_in_submitted(self):
+        """Empty strings that appear in submitted (e.g. from form defaults)
+        are skipped — the detect program fills them in."""
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        submitted = {
+            "accounts": [
+                {
+                    "auth": {"username": "alice"},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        existing: dict = {}
+        result = _seed_for_detect(template, existing, submitted)
+        assert result == {"accounts": [{"auth": {"username": "alice"}}]}
+        # imap.host was empty string → skipped entirely
+        assert "imap" not in result["accounts"][0]
+
+    def test_dict_result_omitted_when_recursion_empty(self):
+        """A nested dict whose every field is skipped produces no entry."""
+        template = {"server": {"host": "", "port": 0}}
+        submitted = {"server": {"host": ""}}
+        existing: dict = {}
+        result = _seed_for_detect(template, existing, submitted)
+        # host was empty → skipped; no other keys submitted → server omitted
+        assert result == {}
+
+    def test_list_omitted_when_all_items_empty(self):
+        """A list of dicts where every item resolves to empty is omitted."""
+        template = {"accounts": [{"imap": {"host": ""}, "auth": {"username": ""}}]}
+        submitted = {"accounts": [{"imap": {"host": ""}}]}
+        existing: dict = {}
+        result = _seed_for_detect(template, existing, submitted)
+        # The single item resolves to empty → list omitted
+        assert "accounts" not in result

@@ -1297,38 +1297,56 @@ def _seed_for_detect(
 
     Only keys present in *submitted* are emitted (recursively).
     ``"***"`` sentinel values are resolved from *existing* for secret fields.
-    Template-default empty strings for unsubmitted fields are NOT included,
-    so the detect program sees absent fields and fills them in correctly.
+    Template-default empty strings are skipped even when present in
+    *submitted*, so the detect program sees absent fields and fills them
+    in correctly.  Dict/list results that are entirely empty are also
+    omitted.
     """
     result: dict[str, Any] = {}
     for key, val in submitted.items():
         tval = template.get(key) if isinstance(template, dict) else None
         ex_val = existing.get(key) if isinstance(existing, dict) else None
-        if isinstance(val, dict) and isinstance(tval, dict):
-            result[key] = _seed_for_detect(
-                tval, ex_val if isinstance(ex_val, dict) else {}, val
-            )
-        elif (
-            isinstance(val, list)
-            and isinstance(tval, list)
-            and tval
-            and isinstance(tval[0], dict)
-        ):
-            item_template = tval[0]
-            ex_list = ex_val if isinstance(ex_val, list) else []
-            result[key] = [
-                _seed_for_detect(
-                    item_template,
-                    ex_list[i]
-                    if i < len(ex_list) and isinstance(ex_list[i], dict)
-                    else {},
-                    item if isinstance(item, dict) else {},
-                )
-                for i, item in enumerate(val)
-            ]
-        elif tval in ("", None) and val == "***":
+
+        if isinstance(val, str) and val == "":
+            # Template default — skip, let detect fill it in.
+            continue
+        if isinstance(val, str) and val == "***":
+            # Secret restoration: use existing value, or empty string if none.
             result[key] = ex_val if ex_val is not None else ""
+        elif isinstance(val, str):
+            result[key] = val
+        elif isinstance(val, dict):
+            sub = _seed_for_detect(
+                tval if isinstance(tval, dict) else {},
+                ex_val if isinstance(ex_val, dict) else {},
+                val,
+            )
+            if sub:
+                result[key] = sub
+        elif isinstance(val, list):
+            if isinstance(tval, list) and tval and isinstance(tval[0], dict):
+                item_template = tval[0]
+                ex_list = ex_val if isinstance(ex_val, list) else []
+                items: list[dict[str, Any]] = []
+                for i, item in enumerate(val):
+                    if isinstance(item, dict):
+                        sub = _seed_for_detect(
+                            item_template,
+                            ex_list[i]
+                            if i < len(ex_list) and isinstance(ex_list[i], dict)
+                            else {},
+                            item,
+                        )
+                        if sub:
+                            items.append(sub)
+                    else:
+                        items.append(item)
+                if items:
+                    result[key] = items
+            else:
+                result[key] = val
         else:
+            # Any other type (bool, int, float): include as-is.
             result[key] = val
     return result
 
@@ -1616,6 +1634,16 @@ async def run_config_assist(
     # Merge detected fields into the submitted config so the detected
     # output never clobbers other fields the user already entered.
     merged = _deep_merge(partial, filled)
+
+    # Normalize default_account to first account's id if absent/empty
+    accounts = merged.get("accounts")
+    if isinstance(accounts, list) and accounts:
+        first_id = accounts[0].get("id") if isinstance(accounts[0], dict) else None
+        if first_id and not merged.get("default_account"):
+            merged["default_account"] = first_id
+
+    # Persist detected config so GET /config shows it and Save is idempotent
+    await config_yaml_store.update_current(name, merged)
 
     return ConfigAssistResponse(config=merged, output=output)
 

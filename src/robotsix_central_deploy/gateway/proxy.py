@@ -63,6 +63,8 @@ async def http_proxy(
     request: Request,
     target_base_url: str,
     path: str,
+    *,
+    prefix: str = "",
 ) -> Response:
     """Forward an HTTP request to *target_base_url/path* and stream the response.
 
@@ -81,6 +83,8 @@ async def http_proxy(
     headers["x-forwarded-for"] = request.client.host if request.client else "unknown"
     headers["x-forwarded-proto"] = request.url.scheme
     headers["x-forwarded-host"] = request.headers.get("host", "")
+    if prefix:
+        headers["x-forwarded-prefix"] = prefix
 
     # -- Send to upstream ---------------------------------------------------
     client = httpx.AsyncClient(timeout=300.0)
