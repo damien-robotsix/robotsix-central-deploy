@@ -68,6 +68,10 @@ async def login_submit(request: Request) -> Response:
     store: SessionStore = request.app.state.session_store
     token = store.create()
     response = RedirectResponse(url=next_url, status_code=303)
+    # Share the session cookie across component subdomains so a login on the
+    # base domain also authorizes subdomain-routed component UIs
+    # (e.g. mail.<gateway_base_domain>/...). Host-only when no base domain set.
+    cookie_domain = f".{cfg.gateway_base_domain}" if cfg.gateway_base_domain else None
     response.set_cookie(
         key="session_token",
         value=token,
@@ -76,6 +80,7 @@ async def login_submit(request: Request) -> Response:
         path="/",
         max_age=86400,
         secure=True,
+        domain=cookie_domain,
     )
     return response
 
@@ -86,8 +91,10 @@ async def logout(request: Request) -> Response:
     if token:
         store: SessionStore = request.app.state.session_store
         store.delete(token)
+    cfg = request.app.state.config
+    cookie_domain = f".{cfg.gateway_base_domain}" if cfg.gateway_base_domain else None
     response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie(key="session_token", path="/")
+    response.delete_cookie(key="session_token", path="/", domain=cookie_domain)
     return response
 
 
