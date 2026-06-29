@@ -15,4 +15,5 @@ jobs:
       python-version: "3.14"
       cov-package: "robotsix_central_deploy"
       coverage-threshold: "80"
+      mypy-advisory: true
     secrets: inherit
