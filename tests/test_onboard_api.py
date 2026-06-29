@@ -65,8 +65,13 @@ async def _seed_store_record(name: str = "svc-a") -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_globals(monkeypatch):
-    """Wire a fresh store/backend/config/registry/config_store before each test."""
+def _reset_globals(monkeypatch, tmp_path):
+    """Wire a fresh store/backend/config/registry/config_store before each test.
+
+    All file-backed stores use the per-test ``tmp_path`` so tests stay
+    isolated under parallel (xdist) execution — a shared fixed path under
+    /tmp leaks state across workers.
+    """
     monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
@@ -76,11 +81,7 @@ def _reset_globals(monkeypatch):
     store = InMemoryStore()
     backend = NoopBackend()
     registry = ComponentRegistry([])
-    config_store = ComponentConfigStore(Path("/tmp/test_component_configs.json"))  # noqa: S108
-
-    # Remove any stale test file
-    if config_store._path.exists():
-        config_store._path.unlink()
+    config_store = ComponentConfigStore(tmp_path / "component_configs.json")
 
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = MagicMock(return_value=None)
@@ -97,11 +98,11 @@ def _reset_globals(monkeypatch):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.config_yaml_store = ConfigYamlStore(
-        Path("/tmp/test_config_yaml.json")
-    )  # noqa: S108
+        tmp_path / "config_yaml.json"
+    )
     server_mod.app.state.env_store = EnvStore(
-        Path("/tmp/test_env_store.json"), SecretKeyManager(Path("/tmp/test_secret_key"))
-    )  # noqa: S108
+        tmp_path / "env_store.json", SecretKeyManager(tmp_path / "secret_key")
+    )
 
 
 @pytest.fixture
