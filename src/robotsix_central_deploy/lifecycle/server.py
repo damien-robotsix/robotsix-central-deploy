@@ -1377,7 +1377,8 @@ def _prune_unset(merged: dict[str, Any], existing: dict[str, Any]) -> dict[str, 
             if pruned or k in existing:
                 result[k] = pruned
         elif isinstance(v, list) and v and isinstance(v[0], dict):
-            ex_list = existing.get(k) if isinstance(existing.get(k), list) else []
+            ex_val = existing.get(k)
+            ex_list: list[Any] = ex_val if isinstance(ex_val, list) else []
             result[k] = [
                 _prune_unset(
                     item,
