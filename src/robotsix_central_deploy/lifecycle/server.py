@@ -21,7 +21,7 @@ import re
 import shutil
 from collections.abc import AsyncIterator
 import shlex
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,8 @@ from ..registry.models import ComponentConfig, ConfigAssistSeed, ServiceConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
 from ..ui.router import router as ui_router
+from ..volume_audit.models import VolumeAuditResponse
+from ..volume_audit.scheduler import VolumeAuditScheduler
 from .store import FileStore, InMemoryStore, ServiceStore
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,7 @@ logger = logging.getLogger(__name__)
 #: Module-level registry checker (set by lifespan, used by endpoints).
 _registry_checker: RegistryChecker | None = None
 _http_client: httpx.AsyncClient | None = None
+_volume_audit_scheduler: VolumeAuditScheduler | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -294,8 +297,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
                 logger.info("Migrated config template sentinels for %s", _dyn_cfg.id)
 
+    # --- Volume audit subsystem ---
+    global _volume_audit_scheduler
+    _volume_audit_task: asyncio.Task | None = None
+    if _config.volume_audit_enabled:
+        _volume_audit_scheduler = VolumeAuditScheduler(
+            _config, _backend, component_config_store
+        )
+        app.state.volume_audit_scheduler = _volume_audit_scheduler
+        _volume_audit_task = asyncio.create_task(
+            _volume_audit_scheduler.loop(_config.volume_audit_interval_seconds)
+        )
+    else:
+        _volume_audit_scheduler = None
+        app.state.volume_audit_scheduler = None
+
     yield
 
+    if _volume_audit_task and not _volume_audit_task.done():
+        _volume_audit_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _volume_audit_task
     if bg_task:
         bg_task.cancel()
         await asyncio.gather(bg_task, return_exceptions=True)
@@ -449,6 +471,23 @@ async def get_disk_usage(
         warn_threshold_bytes=config.disk_warn_bytes,
         docker=docker_df,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /volumes/audit
+# ---------------------------------------------------------------------------
+
+
+@app.get("/volumes/audit", response_model=VolumeAuditResponse)
+async def get_volume_audit(
+    _auth: None = Depends(verify_auth),
+    config: LifecycleConfig = Depends(_get_config),
+) -> VolumeAuditResponse:
+    """Current volume audit state (sizes and growth). Returns enabled=false when subsystem is off."""
+    if not config.volume_audit_enabled:
+        return VolumeAuditResponse(enabled=False)
+    scheduler: VolumeAuditScheduler = app.state.volume_audit_scheduler
+    return scheduler.get_audit_response()
 
 
 # ---------------------------------------------------------------------------

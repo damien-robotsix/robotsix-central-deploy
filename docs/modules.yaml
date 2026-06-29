@@ -79,3 +79,18 @@ modules:
       - pydantic
       - pyyaml
     tests: tests/test_onboard_parser.py tests/test_onboard_api.py tests/test_config_yaml_store.py
+
+  volume_audit:
+    name: volume_audit
+    description: >
+      Docker volume audit subsystem — periodic scanning of managed named
+      volumes, growth-over-time tracking with percentile and absolute-delta
+      guards, and threshold-breach reporting via a pluggable report seam.
+    package: robotsix_central_deploy.volume_audit
+    dependencies:
+      - pydantic
+    config:
+      env_prefix: ROBOTSIX_LIFECYCLE_
+    endpoints:
+      - GET /volumes/audit
+    tests: tests/volume_audit/ tests/lifecycle/test_volume_audit_endpoint.py

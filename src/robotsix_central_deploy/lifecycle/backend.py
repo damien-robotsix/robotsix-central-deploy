@@ -107,6 +107,14 @@ class ExecutionBackend(ABC):
         Always removes the container on exit or timeout."""
         ...
 
+    @abstractmethod
+    async def measure_volume_bytes(self, volume_name: str) -> int:
+        """Return effective total bytes for *volume_name*, excluding SQLite
+        transient sidecars (*.db-wal, *.db-shm, *.db-journal).
+        Returns 0 on error or when the volume is inaccessible.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -178,6 +186,9 @@ class NoopBackend(ExecutionBackend):
         timeout_seconds=60,
     ) -> str:
         return "[noop backend]"
+
+    async def measure_volume_bytes(self, volume_name: str) -> int:
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +316,9 @@ class DockerBackend(ExecutionBackend):
         raise NotImplementedError(
             "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
         )
+
+    async def measure_volume_bytes(self, volume_name: str) -> int:
+        return 0  # CLI backend lacks volume-inspection support; placeholder.
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -862,6 +876,29 @@ class DockerSdkBackend(ExecutionBackend):
                 ) from exc
 
         return await loop.run_in_executor(None, _run)
+
+    async def measure_volume_bytes(self, volume_name: str) -> int:
+        loop = asyncio.get_running_loop()
+        cmd = (
+            "find /vol -type f "
+            "! -name '*.db-wal' ! -name '*.db-shm' ! -name '*.db-journal' "
+            "-exec du -b {} + 2>/dev/null "
+            "| awk '{s+=$1}END{print s+0}'"
+        )
+        try:
+            raw: bytes = await loop.run_in_executor(
+                None,
+                lambda: self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", cmd],
+                    volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
+                    remove=True,
+                ),
+            )
+            return int(raw.strip() or b"0")
+        except Exception as exc:
+            logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
+            return 0
 
     async def run_config_assist(
         self,
