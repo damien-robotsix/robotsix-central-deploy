@@ -1224,7 +1224,7 @@ function _renderArrayItem(prefix, index, itemTemplate, itemCurrent, container) {
   itemDiv.dataset.arrayIndex = index;
   itemDiv.dataset.arrayPrefix = prefix;  // e.g. "accounts"
 
-  const heading = (itemCurrent && (itemCurrent.id || itemCurrent.name))
+  const heading = (itemCurrent && (itemCurrent.email || itemCurrent.id || itemCurrent.name))
                   || `[${index}]`;
   const headerDiv = document.createElement('div');
   headerDiv.className = 'array-item-header';
@@ -1461,6 +1461,22 @@ async function saveConfigValues() {
   const values = collectConfigValues(_configSchema);
   // ^ uses the default container (#config-form-body)
 
+  // Bug 2: validate account id slugs before sending
+  const accountIdInputs = (document.getElementById('config-form-body')
+    .querySelectorAll('[data-key]'));
+  for (const input of accountIdInputs) {
+    if (/^accounts\.\d+\.id$/.test(input.dataset.key)) {
+      const val = input.value.trim();
+      if (val && !/^[A-Za-z0-9._-]+$/.test(val)) {
+        showConfigModalError(
+          `Account id "${val}" must match ^[A-Za-z0-9._\\-]+$ ` +
+          '(no @ or spaces — use a slug like "gmail" or "ovh")'
+        );
+        return;
+      }
+    }
+  }
+
   try {
     const resp = await fetch(`/services/${encodeURIComponent(_configComponent)}/config`, {
       method: 'PUT',
@@ -1470,7 +1486,7 @@ async function saveConfigValues() {
     });
     if (resp.status === 204) {
       // Refresh the form to reflect saved state
-      openConfigModal(_configComponent);
+      closeConfigModal();
     } else {
       const body = await resp.json().catch(() => ({}));
       showConfigModalError(body.error || `HTTP ${resp.status}`);

@@ -4,6 +4,19 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Fix: config-form Save corrupts multi-account configs** — five coordinated
+  fixes for the `GET /config → form render → collectConfigValues → PUT /config`
+  chain: (1) `_merge_config` dict-branch now recurses correctly when the
+  destination key is absent from existing config, preventing `"***"` sentinel
+  literals from being written to storage; (2) new `_prune_unset` post-merge
+  pass removes template-default empty fields that were absent from existing,
+  preventing resurrected `archive.namespace` etc.; (3) new
+  `_validate_account_ids` server-side + client-side pre-fetch validation
+  reject invalid account `id` slugs (e.g. email addresses with `@`) before
+  they can crash-loop auto-mail; (4) `saveConfigValues` now calls
+  `closeConfigModal()` on success instead of re-opening the modal; (5)
+  array-item accordion headers prefer `itemCurrent.email` over `id`/`name`
+  for human-readable account labels.
 - **Account-aware config assist**: `POST /services/{name}/config/assist` now
   supports a `target_account_index` field to control whether auto-detect
   updates an existing account or adds a new one.  When omitted and accounts
