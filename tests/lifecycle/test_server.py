@@ -1963,3 +1963,103 @@ class TestConfigAssist:
             json={"values": {}},
         )
         assert resp.status_code == 401
+
+    async def test_config_assist_returns_detected_imap_smtp(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Regression: detected imap/smtp hosts are returned — the pre-detect
+        write must be sparse (no empty-string imap/smtp keys) so the detect
+        program fills them in."""
+        await _seed_store("test-gmail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        await store.save_template("test-gmail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="test-gmail",
+            image="auto-mail:latest",
+            container_name="test-gmail",
+            has_config_yaml=True,
+            config_volume="test-gmail-config",
+            config_assist_command="detect --output /config/config.yaml",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+                ConfigAssistSeed(key="accounts.0.auth.password", label="Password"),
+            ],
+            mounts=[VolumeMount(host="test-gmail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        # Capture the pre-detect write
+        pre_detect_writes: list[dict] = []
+        original_write = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            pre_detect_writes.append(dict(config_dict))
+            return await original_write(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
+        )
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "imap": {"host": "imap.gmail.com"},
+                        "smtp": {"host": "smtp.gmail.com"},
+                        "auth": {"username": "t@g.com", "password": "x"},
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/test-gmail/config/assist",
+            json={
+                "values": {
+                    "accounts": [{"auth": {"username": "t@g.com", "password": "x"}}]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        cfg_result = data["config"]
+
+        # Detected imap/smtp hosts are returned
+        assert cfg_result["accounts"][0]["imap"]["host"] == "imap.gmail.com"
+        assert cfg_result["accounts"][0]["smtp"]["host"] == "smtp.gmail.com"
+
+        # User-entered auth preserved
+        assert cfg_result["accounts"][0]["auth"]["username"] == "t@g.com"
+
+        # Pre-detect write was sparse: no imap/smtp keys in accounts[0]
+        assert len(pre_detect_writes) >= 1
+        seed = pre_detect_writes[0]
+        assert "accounts" in seed
+        assert len(seed["accounts"]) == 1
+        assert "imap" not in seed["accounts"][0]
+        assert "smtp" not in seed["accounts"][0]

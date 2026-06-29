@@ -110,7 +110,11 @@ async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path)
 # ---------------------------------------------------------------------------
 
 
-from robotsix_central_deploy.lifecycle.server import _mask_secrets, _merge_config  # noqa: E402
+from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
+    _mask_secrets,
+    _merge_config,
+    _seed_for_detect,
+)
 
 
 class TestMaskSecrets:
@@ -283,3 +287,107 @@ class TestMergeConfig:
             {"hosts": ["a"]}, {"hosts": ["a"]}, {"hosts": ["x", "y"]}
         )
         assert result == {"hosts": ["x", "y"]}
+
+
+# ---------------------------------------------------------------------------
+# _seed_for_detect
+# ---------------------------------------------------------------------------
+
+
+class TestSeedForDetect:
+    def test_omits_template_defaults(self):
+        """Template defaults (empty strings) for unsubmitted fields are excluded."""
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        submitted = {
+            "accounts": [{"auth": {"username": "test@gmail.com", "password": "x"}}]
+        }
+        existing: dict = {}
+        result = _seed_for_detect(template, existing, submitted)
+        assert result == {
+            "accounts": [{"auth": {"username": "test@gmail.com", "password": "x"}}]
+        }
+        # No imap or smtp keys in accounts[0]
+        assert "imap" not in result["accounts"][0]
+        assert "smtp" not in result["accounts"][0]
+
+    def test_substitutes_secret_sentinel(self):
+        """'***' sentinel for a secret field resolves from existing."""
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        existing = {
+            "accounts": [
+                {
+                    "auth": {"password": "real_pass"},
+                }
+            ]
+        }
+        submitted = {
+            "accounts": [{"auth": {"username": "test@gmail.com", "password": "***"}}]
+        }
+        result = _seed_for_detect(template, existing, submitted)
+        assert result == {
+            "accounts": [
+                {"auth": {"username": "test@gmail.com", "password": "real_pass"}}
+            ]
+        }
+
+    def test_preserves_non_secret_submitted(self):
+        """Explicitly submitted non-secret fields are included as-is."""
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        submitted = {
+            "accounts": [
+                {
+                    "imap": {"host": "custom.imap.example.com"},
+                    "auth": {"username": "test@gmail.com", "password": "x"},
+                }
+            ]
+        }
+        existing: dict = {}
+        result = _seed_for_detect(template, existing, submitted)
+        assert result == {
+            "accounts": [
+                {
+                    "imap": {"host": "custom.imap.example.com"},
+                    "auth": {"username": "test@gmail.com", "password": "x"},
+                }
+            ]
+        }
+
+    def test_secret_sentinel_defaults_to_empty_when_no_existing(self):
+        """'***' with no existing value falls back to ''."""
+        template = {"auth": {"password": ""}}
+        existing: dict = {}
+        submitted = {"auth": {"password": "***"}}
+        result = _seed_for_detect(template, existing, submitted)
+        assert result == {"auth": {"password": ""}}
+
+    def test_shallow_dict_omits_unsubmitted_keys(self):
+        template = {"host": "", "port": 993, "tls": True}
+        existing: dict = {}
+        submitted = {"port": 443}
+        result = _seed_for_detect(template, existing, submitted)
+        assert result == {"port": 443}
+        assert "host" not in result
+        assert "tls" not in result

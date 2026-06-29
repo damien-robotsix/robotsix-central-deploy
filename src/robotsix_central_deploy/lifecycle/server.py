@@ -1288,6 +1288,51 @@ def _merge_config(
     return _recursive(template, existing, submitted)
 
 
+def _seed_for_detect(
+    template: dict[str, Any],
+    existing: dict[str, Any],
+    submitted: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a sparse seed config for the pre-detect volume write.
+
+    Only keys present in *submitted* are emitted (recursively).
+    ``"***"`` sentinel values are resolved from *existing* for secret fields.
+    Template-default empty strings for unsubmitted fields are NOT included,
+    so the detect program sees absent fields and fills them in correctly.
+    """
+    result: dict[str, Any] = {}
+    for key, val in submitted.items():
+        tval = template.get(key) if isinstance(template, dict) else None
+        ex_val = existing.get(key) if isinstance(existing, dict) else None
+        if isinstance(val, dict) and isinstance(tval, dict):
+            result[key] = _seed_for_detect(
+                tval, ex_val if isinstance(ex_val, dict) else {}, val
+            )
+        elif (
+            isinstance(val, list)
+            and isinstance(tval, list)
+            and tval
+            and isinstance(tval[0], dict)
+        ):
+            item_template = tval[0]
+            ex_list = ex_val if isinstance(ex_val, list) else []
+            result[key] = [
+                _seed_for_detect(
+                    item_template,
+                    ex_list[i]
+                    if i < len(ex_list) and isinstance(ex_list[i], dict)
+                    else {},
+                    item if isinstance(item, dict) else {},
+                )
+                for i, item in enumerate(val)
+            ]
+        elif tval in ("", None) and val == "***":
+            result[key] = ex_val if ex_val is not None else ""
+        else:
+            result[key] = val
+    return result
+
+
 def _resolve_placeholders(command_str: str, values: dict) -> str:
     """Substitute ``{dotted.path}`` placeholders in *command_str* from *values*.
 
@@ -1524,8 +1569,14 @@ async def run_config_assist(
     existing = await config_yaml_store.get_current(name) or template
     partial = _merge_config(template, existing, body.values)
 
-    # Write partial merged config into the volume
-    await backend.write_config_to_volume(comp_cfg.config_volume, partial)
+    # Write sparse seed config into the volume (only submitted keys, no
+    # template-default empty strings).  This lets the detect program fill
+    # in absent/null fields correctly instead of treating pre-existing
+    # empty strings as "already configured".
+    await backend.write_config_to_volume(
+        comp_cfg.config_volume,
+        _seed_for_detect(template, existing, body.values),
+    )
 
     # Resolve the container-side mount path for the config volume
     volume_mount_path = next(
