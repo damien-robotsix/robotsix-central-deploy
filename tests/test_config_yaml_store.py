@@ -119,12 +119,12 @@ from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
 
 class TestMaskSecrets:
     def test_mask_secret_with_value(self):
-        result = _mask_secrets({"k": ""}, {"k": "actual"})
-        assert result == {"k": "***"}
+        result = _mask_secrets({"password": ""}, {"password": "actual"})
+        assert result == {"password": "***"}
 
     def test_mask_secret_none_value(self):
-        result = _mask_secrets({"k": None}, {"k": "actual"})
-        assert result == {"k": "***"}
+        result = _mask_secrets({"password": None}, {"password": "actual"})
+        assert result == {"password": "***"}
 
     def test_no_mask_on_non_secret(self):
         result = _mask_secrets({"k": "default"}, {"k": "default"})
