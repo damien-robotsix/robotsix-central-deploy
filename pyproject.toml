@@ -48,3 +48,7 @@ branch = true
 
 [tool.coverage.report]
 fail_under = 80
+
+[tool.deptry]
+known_first_party = ["robotsix_central_deploy"]
+per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff"], "DEP003" = ["starlette", "requests"] }
