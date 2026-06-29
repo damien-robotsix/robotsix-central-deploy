@@ -451,10 +451,16 @@
   <form id="settings-form" onsubmit="saveSettings(event)">
     <table style="margin-bottom:20px;">
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">GHCR Pull Token</td>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">GHCR Pull Token <span style="font-size:0.75rem;color:#64748b;">(optional)</span></td>
         <td style="padding:6px 12px;">
-          <input id="s-ghcr-token" type="password" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" disabled />
+          <input id="s-ghcr-token" type="password" placeholder="Leave blank for public images" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" disabled />
           <button type="button" class="btn-secondary" onclick="changeSecret('s-ghcr-token')" style="font-size:0.75rem;margin-left:6px;">Change</button>
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td style="padding:0 12px 6px;font-size:0.75rem;color:#64748b;">
+          Only required for private GHCR registry images.
         </td>
       </tr>
       <tr>

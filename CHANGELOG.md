@@ -10,6 +10,10 @@ All notable changes to robotsix-central-deploy.
   (placeholder: persists to local JSON + logs WARNING). Configurable via
   `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_*` environment variables; disabled by default.
   New `GET /volumes/audit` endpoint returns live growth records.
+- **Settings: mark GHCR Pull Token as optional** — label reads "GHCR Pull Token
+  (optional)", placeholder text "Leave blank for public images", and help row
+  "Only required for private GHCR registry images." to clarify it is not
+  required for public images.
 
 - **Fix: config-form Save corrupts multi-account configs** — five coordinated
   fixes for the `GET /config → form render → collectConfigValues → PUT /config`
