@@ -1166,40 +1166,26 @@ async def delete_service_env_key(
 # ---------------------------------------------------------------------------
 
 
-_SECRET_NAME_TOKENS = (
-    "password",
-    "passwd",
-    "secret",
-    "token",
-    "apikey",
-    "api_key",
-    "credential",
-    "private_key",
-    "access_key",
-)
-
-
-def _is_secret_name(key: str) -> bool:
-    """Heuristic: a config field is a secret only if its NAME looks like one.
-
-    Used so that required-but-empty-in-template fields that are NOT secrets
-    (e.g. imap.host, username) are shown in the UI instead of masked as "***".
-    """
-    k = key.lower()
-    return any(t in k for t in _SECRET_NAME_TOKENS) or k.endswith("_key")
+_CONFIG_SECRET_SENTINEL = "SECRET"
+"""Template authors mark a sensitive leaf by setting its value to
+``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``) in their
+``config/config.yaml``. Any other value (empty string, default text,
+integer, etc.) is NOT treated as a secret."""
 
 
 def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Return *current* with secret leaf values replaced by ``"***"``.
 
-    A leaf in *template* is treated as a secret when its value is ``""`` or
-    ``None`` **and** its key name matches a known secret token
-    (``_SECRET_NAME_TOKENS``) — the name gate avoids masking every unfilled
-    default. Corresponding non-empty string values in *current* are masked.
-    Non-secret and nested branches are preserved as-is from *current*.
+    A leaf in *template* is treated as a secret when its value is
+    ``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``). Template
+    authors mark sensitive fields explicitly — no name-based heuristic
+    is applied.
 
-    NOTE: the name-token heuristic is a stopgap; the intended design is an
-    explicit SECRET marker in the template (see follow-up ticket).
+    * If the template value is ``"SECRET"`` and *current* has a
+      non-empty, non-sentinel string value: mask as ``"***"``.
+    * If the template value is ``"SECRET"`` but *current* is missing or
+      also ``"SECRET"``: return ``""`` (unconfigured secret).
+    * Otherwise: pass through from *current* (or fall back to *template*).
     """
 
     def _recursive(
@@ -1222,8 +1208,17 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                     ]
                 else:
                     result[key] = cval  # scalar array — pass through unchanged
-            elif tval in ("", None) and isinstance(cval, str) and cval:
+            elif (
+                tval == _CONFIG_SECRET_SENTINEL
+                and isinstance(cval, str)
+                and cval
+                and cval != _CONFIG_SECRET_SENTINEL
+            ):
+                # Configured secret → mask it
                 result[key] = "***"
+            elif tval == _CONFIG_SECRET_SENTINEL:
+                # Unconfigured secret (no current value, or current == sentinel) → empty
+                result[key] = ""
             else:
                 result[key] = cval if key in i_current else tval
         return result
@@ -1279,8 +1274,9 @@ def _merge_config(
 
     For each key in *template*:
     - If the key is a nested dict in all three, recurse.
-    - If the template leaf is a secret (``""`` or ``None``) AND
-      ``submitted[key] == "***"``: keep ``existing[key]`` unchanged.
+    - If the template leaf is ``_CONFIG_SECRET_SENTINEL`` AND
+      ``submitted[key] == "***"``: keep ``existing[key]`` unchanged (or
+      fall back to ``""`` when there is no existing value).
     - Else: use the submitted value (coerced back to the template leaf's
       type, since the UI submits everything as strings) or, when the key
       was not submitted, the template default.
@@ -1322,8 +1318,8 @@ def _merge_config(
                     )
                     for idx, sitem in enumerate(submitted_list)
                 ]
-            elif tval in ("", None) and i_submitted.get(key) == "***":
-                result[key] = i_existing.get(key, tval)
+            elif tval == _CONFIG_SECRET_SENTINEL and i_submitted.get(key) == "***":
+                result[key] = i_existing.get(key, "")
             elif key in i_submitted:
                 result[key] = _coerce_to_template(tval, i_submitted[key])
             else:

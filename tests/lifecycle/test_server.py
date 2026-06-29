@@ -1141,7 +1141,7 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost", "password": ""}
+        template = {"host": "localhost", "password": "SECRET"}
         await store.save_template("chat", template)
         await store.update_current("chat", {"host": "0.0.0.0", "password": "realpass"})
 
@@ -1195,7 +1195,7 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"server": {"host": "localhost", "password": ""}}
+        template = {"server": {"host": "localhost", "password": "SECRET"}}
         await store.save_template("chat", template)
         await store.update_current(
             "chat", {"server": {"host": "0.0.0.0", "password": "s3cret"}}
@@ -1212,7 +1212,7 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"api_key": None}
+        template = {"api_key": "SECRET"}
         await store.save_template("chat", template)
         await store.update_current("chat", {"api_key": "real-key"})
 
@@ -1249,7 +1249,7 @@ class TestPutServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost", "password": ""}
+        template = {"host": "localhost", "password": "SECRET"}
         await store.save_template("chat", template)
         await store.update_current(
             "chat", {"host": "localhost", "password": "realpass"}
@@ -1316,7 +1316,7 @@ class TestPutServiceConfig:
     async def test_merge_nested_config(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"server": {"host": "localhost", "port": 8080, "password": ""}}
+        template = {"server": {"host": "localhost", "port": 8080, "password": "SECRET"}}
         await store.save_template("chat", template)
         await store.update_current(
             "chat",
