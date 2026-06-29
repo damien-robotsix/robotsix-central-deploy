@@ -320,7 +320,7 @@ def _parse_one_service(
             config_assist_command = raw_cmd.strip()
         _seeds_raw = labels.get(LABEL_CONFIG_ASSIST_SEEDS, "")
         if isinstance(_seeds_raw, str) and _seeds_raw.strip():
-            config_assist_seeds: list[ConfigAssistSeed] = []
+            config_assist_seeds = []
             for _entry in _seeds_raw.split(","):
                 _entry = _entry.strip()
                 if not _entry:
