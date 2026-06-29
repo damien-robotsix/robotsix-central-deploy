@@ -1537,8 +1537,11 @@ async def run_config_assist(
     merged_env = await env_store.get_merged_env(name, comp_cfg.env)
 
     # Substitute {seed} placeholders in the command with submitted values
+    # Substitute from the MERGED config (template+existing+submitted), not just
+    # body.values — so placeholders like {accounts.0.id} (not user-submitted, but
+    # present in the config) resolve instead of leaking the literal "{...}".
     resolved_command = _resolve_placeholders(
-        comp_cfg.config_assist_command, body.values
+        comp_cfg.config_assist_command, partial
     )
 
     # Run the one-shot container (60 s timeout)
