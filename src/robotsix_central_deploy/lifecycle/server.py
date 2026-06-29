@@ -299,7 +299,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # --- Volume audit subsystem ---
     global _volume_audit_scheduler
-    _volume_audit_task: asyncio.Task | None = None
+    _volume_audit_task: asyncio.Task[Any] | None = None
     if _config.volume_audit_enabled:
         _volume_audit_scheduler = VolumeAuditScheduler(
             _config, _backend, component_config_store

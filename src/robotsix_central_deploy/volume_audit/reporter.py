@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from .models import AuditFinding
 
@@ -34,7 +35,7 @@ def report_finding(finding: AuditFinding, findings_path: Path) -> None:
             if findings_path.exists()
             else "[]"
         )
-        existing: list[dict] = json.loads(raw)
+        existing: list[dict[str, Any]] = json.loads(raw)
     except (json.JSONDecodeError, OSError):
         existing = []
     existing.append(finding.model_dump(mode="json"))

@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from ..lifecycle.backend import ExecutionBackend
 from ..lifecycle.config import LifecycleConfig
@@ -64,7 +65,7 @@ class VolumeAuditScheduler:
         if not self._findings_path.exists():
             return []
         try:
-            raw: list[dict] = json.loads(
+            raw: list[dict[str, Any]] = json.loads(
                 self._findings_path.read_text(encoding="utf-8")
             )
             return [AuditFinding.model_validate(f) for f in raw[-5:]]
