@@ -1572,7 +1572,7 @@ def _relocate_account_seed_values(
     ``"***"`` sentinels (unchanged secrets) are skipped — they already
     carry the correct meaning at the source and should not be relocated.
     """
-    accts: list = values.setdefault("accounts", [])
+    accts: list[dict[str, Any]] = values.setdefault("accounts", [])
     while len(accts) <= max(src_idx, dst_idx):
         accts.append({})
     src_acct: dict = accts[src_idx] if src_idx < len(accts) else {}
@@ -1584,7 +1584,7 @@ def _relocate_account_seed_values(
             continue
 
         # Check whether destination already has a non-empty value.
-        dst_node: dict = dst_acct
+        dst_node: dict[str, Any] = dst_acct
         for p in parts[2:-1]:
             if not isinstance(dst_node, dict):
                 dst_node = {}
@@ -1598,7 +1598,7 @@ def _relocate_account_seed_values(
             continue  # already present at destination — nothing to move
 
         # Navigate to the leaf dict containing the key at source.
-        node: dict = src_acct
+        node: dict[str, Any] = src_acct
         for p in parts[2:-1]:
             if not isinstance(node, dict):
                 node = {}
@@ -1612,7 +1612,7 @@ def _relocate_account_seed_values(
             continue  # unchanged secret — stays at source
         del node[last]
         # Place at destination.
-        dst_node2: dict = dst_acct
+        dst_node2: dict[str, Any] = dst_acct
         for p in parts[2:-1]:
             if isinstance(dst_node2, dict):
                 dst_node2 = dst_node2.setdefault(p, {})
@@ -1624,7 +1624,7 @@ def _relocate_account_seed_values(
 
 def _derive_account_id(
     seeds: list["ConfigAssistSeed"],
-    partial: dict,
+    partial: dict[str, Any],
     n: int,
 ) -> str:
     """Derive a slug-based account ID for a new account slot at index *n*.
@@ -1661,7 +1661,7 @@ def _derive_account_id(
     return f"accounts-{n}"
 
 
-def _resolve_placeholders(command_str: str, values: dict) -> str:
+def _resolve_placeholders(command_str: str, values: dict[str, Any]) -> str:
     """Substitute ``{dotted.path}`` placeholders in *command_str* from *values*.
 
     Each placeholder is a dot-separated path of dict keys and list indices
@@ -1700,7 +1700,7 @@ def _resolve_placeholders(command_str: str, values: dict) -> str:
     return re.sub(r"\{([^{}]+)\}", _replacer, command_str)
 
 
-def _deep_merge(base: dict, overlay: dict) -> dict:
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge *overlay* into *base*, returning a new dict.
 
     Leaf values from *overlay* overwrite *base*; nested dicts are merged
@@ -1732,7 +1732,7 @@ class ConfigUpdate(BaseModel):
 
 
 class ConfigAssistRequest(BaseModel):
-    values: dict  # current (partial) form values — same shape as ConfigUpdate.values
+    values: dict[str, Any]  # current (partial) form values — same shape as ConfigUpdate.values
     target_account_index: int | None = None
     # None  → infer: first-setup if no accounts exist, else add-new
     # int N → update account N if N < len(existing_accounts), else add-new
