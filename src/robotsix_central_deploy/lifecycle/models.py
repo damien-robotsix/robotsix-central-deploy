@@ -254,12 +254,21 @@ class RollbackResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class VolumeStat(BaseModel):
+    """Size of a single Docker volume (from ``docker system df``)."""
+
+    name: str
+    size_bytes: int = 0
+    in_use: bool = False
+
+
 class DockerDfStats(BaseModel):
     """Docker storage breakdown from ``docker system df``."""
 
     images_size_bytes: int = 0
     build_cache_size_bytes: int = 0
     build_cache_reclaimable_bytes: int = 0
+    volumes: list[VolumeStat] = []
 
 
 class DiskUsageResponse(BaseModel):
