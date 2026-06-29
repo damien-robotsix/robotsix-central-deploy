@@ -351,6 +351,22 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
     return request.app.state.component_config_store  # type: ignore[no-any-return]
 
 
+def _fetch_fresh_config_assist(
+    git_url: str, name: str
+) -> tuple[str | None, list[ConfigAssistSeed]]:
+    """Re-fetch config-assist fields from the repo's compose at HEAD.
+
+    Blocking (runs git clone). Call via run_in_executor.
+    Raises FetchError or ParseError on failure; callers must handle.
+    """
+    from robotsix_central_deploy.onboard.fetcher import fetch_compose_bytes
+    from robotsix_central_deploy.onboard.parser import parse_compose
+
+    compose_bytes = fetch_compose_bytes(git_url)
+    spec = parse_compose(compose_bytes, name, git_url)
+    return spec.config_assist_command, spec.config_assist_seeds
+
+
 async def _get_env_store(request: Request) -> EnvStore:
     return request.app.state.env_store  # type: ignore[no-any-return]
 
@@ -1571,6 +1587,34 @@ async def run_config_assist(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Component '{name}' not found",
         )
+
+    # Re-read config-assist fields from repo HEAD. Write back if changed so
+    # GET /config and future assist calls also see the fresh values.
+    try:
+        loop = asyncio.get_running_loop()
+        fresh_cmd, fresh_seeds = await loop.run_in_executor(
+            None, _fetch_fresh_config_assist, comp_cfg.git_url, name
+        )
+        if (
+            fresh_cmd != comp_cfg.config_assist_command
+            or fresh_seeds != comp_cfg.config_assist_seeds
+        ):
+            comp_cfg = comp_cfg.model_copy(
+                update={
+                    "config_assist_command": fresh_cmd,
+                    "config_assist_seeds": fresh_seeds,
+                }
+            )
+            await component_config_store.put(comp_cfg)
+            logger.info("Refreshed config-assist fields for %s from repo", name)
+    except Exception as exc:
+        logger.warning(
+            "Could not refresh config-assist fields for %s from repo (%s); "
+            "using stored values",
+            name,
+            exc,
+        )
+
     if comp_cfg.config_assist_command is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

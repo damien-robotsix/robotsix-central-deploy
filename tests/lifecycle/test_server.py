@@ -1959,6 +1959,144 @@ class TestConfigAssist:
         assert config["imap"]["port"] == 993
         assert config["imap"]["tls"] is True
 
+    async def test_stale_command_refreshed_from_repo(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """config_assist_command and config_assist_seeds are refreshed from repo HEAD."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="old-detect --old",
+            config_assist_seeds=["old_host"],
+            git_url="https://github.com/example/repo.git",
+        )
+        await config_store.put(cfg)
+
+        # Patch _fetch_fresh_config_assist to return fresh values synchronously
+        def _fresh(git_url: str, name: str) -> tuple[str | None, list[str]]:
+            return ("new-detect --new", ["new_host"])
+
+        monkeypatch.setattr(server_mod, "_fetch_fresh_config_assist", _fresh)
+
+        # Capture the command that run_config_assist receives
+        captured_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            captured_command.append(command_str)
+            return "ok"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {}
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "read_config_from_volume", _fake_read_config
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        # Command used was the fresh one
+        assert len(captured_command) == 1
+        assert "new-detect --new" in captured_command[0]
+
+        # Store was updated with fresh values
+        updated_cfg = config_store.get("auto-mail")
+        assert updated_cfg is not None
+        assert updated_cfg.config_assist_command == "new-detect --new"
+        assert updated_cfg.config_assist_seeds == [ConfigAssistSeed(key="new_host")]
+
+    async def test_fetch_failure_falls_back_to_stored_command(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When _fetch_fresh_config_assist raises, the stored command is used."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {"host": "localhost"}
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="stored-detect",
+            config_assist_seeds=[],
+            git_url="https://github.com/example/repo.git",
+        )
+        await config_store.put(cfg)
+
+        # Patch _fetch_fresh_config_assist to raise
+        def _raise_network_error(git_url: str, name: str):
+            raise Exception("simulated network error")
+
+        monkeypatch.setattr(
+            server_mod, "_fetch_fresh_config_assist", _raise_network_error
+        )
+
+        captured_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            captured_command.append(command_str)
+            return "ok"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {}
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "read_config_from_volume", _fake_read_config
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        # Stored command was used (fell back)
+        assert len(captured_command) == 1
+        assert "stored-detect" in captured_command[0]
+
+        # Store was NOT mutated on failure
+        updated_cfg = config_store.get("auto-mail")
+        assert updated_cfg is not None
+        assert updated_cfg.config_assist_command == "stored-detect"
+        assert updated_cfg.config_assist_seeds == []
+
     async def test_unauthenticated_returns_401(self, client: AsyncClient):
         resp = await client.post(
             "/services/chat/config/assist",
