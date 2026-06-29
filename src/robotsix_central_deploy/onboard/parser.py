@@ -545,6 +545,11 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
 def parse_config_yaml(config_bytes: bytes) -> dict[str, Any]:
     """Parse config/config.yaml from raw bytes; return parsed mapping.
 
+    Returns the raw parsed YAML as a Python dict.  No secret annotation is
+    applied here — callers that store the result as a config template must
+    wrap it with ``_annotate_secret_sentinels()`` (server.py) to mark
+    secret leaves with the ``"SECRET"`` sentinel.
+
     Raises:
         ConfigParseError: if the YAML is malformed or not a top-level mapping.
     """

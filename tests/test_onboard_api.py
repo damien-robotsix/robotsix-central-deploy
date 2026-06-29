@@ -575,7 +575,7 @@ class TestOnboardPreflightWithConfig:
         assert data["spec"]["config_schema"] == {
             "host": "localhost",
             "port": 8080,
-            "password": "",
+            "password": "SECRET",
         }
 
     async def test_preflight_config_schema_null_when_absent(
