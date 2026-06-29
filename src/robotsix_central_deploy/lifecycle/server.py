@@ -1289,12 +1289,11 @@ def _merge_config(
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, tval in i_template.items():
-            if (
-                isinstance(tval, dict)
-                and isinstance(i_existing.get(key), dict)
-                and isinstance(i_submitted.get(key), dict)
-            ):
-                result[key] = _recursive(tval, i_existing[key], i_submitted[key])
+            if isinstance(tval, dict) and isinstance(i_submitted.get(key), dict):
+                existing_sub = (
+                    i_existing[key] if isinstance(i_existing.get(key), dict) else {}
+                )
+                result[key] = _recursive(tval, existing_sub, i_submitted[key])
             elif (
                 isinstance(tval, list)
                 and isinstance(i_submitted.get(key), list)
@@ -1327,6 +1326,73 @@ def _merge_config(
         return result
 
     return _recursive(template, existing, submitted)
+
+
+_ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_account_ids(merged: dict[str, Any]) -> None:
+    """Raise HTTP 422 when any account id contains disallowed characters.
+
+    auto-mail enforces account_id =~ ^[A-Za-z0-9._-]+$ at startup.
+    The @ character (e.g. from using an email address as the id) triggers
+    a crash-loop.  Validate before writing to storage.
+    """
+    for item in merged.get("accounts", []):
+        if not isinstance(item, dict):
+            continue
+        id_val = item.get("id", "")
+        if id_val and not _ACCOUNT_ID_RE.fullmatch(id_val):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"account_id {id_val!r} must match ^[A-Za-z0-9._-]+$ "
+                    f"(no @ or spaces — use the slug derived from the email address)"
+                ),
+            )
+
+
+def _prune_unset(merged: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
+    """Remove template-default empty fields that were absent from existing.
+
+    Prevents empty-string placeholders for unused template sections
+    (e.g. ``archive.namespace``, ``calendar.broker_*``) from being
+    written to stored config after they fall through merge with
+    empty/no value.
+
+    Rules:
+    - Empty string (``""``) or ``None`` at a scalar leaf: prune unless the key
+      was already in *existing*.
+    - Non-empty scalars (including int/float/bool and 0/False): always kept.
+    - Dict values: recurse; include the sub-dict only when non-empty or
+      the key was already present in *existing*.
+    - List-of-dicts: recurse per item against the corresponding
+      *existing* item (or ``{}`` for out-of-range indices).
+    """
+    result: dict[str, Any] = {}
+    for k, v in merged.items():
+        if isinstance(v, dict):
+            sub_existing = existing[k] if isinstance(existing.get(k), dict) else {}
+            pruned = _prune_unset(v, sub_existing)
+            if pruned or k in existing:
+                result[k] = pruned
+        elif isinstance(v, list) and v and isinstance(v[0], dict):
+            ex_val = existing.get(k)
+            ex_list: list[Any] = ex_val if isinstance(ex_val, list) else []
+            result[k] = [
+                _prune_unset(
+                    item,
+                    ex_list[i]
+                    if i < len(ex_list) and isinstance(ex_list[i], dict)
+                    else {},
+                )
+                for i, item in enumerate(v)
+            ]
+        elif v in ("", None) and k not in existing:
+            pass  # skip: field was absent from existing and no new value set
+        else:
+            result[k] = v
+    return result
 
 
 def _seed_for_detect(
@@ -1585,6 +1651,9 @@ async def put_service_config(
         )
     existing = await config_yaml_store.get_current(name) or template
     merged = _merge_config(template, existing, body.values)
+    if "accounts" in merged:
+        _validate_account_ids(merged)  # Bug 2: reject invalid id slugs
+    merged = _prune_unset(merged, existing)  # Bug 3: prune resurrected empty fields
     await config_yaml_store.update_current(name, merged)
 
     # Write to the actual config volume (not synthetic "{name}-config")
