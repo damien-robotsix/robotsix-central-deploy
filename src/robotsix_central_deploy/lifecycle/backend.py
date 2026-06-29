@@ -979,13 +979,20 @@ class DockerSdkBackend(ExecutionBackend):
             return DockerDfStats()
         images = result.get("Images") or []
         build_cache = result.get("BuildCache") or []
-        images_size = sum(img.get("Size", 0) for img in images)
-        builder_size = result.get("BuilderSize", 0)
+        # ``LayersSize`` is the de-duplicated total image disk (matches
+        # ``docker system df``); summing each image's ``Size`` double-counts
+        # shared layers and over-reports.
+        images_size = result.get("LayersSize", 0) or sum(
+            img.get("Size", 0) for img in images
+        )
+        # ``BuilderSize`` is the legacy pre-BuildKit builder cache (0 on modern
+        # Docker); the real build cache is the sum of the ``BuildCache`` records.
+        build_cache_size = sum(item.get("Size", 0) for item in build_cache)
         reclaimable = sum(
             item.get("Size", 0) for item in build_cache if not item.get("InUse", True)
         )
         return DockerDfStats(
             images_size_bytes=images_size,
-            build_cache_size_bytes=builder_size,
+            build_cache_size_bytes=build_cache_size,
             build_cache_reclaimable_bytes=reclaimable,
         )

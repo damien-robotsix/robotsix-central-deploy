@@ -689,7 +689,7 @@ function renderDiskPanel(data) {
             <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
             ${usedPct}%</td></tr>
           <tr><th>Host free</th><td>${fmt_gb(data.free_bytes)}</td></tr>
-          <tr><th>Docker images</th><td>${fmt_gb(data.docker.images_size_bytes)}</td></tr>
+          <tr><th>Docker images (host total)</th><td>${fmt_gb(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_gb(data.docker.build_cache_size_bytes)}</td></tr>
           <tr><th>Build cache reclaimable</th><td>${fmt_gb(data.docker.build_cache_reclaimable_bytes)}</td></tr>
         </table>`;
