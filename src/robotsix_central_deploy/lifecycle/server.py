@@ -1185,9 +1185,14 @@ def _is_secret_name(key: str) -> bool:
 def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Return *current* with secret leaf values replaced by ``"***"``.
 
-    A leaf in *template* is a secret if its value is ``""`` or ``None``.
-    Corresponding non-empty string values in *current* are masked.
+    A leaf in *template* is treated as a secret when its value is ``""`` or
+    ``None`` **and** its key name matches a known secret token
+    (``_SECRET_NAME_TOKENS``) — the name gate avoids masking every unfilled
+    default. Corresponding non-empty string values in *current* are masked.
     Non-secret and nested branches are preserved as-is from *current*.
+
+    NOTE: the name-token heuristic is a stopgap; the intended design is an
+    explicit SECRET marker in the template (see follow-up ticket).
     """
 
     def _recursive(
