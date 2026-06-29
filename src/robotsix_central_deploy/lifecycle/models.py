@@ -128,7 +128,10 @@ class ServiceRecord:
 
     def to_list_item(self) -> "ServiceListItem":
         return ServiceListItem(
-            name=self.name, state=self.state, update_available=self.update_available
+            name=self.name,
+            state=self.state,
+            update_available=self.update_available,
+            component_id=self.component_id,
         )
 
 
@@ -162,6 +165,9 @@ class ServiceListItem(BaseModel):
     update_available: bool = False
     stateful_volumes: list[str] = []
     has_config_yaml: bool = False
+    component_id: str = (
+        ""  # non-empty for sibling records; equals the primary service name
+    )
 
 
 class ServiceListResponse(BaseModel):

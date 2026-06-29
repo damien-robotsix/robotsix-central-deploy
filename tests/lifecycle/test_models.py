@@ -91,7 +91,16 @@ class TestServiceRecord:
         assert status.image == "img:v1"
 
     def test_to_list_item(self):
+        # Primary service — component_id propagates as empty string
         rec = ServiceRecord(name="svc", state=ServiceState.STOPPED)
         item = rec.to_list_item()
         assert item.name == "svc"
         assert item.state == ServiceState.STOPPED
+        assert item.component_id == ""
+
+        # Sibling service — component_id propagates as primary name
+        sib = ServiceRecord(
+            name="svc-ingester", state=ServiceState.RUNNING, component_id="svc"
+        )
+        sib_item = sib.to_list_item()
+        assert sib_item.component_id == "svc"
