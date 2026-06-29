@@ -1428,6 +1428,8 @@ def _derive_account_id(
             slug = _re.sub(r"[^a-z0-9]+", "-", node.lower()).strip("-")
             return slug[:40] or f"accounts-{n}"
     return f"accounts-{n}"
+
+
 def _validate_account_ids(merged: dict[str, Any]) -> None:
     """Validate that every account id matches ^[A-Za-z0-9._-]+$ (no @ or spaces)."""
     accounts = merged.get("accounts", [])
