@@ -2355,3 +2355,335 @@ class TestConfigAssist:
         current = await store.get_current("mail2")
         assert current is not None
         assert current["default_account"] == "acct-1"
+
+    async def test_add_second_account_leaves_first_intact(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When accounts exist and no target_account_index is given,
+        --overwrite is stripped and a new account is added at next index."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "auth": {"username": "", "password": ""},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+        await store.update_current(
+            "auto-mail",
+            {
+                "accounts": [
+                    {
+                        "id": "main",
+                        "auth": {"username": "old@example.com"},
+                        "imap": {"host": "imap.old.com"},
+                    }
+                ]
+            },
+        )
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "main",
+                        "auth": {"username": "old@example.com"},
+                        "imap": {"host": "imap.old.com"},
+                    },
+                    {
+                        "id": "new-example-com",
+                        "auth": {"username": "new@example.com"},
+                        "imap": {"host": "imap.new.com"},
+                    },
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "id": "main",
+                            "auth": {"username": "old@example.com"},
+                        },
+                        {
+                            "auth": {"username": "new@example.com"},
+                        },
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 2
+        assert accounts[0]["id"] == "main"
+        assert accounts[1]["id"] == "new-example-com"
+
+        assert len(received_command) == 1
+        cmd = received_command[0]
+        assert "--overwrite" not in cmd
+        # Placeholders were rewritten to accounts.1, then resolved — so we
+        # should see the new account values, not the old ones.
+        assert "new@example.com" in cmd
+        assert "accounts.0." not in cmd  # old placeholder index absent
+
+    async def test_update_nth_account_uses_overwrite(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When target_account_index=1 and two accounts exist,
+        --overwrite is kept and accounts.1.* placeholders are used."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "auth": {"username": "", "password": ""},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+        await store.update_current(
+            "auto-mail",
+            {
+                "accounts": [
+                    {
+                        "id": "main",
+                        "auth": {"username": "old@example.com"},
+                        "imap": {"host": "imap.old.com"},
+                    },
+                    {
+                        "id": "secondary",
+                        "auth": {"username": "sec@example.com"},
+                        "imap": {"host": "imap.sec.com"},
+                    },
+                ]
+            },
+        )
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "main",
+                        "auth": {"username": "old@example.com"},
+                        "imap": {"host": "imap.old.com"},
+                    },
+                    {
+                        "id": "secondary",
+                        "auth": {"username": "updated@example.com"},
+                        "imap": {"host": "imap.updated.com"},
+                    },
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "id": "main",
+                            "auth": {"username": "old@example.com"},
+                        },
+                        {
+                            "id": "secondary",
+                            "auth": {"username": "updated@example.com"},
+                        },
+                    ]
+                },
+                "target_account_index": 1,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 2
+        assert accounts[0]["id"] == "main"
+
+        assert len(received_command) == 1
+        cmd = received_command[0]
+        assert "--overwrite" in cmd
+        assert "updated@example.com" in cmd
+        assert "accounts.0." not in cmd
+
+    async def test_first_setup_no_accounts_backward_compat(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When no accounts exist and target_account_index is omitted,
+        first_setup mode keeps --overwrite and accounts.0.* placeholders."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "auth": {"username": "", "password": ""},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "new-account",
+                        "auth": {"username": "user@example.com"},
+                        "imap": {"host": "imap.example.com"},
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        # Omit target_account_index entirely (None is default)
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "auth": {"username": "user@example.com"},
+                        }
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 1
+
+        assert len(received_command) == 1
+        cmd = received_command[0]
+        assert "--overwrite" in cmd
+        # In first_setup, accounts.0. placeholders are resolved from the
+        # submitted values — verify the value made it into the command.
+        assert "user@example.com" in cmd

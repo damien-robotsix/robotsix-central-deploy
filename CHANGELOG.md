@@ -4,6 +4,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Account-aware config assist**: `POST /services/{name}/config/assist` now
+  supports a `target_account_index` field to control whether auto-detect
+  updates an existing account or adds a new one.  When omitted and accounts
+  already exist, the new `add_new` mode injects a derived account ID and
+  strips `--overwrite` from the detect command so existing accounts are not
+  destroyed.  Backward-compatible: first-setup behaviour is unchanged.
 - **Fix: `_mask_secrets` no longer filters by secret-name heuristic** — removed
   the `_is_secret_name(key)` guard so that any leaf whose template value is
   `""` or `None` is treated as a secret and masked as `"***"`, matching the

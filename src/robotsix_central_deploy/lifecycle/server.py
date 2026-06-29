@@ -1396,6 +1396,45 @@ def _seed_for_detect(
     return result
 
 
+def _derive_account_id(
+    seeds: list["ConfigAssistSeed"],
+    partial: dict,
+    n: int,
+) -> str:
+    """Derive a slug-based account ID for a new account slot at index *n*.
+
+    Looks for the first ConfigAssistSeed whose last path segment is
+    ``username`` or ``email``, then navigates *partial* (replacing the
+    hardcoded ``0`` index in the seed key with *n*) to get the submitted
+    value.  Slugifies it (lower-case, non-alnum chars → ``-``, max 40
+    chars).  Falls back to ``f'accounts-{n}'``.
+    """
+    import re as _re
+
+    for seed in seeds:
+        parts = seed.key.split(".")
+        if parts[-1] not in ("username", "email"):
+            continue
+        nav_parts = [str(n) if p == "0" else p for p in parts]
+        node: object = partial
+        for part in nav_parts:
+            if isinstance(node, dict):
+                node = node.get(part)
+            elif isinstance(node, list):
+                try:
+                    node = node[int(part)]
+                except (ValueError, IndexError):
+                    node = None
+            else:
+                node = None
+            if node is None:
+                break
+        if isinstance(node, str) and node:
+            slug = _re.sub(r"[^a-z0-9]+", "-", node.lower()).strip("-")
+            return slug[:40] or f"accounts-{n}"
+    return f"accounts-{n}"
+
+
 def _resolve_placeholders(command_str: str, values: dict) -> str:
     """Substitute ``{dotted.path}`` placeholders in *command_str* from *values*.
 
@@ -1468,10 +1507,15 @@ class ConfigUpdate(BaseModel):
 
 class ConfigAssistRequest(BaseModel):
     values: dict  # current (partial) form values — same shape as ConfigUpdate.values
+    target_account_index: int | None = None
+    # None  → infer: first-setup if no accounts exist, else add-new
+    # int N → update account N if N < len(existing_accounts), else add-new
 
 
 class ConfigAssistResponse(BaseModel):
-    config: dict  # the auto-filled config dict read back from the volume after the command ran
+    config: dict[
+        str, Any
+    ]  # the auto-filled config dict read back from the volume after the command ran
     output: str  # captured stdout+stderr from the one-shot container
 
 
@@ -1660,6 +1704,42 @@ async def run_config_assist(
     existing = await config_yaml_store.get_current(name) or template
     partial = _merge_config(template, existing, body.values)
 
+    # --- Account-aware mode resolution ---
+    existing_accounts: list[dict[str, Any]] = (
+        [a for a in existing.get("accounts", []) if isinstance(a, dict) and a.get("id")]
+        if isinstance(existing.get("accounts"), list)
+        else []
+    )
+    req_idx = body.target_account_index
+
+    if req_idx is not None and req_idx < len(existing_accounts):
+        mode, target_idx = "update", req_idx
+    elif existing_accounts:  # req_idx is None OR req_idx >= len
+        mode, target_idx = "add_new", len(existing_accounts)
+    else:
+        mode, target_idx = "first_setup", 0
+
+    # Rewrite accounts.0.* placeholders to the target index in the command.
+    import re as _re  # noqa: PLC0415
+
+    assist_command = comp_cfg.config_assist_command
+    if target_idx != 0:
+        assist_command = _re.sub(
+            r"\{accounts\.0\.",
+            f"{{accounts.{target_idx}.",
+            assist_command,
+        )
+
+    # For add_new: ensure partial has a derived ID at accounts[target_idx]["id"]
+    # so that {accounts.N.id} resolves during placeholder substitution.
+    if mode == "add_new":
+        new_id = _derive_account_id(comp_cfg.config_assist_seeds, partial, target_idx)
+        acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
+        while len(acct_list) <= target_idx:
+            acct_list.append({})
+        if not acct_list[target_idx].get("id"):
+            acct_list[target_idx]["id"] = new_id
+
     # Write sparse seed config into the volume (only submitted keys, no
     # template-default empty strings).  This lets the detect program fill
     # in absent/null fields correctly instead of treating pre-existing
@@ -1686,9 +1766,15 @@ async def run_config_assist(
     # containing spaces (e.g. a Google app password "abcd efgh ijkl mnop") stays
     # a SINGLE argument instead of being split apart by the backend's shlex.split.
     resolved_command = shlex.join(
-        _resolve_placeholders(arg, partial)
-        for arg in shlex.split(comp_cfg.config_assist_command)
+        _resolve_placeholders(arg, partial) for arg in shlex.split(assist_command)
     )
+
+    # For add_new: the config-assist command template always includes
+    # --overwrite, but adding a new account should NOT overwrite.
+    if mode == "add_new":
+        resolved_command = shlex.join(
+            arg for arg in shlex.split(resolved_command) if arg != "--overwrite"
+        )
 
     # Run the one-shot container (60 s timeout)
     try:
