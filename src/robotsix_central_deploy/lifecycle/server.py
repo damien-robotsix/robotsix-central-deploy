@@ -1291,10 +1291,10 @@ def _merge_config(
         for key, tval in i_template.items():
             if (
                 isinstance(tval, dict)
-                and isinstance(i_existing.get(key), dict)
                 and isinstance(i_submitted.get(key), dict)
             ):
-                result[key] = _recursive(tval, i_existing[key], i_submitted[key])
+                existing_sub = i_existing[key] if isinstance(i_existing.get(key), dict) else {}
+                result[key] = _recursive(tval, existing_sub, i_submitted[key])
             elif (
                 isinstance(tval, list)
                 and isinstance(i_submitted.get(key), list)
@@ -1429,6 +1429,60 @@ def _derive_account_id(
             slug = _re.sub(r"[^a-z0-9]+", "-", node.lower()).strip("-")
             return slug[:40] or f"accounts-{n}"
     return f"accounts-{n}"
+def _validate_account_ids(merged: dict[str, Any]) -> None:
+    """Validate that every account id matches ^[A-Za-z0-9._-]+$ (no @ or spaces)."""
+    accounts = merged.get("accounts", [])
+    if not isinstance(accounts, list):
+        return
+    for item in accounts:
+        if not isinstance(item, dict):
+            continue
+        id_val = item.get("id", "")
+        if not isinstance(id_val, str) or not id_val:
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", id_val):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Account id {id_val!r} must match ^[A-Za-z0-9._-]+ (no @ or spaces)",
+            )
+
+
+def _prune_unset(merged: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
+    """Remove template-default empty fields from merged that were absent from existing.
+
+    A field is pruned only when its merged value is '' or None AND the field was
+    not present in existing (i.e. the user did not explicitly set it this session).
+    Non-empty template defaults (e.g. port: 993) and any value set by the user
+    are preserved unchanged.
+    """
+    result: dict[str, Any] = {}
+    for k, v in merged.items():
+        if isinstance(v, dict):
+            sub_existing = existing[k] if isinstance(existing.get(k), dict) else {}
+            pruned = _prune_unset(v, sub_existing)
+            # Include if the sub-dict is non-empty OR if k was already in existing
+            if pruned or k in existing:
+                result[k] = pruned
+        elif (
+            isinstance(v, list)
+            and v
+            and isinstance(v[0], dict)
+        ):
+            ex_list = existing.get(k) if isinstance(existing.get(k), list) else []
+            result[k] = [
+                _prune_unset(
+                    item,
+                    ex_list[i]
+                    if i < len(ex_list) and isinstance(ex_list[i], dict)
+                    else {},
+                )
+                for i, item in enumerate(v)
+            ]
+        elif v in ("", None) and k not in existing:
+            pass  # skip: field was absent from existing and no new value set
+        else:
+            result[k] = v
+    return result
 
 
 def _resolve_placeholders(command_str: str, values: dict) -> str:
@@ -1585,6 +1639,9 @@ async def put_service_config(
         )
     existing = await config_yaml_store.get_current(name) or template
     merged = _merge_config(template, existing, body.values)
+    if "accounts" in merged:
+        _validate_account_ids(merged)
+    merged = _prune_unset(merged, existing)
     await config_yaml_store.update_current(name, merged)
 
     # Write to the actual config volume (not synthetic "{name}-config")
