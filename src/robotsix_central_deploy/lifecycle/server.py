@@ -52,7 +52,7 @@ from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
 from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry
-from ..registry.models import ComponentConfig, ServiceConfig
+from ..registry.models import ComponentConfig, ConfigAssistSeed, ServiceConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
 from ..ui.router import router as ui_router
@@ -1351,7 +1351,7 @@ class ConfigResponse(BaseModel):
     config_schema: dict[str, Any] = Field(serialization_alias="schema")
     current: dict[str, Any]
     config_assist_command: str | None = None
-    config_assist_seeds: list[str] = []
+    config_assist_seeds: list[ConfigAssistSeed] = []
 
 
 class ConfigUpdate(BaseModel):

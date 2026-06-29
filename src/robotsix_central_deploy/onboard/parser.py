@@ -15,6 +15,7 @@ from robotsix_central_deploy.onboard.models import (
     SiblingDerivedSpec,
 )
 from robotsix_central_deploy.registry.models import (
+    ConfigAssistSeed,
     HealthCheck,
     PortMapping,
     VolumeMount,
@@ -312,16 +313,25 @@ def _parse_one_service(
 
     # Labels — config-assist (command + seed fields)
     config_assist_command: str | None = None
-    config_assist_seeds: list[str] = []
+    config_assist_seeds: list[ConfigAssistSeed] = []
     if isinstance(labels, dict):
         raw_cmd = labels.get(LABEL_CONFIG_ASSIST)
         if isinstance(raw_cmd, str) and raw_cmd.strip():
             config_assist_command = raw_cmd.strip()
         _seeds_raw = labels.get(LABEL_CONFIG_ASSIST_SEEDS, "")
         if isinstance(_seeds_raw, str) and _seeds_raw.strip():
-            config_assist_seeds = [
-                s.strip() for s in _seeds_raw.split(",") if s.strip()
-            ]
+            config_assist_seeds: list[ConfigAssistSeed] = []
+            for _entry in _seeds_raw.split(","):
+                _entry = _entry.strip()
+                if not _entry:
+                    continue
+                if ":" in _entry:
+                    _key, _, _lbl = _entry.partition(":")
+                    config_assist_seeds.append(
+                        ConfigAssistSeed(key=_key.strip(), label=_lbl.strip() or None)
+                    )
+                else:
+                    config_assist_seeds.append(ConfigAssistSeed(key=_entry))
 
     # container_name override
     container_name = svc.get("container_name", "")

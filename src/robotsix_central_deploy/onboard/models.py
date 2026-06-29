@@ -5,6 +5,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 
 from robotsix_central_deploy.registry.models import (
+    ConfigAssistSeed,
     HealthCheck,
     PortMapping,
     VolumeMount,
@@ -54,7 +55,7 @@ class DerivedSpec(BaseModel):
         None  # shell command from robotsix.deploy.config-assist
     )
     config_assist_seeds: list[
-        str
+        ConfigAssistSeed
     ] = []  # seed field keys from robotsix.deploy.config-assist-seeds
 
 

@@ -15,7 +15,7 @@ from robotsix_central_deploy.lifecycle.backend import ComponentInspect
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
-from robotsix_central_deploy.registry.models import ComponentConfig, VolumeMount
+from robotsix_central_deploy.registry.models import ComponentConfig, ConfigAssistSeed, VolumeMount
 
 # Import the server module itself (not just symbols) so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -1530,7 +1530,7 @@ class TestGetServiceConfigAssistFields:
             container_name="auto-mail",
             has_config_yaml=True,
             config_assist_command="detect",
-            config_assist_seeds=["account.email", "account.password"],
+            config_assist_seeds=[ConfigAssistSeed(key="account.email"), ConfigAssistSeed(key="account.password")],
         )
         await config_store.put(cfg)
 
@@ -1538,7 +1538,34 @@ class TestGetServiceConfigAssistFields:
         assert resp.status_code == 200
         data = resp.json()
         assert data["config_assist_command"] == "detect"
-        assert data["config_assist_seeds"] == ["account.email", "account.password"]
+        assert data["config_assist_seeds"] == [{"key": "account.email", "label": None}, {"key": "account.password", "label": None}]
+
+    async def test_returns_seeds_with_labels(self, client: AsyncClient, auth_headers: dict):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        await store.save_template("auto-mail", {"host": ""})
+
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_assist_command="detect",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+                ConfigAssistSeed(key="accounts.0.auth.password", label="Password"),
+            ],
+        )
+        await config_store.put(cfg)
+
+        resp = await client.get("/services/auto-mail/config", headers=auth_headers)
+        assert resp.status_code == 200
+        seeds = resp.json()["config_assist_seeds"]
+        assert seeds == [
+            {"key": "accounts.0.auth.username", "label": "Email"},
+            {"key": "accounts.0.auth.password", "label": "Password"},
+        ]
 
     async def test_returns_null_and_empty_when_not_configured(
         self, client: AsyncClient, auth_headers: dict
@@ -1592,7 +1619,7 @@ class TestConfigAssist:
             has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect",
-            config_assist_seeds=["account.email", "account.password"],
+            config_assist_seeds=[ConfigAssistSeed(key="account.email"), ConfigAssistSeed(key="account.password")],
             mounts=[VolumeMount(host="auto-mail-config", container="/config")],
             env={"APP_ENV": "prod"},
         )
@@ -1804,7 +1831,7 @@ class TestConfigAssist:
             has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect {account.email} --no-verify --output /config/config.yaml",
-            config_assist_seeds=["account.email", "account.password"],
+            config_assist_seeds=[ConfigAssistSeed(key="account.email"), ConfigAssistSeed(key="account.password")],
             mounts=[VolumeMount(host="auto-mail-config", container="/config")],
         )
         await config_store.put(cfg)
@@ -1865,7 +1892,7 @@ class TestConfigAssist:
             has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect {account.email} --no-verify --output /config/config.yaml",
-            config_assist_seeds=["account.email"],
+            config_assist_seeds=[ConfigAssistSeed(key="account.email")],
             mounts=[VolumeMount(host="auto-mail-config", container="/config")],
         )
         await config_store.put(cfg)
