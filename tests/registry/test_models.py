@@ -7,6 +7,7 @@ from robotsix_central_deploy.registry import (
     PortMapping,
     VolumeMount,
 )
+from robotsix_central_deploy.registry.models import ConfigAssistSeed
 
 
 class TestPortMapping:
@@ -59,3 +60,35 @@ class TestComponentConfig:
     def test_invalid_id_rejected(self, bad_id):
         with pytest.raises(ValidationError):
             ComponentConfig(id=bad_id, image="repo:latest", container_name="c")
+
+
+class TestConfigAssistSeed:
+    """Tests for ConfigAssistSeed back-compat string coercion."""
+
+    def test_accepts_plain_string(self):
+        """A bare str is coerced to {"key": s, "label": None}."""
+        result = ConfigAssistSeed.model_validate("my.key")
+        assert isinstance(result, ConfigAssistSeed)
+        assert result.key == "my.key"
+        assert result.label is None
+
+    def test_accepts_dict(self):
+        """The existing dict form still works."""
+        result = ConfigAssistSeed.model_validate({"key": "x", "label": "X"})
+        assert isinstance(result, ConfigAssistSeed)
+        assert result.key == "x"
+        assert result.label == "X"
+
+    def test_component_config_coerces_string_seeds(self):
+        """ComponentConfig with plain-string seeds succeeds and coerces each."""
+        result = ComponentConfig.model_validate(
+            {
+                "id": "mail",
+                "image": "x:y",
+                "container_name": "mail",
+                "config_assist_seeds": ["host", "port"],
+            }
+        )
+        assert len(result.config_assist_seeds) == 2
+        assert result.config_assist_seeds[0] == ConfigAssistSeed(key="host", label=None)
+        assert result.config_assist_seeds[1] == ConfigAssistSeed(key="port", label=None)
