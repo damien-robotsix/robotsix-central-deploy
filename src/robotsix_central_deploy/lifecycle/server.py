@@ -1165,6 +1165,22 @@ async def delete_service_env_key(
 # ---------------------------------------------------------------------------
 
 
+_SECRET_NAME_TOKENS = (
+    "password", "passwd", "secret", "token", "apikey", "api_key",
+    "credential", "private_key", "access_key",
+)
+
+
+def _is_secret_name(key: str) -> bool:
+    """Heuristic: a config field is a secret only if its NAME looks like one.
+
+    Used so that required-but-empty-in-template fields that are NOT secrets
+    (e.g. imap.host, username) are shown in the UI instead of masked as "***".
+    """
+    k = key.lower()
+    return any(t in k for t in _SECRET_NAME_TOKENS) or k.endswith("_key")
+
+
 def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Return *current* with secret leaf values replaced by ``"***"``.
 
@@ -1193,7 +1209,12 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                     ]
                 else:
                     result[key] = cval  # scalar array — pass through unchanged
-            elif tval in ("", None) and isinstance(cval, str) and cval:
+            elif (
+                tval in ("", None)
+                and isinstance(cval, str)
+                and cval
+                and _is_secret_name(key)
+            ):
                 result[key] = "***"
             else:
                 result[key] = cval if key in i_current else tval
