@@ -48,9 +48,7 @@ class VolumeAuditScheduler:
             return {}
         try:
             raw = json.loads(self._snapshot_path.read_text(encoding="utf-8"))
-            return {
-                k: VolumeSizeSnapshot.model_validate(v) for k, v in raw.items()
-            }
+            return {k: VolumeSizeSnapshot.model_validate(v) for k, v in raw.items()}
         except Exception as exc:
             logger.warning("Failed to load volume snapshots: %s", exc)
             return {}

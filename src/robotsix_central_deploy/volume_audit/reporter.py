@@ -29,7 +29,11 @@ def report_finding(finding: AuditFinding, findings_path: Path) -> None:
     )
     findings_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        raw = findings_path.read_text(encoding="utf-8") if findings_path.exists() else "[]"
+        raw = (
+            findings_path.read_text(encoding="utf-8")
+            if findings_path.exists()
+            else "[]"
+        )
         existing: list[dict] = json.loads(raw)
     except (json.JSONDecodeError, OSError):
         existing = []

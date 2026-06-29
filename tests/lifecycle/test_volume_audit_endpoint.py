@@ -9,9 +9,7 @@ class TestVolumeAuditEndpoint:
     @pytest.mark.asyncio
     async def test_disabled_returns_disabled_response(self, client):
         """When volume_audit_enabled=False (default), endpoint returns enabled=false."""
-        resp = await client.get(
-            "/volumes/audit", headers={"X-API-Key": "test-key"}
-        )
+        resp = await client.get("/volumes/audit", headers={"X-API-Key": "test-key"})
         assert resp.status_code == 200
         data = resp.json()
         assert data["enabled"] is False
@@ -33,9 +31,7 @@ class TestVolumeAuditEndpoint:
                 update={"volume_audit_enabled": True}
             ),
         )
-        resp = await client.get(
-            "/volumes/audit", headers={"X-API-Key": "test-key"}
-        )
+        resp = await client.get("/volumes/audit", headers={"X-API-Key": "test-key"})
         assert resp.status_code == 200
         assert resp.json()["enabled"] is True
         fake_scheduler.get_audit_response.assert_called_once()
