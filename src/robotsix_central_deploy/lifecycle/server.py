@@ -1167,8 +1167,15 @@ async def delete_service_env_key(
 
 
 _SECRET_NAME_TOKENS = (
-    "password", "passwd", "secret", "token", "apikey", "api_key",
-    "credential", "private_key", "access_key",
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "credential",
+    "private_key",
+    "access_key",
 )
 
 
@@ -1210,11 +1217,7 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                     ]
                 else:
                     result[key] = cval  # scalar array — pass through unchanged
-            elif (
-                tval in ("", None)
-                and isinstance(cval, str)
-                and cval
-            ):
+            elif tval in ("", None) and isinstance(cval, str) and cval:
                 result[key] = "***"
             else:
                 result[key] = cval if key in i_current else tval
