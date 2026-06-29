@@ -55,7 +55,9 @@ class EnvStore:
             return ComponentEnvConfig()
         return ComponentEnvConfig.model_validate(entry)
 
-    async def upsert(self, name: str, env: dict[str, str], secrets: dict[str, str]) -> None:
+    async def upsert(
+        self, name: str, env: dict[str, str], secrets: dict[str, str]
+    ) -> None:
         """Merge *env* and *secrets* into the stored config for *name*.
 
         Overwrites matching keys; does not wipe keys not mentioned.
@@ -102,7 +104,9 @@ class EnvStore:
             store.pop(name, None)
             await self._save(store)
 
-    async def get_merged_env(self, name: str, base_env: dict[str, str]) -> dict[str, str]:
+    async def get_merged_env(
+        self, name: str, base_env: dict[str, str]
+    ) -> dict[str, str]:
         """Return the effective environment for *name*.
 
         Merging order (later wins):

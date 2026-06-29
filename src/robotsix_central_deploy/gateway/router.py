@@ -23,13 +23,20 @@ gateway_router = APIRouter(tags=["gateway"])
 
 #: Names that MUST NOT be used as component slugs — they would shadow
 #: central-deploy's own endpoints.
-RESERVED_NAMES: frozenset[str] = frozenset({
-    "ui", "health", "services", "onboard",
-    "docs", "openapi.json", "redoc",
-    "disk",  # GET /disk
-    "settings",  # GET/PUT /settings
-    "help",  # GET /help/deploy-contract
-})
+RESERVED_NAMES: frozenset[str] = frozenset(
+    {
+        "ui",
+        "health",
+        "services",
+        "onboard",
+        "docs",
+        "openapi.json",
+        "redoc",
+        "disk",  # GET /disk
+        "settings",  # GET/PUT /settings
+        "help",  # GET /help/deploy-contract
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +128,9 @@ async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
 async def gateway_http(
-    request: Request, name: str, path: str,
+    request: Request,
+    name: str,
+    path: str,
     _auth: None = Depends(verify_session),
 ) -> Response:
     config, err_status = _resolve(request.app, name)

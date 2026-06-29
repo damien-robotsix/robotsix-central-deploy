@@ -7,8 +7,15 @@ from unittest import mock
 
 import pytest
 
-from robotsix_central_deploy.onboard.fetcher import FetchError, RepoFiles, fetch_compose_bytes, fetch_repo_files
-from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
+from robotsix_central_deploy.onboard.fetcher import (
+    FetchError,
+    fetch_compose_bytes,
+    fetch_repo_files,
+)
+from robotsix_central_deploy.onboard.models import (
+    DerivedSpec,
+    ParseError,
+)
 from robotsix_central_deploy.onboard.parser import _parse_go_duration, parse_compose
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
 
@@ -52,6 +59,7 @@ def _bytes(yaml_str: str) -> bytes:
 # _parse_go_duration
 # ---------------------------------------------------------------------------
 
+
 class TestGoDuration:
     def test_seconds_only(self):
         assert _parse_go_duration("30s") == 30
@@ -73,6 +81,7 @@ class TestGoDuration:
 # ---------------------------------------------------------------------------
 # parse_compose — valid
 # ---------------------------------------------------------------------------
+
 
 class TestParseComposeValid:
     def test_valid_contract(self):
@@ -143,6 +152,7 @@ volumes:
 # ---------------------------------------------------------------------------
 # parse_compose — invalid
 # ---------------------------------------------------------------------------
+
 
 class TestParseComposeInvalid:
     def test_missing_header(self):
@@ -283,6 +293,7 @@ services:
 # parse_compose — labels
 # ---------------------------------------------------------------------------
 
+
 class TestParseComposeLabels:
     def test_claude_mount_true(self):
         y = """\
@@ -404,6 +415,7 @@ volumes:
 """
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.config_volume == "myapp-conf"
+
 
 class TestParseComposeHealthcheck:
     def test_interval_30s(self):
@@ -603,6 +615,7 @@ class TestFetchRepoFiles:
 # fetch_compose_bytes
 # ---------------------------------------------------------------------------
 
+
 class TestFetchComposeBytes:
     def test_non_https_url(self):
         with pytest.raises(FetchError, match="only https://"):
@@ -799,6 +812,7 @@ services:
 # ---------------------------------------------------------------------------
 # parse_compose — command and entrypoint
 # ---------------------------------------------------------------------------
+
 
 class TestParseComposeCommandAndEntrypoint:
     def test_command_string_is_split(self):

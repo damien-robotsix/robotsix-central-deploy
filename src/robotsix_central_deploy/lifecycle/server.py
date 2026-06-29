@@ -312,6 +312,7 @@ app = FastAPI(
 app.include_router(ui_router)
 
 from .settings_router import settings_router  # noqa: E402
+
 app.include_router(settings_router)
 
 # ---------------------------------------------------------------------------
@@ -566,7 +567,9 @@ async def get_service_logs(
     record = await _get_or_create_record(name, store)
 
     async def log_gen() -> AsyncIterator[bytes]:
-        async for chunk in backend.stream_logs(record, tail=tail, since=since, follow=follow):
+        async for chunk in backend.stream_logs(
+            record, tail=tail, since=since, follow=follow
+        ):
             yield chunk
 
     return StreamingResponse(log_gen(), media_type="text/plain; charset=utf-8")
@@ -1154,7 +1157,9 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
     Non-secret and nested branches are preserved as-is from *current*.
     """
 
-    def _recursive(i_template: dict[str, Any], i_current: dict[str, Any]) -> dict[str, Any]:
+    def _recursive(
+        i_template: dict[str, Any], i_current: dict[str, Any]
+    ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, tval in i_template.items():
             cval = i_current.get(key)
@@ -1210,7 +1215,9 @@ def _coerce_to_template(tval: object, sval: object) -> object:
     return sval
 
 
-def _merge_config(template: dict[str, Any], existing: dict[str, Any], submitted: dict[str, Any]) -> dict[str, Any]:
+def _merge_config(
+    template: dict[str, Any], existing: dict[str, Any], submitted: dict[str, Any]
+) -> dict[str, Any]:
     """Deep-merge *submitted* over *existing*, respecting secret sentinel.
 
     For each key in *template*:
@@ -1222,7 +1229,11 @@ def _merge_config(template: dict[str, Any], existing: dict[str, Any], submitted:
       was not submitted, the template default.
     """
 
-    def _recursive(i_template: dict[str, Any], i_existing: dict[str, Any], i_submitted: dict[str, Any]) -> dict[str, Any]:
+    def _recursive(
+        i_template: dict[str, Any],
+        i_existing: dict[str, Any],
+        i_submitted: dict[str, Any],
+    ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, tval in i_template.items():
             if (

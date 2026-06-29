@@ -29,7 +29,9 @@ class SystemSettings(BaseModel):
     registry_check_interval: int = 300  # seconds; 0 = disabled
     log_level: str = "INFO"
     gateway_base_domain: str = ""  # e.g. "deploy.robotsix.net"
-    claude_host_mount_path: str = ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
+    claude_host_mount_path: str = (
+        ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
+    )
 
     @field_validator("log_level")
     @classmethod
@@ -37,8 +39,7 @@ class SystemSettings(BaseModel):
         normalised = v.upper()
         if normalised not in VALID_LOG_LEVELS:
             raise ValueError(
-                f"Unknown log level '{v}'. "
-                f"Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
+                f"Unknown log level '{v}'. Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
             )
         return normalised
 
@@ -106,7 +107,6 @@ class SystemSettingsStore:
         """
         if not self._path.exists():
             return config
-
 
         stored = self._load()
         return config.model_copy(

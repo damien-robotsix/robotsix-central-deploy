@@ -15,8 +15,13 @@ class TestServiceStateEnum:
 
     def test_all_states_exist(self):
         assert {s.value for s in ServiceState} == {
-            "stopped", "starting", "running", "stopping",
-            "restarting", "failed", "unknown",
+            "stopped",
+            "starting",
+            "running",
+            "stopping",
+            "restarting",
+            "failed",
+            "unknown",
         }
 
     def test_state_is_string_comparable(self):
@@ -27,35 +32,38 @@ class TestServiceStateEnum:
 class TestTransitions:
     """State machine transition rules."""
 
-    @pytest.mark.parametrize("src,dst,allowed", [
-        # STOPPED → STARTING only
-        (ServiceState.STOPPED, ServiceState.STARTING, True),
-        (ServiceState.STOPPED, ServiceState.RUNNING, False),
-        (ServiceState.STOPPED, ServiceState.STOPPING, False),
-        (ServiceState.STOPPED, ServiceState.RESTARTING, False),
-        # STARTING → RUNNING or FAILED
-        (ServiceState.STARTING, ServiceState.RUNNING, True),
-        (ServiceState.STARTING, ServiceState.FAILED, True),
-        (ServiceState.STARTING, ServiceState.STOPPED, False),
-        # RUNNING → STOPPING or RESTARTING
-        (ServiceState.RUNNING, ServiceState.STOPPING, True),
-        (ServiceState.RUNNING, ServiceState.RESTARTING, True),
-        (ServiceState.RUNNING, ServiceState.STARTING, False),
-        # STOPPING → STOPPED or FAILED
-        (ServiceState.STOPPING, ServiceState.STOPPED, True),
-        (ServiceState.STOPPING, ServiceState.FAILED, True),
-        (ServiceState.STOPPING, ServiceState.RUNNING, False),
-        # RESTARTING → STOPPING only
-        (ServiceState.RESTARTING, ServiceState.STOPPING, True),
-        (ServiceState.RESTARTING, ServiceState.RUNNING, False),
-        # FAILED → STARTING only
-        (ServiceState.FAILED, ServiceState.STARTING, True),
-        (ServiceState.FAILED, ServiceState.STOPPING, False),
-        # UNKNOWN → STARTING or STOPPING
-        (ServiceState.UNKNOWN, ServiceState.STARTING, True),
-        (ServiceState.UNKNOWN, ServiceState.STOPPING, True),
-        (ServiceState.UNKNOWN, ServiceState.RUNNING, False),
-    ])
+    @pytest.mark.parametrize(
+        "src,dst,allowed",
+        [
+            # STOPPED → STARTING only
+            (ServiceState.STOPPED, ServiceState.STARTING, True),
+            (ServiceState.STOPPED, ServiceState.RUNNING, False),
+            (ServiceState.STOPPED, ServiceState.STOPPING, False),
+            (ServiceState.STOPPED, ServiceState.RESTARTING, False),
+            # STARTING → RUNNING or FAILED
+            (ServiceState.STARTING, ServiceState.RUNNING, True),
+            (ServiceState.STARTING, ServiceState.FAILED, True),
+            (ServiceState.STARTING, ServiceState.STOPPED, False),
+            # RUNNING → STOPPING or RESTARTING
+            (ServiceState.RUNNING, ServiceState.STOPPING, True),
+            (ServiceState.RUNNING, ServiceState.RESTARTING, True),
+            (ServiceState.RUNNING, ServiceState.STARTING, False),
+            # STOPPING → STOPPED or FAILED
+            (ServiceState.STOPPING, ServiceState.STOPPED, True),
+            (ServiceState.STOPPING, ServiceState.FAILED, True),
+            (ServiceState.STOPPING, ServiceState.RUNNING, False),
+            # RESTARTING → STOPPING only
+            (ServiceState.RESTARTING, ServiceState.STOPPING, True),
+            (ServiceState.RESTARTING, ServiceState.RUNNING, False),
+            # FAILED → STARTING only
+            (ServiceState.FAILED, ServiceState.STARTING, True),
+            (ServiceState.FAILED, ServiceState.STOPPING, False),
+            # UNKNOWN → STARTING or STOPPING
+            (ServiceState.UNKNOWN, ServiceState.STARTING, True),
+            (ServiceState.UNKNOWN, ServiceState.STOPPING, True),
+            (ServiceState.UNKNOWN, ServiceState.RUNNING, False),
+        ],
+    )
     def test_transition_allowed(self, src, dst, allowed):
         assert can_transition(src, dst) == allowed
 

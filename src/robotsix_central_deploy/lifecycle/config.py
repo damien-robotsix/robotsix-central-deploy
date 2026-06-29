@@ -42,20 +42,26 @@ class LifecycleConfig(BaseSettings):
     docker_socket_url: str = "unix:///var/run/docker.sock"
 
     # Disk usage monitoring
-    disk_path: str = "/"  # env: ROBOTSIX_LIFECYCLE_DISK_PATH — /host_root when containerised
-    disk_warn_bytes: int = 5_368_709_120  # 5 GiB — env: ROBOTSIX_LIFECYCLE_DISK_WARN_BYTES
+    disk_path: str = (
+        "/"  # env: ROBOTSIX_LIFECYCLE_DISK_PATH — /host_root when containerised
+    )
+    disk_warn_bytes: int = (
+        5_368_709_120  # 5 GiB — env: ROBOTSIX_LIFECYCLE_DISK_WARN_BYTES
+    )
 
     # Env / secrets persistence
-    env_store_path: str = "component_env.json"   # ROBOTSIX_LIFECYCLE_ENV_STORE_PATH
-    secret_key_path: str = "secrets.key"         # ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH
+    env_store_path: str = "component_env.json"  # ROBOTSIX_LIFECYCLE_ENV_STORE_PATH
+    secret_key_path: str = "secrets.key"  # ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH
 
     # Per-component config.yaml store
     config_yaml_store_path: str = "data/component_config_yaml.json"
     # env: ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH
 
     # Registry check
-    ghcr_token: str = ""           # ROBOTSIX_LIFECYCLE_GHCR_TOKEN
-    registry_check_ttl: int = 300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL  (cache TTL, seconds)
+    ghcr_token: str = ""  # ROBOTSIX_LIFECYCLE_GHCR_TOKEN
+    registry_check_ttl: int = (
+        300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL  (cache TTL, seconds)
+    )
     registry_check_interval: int = 300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL (bg task interval; 0 = disabled)
 
     # Settings store
@@ -63,7 +69,7 @@ class LifecycleConfig(BaseSettings):
     # env: ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH
 
     # Logging
-    log_level: str = "INFO"   # env: ROBOTSIX_LIFECYCLE_LOG_LEVEL
+    log_level: str = "INFO"  # env: ROBOTSIX_LIFECYCLE_LOG_LEVEL
 
     # Gateway
     gateway_base_domain: str = ""  # ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN

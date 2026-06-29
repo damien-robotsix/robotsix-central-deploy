@@ -14,12 +14,18 @@ from .config import LifecycleConfig
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="robotsix-central-deploy lifecycle server")
+    parser = argparse.ArgumentParser(
+        description="robotsix-central-deploy lifecycle server"
+    )
     parser.add_argument("--host", default=None, help="Bind address (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=None, help="Bind port (default: 8100)")
+    parser.add_argument(
+        "--port", type=int, default=None, help="Bind port (default: 8100)"
+    )
     parser.add_argument("--store-backend", default=None, choices=("memory", "file"))
     parser.add_argument("--execution-backend", default=None, choices=("docker", "noop"))
-    parser.add_argument("--api-key", default=None, help="API key for mutating endpoints")
+    parser.add_argument(
+        "--api-key", default=None, help="API key for mutating endpoints"
+    )
     args = parser.parse_args(argv)
 
     cfg = LifecycleConfig()

@@ -6,7 +6,6 @@ import json
 import logging
 from pathlib import Path
 
-import pytest
 
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.models import ComponentConfig
@@ -56,9 +55,11 @@ class TestConfigStoreCorruptionGuard:
         store_path = tmp_path / "data" / "component_configs.json"
         store_path.parent.mkdir(parents=True, exist_ok=True)
         store_path.write_text(
-            json.dumps({
-                "svc-a": _make_config("svc-a").model_dump(),
-            }),
+            json.dumps(
+                {
+                    "svc-a": _make_config("svc-a").model_dump(),
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -74,7 +75,9 @@ class TestConfigStoreCorruptionGuard:
         store_path.write_text("{{{ invalid json", encoding="utf-8")
 
         store = ComponentConfigStore(store_path)
-        with caplog.at_level(logging.ERROR, logger="robotsix_central_deploy.registry.config_store"):
+        with caplog.at_level(
+            logging.ERROR, logger="robotsix_central_deploy.registry.config_store"
+        ):
             _ = store.all()
 
         # At least one ERROR message mentioning the path

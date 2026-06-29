@@ -74,8 +74,7 @@ components:
     container_name: broken
 """,
         )
-        with pytest.raises(RegistryLoadError, match="Invalid component entry at index 0"):
+        with pytest.raises(
+            RegistryLoadError, match="Invalid component entry at index 0"
+        ):
             ComponentRegistry.from_yaml(path)
-
-
-

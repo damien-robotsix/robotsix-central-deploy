@@ -4,14 +4,20 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-from robotsix_central_deploy.registry.models import HealthCheck, PortMapping, VolumeMount
+from robotsix_central_deploy.registry.models import (
+    HealthCheck,
+    PortMapping,
+    VolumeMount,
+)
 
 
 class SiblingDerivedSpec(BaseModel):
     """Parsed config for a non-primary service in a multi-service compose."""
 
-    service_key: str       # compose services: key (e.g. "ingester")
-    container_name: str    # derived name ("<component>-<service_key>") or container_name: override
+    service_key: str  # compose services: key (e.g. "ingester")
+    container_name: (
+        str  # derived name ("<component>-<service_key>") or container_name: override
+    )
     image: str
     ports: list[PortMapping] = []
     volume_mounts: list[VolumeMount] = []
@@ -38,10 +44,18 @@ class DerivedSpec(BaseModel):
     entrypoint: Optional[list[str]] = None
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
-    config_schema: dict[str, Any] | None = None  # parsed config/config.yaml, null when absent
-    config_volume: Optional[str] = None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)
-    config_assist_command: Optional[str] = None  # shell command from robotsix.deploy.config-assist
-    config_assist_seeds: list[str] = []  # seed field keys from robotsix.deploy.config-assist-seeds
+    config_schema: dict[str, Any] | None = (
+        None  # parsed config/config.yaml, null when absent
+    )
+    config_volume: Optional[str] = (
+        None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)
+    )
+    config_assist_command: Optional[str] = (
+        None  # shell command from robotsix.deploy.config-assist
+    )
+    config_assist_seeds: list[
+        str
+    ] = []  # seed field keys from robotsix.deploy.config-assist-seeds
 
 
 class ParseError(Exception):

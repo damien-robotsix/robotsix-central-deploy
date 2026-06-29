@@ -31,9 +31,12 @@ async def verify_auth(request: Request) -> None:
         username, password = _decode_basic_auth(auth_header)
         if config.auth_username and config.auth_password:
             # Username+password mode — both fields must match.
-            if (username and password
-                    and _safe_compare(username, config.auth_username)
-                    and _safe_compare(password, config.auth_password)):
+            if (
+                username
+                and password
+                and _safe_compare(username, config.auth_username)
+                and _safe_compare(password, config.auth_password)
+            ):
                 return
         elif config.api_key and password and _safe_compare(password, config.api_key):
             # Legacy api_key mode — username is ignored, password == api_key.
@@ -98,5 +101,3 @@ def _safe_next(next_url: str) -> str:
     if parsed.query:
         path = f"{path}?{parsed.query}"
     return path
-
-

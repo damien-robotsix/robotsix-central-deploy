@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: damien-robotsix/robotsix-mill/.github/workflows/python-ci.yml@b65aa6fcec7fc76e5a565c70e630623a91204f86  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@5cd8c1facb02299da618979e7a55f1953f9c075a  # main
     with:
       python-version: "3.14"
       # central-deploy declares no `tracing` extra; the reusable defaults
