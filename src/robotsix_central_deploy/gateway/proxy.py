@@ -113,6 +113,24 @@ async def http_proxy(
         if key.lower() not in _RESPONSE_STRIP:
             resp_headers[key] = value
 
+    # Rewrite absolute-path redirect Locations to keep the gateway prefix.
+    # An app served at /<name>/ that redirects to e.g. "/board" would drop the
+    # prefix and the browser would hit /board -> 404.  Prepend /<name> so
+    # /mail/ -> Location:/board becomes /mail/board.
+    if 300 <= upstream_resp.status_code < 400:
+        _name = request.url.path.lstrip("/").split("/", 1)[0]
+        if _name:
+            _prefix = "/" + _name
+            for _hk in list(resp_headers):
+                if _hk.lower() == "location":
+                    _loc = resp_headers[_hk]
+                    if (
+                        _loc.startswith("/")
+                        and _loc != _prefix
+                        and not _loc.startswith(_prefix + "/")
+                    ):
+                        resp_headers[_hk] = _prefix + _loc
+
     content_type: str = upstream_resp.headers.get("content-type", "")
 
     # -- Stream response body (and close client when done) ------------------
