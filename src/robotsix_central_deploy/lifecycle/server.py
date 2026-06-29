@@ -20,6 +20,7 @@ import logging
 import re
 import shutil
 from collections.abc import AsyncIterator
+import shlex
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -1674,7 +1675,13 @@ async def run_config_assist(
     # Substitute from the MERGED config (template+existing+submitted), not just
     # body.values — so placeholders like {accounts.0.id} (not user-submitted, but
     # present in the config) resolve instead of leaking the literal "{...}".
-    resolved_command = _resolve_placeholders(comp_cfg.config_assist_command, partial)
+    # Split into args FIRST, substitute per-arg, then re-quote — so a value
+    # containing spaces (e.g. a Google app password "abcd efgh ijkl mnop") stays
+    # a SINGLE argument instead of being split apart by the backend's shlex.split.
+    resolved_command = shlex.join(
+        _resolve_placeholders(arg, partial)
+        for arg in shlex.split(comp_cfg.config_assist_command)
+    )
 
     # Run the one-shot container (60 s timeout)
     try:
