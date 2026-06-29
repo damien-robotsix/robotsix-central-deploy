@@ -157,6 +157,45 @@
     color: var(--blue); border-bottom: 1px solid #334155;
     padding-bottom: 4px; margin-bottom: 8px; font-size: 0.9rem;
   }
+  /* Array-of-objects rendering */
+  .array-item {
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .array-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .array-item-header span {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-weight: 600;
+  }
+  .btn-array-remove {
+    background: none;
+    border: 1px solid var(--red);
+    color: var(--red);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  .btn-array-remove:hover { opacity: 0.75; }
+  .btn-array-add {
+    background: none;
+    border: 1px dashed #475569;
+    color: #94a3b8;
+    border-radius: 4px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    margin-top: 6px;
+  }
+  .btn-array-add:hover { border-color: var(--blue); color: var(--blue); }
   .env-row {
     display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
   }
@@ -1040,43 +1079,131 @@ async function fetchConfigSchema(name) {
   }
 }
 
-function generateConfigForm(schema, current, targetId) {
-  const container = typeof targetId === 'string'
-    ? document.getElementById(targetId)
-    : (targetId || document.getElementById('config-form-body'));
+function generateConfigForm(schema, current, containerOrId) {
+  const container = typeof containerOrId === 'string'
+    ? document.getElementById(containerOrId)
+    : (containerOrId || document.getElementById('config-form-body'));
   container.innerHTML = '';
+  _renderConfigNode(schema, current, '', container);
+}
 
-  for (const [key, val] of Object.entries(schema)) {
-    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-      // Nested section
+function _renderConfigNode(schema, current, prefix, container) {
+  for (const [key, schemaVal] of Object.entries(schema)) {
+    const fullKey = prefix ? prefix + '.' + key : key;
+    const currentVal = (current != null) ? current[key] : undefined;
+
+    if (Array.isArray(schemaVal)) {
+      const firstItem = schemaVal[0];
+      if (firstItem !== null && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
+        // Array of objects — full recursive section with Add/Remove
+        _renderArraySection(key, fullKey, schemaVal, currentVal, container);
+      } else {
+        // Scalar array — JSON-string escape hatch (backward compat with _coerce_to_template)
+        const displayVal = Array.isArray(currentVal)
+          ? JSON.stringify(currentVal)
+          : JSON.stringify(schemaVal ?? []);
+        container.appendChild(buildConfigRow(fullKey, key, schemaVal, displayVal, false));
+      }
+    } else if (schemaVal !== null && typeof schemaVal === 'object') {
+      // Nested object section — recurse
       const section = document.createElement('div');
       section.className = 'env-section';
       section.innerHTML = `<h3>${escHtml(key)}</h3>`;
-      const currentSub = (current && typeof current[key] === 'object' && !Array.isArray(current[key]))
-        ? current[key] : {};
-      for (const [subKey, subVal] of Object.entries(val)) {
-        const fullKey = key + '.' + subKey;
-        if (subVal !== null && typeof subVal === 'object' && !Array.isArray(subVal)) {
-          // Deeper nesting (3+ levels) — escape hatch: render as JSON string
-          section.appendChild(buildConfigRow(
-            fullKey, subKey, JSON.stringify(subVal),
-            currentSub[subKey] !== undefined ? String(currentSub[subKey]) : JSON.stringify(subVal),
-            false
-          ));
-        } else {
-          const isSecret = (subVal === '' || subVal === null);
-          const currentVal = currentSub[subKey];
-          section.appendChild(buildConfigRow(fullKey, subKey, subVal, currentVal, isSecret));
-        }
-      }
+      const currentSub = (currentVal !== null && typeof currentVal === 'object'
+                          && !Array.isArray(currentVal)) ? currentVal : {};
+      _renderConfigNode(schemaVal, currentSub, fullKey, section);
       container.appendChild(section);
     } else {
-      // Top-level scalar
-      const isSecret = (val === '' || val === null);
-      const currentVal = current[key];
-      container.appendChild(buildConfigRow(key, key, val, currentVal, isSecret));
+      // Scalar leaf
+      const isSecret = (schemaVal === '' || schemaVal === null);
+      container.appendChild(buildConfigRow(fullKey, key, schemaVal, currentVal, isSecret));
     }
   }
+}
+
+function _renderArraySection(key, prefix, schemaArray, currentArray, container) {
+  const itemTemplate = schemaArray[0] || {};
+  // If no current values, seed with one blank item so the user has something to fill in
+  const items = Array.isArray(currentArray) && currentArray.length > 0
+    ? currentArray
+    : [{}];
+
+  const section = document.createElement('div');
+  section.className = 'env-section array-section';
+  section.dataset.arrayKey = prefix;
+  section.innerHTML = `<h3>${escHtml(key)}</h3>`;
+
+  const itemsContainer = document.createElement('div');
+  itemsContainer.className = 'array-items-container';
+  section.appendChild(itemsContainer);
+
+  items.forEach((item, idx) => {
+    _renderArrayItem(prefix, idx, itemTemplate, item, itemsContainer);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn-array-add';
+  addBtn.textContent = `+ Add ${key} item`;
+  addBtn.addEventListener('click', () => _addArrayItem(prefix, itemTemplate, itemsContainer));
+  section.appendChild(addBtn);
+
+  container.appendChild(section);
+}
+
+function _renderArrayItem(prefix, index, itemTemplate, itemCurrent, container) {
+  const itemDiv = document.createElement('div');
+  itemDiv.className = 'array-item';
+  itemDiv.dataset.arrayIndex = index;
+  itemDiv.dataset.arrayPrefix = prefix;  // e.g. "accounts"
+
+  const heading = (itemCurrent && (itemCurrent.id || itemCurrent.name))
+                  || `[${index}]`;
+  const headerDiv = document.createElement('div');
+  headerDiv.className = 'array-item-header';
+  headerDiv.innerHTML = `<span>${escHtml(String(heading))}</span>`;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn-array-remove';
+  removeBtn.textContent = 'Remove';
+  removeBtn.addEventListener('click', () => {
+    const itemsContainer = itemDiv.closest('.array-items-container');
+    itemDiv.remove();
+    if (itemsContainer) _reindexArrayItems(itemsContainer);
+  });
+  headerDiv.appendChild(removeBtn);
+  itemDiv.appendChild(headerDiv);
+
+  const body = document.createElement('div');
+  body.className = 'array-item-body';
+  _renderConfigNode(itemTemplate, itemCurrent || {}, `${prefix}.${index}`, body);
+  itemDiv.appendChild(body);
+
+  container.appendChild(itemDiv);
+}
+
+function _addArrayItem(prefix, itemTemplate, container) {
+  const count = container.querySelectorAll(':scope > .array-item').length;
+  _renderArrayItem(prefix, count, itemTemplate, {}, container);
+}
+
+function _reindexArrayItems(container) {
+  const items = container.querySelectorAll(':scope > .array-item');
+  items.forEach((itemDiv, newIdx) => {
+    const oldIdx = parseInt(itemDiv.dataset.arrayIndex, 10);
+    const prefix = itemDiv.dataset.arrayPrefix;
+    if (oldIdx !== newIdx) {
+      const oldSeg = `${prefix}.${oldIdx}.`;
+      const newSeg = `${prefix}.${newIdx}.`;
+      itemDiv.querySelectorAll('[data-key]').forEach(el => {
+        if (el.dataset.key.startsWith(oldSeg)) {
+          el.dataset.key = newSeg + el.dataset.key.slice(oldSeg.length);
+        }
+      });
+    }
+    itemDiv.dataset.arrayIndex = newIdx;
+  });
 }
 
 function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
@@ -1112,16 +1239,31 @@ function collectConfigValues(schema, containerEl) {
   root.querySelectorAll('[data-key]').forEach(input => {
     const parts = input.dataset.key.split('.');
     let obj = result;
+
     for (let i = 0; i < parts.length - 1; i++) {
-      if (!obj[parts[i]]) obj[parts[i]] = {};
-      obj = obj[parts[i]];
+      const part = parts[i];
+      const nextPart = parts[i + 1];
+      const nextIsIndex = /^\d+$/.test(nextPart);
+
+      if (/^\d+$/.test(part)) {
+        // Current part is a numeric array index — navigate into the array slot
+        const idx = parseInt(part, 10);
+        if (obj[idx] === undefined) obj[idx] = nextIsIndex ? [] : {};
+        obj = obj[idx];
+      } else {
+        // Current part is an object key
+        if (obj[part] === undefined) obj[part] = nextIsIndex ? [] : {};
+        obj = obj[part];
+      }
     }
+
     const key = parts[parts.length - 1];
     const isSecret = input.type === 'password';
-    if (isSecret && input.value === '') {
-      obj[key] = '***';  // sentinel: preserve existing
+    if (/^\d+$/.test(key)) {
+      const idx = parseInt(key, 10);
+      obj[idx] = (isSecret && input.value === '') ? '***' : input.value;
     } else {
-      obj[key] = input.value;
+      obj[key] = (isSecret && input.value === '') ? '***' : input.value;
     }
   });
   return result;

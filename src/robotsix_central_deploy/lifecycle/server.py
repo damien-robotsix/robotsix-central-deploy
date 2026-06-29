@@ -1165,6 +1165,16 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
             cval = i_current.get(key)
             if isinstance(tval, dict) and isinstance(cval, dict):
                 result[key] = _recursive(tval, cval)
+            elif isinstance(tval, list) and isinstance(cval, list):
+                # Object-array: mask each item using the first schema item as the template.
+                item_template = tval[0] if tval and isinstance(tval[0], dict) else None
+                if item_template:
+                    result[key] = [
+                        _recursive(item_template, item) if isinstance(item, dict) else item
+                        for item in cval
+                    ]
+                else:
+                    result[key] = cval  # scalar array — pass through unchanged
             elif tval in ("", None) and isinstance(cval, str) and cval:
                 result[key] = "***"
             else:
@@ -1242,6 +1252,28 @@ def _merge_config(
                 and isinstance(i_submitted.get(key), dict)
             ):
                 result[key] = _recursive(tval, i_existing[key], i_submitted[key])
+            elif (
+                isinstance(tval, list)
+                and isinstance(i_submitted.get(key), list)
+                and tval
+                and isinstance(tval[0], dict)
+            ):
+                # Array of objects: merge each submitted item against the corresponding existing item,
+                # preserving secret sentinels ("***") per field within each item.
+                item_template = tval[0]
+                submitted_list = i_submitted[key]
+                raw_existing = i_existing.get(key)
+                existing_list = raw_existing if isinstance(raw_existing, list) else []
+                result[key] = [
+                    _recursive(
+                        item_template,
+                        existing_list[idx] if idx < len(existing_list)
+                                           and isinstance(existing_list[idx], dict)
+                                           else {},
+                        sitem if isinstance(sitem, dict) else {},
+                    )
+                    for idx, sitem in enumerate(submitted_list)
+                ]
             elif tval in ("", None) and i_submitted.get(key) == "***":
                 result[key] = i_existing.get(key, tval)
             elif key in i_submitted:

@@ -141,6 +141,24 @@ class TestMaskSecrets:
         result = _mask_secrets({"k": None}, {"k": None})
         assert result == {"k": None}
 
+    def test_mask_array_of_dicts_masks_secrets_in_each_item(self):
+        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        current = {"accounts": [
+            {"host": "imap.example.com", "password": "secret1"},
+            {"host": "smtp.example.com", "password": "secret2"},
+        ]}
+        result = _mask_secrets(template, current)
+        assert result == {"accounts": [
+            {"host": "imap.example.com", "password": "***"},
+            {"host": "smtp.example.com", "password": "***"},
+        ]}
+
+    def test_mask_scalar_array_passthrough(self):
+        template = {"hosts": ["example.com"]}
+        current = {"hosts": ["a.com", "b.com"]}
+        result = _mask_secrets(template, current)
+        assert result == {"hosts": ["a.com", "b.com"]}
+
 
 class TestMergeConfig:
     def test_merge_preserves_masked_secrets(self):
@@ -218,4 +236,35 @@ class TestMergeConfig:
         result = _merge_config(
             {"hosts": ["a"]}, {"hosts": ["a"]}, {"hosts": '["x", "y"]'}
         )
+        assert result == {"hosts": ["x", "y"]}
+
+    def test_merge_array_of_dicts_preserves_secret_sentinel_per_item(self):
+        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        existing = {"accounts": [{"host": "imap.example.com", "password": "real"}]}
+        submitted = {"accounts": [{"host": "imap2.example.com", "password": "***"}]}
+        result = _merge_config(template, existing, submitted)
+        assert result == {"accounts": [{"host": "imap2.example.com", "password": "real"}]}
+
+    def test_merge_array_of_dicts_updates_secret_when_new_value_submitted(self):
+        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        existing = {"accounts": [{"host": "imap.example.com", "password": "old"}]}
+        submitted = {"accounts": [{"host": "imap.example.com", "password": "new"}]}
+        result = _merge_config(template, existing, submitted)
+        assert result == {"accounts": [{"host": "imap.example.com", "password": "new"}]}
+
+    def test_merge_array_of_dicts_add_item_no_existing(self):
+        """New item has no corresponding existing entry — sentinel produces empty password."""
+        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        existing = {"accounts": [{"host": "old.com", "password": "pass1"}]}
+        submitted = {"accounts": [
+            {"host": "old.com", "password": "***"},   # item 0 — preserve existing
+            {"host": "new.com", "password": "pass2"},  # item 1 — no existing, sentinel falls back to template default
+        ]}
+        result = _merge_config(template, existing, submitted)
+        assert result["accounts"][0]["password"] == "pass1"   # sentinel preserved for existing item
+        assert result["accounts"][1]["password"] == "pass2"   # new item written as-is
+
+    def test_merge_array_of_dicts_scalar_list_as_actual_list(self):
+        """Scalar list submitted as an actual list (not JSON string) passes through."""
+        result = _merge_config({"hosts": ["a"]}, {"hosts": ["a"]}, {"hosts": ["x", "y"]})
         assert result == {"hosts": ["x", "y"]}
