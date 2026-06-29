@@ -1,6 +1,7 @@
 """HTTP and WebSocket proxy helpers for the central-deploy gateway.
 
-All managed services are reachable at ``deploy.robotsix.net/<name>/...``.
+All managed services are reachable at ``<name>.deploy.robotsix.net/...`` (subdomain
+routing) or ``deploy.robotsix.net/<name>/...`` (legacy path-prefix routing).
 This module contains the low-level relay logic — the FastAPI routes live
 in ``gateway/router.py``.
 """
@@ -121,19 +122,16 @@ async def http_proxy(
     # An app served at /<name>/ that redirects to e.g. "/board" would drop the
     # prefix and the browser would hit /board -> 404.  Prepend /<name> so
     # /mail/ -> Location:/board becomes /mail/board.
-    if 300 <= upstream_resp.status_code < 400:
-        _name = request.url.path.lstrip("/").split("/", 1)[0]
-        if _name:
-            _prefix = "/" + _name
-            for _hk in list(resp_headers):
-                if _hk.lower() == "location":
-                    _loc = resp_headers[_hk]
-                    if (
-                        _loc.startswith("/")
-                        and _loc != _prefix
-                        and not _loc.startswith(_prefix + "/")
-                    ):
-                        resp_headers[_hk] = _prefix + _loc
+    if prefix and 300 <= upstream_resp.status_code < 400:
+        for _hk in list(resp_headers):
+            if _hk.lower() == "location":
+                _loc = resp_headers[_hk]
+                if (
+                    _loc.startswith("/")
+                    and _loc != prefix
+                    and not _loc.startswith(prefix + "/")
+                ):
+                    resp_headers[_hk] = prefix + _loc
 
     content_type: str = upstream_resp.headers.get("content-type", "")
 
