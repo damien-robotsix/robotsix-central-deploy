@@ -1095,7 +1095,7 @@ function hideEnvModalError() {
 let _configComponent = null;
 let _configSchema = null;
 let _configAssistCommand = null;   // string|null
-let _configAssistSeeds = [];       // string[]
+let _configAssistSeeds = [];       // {key, label}[]
 
 function openConfigModal(name) {
   _configComponent = name;
@@ -1356,8 +1356,8 @@ function collectConfigValues(schema, containerEl) {
 
 function _injectConfigAssistUI() {
   // Apply seed-field indicators (unchanged)
-  for (const key of _configAssistSeeds) {
-    const el = document.querySelector(`#config-form-body [data-key="${escAttr(key)}"]`);
+  for (const seed of _configAssistSeeds) {
+    const el = document.querySelector(`#config-form-body [data-key="${escAttr(seed.key)}"]`);
     if (el) el.classList.add('seed-required');
   }
   // Remove existing bar/output (unchanged)
@@ -1369,17 +1369,18 @@ function _injectConfigAssistUI() {
   if (!_configAssistCommand) return;
 
   // Build seed inputs for each declared seed key.
-  const seedInputsHtml = _configAssistSeeds.map(key => {
-    // Derive a human-readable label: last non-numeric segment of the dotted path.
-    const label = key.split('.').filter(s => !/^\d+$/.test(s)).pop() || key;
-    const isSecret = /password|secret|token|key/i.test(key);
+  const seedInputsHtml = _configAssistSeeds.map(seed => {
+    // Use declared label if present; otherwise derive from last non-numeric segment.
+    const derivedLabel = seed.key.split('.').filter(s => !/^\d+$/.test(s)).pop() || seed.key;
+    const displayLabel = seed.label || derivedLabel;
+    const isSecret = /password|secret|token|key/i.test(seed.key);
     return `<label class="seed-label" style="font-size:0.85rem;margin-left:0.75rem;white-space:nowrap;">
-      ${escHtml(label)}:
-      <input id="seed-input-${escAttr(key)}"
+      ${escHtml(displayLabel)}:
+      <input id="seed-input-${escAttr(seed.key)}"
              type="${isSecret ? 'password' : 'text'}"
-             placeholder="${escHtml(label)}"
+             placeholder="${escHtml(displayLabel)}"
              style="width:10rem;margin-left:0.25rem;"
-             aria-label="Seed value for ${escHtml(key)}" />
+             aria-label="Seed value for ${escHtml(seed.key)}" />
     </label>`;
   }).join('');
 
@@ -1414,10 +1415,10 @@ async function runConfigAssist() {
 
   // Merge seed bar inputs into values (so the email/password is included
   // even if the corresponding form section is not expanded).
-  for (const key of _configAssistSeeds) {
-    const input = document.getElementById(`seed-input-${key}`);
+  for (const seed of _configAssistSeeds) {
+    const input = document.getElementById(`seed-input-${seed.key}`);
     if (input && input.value.trim() !== '') {
-      setNestedValue(values, key, input.value.trim());
+      setNestedValue(values, seed.key, input.value.trim());
     }
   }
 

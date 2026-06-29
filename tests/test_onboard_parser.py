@@ -17,7 +17,11 @@ from robotsix_central_deploy.onboard.models import (
     ParseError,
 )
 from robotsix_central_deploy.onboard.parser import _parse_go_duration, parse_compose
-from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
+from robotsix_central_deploy.registry.models import (
+    ConfigAssistSeed,
+    PortMapping,
+    VolumeMount,
+)
 
 # ---------------------------------------------------------------------------
 # Valid compose
@@ -878,3 +882,69 @@ services:
 """
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.entrypoint == ["python", "-m", "app"]
+
+
+# ---------------------------------------------------------------------------
+# Config-assist seeds parser tests
+# ---------------------------------------------------------------------------
+
+
+def minimal_compose_with_label(label_key: str, label_value: str) -> bytes:
+    """Build a minimal valid docker-compose YAML with a single label on the primary service."""
+    return f"""\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      {label_key}: "{label_value}"
+""".encode("utf-8")
+
+
+class TestParseComposeConfigAssistSeeds:
+    def test_bare_keys(self):
+        """Bare keys (no label) parse to ConfigAssistSeed with label=None."""
+        compose = minimal_compose_with_label(
+            "robotsix.deploy.config-assist-seeds",
+            "accounts.0.auth.username,accounts.0.auth.password",
+        )
+        spec = parse_compose(compose, name="foo", git_url="https://x.com/r.git")
+        assert spec.config_assist_seeds == [
+            ConfigAssistSeed(key="accounts.0.auth.username"),
+            ConfigAssistSeed(key="accounts.0.auth.password"),
+        ]
+
+    def test_with_labels(self):
+        """key:label format parses correctly."""
+        compose = minimal_compose_with_label(
+            "robotsix.deploy.config-assist-seeds",
+            "accounts.0.auth.username:Email,accounts.0.auth.password:Password",
+        )
+        spec = parse_compose(compose, name="foo", git_url="https://x.com/r.git")
+        assert spec.config_assist_seeds == [
+            ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+            ConfigAssistSeed(key="accounts.0.auth.password", label="Password"),
+        ]
+
+    def test_mixed(self):
+        """Mix of bare keys and key:label entries."""
+        compose = minimal_compose_with_label(
+            "robotsix.deploy.config-assist-seeds",
+            "accounts.0.auth.username:Email,accounts.0.auth.password",
+        )
+        spec = parse_compose(compose, name="foo", git_url="https://x.com/r.git")
+        assert spec.config_assist_seeds == [
+            ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+            ConfigAssistSeed(key="accounts.0.auth.password", label=None),
+        ]
+
+    def test_blank_label_normalises_to_none(self):
+        """Trailing colon with no label text normalises to label=None."""
+        compose = minimal_compose_with_label(
+            "robotsix.deploy.config-assist-seeds",
+            "accounts.0.auth.username:",
+        )
+        spec = parse_compose(compose, name="foo", git_url="https://x.com/r.git")
+        assert spec.config_assist_seeds == [
+            ConfigAssistSeed(key="accounts.0.auth.username", label=None),
+        ]

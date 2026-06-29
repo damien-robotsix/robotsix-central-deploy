@@ -42,6 +42,11 @@ class ServiceConfig(BaseModel):
     entrypoint: Optional[list[str]] = None
 
 
+class ConfigAssistSeed(BaseModel):
+    key: str  # dotted config path, e.g. "accounts.0.auth.username"
+    label: str | None = None  # optional human-readable label; None → derive from key
+
+
 class ComponentConfig(BaseModel):
     """Declares a single managed Docker component."""
 
@@ -71,5 +76,5 @@ class ComponentConfig(BaseModel):
         None  # command from robotsix.deploy.config-assist
     )
     config_assist_seeds: list[
-        str
+        ConfigAssistSeed
     ] = []  # seed field keys from robotsix.deploy.config-assist-seeds
