@@ -714,6 +714,13 @@ function renderDiskPanel(data) {
     const warn = data.free_bytes < data.warn_threshold_bytes;
     document.getElementById('disk-warning').style.display = warn ? '' : 'none';
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
+    const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
+    const volRows = vols.map(v =>
+        `<tr><th style="font-weight:400;">${escHtml(v.name)}${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_gb(v.size_bytes)}</td></tr>`
+    ).join('');
+    const volTable = vols.length
+        ? `<table style="margin-top:10px;"><tr><th colspan="2" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
+        : '';
     document.getElementById('disk-content').innerHTML = `
         <table>
           <tr><th>Host total</th><td>${fmt_gb(data.total_bytes)}</td></tr>
@@ -724,7 +731,7 @@ function renderDiskPanel(data) {
           <tr><th>Docker images (host total)</th><td>${fmt_gb(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_gb(data.docker.build_cache_size_bytes)}</td></tr>
           <tr><th>Build cache reclaimable</th><td>${fmt_gb(data.docker.build_cache_reclaimable_bytes)}</td></tr>
-        </table>`;
+        </table>${volTable}`;
 }
 
 async function loadDashboard() {

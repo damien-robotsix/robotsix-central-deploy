@@ -22,6 +22,7 @@ from .models import (
     RollbackOutcome,
     ServiceRecord,
     ServiceState,
+    VolumeStat,
 )
 
 if TYPE_CHECKING:
@@ -991,8 +992,20 @@ class DockerSdkBackend(ExecutionBackend):
         reclaimable = sum(
             item.get("Size", 0) for item in build_cache if not item.get("InUse", True)
         )
+        # Per-volume sizes from ``docker system df`` (``Volumes`` carries
+        # ``UsageData.Size`` and ``RefCount``); skip the -1 "unknown" sentinel.
+        volumes = [
+            VolumeStat(
+                name=v.get("Name", ""),
+                size_bytes=(v.get("UsageData") or {}).get("Size", 0),
+                in_use=(v.get("UsageData") or {}).get("RefCount", 0) > 0,
+            )
+            for v in (result.get("Volumes") or [])
+            if (v.get("UsageData") or {}).get("Size", 0) >= 0
+        ]
         return DockerDfStats(
             images_size_bytes=images_size,
             build_cache_size_bytes=build_cache_size,
             build_cache_reclaimable_bytes=reclaimable,
+            volumes=volumes,
         )
