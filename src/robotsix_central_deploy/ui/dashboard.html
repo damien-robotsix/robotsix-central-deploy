@@ -196,6 +196,38 @@
     margin-top: 6px;
   }
   .btn-array-add:hover { border-color: var(--blue); color: var(--blue); }
+
+  /* OAuth2 collapsible group */
+  .oauth2-collapsible {
+    margin-bottom: 0.6rem;
+  }
+  .oauth2-collapsible > summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #64748b;
+    padding: 3px 0;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+  }
+  .oauth2-collapsible > summary::before {
+    content: '▶';
+    font-size: 0.65rem;
+    display: inline-block;
+    transition: transform 0.15s;
+  }
+  .oauth2-collapsible[open] > summary::before {
+    transform: rotate(90deg);
+  }
+  .oauth2-collapsible > summary::-webkit-details-marker { display: none; }
+  .oauth2-collapsible > .oauth2-body {
+    padding-left: 8px;
+    border-left: 2px solid #334155;
+    margin-top: 4px;
+  }
+
   .env-row {
     display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
   }
@@ -1155,24 +1187,28 @@ function generateConfigForm(schema, current, containerOrId) {
 }
 
 function _renderConfigNode(schema, current, prefix, container) {
+  const oauth2Entries = [];
+
   for (const [key, schemaVal] of Object.entries(schema)) {
     const fullKey = prefix ? prefix + '.' + key : key;
     const currentVal = (current != null) ? current[key] : undefined;
 
+    if (key.startsWith('oauth2_')) {
+      oauth2Entries.push({ key, schemaVal, fullKey, currentVal });
+      continue;
+    }
+
     if (Array.isArray(schemaVal)) {
       const firstItem = schemaVal[0];
       if (firstItem !== null && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
-        // Array of objects — full recursive section with Add/Remove
         _renderArraySection(key, fullKey, schemaVal, currentVal, container);
       } else {
-        // Scalar array — JSON-string escape hatch (backward compat with _coerce_to_template)
         const displayVal = Array.isArray(currentVal)
           ? JSON.stringify(currentVal)
           : JSON.stringify(schemaVal ?? []);
         container.appendChild(buildConfigRow(fullKey, key, schemaVal, displayVal, false));
       }
     } else if (schemaVal !== null && typeof schemaVal === 'object') {
-      // Nested object section — recurse
       const section = document.createElement('div');
       section.className = 'env-section';
       section.innerHTML = `<h3>${escHtml(key)}</h3>`;
@@ -1181,10 +1217,50 @@ function _renderConfigNode(schema, current, prefix, container) {
       _renderConfigNode(schemaVal, currentSub, fullKey, section);
       container.appendChild(section);
     } else {
-      // Scalar leaf
       const isSecret = schemaVal === 'SECRET';
       container.appendChild(buildConfigRow(fullKey, key, schemaVal, currentVal, isSecret));
     }
+  }
+
+  if (oauth2Entries.length > 0) {
+    const anySet = oauth2Entries.some(e => {
+      const v = e.currentVal;
+      return v !== undefined && v !== null && v !== '' && v !== '***';
+    });
+    const details = document.createElement('details');
+    details.className = 'oauth2-collapsible';
+    if (anySet) details.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = 'Advanced / OAuth2';
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'oauth2-body';
+    for (const { key, schemaVal, fullKey, currentVal } of oauth2Entries) {
+      if (Array.isArray(schemaVal)) {
+        const firstItem = schemaVal[0];
+        if (firstItem !== null && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
+          _renderArraySection(key, fullKey, schemaVal, currentVal, body);
+        } else {
+          const displayVal = Array.isArray(currentVal)
+            ? JSON.stringify(currentVal)
+            : JSON.stringify(schemaVal ?? []);
+          body.appendChild(buildConfigRow(fullKey, key, schemaVal, displayVal, false));
+        }
+      } else if (schemaVal !== null && typeof schemaVal === 'object') {
+        const section = document.createElement('div');
+        section.className = 'env-section';
+        section.innerHTML = `<h3>${escHtml(key)}</h3>`;
+        const currentSub = (currentVal !== null && typeof currentVal === 'object'
+                            && !Array.isArray(currentVal)) ? currentVal : {};
+        _renderConfigNode(schemaVal, currentSub, fullKey, section);
+        body.appendChild(section);
+      } else {
+        const isSecret = schemaVal === 'SECRET';
+        body.appendChild(buildConfigRow(fullKey, key, schemaVal, currentVal, isSecret));
+      }
+    }
+    details.appendChild(body);
+    container.appendChild(details);
   }
 }
 
