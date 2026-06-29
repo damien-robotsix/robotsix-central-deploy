@@ -77,6 +77,25 @@ class LifecycleConfig(BaseSettings):
     # Claude mount
     claude_host_mount_path: str = ""  # ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH
 
+    # Volume audit
+    volume_audit_enabled: bool = False
+    # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_ENABLED — master on/off switch; default OFF
+
+    volume_audit_interval_seconds: int = 3600
+    # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_INTERVAL_SECONDS
+
+    volume_audit_snapshot_path: str = "data/volume_audit_snapshots.json"
+    # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_SNAPSHOT_PATH
+
+    volume_audit_findings_path: str = "data/volume_audit_findings.json"
+    # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_FINDINGS_PATH
+
+    volume_audit_growth_threshold_pct: float = 10.0
+    # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_GROWTH_THRESHOLD_PCT
+
+    volume_audit_min_delta_bytes: int = 10_485_760
+    # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES (default 10 MiB)
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

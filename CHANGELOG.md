@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Volume audit subsystem**: New optional `volume_audit` module that periodically
+  scans Docker named volumes for size and growth-over-time tracking. Growth
+  threshold breaches are reported through a pluggable `report_finding` seam
+  (placeholder: persists to local JSON + logs WARNING). Configurable via
+  `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_*` environment variables; disabled by default.
+  New `GET /volumes/audit` endpoint returns live growth records.
+
 - **Fix: config-form Save corrupts multi-account configs** — five coordinated
   fixes for the `GET /config → form render → collectConfigValues → PUT /config`
   chain: (1) `_merge_config` dict-branch now recurses correctly when the
