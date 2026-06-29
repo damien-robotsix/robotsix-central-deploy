@@ -1154,6 +1154,15 @@ function generateConfigForm(schema, current, containerOrId) {
   _renderConfigNode(schema, current, '', container);
 }
 
+// A config leaf is a secret only if its NAME looks like one (matches the
+// backend _is_secret_name). Prevents non-secret blank-in-template fields
+// (imap.host, username, ...) from rendering as masked "secret" inputs.
+function isSecretName(key) {
+  const k = String(key).toLowerCase();
+  return /password|passwd|secret|token|apikey|api_key|credential|private_key|access_key/.test(k)
+    || k.endsWith('_key');
+}
+
 function _renderConfigNode(schema, current, prefix, container) {
   for (const [key, schemaVal] of Object.entries(schema)) {
     const fullKey = prefix ? prefix + '.' + key : key;
@@ -1182,7 +1191,7 @@ function _renderConfigNode(schema, current, prefix, container) {
       container.appendChild(section);
     } else {
       // Scalar leaf
-      const isSecret = (schemaVal === '' || schemaVal === null);
+      const isSecret = (schemaVal === '' || schemaVal === null) && isSecretName(key);
       container.appendChild(buildConfigRow(fullKey, key, schemaVal, currentVal, isSecret));
     }
   }
