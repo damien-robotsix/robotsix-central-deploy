@@ -91,13 +91,29 @@ async def _get_settings_store(request: Request) -> SystemSettingsStore:
 
 @settings_router.get("/settings", response_model=SystemSettingsResponse)
 async def get_settings(
+    request: Request,
     settings_store: SystemSettingsStore = Depends(_get_settings_store),
     _auth: None = Depends(verify_auth),
 ) -> SystemSettingsResponse:
     """Return current system settings. Secrets are returned as ``"***"``
-    when set, or ``""`` when empty."""
-    stored = await settings_store.get()
-    return _mask_response(stored)
+    when set, or ``""`` when empty.
+
+    Reads from the *effective* config (env-var values overlaid by any
+    stored settings) so that env-var credentials are visible in the UI
+    even before the operator has saved settings via the UI.
+    """
+    effective_config = settings_store.overlay(request.app.state.config)
+    effective = SystemSettings(
+        ghcr_token=effective_config.ghcr_token,
+        auth_username=effective_config.auth_username,
+        auth_password=effective_config.auth_password,
+        disk_warn_bytes=effective_config.disk_warn_bytes,
+        registry_check_interval=effective_config.registry_check_interval,
+        log_level=effective_config.log_level,
+        gateway_base_domain=effective_config.gateway_base_domain,
+        claude_host_mount_path=effective_config.claude_host_mount_path,
+    )
+    return _mask_response(effective)
 
 
 # ---------------------------------------------------------------------------
