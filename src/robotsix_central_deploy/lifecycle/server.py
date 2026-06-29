@@ -1289,11 +1289,10 @@ def _merge_config(
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, tval in i_template.items():
-            if (
-                isinstance(tval, dict)
-                and isinstance(i_submitted.get(key), dict)
-            ):
-                existing_sub = i_existing[key] if isinstance(i_existing.get(key), dict) else {}
+            if isinstance(tval, dict) and isinstance(i_submitted.get(key), dict):
+                existing_sub = (
+                    i_existing[key] if isinstance(i_existing.get(key), dict) else {}
+                )
                 result[key] = _recursive(tval, existing_sub, i_submitted[key])
             elif (
                 isinstance(tval, list)
@@ -1463,11 +1462,7 @@ def _prune_unset(merged: dict[str, Any], existing: dict[str, Any]) -> dict[str, 
             # Include if the sub-dict is non-empty OR if k was already in existing
             if pruned or k in existing:
                 result[k] = pruned
-        elif (
-            isinstance(v, list)
-            and v
-            and isinstance(v[0], dict)
-        ):
+        elif isinstance(v, list) and v and isinstance(v[0], dict):
             ex_list = existing.get(k) if isinstance(existing.get(k), list) else []
             result[k] = [
                 _prune_unset(
