@@ -289,11 +289,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             _annotated = _annotate_secret_sentinels(_tmpl)
             if _annotated != _tmpl:
                 await _config_yaml_store.save_template(
-                    _dyn_cfg.id, _annotated  # type: ignore[arg-type]
+                    _dyn_cfg.id,
+                    _annotated,  # type: ignore[arg-type]
                 )
-                logger.info(
-                    "Migrated config template sentinels for %s", _dyn_cfg.id
-                )
+                logger.info("Migrated config template sentinels for %s", _dyn_cfg.id)
 
     yield
 

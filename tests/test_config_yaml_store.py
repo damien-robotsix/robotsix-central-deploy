@@ -711,24 +711,18 @@ class TestAnnotateSecretSentinels:
         assert result == {"host": "localhost", "port": 8080, "timeout": 30}
 
     def test_nested_dict_secret_at_depth_two(self):
-        result = _annotate_secret_sentinels(
-            {"server": {"host": "", "api_key": ""}}
-        )
+        result = _annotate_secret_sentinels({"server": {"host": "", "api_key": ""}})
         assert result == {"server": {"host": "", "api_key": "SECRET"}}
 
     def test_array_of_objects(self):
         result = _annotate_secret_sentinels(
             {"accounts": [{"imap": {"host": "", "password": ""}}]}
         )
-        assert result == {
-            "accounts": [{"imap": {"host": "", "password": "SECRET"}}]
-        }
+        assert result == {"accounts": [{"imap": {"host": "", "password": "SECRET"}}]}
 
     def test_explicit_sentinel_preserved(self):
         """A non-secret-named key with value "SECRET" is preserved."""
-        result = _annotate_secret_sentinels(
-            {"custom_field": "SECRET"}
-        )
+        result = _annotate_secret_sentinels({"custom_field": "SECRET"})
         assert result == {"custom_field": "SECRET"}
 
     def test_scalar_array_unchanged(self):
