@@ -1167,8 +1167,15 @@ async def delete_service_env_key(
 
 
 _SECRET_NAME_TOKENS = (
-    "password", "passwd", "secret", "token", "apikey", "api_key",
-    "credential", "private_key", "access_key",
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "credential",
+    "private_key",
+    "access_key",
 )
 
 
