@@ -10,6 +10,15 @@
 - `DockerSdkBackend.stream_logs` uses `run_in_executor` with a `_next_chunk` helper to avoid `StopIteration` crossing `await`
 - `asyncio.CancelledError` re-raised; `log_iter.close()` in `finally` block
 - Tests replace `backend.stream_logs` via direct attribute assignment on `server_mod.app.state.backend`
+## Key changes — config-form Save (multi-account collapse, id validation, template field resurrection)
+- **Bug 1 fix** (`_merge_config._recursive`): dict-branch guard no longer requires `isinstance(i_existing.get(key), dict)` — uses `existing_sub = i_existing[key] if isinstance(i_existing.get(key), dict) else {}` so removed template dict keys with `"***"` in submitted are recursively resolved instead of being passed through `_coerce_to_template`.
+- **Bug 2 fix**: `_validate_account_ids(merged)` validates `accounts[*].id` against `^[A-Za-z0-9._-]+$`, raises `422` on failure. Called in `put_service_config` after merge. Client side: `saveConfigValues` checks `accounts.\d+.id` inputs via `querySelectorAll` before fetch.
+- **Bug 2 heading fix**: `_renderArrayItem` heading includes `itemCurrent.email ||` before `id || name` so human-readable email shows as accordion header.
+- **Bug 3 fix**: `_prune_unset(merged, existing)` prunes empty (`""`/`None`) fields absent from existing, preventing resurrection of removed template fields as `"***"`. Called in `put_service_config` after merge+validation.
+- **Config modal close on save**: changed from re-opening config modal to `closeConfigModal()` on success (no pointless re-fetch).
+- **Tests**: `TestMergeConfig` (Bug 1: two-account preservation), `TestValidateAccountIds` (Bug 2: rejects email, accepts slug), `TestMergeConfigBug3` (no sentinel literal with absent existing), `TestPruneUnset`, `TestConfigRoundTrip` (round-trip invariant).
+- **Test file**: `tests/test_config_yaml_store.py` — imports `_merge_config`, `_prune_unset`, `_validate_account_ids` from `robotsix_central_deploy.lifecycle.server`.
+
 ## Doc structure
 - `src/robotsix_central_deploy/lifecycle/` — lifecycle server code
   - `models.py` — `ServiceState` enum, `ComponentInspect` dataclass, `ServiceRecord`, all Pydantic API schemas (`ServiceStatus`, `ServiceListItem`, `ServiceListResponse`, `ActionResponse`, `DeployResponse`, `RollbackResponse`, `DiskUsageResponse`, etc.)
