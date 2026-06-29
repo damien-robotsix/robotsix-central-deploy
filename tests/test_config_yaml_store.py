@@ -111,6 +111,7 @@ async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path)
 
 
 from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
+    _CONFIG_SECRET_SENTINEL,
     _mask_secrets,
     _merge_config,
     _seed_for_detect,
@@ -119,34 +120,51 @@ from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
 
 class TestMaskSecrets:
     def test_mask_secret_with_value(self):
-        result = _mask_secrets({"password": ""}, {"password": "actual"})
+        """A template leaf of _CONFIG_SECRET_SENTINEL with a configured
+        current value is masked as '***' regardless of key name."""
+        result = _mask_secrets(
+            {"password": _CONFIG_SECRET_SENTINEL}, {"password": "actual"}
+        )
         assert result == {"password": "***"}
 
-    def test_mask_secret_none_value(self):
-        result = _mask_secrets({"password": None}, {"password": "actual"})
-        assert result == {"password": "***"}
+    def test_none_template_is_not_secret(self):
+        """None in template no longer marks a secret — the value passes
+        through from current.  (Previously None was treated as a secret
+        marker alongside ''; now only _CONFIG_SECRET_SENTINEL is.)"""
+        result = _mask_secrets({"k": None}, {"k": "value"})
+        assert result == {"k": "value"}
 
     def test_no_mask_on_non_secret(self):
         result = _mask_secrets({"k": "default"}, {"k": "default"})
         assert result == {"k": "default"}
 
-    def test_no_mask_on_empty_secret_with_no_current_value(self):
-        # If current value is also empty, it's not a non-empty string → no mask
-        result = _mask_secrets({"k": ""}, {"k": ""})
-        assert result == {"k": ""}
+    def test_empty_string_template_is_not_secret(self):
+        """Empty string in template no longer marks a secret — the current
+        value passes through unmasked."""
+        result = _mask_secrets({"k": ""}, {"k": "filled"})
+        assert result == {"k": "filled"}
 
     def test_mask_nested(self):
-        template = {"server": {"password": ""}, "port": 8080}
+        template = {"server": {"password": "SECRET"}, "port": 8080}
         current = {"server": {"password": "realpass"}, "port": 8080}
         result = _mask_secrets(template, current)
         assert result == {"server": {"password": "***"}, "port": 8080}
 
-    def test_mask_secret_none_template_none_current(self):
-        result = _mask_secrets({"k": None}, {"k": None})
-        assert result == {"k": None}
+    def test_unconfigured_sentinel_returns_empty(self):
+        """When template is _CONFIG_SECRET_SENTINEL but no current value
+        exists, the field is returned as '' (not masked, not the
+        literal sentinel string)."""
+        result = _mask_secrets({"k": "SECRET"}, {})
+        assert result == {"k": ""}
+
+    def test_unconfigured_sentinel_current_equals_sentinel_returns_empty(self):
+        """When current == template == 'SECRET' (no config stored yet),
+        the field must NOT be masked — return '' (empty)."""
+        result = _mask_secrets({"k": "SECRET"}, {"k": "SECRET"})
+        assert result == {"k": ""}
 
     def test_mask_array_of_dicts_masks_secrets_in_each_item(self):
-        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        template = {"accounts": [{"host": "example.com", "password": "SECRET"}]}
         current = {
             "accounts": [
                 {"host": "imap.example.com", "password": "secret1"},
@@ -170,11 +188,17 @@ class TestMaskSecrets:
 
 class TestMergeConfig:
     def test_merge_preserves_masked_secrets(self):
-        result = _merge_config({"pwd": ""}, {"pwd": "real"}, {"pwd": "***"})
+        """When submitted is '***' for a _CONFIG_SECRET_SENTINEL leaf, the
+        existing value is preserved."""
+        result = _merge_config(
+            {"pwd": _CONFIG_SECRET_SENTINEL}, {"pwd": "real"}, {"pwd": "***"}
+        )
         assert result == {"pwd": "real"}
 
     def test_merge_replaces_secret(self):
-        result = _merge_config({"pwd": ""}, {"pwd": "old"}, {"pwd": "new"})
+        """When a new plain-text value is submitted for a
+        _CONFIG_SECRET_SENTINEL leaf, the existing value is replaced."""
+        result = _merge_config({"pwd": "SECRET"}, {"pwd": "old"}, {"pwd": "new"})
         assert result == {"pwd": "new"}
 
     def test_merge_uses_default_for_missing_key(self):
@@ -182,7 +206,7 @@ class TestMergeConfig:
         assert result == {"host": "localhost"}
 
     def test_merge_nested(self):
-        template = {"server": {"host": "localhost", "password": ""}}
+        template = {"server": {"host": "localhost", "password": "SECRET"}}
         existing = {"server": {"host": "0.0.0.0", "password": "realpass"}}
         submitted = {"server": {"host": "10.0.0.1", "password": "***"}}
         result = _merge_config(template, existing, submitted)
@@ -197,11 +221,15 @@ class TestMergeConfig:
         assert result == {"server": {"host": "localhost", "port": 8080}}
 
     def test_merge_none_template_secret(self):
+        """None is no longer a secret marker — submitted '***' is NOT
+        treated as a secret-preserve sentinel and is written literally."""
         template = {"password": None}
         existing = {"password": "real"}
         submitted = {"password": "***"}
         result = _merge_config(template, existing, submitted)
-        assert result == {"password": "real"}
+        # None is not _CONFIG_SECRET_SENTINEL, so the secret-preserve
+        # branch is skipped; the submitted string '***' is written as-is.
+        assert result == {"password": "***"}
 
     def test_merge_coerces_int_from_string(self):
         # The UI submits everything as strings; an int template leaf must
@@ -247,7 +275,7 @@ class TestMergeConfig:
         assert result == {"hosts": ["x", "y"]}
 
     def test_merge_array_of_dicts_preserves_secret_sentinel_per_item(self):
-        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        template = {"accounts": [{"host": "example.com", "password": "SECRET"}]}
         existing = {"accounts": [{"host": "imap.example.com", "password": "real"}]}
         submitted = {"accounts": [{"host": "imap2.example.com", "password": "***"}]}
         result = _merge_config(template, existing, submitted)
@@ -256,7 +284,7 @@ class TestMergeConfig:
         }
 
     def test_merge_array_of_dicts_updates_secret_when_new_value_submitted(self):
-        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        template = {"accounts": [{"host": "example.com", "password": "SECRET"}]}
         existing = {"accounts": [{"host": "imap.example.com", "password": "old"}]}
         submitted = {"accounts": [{"host": "imap.example.com", "password": "new"}]}
         result = _merge_config(template, existing, submitted)
@@ -264,7 +292,7 @@ class TestMergeConfig:
 
     def test_merge_array_of_dicts_add_item_no_existing(self):
         """New item has no corresponding existing entry — sentinel produces empty password."""
-        template = {"accounts": [{"host": "example.com", "password": ""}]}
+        template = {"accounts": [{"host": "example.com", "password": "SECRET"}]}
         existing = {"accounts": [{"host": "old.com", "password": "pass1"}]}
         submitted = {
             "accounts": [
