@@ -21,7 +21,7 @@ class LifecycleConfig(BaseSettings):
     )
 
     # Server
-    host: str = "0.0.0.0"
+    host: str = "0.0.0.0"  # nosec B104 — intentional bind for the containerized service
     port: int = 8100
     api_key: str = ""
     auth_username: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_USERNAME
