@@ -1513,7 +1513,9 @@ class ConfigAssistRequest(BaseModel):
 
 
 class ConfigAssistResponse(BaseModel):
-    config: dict  # the auto-filled config dict read back from the volume after the command ran
+    config: dict[
+        str, Any
+    ]  # the auto-filled config dict read back from the volume after the command ran
     output: str  # captured stdout+stderr from the one-shot container
 
 
@@ -1703,7 +1705,7 @@ async def run_config_assist(
     partial = _merge_config(template, existing, body.values)
 
     # --- Account-aware mode resolution ---
-    existing_accounts: list = (
+    existing_accounts: list[dict[str, Any]] = (
         [a for a in existing.get("accounts", []) if isinstance(a, dict) and a.get("id")]
         if isinstance(existing.get("accounts"), list)
         else []
@@ -1720,7 +1722,7 @@ async def run_config_assist(
     # Rewrite accounts.0.* placeholders to the target index in the command.
     import re as _re  # noqa: PLC0415
 
-    assist_command = comp_cfg.config_assist_command  # type: ignore[assignment]
+    assist_command = comp_cfg.config_assist_command
     if target_idx != 0:
         assist_command = _re.sub(
             r"\{accounts\.0\.",
@@ -1732,7 +1734,7 @@ async def run_config_assist(
     # so that {accounts.N.id} resolves during placeholder substitution.
     if mode == "add_new":
         new_id = _derive_account_id(comp_cfg.config_assist_seeds, partial, target_idx)
-        acct_list: list = partial.setdefault("accounts", [])
+        acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
         while len(acct_list) <= target_idx:
             acct_list.append({})
         if not acct_list[target_idx].get("id"):
