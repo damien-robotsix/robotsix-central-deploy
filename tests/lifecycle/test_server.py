@@ -2025,7 +2025,7 @@ class TestConfigAssist:
         updated_cfg = config_store.get("auto-mail")
         assert updated_cfg is not None
         assert updated_cfg.config_assist_command == "new-detect --new"
-        assert updated_cfg.config_assist_seeds == ["new_host"]
+        assert updated_cfg.config_assist_seeds == [ConfigAssistSeed(key="new_host")]
 
     async def test_fetch_failure_falls_back_to_stored_command(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
