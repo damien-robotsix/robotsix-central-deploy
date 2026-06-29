@@ -1732,7 +1732,9 @@ class ConfigUpdate(BaseModel):
 
 
 class ConfigAssistRequest(BaseModel):
-    values: dict[str, Any]  # current (partial) form values — same shape as ConfigUpdate.values
+    values: dict[
+        str, Any
+    ]  # current (partial) form values — same shape as ConfigUpdate.values
     target_account_index: int | None = None
     # None  → infer: first-setup if no accounts exist, else add-new
     # int N → update account N if N < len(existing_accounts), else add-new
