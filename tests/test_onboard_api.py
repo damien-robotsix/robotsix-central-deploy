@@ -6,7 +6,6 @@ fetch/compose functions so no real git clone or Docker daemon is needed.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
