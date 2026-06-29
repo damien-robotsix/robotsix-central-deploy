@@ -572,6 +572,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
+      <button onclick="updateService('${escAttr(svc.name)}')" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container">Update</button>
       ${svc.has_config_yaml
         ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>`
         : `<button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>`
@@ -754,6 +755,34 @@ async function loadDashboard() {
     updateRefreshTime();
   } catch (err) {
     showError(`Dashboard error: ${err.message}`);
+  }
+}
+
+async function updateService(name) {
+  if (!window.confirm(`Force-update "${name}" to the latest image?\n\nThis pulls the latest image from the registry and recreates the container (brief restart).`)) return;
+  hideRowError(name);
+  const btn = document.getElementById(`btn-update-${name}`);
+  const orig = btn ? btn.textContent : 'Update';
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/deploy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: '{}',
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+    const svc = await fetchOneStatus(name);
+    const rowEl = document.getElementById(`row-${name}`);
+    if (rowEl) rowEl.outerHTML = renderRow(svc);
+    updateRefreshTime();
+  } catch (err) {
+    showRowError(name, 'Update failed: ' + err.message);
+    const b = document.getElementById(`btn-update-${name}`);
+    if (b) { b.disabled = false; b.textContent = orig; }
   }
 }
 
