@@ -17,7 +17,11 @@ from robotsix_central_deploy.onboard.models import (
     ParseError,
 )
 from robotsix_central_deploy.onboard.parser import _parse_go_duration, parse_compose
-from robotsix_central_deploy.registry.models import ConfigAssistSeed, PortMapping, VolumeMount
+from robotsix_central_deploy.registry.models import (
+    ConfigAssistSeed,
+    PortMapping,
+    VolumeMount,
+)
 
 # ---------------------------------------------------------------------------
 # Valid compose
