@@ -1170,7 +1170,9 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                 item_template = tval[0] if tval and isinstance(tval[0], dict) else None
                 if item_template:
                     result[key] = [
-                        _recursive(item_template, item) if isinstance(item, dict) else item
+                        _recursive(item_template, item)
+                        if isinstance(item, dict)
+                        else item
                         for item in cval
                     ]
                 else:
@@ -1267,9 +1269,10 @@ def _merge_config(
                 result[key] = [
                     _recursive(
                         item_template,
-                        existing_list[idx] if idx < len(existing_list)
-                                           and isinstance(existing_list[idx], dict)
-                                           else {},
+                        existing_list[idx]
+                        if idx < len(existing_list)
+                        and isinstance(existing_list[idx], dict)
+                        else {},
                         sitem if isinstance(sitem, dict) else {},
                     )
                     for idx, sitem in enumerate(submitted_list)
