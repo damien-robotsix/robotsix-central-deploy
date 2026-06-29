@@ -1,7 +1,5 @@
 # robotsix-central-deploy
 
-> **📖 Documentation:** [robotsix.net/central-deploy](https://robotsix.net/central-deploy/)
-
 Central deployment & lifecycle server for the robotsix suite.
 
 This repository hosts the deployment/lifecycle control plane for the robotsix

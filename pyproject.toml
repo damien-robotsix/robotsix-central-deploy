@@ -27,6 +27,10 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+]
 
 [tool.uv]
 default-groups = ["dev"]

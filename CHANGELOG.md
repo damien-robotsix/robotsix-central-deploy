@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Add MkDocs documentation infrastructure** — added `mkdocs.yml` with
+  mkdocs-material theme and mkdocstrings[python] plugin for auto-generated
+  API reference. New `docs/` dependency group in `pyproject.toml`
+  (`uv sync --group docs`). `docs/index.md` converts the README into the
+  MkDocs home page; `docs/api.md` stubs auto-generated API docs for all
+  modules; `docs/changelog.md` includes `CHANGELOG.md` via pymdownx.snippets.
+  `README.md` now points readers to the hosted docs site.
 - **Document 16 missing lifecycle environment variables** — added
   `Auth`, `Docker`, `Disk`, `Registry`, `Logging`, `Gateway`, and
   `Claude Integration` sections to `docs/configuration.md`, and extended
