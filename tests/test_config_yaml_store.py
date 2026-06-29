@@ -114,6 +114,8 @@ async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path)
 
 from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
     _CONFIG_SECRET_SENTINEL,
+    _annotate_secret_sentinels,
+    _is_secret_name,
     _mask_secrets,
     _merge_config,
     _prune_unset,  # new
@@ -660,3 +662,77 @@ class TestConfigRoundTrip:
         assert "***" not in serialised
         assert result.get("archive", {}).get("namespace") != "***"
         assert result.get("calendar", {}).get("broker_password") != "***"
+
+
+# ---------------------------------------------------------------------------
+# _is_secret_name
+# ---------------------------------------------------------------------------
+
+
+class TestIsSecretName:
+    def test_password_true(self):
+        assert _is_secret_name("password") is True
+
+    def test_smtp_password_substring_true(self):
+        assert _is_secret_name("smtp_password") is True
+
+    def test_api_key_true(self):
+        assert _is_secret_name("api_key") is True
+
+    def test_token_true(self):
+        assert _is_secret_name("token") is True
+
+    def test_host_false(self):
+        assert _is_secret_name("host") is False
+
+    def test_port_false(self):
+        assert _is_secret_name("port") is False
+
+    def test_username_false(self):
+        assert _is_secret_name("username") is False
+
+
+# ---------------------------------------------------------------------------
+# _annotate_secret_sentinels
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotateSecretSentinels:
+    def test_flat_dict_secret_key_marked(self):
+        result = _annotate_secret_sentinels(
+            {"host": "localhost", "password": "", "port": 8080}
+        )
+        assert result == {"host": "localhost", "password": "SECRET", "port": 8080}
+
+    def test_flat_dict_non_secret_unchanged(self):
+        result = _annotate_secret_sentinels(
+            {"host": "localhost", "port": 8080, "timeout": 30}
+        )
+        assert result == {"host": "localhost", "port": 8080, "timeout": 30}
+
+    def test_nested_dict_secret_at_depth_two(self):
+        result = _annotate_secret_sentinels({"server": {"host": "", "api_key": ""}})
+        assert result == {"server": {"host": "", "api_key": "SECRET"}}
+
+    def test_array_of_objects(self):
+        result = _annotate_secret_sentinels(
+            {"accounts": [{"imap": {"host": "", "password": ""}}]}
+        )
+        assert result == {"accounts": [{"imap": {"host": "", "password": "SECRET"}}]}
+
+    def test_explicit_sentinel_preserved(self):
+        """A non-secret-named key with value "SECRET" is preserved."""
+        result = _annotate_secret_sentinels({"custom_field": "SECRET"})
+        assert result == {"custom_field": "SECRET"}
+
+    def test_scalar_array_unchanged(self):
+        result = _annotate_secret_sentinels({"ports": [80, 443]})
+        assert result == {"ports": [80, 443]}
+
+    def test_idempotent(self):
+        """Calling twice yields the same result."""
+        template = {"password": "", "host": "localhost"}
+        first = _annotate_secret_sentinels(template)
+        second = _annotate_secret_sentinels(first)
+        assert first == second
+        assert first == {"password": "SECRET", "host": "localhost"}
