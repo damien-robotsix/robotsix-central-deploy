@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Fix: `_mask_secrets` no longer filters by secret-name heuristic** — removed
+  the `_is_secret_name(key)` guard so that any leaf whose template value is
+  `""` or `None` is treated as a secret and masked as `"***"`, matching the
+  function's documented contract.
 - **Dashboard: show per-component subdomain URLs** — the "↗ Open" link for each
   component now points to ``https://<name>.<gateway_base_domain>/`` instead of
   ``https://<gateway_base_domain>/<name>/``. Falls back to ``/<name>/`` when no

@@ -1222,12 +1222,7 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                     ]
                 else:
                     result[key] = cval  # scalar array — pass through unchanged
-            elif (
-                tval in ("", None)
-                and isinstance(cval, str)
-                and cval
-                and _is_secret_name(key)
-            ):
+            elif tval in ("", None) and isinstance(cval, str) and cval:
                 result[key] = "***"
             else:
                 result[key] = cval if key in i_current else tval
