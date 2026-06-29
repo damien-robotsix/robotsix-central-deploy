@@ -246,6 +246,8 @@
     font-size: 0.82rem;
   }
   .stateful-warn { color: #f59e0b; cursor: help; font-size: 1rem; }
+  tr.sibling-row { background: rgba(0,0,0,0.02); }
+  tr.sibling-row td:first-child { padding-left: 1.75rem; color: var(--text-muted, #888); font-size: 0.9em; }
   .seed-required { border-left: 3px solid #f90 !important; }
   .config-assist-output {
     background: #1e1e1e; color: #d4d4d4; font-size: 0.8rem;
@@ -570,11 +572,57 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
-      <button onclick="openEnvModal('${escAttr(svc.name)}')" class="${svc.has_config_yaml ? 'btn-secondary' : 'btn-secondary'}"${svc.has_config_yaml ? ` style="font-size:0.72rem;opacity:0.7;"` : ''}>${svc.has_config_yaml ? 'Advanced: Env/Secrets' : 'Config'}</button>
-      ${svc.has_config_yaml ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>` : ''}
+      ${svc.has_config_yaml
+        ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>`
+        : `<button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>`
+      }
       <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
+    <td>${openLink}</td>
+    <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
+  </tr>`;
+}
+
+function renderSiblingRow(svc) {
+  const state = svc.state || 'unknown';
+  const badgeClass = `badge-${state}`;
+  const rev = svc.image_revision || '';
+  const revShort = rev ? rev.slice(0, 12) : '\u2014';
+  const health = svc.health || '';
+  let healthClass = 'health-unknown';
+  if (health === 'healthy') healthClass = 'health-healthy';
+  else if (health === 'unhealthy') healthClass = 'health-unhealthy';
+  const healthDisplay = health || '\u2014';
+
+  const updateState = svc.update_state || 'unknown';
+  let updateBadge = '';
+  if (updateState === 'up-to-date') {
+    updateBadge = '<span class="badge badge-update-ok">up to date</span>';
+  } else if (updateState === 'update-available') {
+    const runningShort = (svc.running_digest || '').replace(/^sha256:/, '').slice(0, 12);
+    const latestShort = (svc.latest_digest || '').replace(/^sha256:/, '').slice(0, 12);
+    const tooltip = `running ${runningShort || '?'} ≠ latest ${latestShort || '?'}`;
+    updateBadge = `<span class="badge badge-update-avail" title="${escAttr(tooltip)}">update available</span>`;
+  } else {
+    updateBadge = '<span class="badge badge-update-unknown">unknown</span>';
+  }
+
+  const gatewayHref = gatewayBaseDomain
+    ? `https://${gatewayBaseDomain}/${escAttr(svc.name)}/`
+    : `/${escAttr(svc.name)}/`;
+  const openLink = svc.state === 'running'
+    ? `<a href="${gatewayHref}" target="_blank" rel="noopener"
+           style="font-size:0.8rem;color:var(--blue);">↗ Open</a>`
+    : '<span style="color:#666;">—</span>';
+
+  return `<tr class="sibling-row" id="row-${escAttr(svc.name)}">
+    <td>↳ ${escHtml(svc.name)}</td>
+    <td><span class="badge ${badgeClass}">${escHtml(state)}</span></td>
+    <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
+    <td><span class="${healthClass}">${escHtml(healthDisplay)}</span></td>
+    <td>${updateBadge}</td>
+    <td class="actions"></td>
     <td>${openLink}</td>
     <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
   </tr>`;
@@ -664,23 +712,42 @@ async function loadDashboard() {
     const data = await resp.json();
     const services = data.services || [];
 
-    const results = await Promise.allSettled(
-      services.map(svc => fetchOneStatus(svc.name))
-    );
+    // Partition: primaries have component_id === '', siblings have component_id set.
+    const primaryList = services.filter(s => s.component_id === '');
+    const siblingMap = new Map();  // primary_name → svc[]
+    for (const s of services.filter(s => s.component_id !== '')) {
+      const list = siblingMap.get(s.component_id) || [];
+      list.push(s);
+      siblingMap.set(s.component_id, list);
+    }
+
+    // Build a status-by-name map from the parallel fetch.
+    const allNames = services.map(s => s.name);
+    const allResults = await Promise.allSettled(allNames.map(n => fetchOneStatus(n)));
+    const statusByName = new Map();
+    for (let i = 0; i < allNames.length; i++) {
+      statusByName.set(allNames[i], allResults[i]);
+    }
 
     const rows = [];
-    for (let i = 0; i < services.length; i++) {
-      const svc = services[i];
-      const result = results[i];
-      if (result.status === 'fulfilled') {
-        rows.push(renderRow(result.value));
-      } else {
-        rows.push(`<tr id="row-${escAttr(svc.name)}">
-          <td>${escHtml(svc.name)}</td>
-          <td><span class="badge badge-error">error</span></td>
-          <td>—</td><td>—</td><td>—</td><td></td><td></td><td></td>
-        </tr>`);
+    for (const svc of primaryList) {
+      const r = statusByName.get(svc.name);
+      rows.push(r?.status === 'fulfilled'
+        ? renderRow(r.value)
+        : `<tr id="row-${escAttr(svc.name)}"><td>${escHtml(svc.name)}</td><td><span class="badge badge-error">error</span></td><td>—</td><td>—</td><td>—</td><td></td><td></td><td></td></tr>`);
+      for (const sibSvc of siblingMap.get(svc.name) || []) {
+        const sr = statusByName.get(sibSvc.name);
+        rows.push(sr?.status === 'fulfilled'
+          ? renderSiblingRow(sr.value)
+          : `<tr class="sibling-row" id="row-${escAttr(sibSvc.name)}"><td>↳ ${escHtml(sibSvc.name)}</td><td><span class="badge badge-error">error</span></td><td>—</td><td>—</td><td>—</td><td></td><td></td><td></td></tr>`);
       }
+    }
+    // Orphaned siblings (primary absent from list) fall through as top-level rows.
+    for (const svc of services.filter(s => s.component_id !== '' && !primaryList.some(p => p.name === s.component_id))) {
+      const r = statusByName.get(svc.name);
+      rows.push(r?.status === 'fulfilled'
+        ? renderRow(r.value)
+        : `<tr id="row-${escAttr(svc.name)}"><td>${escHtml(svc.name)}</td><td><span class="badge badge-error">error</span></td><td>—</td><td>—</td><td>—</td><td></td><td></td><td></td></tr>`);
     }
 
     document.getElementById('table-body').innerHTML = rows.join('');
@@ -1233,6 +1300,24 @@ function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
   return div;
 }
 
+/**
+ * Set a value at a dotted path (e.g. "accounts.0.auth.username") inside obj,
+ * creating intermediate objects/arrays as needed.
+ */
+function setNestedValue(obj, dotPath, value) {
+  const parts = dotPath.split('.');
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    const nextIsIndex = /^\d+$/.test(parts[i + 1]);
+    if (obj[part] === undefined || obj[part] === null) {
+      obj[part] = nextIsIndex ? [] : {};
+    }
+    obj = obj[part];
+  }
+  const last = parts[parts.length - 1];
+  obj[last] = value;
+}
+
 function collectConfigValues(schema, containerEl) {
   const result = {};
   const root = containerEl || document.getElementById('config-form-body');
@@ -1270,33 +1355,50 @@ function collectConfigValues(schema, containerEl) {
 }
 
 function _injectConfigAssistUI() {
-  // Apply seed-field indicators
+  // Apply seed-field indicators (unchanged)
   for (const key of _configAssistSeeds) {
     const el = document.querySelector(`#config-form-body [data-key="${escAttr(key)}"]`);
     if (el) el.classList.add('seed-required');
   }
-  // Remove any existing assist bar to avoid duplicates on re-render
+  // Remove existing bar/output (unchanged)
   const existingBar = document.getElementById('config-assist-bar');
   if (existingBar) existingBar.remove();
   const existingOut = document.getElementById('config-assist-output');
   if (existingOut) existingOut.remove();
 
-  if (_configAssistCommand) {
-    const bar = document.createElement('div');
-    bar.id = 'config-assist-bar';
-    bar.innerHTML = `
-      <button id="config-assist-btn" class="btn-secondary"
-              onclick="runConfigAssist()">Auto-detect / Assist</button>
-      <span id="config-assist-spinner" style="display:none">⟳ Running…</span>
-    `;
-    document.getElementById('config-form-body').appendChild(bar);
+  if (!_configAssistCommand) return;
 
-    const out = document.createElement('pre');
-    out.id = 'config-assist-output';
-    out.className = 'config-assist-output';
-    out.style.display = 'none';
-    document.getElementById('config-form-body').appendChild(out);
-  }
+  // Build seed inputs for each declared seed key.
+  const seedInputsHtml = _configAssistSeeds.map(key => {
+    // Derive a human-readable label: last non-numeric segment of the dotted path.
+    const label = key.split('.').filter(s => !/^\d+$/.test(s)).pop() || key;
+    const isSecret = /password|secret|token|key/i.test(key);
+    return `<label class="seed-label" style="font-size:0.85rem;margin-left:0.75rem;white-space:nowrap;">
+      ${escHtml(label)}:
+      <input id="seed-input-${escAttr(key)}"
+             type="${isSecret ? 'password' : 'text'}"
+             placeholder="${escHtml(label)}"
+             style="width:10rem;margin-left:0.25rem;"
+             aria-label="Seed value for ${escHtml(key)}" />
+    </label>`;
+  }).join('');
+
+  const bar = document.createElement('div');
+  bar.id = 'config-assist-bar';
+  bar.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:0.25rem 0;margin-top:0.5rem;';
+  bar.innerHTML = `
+    <button id="config-assist-btn" class="btn-secondary"
+            onclick="runConfigAssist()">Auto-detect / Assist</button>
+    ${seedInputsHtml}
+    <span id="config-assist-spinner" style="display:none;margin-left:0.5rem;">&#x27F3; Running&hellip;</span>
+  `;
+  document.getElementById('config-form-body').appendChild(bar);
+
+  const out = document.createElement('pre');
+  out.id = 'config-assist-output';
+  out.className = 'config-assist-output';
+  out.style.display = 'none';
+  document.getElementById('config-form-body').appendChild(out);
 }
 
 async function runConfigAssist() {
@@ -1309,6 +1411,16 @@ async function runConfigAssist() {
   out.style.display = 'none';
 
   const values = collectConfigValues(_configSchema);
+
+  // Merge seed bar inputs into values (so the email/password is included
+  // even if the corresponding form section is not expanded).
+  for (const key of _configAssistSeeds) {
+    const input = document.getElementById(`seed-input-${key}`);
+    if (input && input.value.trim() !== '') {
+      setNestedValue(values, key, input.value.trim());
+    }
+  }
+
   try {
     const resp = await fetch(`/services/${encodeURIComponent(_configComponent)}/config/assist`, {
       method: 'POST',
