@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Dashboard: show per-component subdomain URLs** — the "↗ Open" link for each
+  component now points to ``https://<name>.<gateway_base_domain>/`` instead of
+  ``https://<gateway_base_domain>/<name>/``. Falls back to ``/<name>/`` when no
+  ``gateway_base_domain`` is configured.
 - **Gateway: add subdomain routing for component UIs** — each component is now
   reachable at ``<name>.<gateway_base_domain>/...`` (Host-header routing) so apps
   that embed absolute paths (e.g. ``/static/board.css``, ``/move``) work at root
