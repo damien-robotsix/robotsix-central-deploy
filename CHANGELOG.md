@@ -4,6 +4,14 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Gateway: add subdomain routing for component UIs** — each component is now
+  reachable at ``<name>.<gateway_base_domain>/...`` (Host-header routing) so apps
+  that embed absolute paths (e.g. ``/static/board.css``, ``/move``) work at root
+  without the legacy ``/<name>/`` path prefix. The ``http_proxy`` Location-rewrite
+  hack is now gated on ``prefix`` being non-empty (no rewrite for subdomain
+  routing). The existing path-prefix fallback (``/<name>/...``) is preserved as
+  a backward-compat path.
+
 - **Config assist: persist detected config and normalise default_account** —
   `POST /services/{name}/config/assist` now persists the detected config to
   the `config_yaml_store` so that `GET /services/{name}/config` shows the
