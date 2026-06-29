@@ -1,4 +1,5 @@
 """In-memory session store for browser-session authentication."""
+
 from __future__ import annotations
 import secrets
 import time

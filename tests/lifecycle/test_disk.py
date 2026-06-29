@@ -64,7 +64,6 @@ def auth_headers() -> dict[str, str]:
 
 
 class TestDiskEndpoint:
-
     async def test_requires_auth(self, client: AsyncClient):
         resp = await client.get("/disk")
         assert resp.status_code == 401

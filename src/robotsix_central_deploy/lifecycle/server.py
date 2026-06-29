@@ -19,8 +19,10 @@ import json
 import logging
 import re
 import shutil
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
@@ -39,6 +41,7 @@ from .models import (
     ErrorDetail,
     RollbackResponse,
     ServiceHealthResponse,
+    ServiceListItem,
     ServiceListResponse,
     ServiceRecord,
     ServiceState,
@@ -179,9 +182,9 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _config, _store, _backend, _registry_checker, _http_client
-    _config = LifecycleConfig()  # type: ignore[call-arg]
+    _config = LifecycleConfig()
     _store = _build_store(_config)
     _backend = _build_backend(_config)
     _key_manager = SecretKeyManager(Path(_config.secret_key_path))
@@ -308,7 +311,7 @@ app = FastAPI(
 
 app.include_router(ui_router)
 
-from .settings_router import settings_router
+from .settings_router import settings_router  # noqa: E402
 
 app.include_router(settings_router)
 
@@ -320,40 +323,40 @@ app.include_router(settings_router)
 async def _get_store(request: Request) -> ServiceStore:
     store = request.app.state.store
     assert store is not None, "store not initialised"
-    return store
+    return store  # type: ignore[no-any-return]
 
 
 async def _get_backend(request: Request) -> ExecutionBackend:
     backend = request.app.state.backend
     assert backend is not None, "backend not initialised"
-    return backend
+    return backend  # type: ignore[no-any-return]
 
 
 async def _get_config(request: Request) -> LifecycleConfig:
     config = request.app.state.config
     assert config is not None, "config not initialised"
-    return config
+    return config  # type: ignore[no-any-return]
 
 
 async def _get_registry(request: Request) -> ComponentRegistry:
     """Return the ComponentRegistry from app state."""
-    return request.app.state.registry
+    return request.app.state.registry  # type: ignore[no-any-return]
 
 
 def _get_registry_checker(request: Request) -> RegistryChecker:
-    return request.app.state.registry_checker
+    return request.app.state.registry_checker  # type: ignore[no-any-return]
 
 
 async def _get_component_config_store(request: Request) -> ComponentConfigStore:
-    return request.app.state.component_config_store
+    return request.app.state.component_config_store  # type: ignore[no-any-return]
 
 
 async def _get_env_store(request: Request) -> EnvStore:
-    return request.app.state.env_store
+    return request.app.state.env_store  # type: ignore[no-any-return]
 
 
 async def _get_config_yaml_store(request: Request) -> ConfigYamlStore:
-    return request.app.state.config_yaml_store
+    return request.app.state.config_yaml_store  # type: ignore[no-any-return]
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
@@ -563,7 +566,7 @@ async def get_service_logs(
 ) -> StreamingResponse:
     record = await _get_or_create_record(name, store)
 
-    async def log_gen():
+    async def log_gen() -> AsyncIterator[bytes]:
         async for chunk in backend.stream_logs(
             record, tail=tail, since=since, follow=follow
         ):
@@ -850,7 +853,7 @@ async def restart_service(
 async def deploy_service(
     name: str,
     request: Request,
-    body: DeployRequest = Body(default=None),
+    body: DeployRequest | None = Body(default=None),  # type: ignore[assignment]
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
@@ -1146,7 +1149,7 @@ async def delete_service_env_key(
 # ---------------------------------------------------------------------------
 
 
-def _mask_secrets(template: dict, current: dict) -> dict:
+def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Return *current* with secret leaf values replaced by ``"***"``.
 
     A leaf in *template* is a secret if its value is ``""`` or ``None``.
@@ -1154,8 +1157,10 @@ def _mask_secrets(template: dict, current: dict) -> dict:
     Non-secret and nested branches are preserved as-is from *current*.
     """
 
-    def _recursive(i_template: dict, i_current: dict) -> dict:
-        result: dict = {}
+    def _recursive(
+        i_template: dict[str, Any], i_current: dict[str, Any]
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         for key, tval in i_template.items():
             cval = i_current.get(key)
             if isinstance(tval, dict) and isinstance(cval, dict):
@@ -1210,7 +1215,9 @@ def _coerce_to_template(tval: object, sval: object) -> object:
     return sval
 
 
-def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
+def _merge_config(
+    template: dict[str, Any], existing: dict[str, Any], submitted: dict[str, Any]
+) -> dict[str, Any]:
     """Deep-merge *submitted* over *existing*, respecting secret sentinel.
 
     For each key in *template*:
@@ -1222,8 +1229,12 @@ def _merge_config(template: dict, existing: dict, submitted: dict) -> dict:
       was not submitted, the template default.
     """
 
-    def _recursive(i_template: dict, i_existing: dict, i_submitted: dict) -> dict:
-        result: dict = {}
+    def _recursive(
+        i_template: dict[str, Any],
+        i_existing: dict[str, Any],
+        i_submitted: dict[str, Any],
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         for key, tval in i_template.items():
             if (
                 isinstance(tval, dict)
@@ -1302,14 +1313,14 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 
 
 class ConfigResponse(BaseModel):
-    config_schema: dict = Field(serialization_alias="schema")
-    current: dict
+    config_schema: dict[str, Any] = Field(serialization_alias="schema")
+    current: dict[str, Any]
     config_assist_command: str | None = None
     config_assist_seeds: list[str] = []
 
 
 class ConfigUpdate(BaseModel):
-    values: dict
+    values: dict[str, Any]
 
 
 class ConfigAssistRequest(BaseModel):
@@ -1903,7 +1914,7 @@ async def onboard_confirm(
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc: HTTPException):
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     if isinstance(exc.detail, dict):
         content = dict(exc.detail)
         content.setdefault("error", str(exc.detail))
@@ -1937,7 +1948,7 @@ app.include_router(gateway_router)
 if __name__ == "__main__":
     import uvicorn
 
-    cfg = LifecycleConfig()  # type: ignore[call-arg]
+    cfg = LifecycleConfig()
     uvicorn.run(
         "robotsix_central_deploy.lifecycle.server:app",
         host=cfg.host,

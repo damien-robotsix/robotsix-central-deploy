@@ -7,7 +7,7 @@ Registered LAST on the FastAPI app so that built-in routes (``/health``,
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from starlette.requests import Request
@@ -23,13 +23,20 @@ gateway_router = APIRouter(tags=["gateway"])
 
 #: Names that MUST NOT be used as component slugs — they would shadow
 #: central-deploy's own endpoints.
-RESERVED_NAMES: frozenset[str] = frozenset({
-    "ui", "health", "services", "onboard",
-    "docs", "openapi.json", "redoc",
-    "disk",  # GET /disk
-    "settings",  # GET/PUT /settings
-    "help",  # GET /help/deploy-contract
-})
+RESERVED_NAMES: frozenset[str] = frozenset(
+    {
+        "ui",
+        "health",
+        "services",
+        "onboard",
+        "docs",
+        "openapi.json",
+        "redoc",
+        "disk",  # GET /disk
+        "settings",  # GET/PUT /settings
+        "help",  # GET /help/deploy-contract
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +45,7 @@ RESERVED_NAMES: frozenset[str] = frozenset({
 
 
 def _resolve(
-    app,  # FastAPI / Starlette app
+    app: Any,  # FastAPI / Starlette app
     name: str,
 ) -> tuple[Optional[ComponentConfig], Optional[int]]:
     """Look up *name* in the component registry.
@@ -99,7 +106,7 @@ async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
         ws_code: int = 4004 if err_status == 404 else 4011
         await websocket.close(code=ws_code)
         return
-
+    assert config is not None
     # Build target WebSocket URL — Docker container name resolves via the
     # proxy network to the container's internal IP.
     target = f"ws://{config.container_name}:{config.ports[0].container}/{path}"
@@ -121,11 +128,14 @@ async def gateway_ws(websocket: WebSocket, name: str, path: str) -> None:
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
 async def gateway_http(
-    request: Request, name: str, path: str,
+    request: Request,
+    name: str,
+    path: str,
     _auth: None = Depends(verify_session),
 ) -> Response:
     config, err_status = _resolve(request.app, name)
     if err_status:
         raise HTTPException(status_code=err_status)
+    assert config is not None
     target_base = f"http://{config.container_name}:{config.ports[0].container}"
     return await http_proxy(request, target_base, path)

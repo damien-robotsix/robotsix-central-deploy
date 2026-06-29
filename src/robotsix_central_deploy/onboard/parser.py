@@ -8,8 +8,19 @@ from typing import Any, Optional
 
 import yaml
 
-from robotsix_central_deploy.onboard.models import ConfigParseError, DerivedSpec, ParseError, SiblingDerivedSpec
-from robotsix_central_deploy.registry.models import HealthCheck, PortMapping, VolumeMount
+from robotsix_central_deploy.onboard.models import (
+    ConfigParseError,
+    DerivedSpec,
+    ParseError,
+    SiblingDerivedSpec,
+)
+from robotsix_central_deploy.registry.models import (
+    HealthCheck,
+    PortMapping,
+    VolumeMount,
+)
+
+__all__ = ["ConfigParseError", "ParseError", "parse_compose", "parse_config_yaml"]
 
 # Regex for Go-style duration strings: optional h, m, s, ms components.
 _GO_DURATION_RE = re.compile(
@@ -21,8 +32,10 @@ CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
 STATEFUL_LABEL = "robotsix.deploy.stateful"
 PRIMARY_LABEL = "robotsix.deploy.primary"
 LABEL_CONFIG_TARGET = "robotsix.deploy.config-target"
-LABEL_CONFIG_ASSIST       = "robotsix.deploy.config-assist"        # shell command string
-LABEL_CONFIG_ASSIST_SEEDS = "robotsix.deploy.config-assist-seeds"  # comma-separated config keys
+LABEL_CONFIG_ASSIST = "robotsix.deploy.config-assist"  # shell command string
+LABEL_CONFIG_ASSIST_SEEDS = (
+    "robotsix.deploy.config-assist-seeds"  # comma-separated config keys
+)
 
 # Service-key validation pattern: must match ^[a-z0-9][a-z0-9-]*$
 _SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -120,7 +133,12 @@ def _parse_volumes(
         read_only = len(parts) == 3 and parts[2] == "ro"
 
         # Check for bind-mount patterns
-        if source.startswith("/") or source.startswith("./") or source.startswith("../") or source.startswith("~"):
+        if (
+            source.startswith("/")
+            or source.startswith("./")
+            or source.startswith("../")
+            or source.startswith("~")
+        ):
             violations.append(f"host bind-mount not allowed: {entry!r}")
             continue
 
@@ -170,7 +188,9 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
     if raw_hc is None:
         return None, violations
     if not isinstance(raw_hc, dict):
-        violations.append(f"healthcheck: must be a mapping, got {type(raw_hc).__name__}")
+        violations.append(
+            f"healthcheck: must be a mapping, got {type(raw_hc).__name__}"
+        )
         return None, violations
 
     test = raw_hc.get("test")
@@ -222,12 +242,12 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
 
 
 def _parse_one_service(
-    svc: dict,
+    svc: dict[str, Any],
     key: str,
     *,
     component_name: str,
     prefix: str = "",
-) -> tuple[dict, list[str]]:
+) -> tuple[dict[str, Any], list[str]]:
     """Parse a single service dict (primary or sibling) into a result dict + violations.
 
     The result dict has keys: image, env, ports, volume_mounts, health_check,
@@ -237,7 +257,9 @@ def _parse_one_service(
 
     # Build key
     if "build" in svc:
-        violations.append(f"{prefix}build: is not permitted — only pre-built images are supported")
+        violations.append(
+            f"{prefix}build: is not permitted — only pre-built images are supported"
+        )
 
     # Image
     image = svc.get("image")
@@ -276,10 +298,10 @@ def _parse_one_service(
     if isinstance(labels, dict):
         config_target = labels.get(LABEL_CONFIG_TARGET)
         if isinstance(config_target, str) and config_target.strip():
-            config_dir = str(Path(config_target.strip()).parent)  # e.g. "/home/mailbot/config"
-            match = next(
-                (m for m in volume_mounts if m.container == config_dir), None
-            )
+            config_dir = str(
+                Path(config_target.strip()).parent
+            )  # e.g. "/home/mailbot/config"
+            match = next((m for m in volume_mounts if m.container == config_dir), None)
             if match is None:
                 violations.append(
                     f"{prefix}{LABEL_CONFIG_TARGET} '{config_target}' has no matching "
@@ -297,7 +319,9 @@ def _parse_one_service(
             config_assist_command = raw_cmd.strip()
         _seeds_raw = labels.get(LABEL_CONFIG_ASSIST_SEEDS, "")
         if isinstance(_seeds_raw, str) and _seeds_raw.strip():
-            config_assist_seeds = [s.strip() for s in _seeds_raw.split(",") if s.strip()]
+            config_assist_seeds = [
+                s.strip() for s in _seeds_raw.split(",") if s.strip()
+            ]
 
     # container_name override
     container_name = svc.get("container_name", "")
@@ -391,7 +415,8 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         primary_key = next(iter(services))
     else:
         primary_keys = [
-            k for k, svc_dict in services.items()
+            k
+            for k, svc_dict in services.items()
             if isinstance(svc_dict, dict)
             and isinstance(svc_dict.get("labels"), dict)
             and str(svc_dict["labels"].get(PRIMARY_LABEL, "")).strip().lower() == "true"
@@ -507,7 +532,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     )
 
 
-def parse_config_yaml(config_bytes: bytes) -> dict:
+def parse_config_yaml(config_bytes: bytes) -> dict[str, Any]:
     """Parse config/config.yaml from raw bytes; return parsed mapping.
 
     Raises:

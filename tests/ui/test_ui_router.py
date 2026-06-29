@@ -81,7 +81,7 @@ async def _login(client: AsyncClient, password: str, username: str = "") -> str:
     for part in set_cookie.split(";"):
         part = part.strip()
         if part.startswith("session_token="):
-            token = part[len("session_token="):]
+            token = part[len("session_token=") :]
             break
     return token
 
@@ -130,7 +130,9 @@ class TestUiRouter:
         assert "Robotsix Deploy" in resp.text
 
     async def test_login_wrong_password_returns_error(self, client: AsyncClient):
-        resp = await client.post("/login", data={"username": "", "password": "wrong", "next": "/ui"})
+        resp = await client.post(
+            "/login", data={"username": "", "password": "wrong", "next": "/ui"}
+        )
         assert resp.status_code == 401
         assert "Invalid credentials" in resp.text
 
@@ -148,7 +150,9 @@ class TestUiRouter:
         assert "text/html" in resp.headers.get("content-type", "")
         assert "Robotsix Deploy" in resp.text
 
-    async def test_get_deploy_contract_returns_html_with_contract(self, client: AsyncClient):
+    async def test_get_deploy_contract_returns_html_with_contract(
+        self, client: AsyncClient
+    ):
         resp = await client.get("/help/deploy-contract")
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
@@ -170,11 +174,15 @@ class TestUiRouter:
         assert resp.status_code == 200
 
         # logout
-        resp = await client.post("/logout", cookies={"session_token": token}, follow_redirects=False)
+        resp = await client.post(
+            "/logout", cookies={"session_token": token}, follow_redirects=False
+        )
         assert resp.status_code == 303
 
         # now /ui should redirect
-        resp = await client.get("/ui", cookies={"session_token": token}, follow_redirects=False)
+        resp = await client.get(
+            "/ui", cookies={"session_token": token}, follow_redirects=False
+        )
         assert resp.status_code == 303
         assert "/login" in resp.headers["location"]
 

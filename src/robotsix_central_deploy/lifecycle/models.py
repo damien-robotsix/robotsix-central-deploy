@@ -29,13 +29,13 @@ class ServiceState(str, Enum):
 
 #: Allowed transitions: state → set of reachable next states.
 TRANSITIONS: dict[ServiceState, set[ServiceState]] = {
-    ServiceState.STOPPED:    {ServiceState.STARTING},
-    ServiceState.STARTING:   {ServiceState.RUNNING, ServiceState.FAILED},
-    ServiceState.RUNNING:    {ServiceState.STOPPING, ServiceState.RESTARTING},
-    ServiceState.STOPPING:   {ServiceState.STOPPED, ServiceState.FAILED},
+    ServiceState.STOPPED: {ServiceState.STARTING},
+    ServiceState.STARTING: {ServiceState.RUNNING, ServiceState.FAILED},
+    ServiceState.RUNNING: {ServiceState.STOPPING, ServiceState.RESTARTING},
+    ServiceState.STOPPING: {ServiceState.STOPPED, ServiceState.FAILED},
     ServiceState.RESTARTING: {ServiceState.STOPPING},
-    ServiceState.FAILED:     {ServiceState.STARTING},
-    ServiceState.UNKNOWN:    {ServiceState.STARTING, ServiceState.STOPPING},
+    ServiceState.FAILED: {ServiceState.STARTING},
+    ServiceState.UNKNOWN: {ServiceState.STARTING, ServiceState.STOPPING},
 }
 
 #: States that are considered "in-flight" (user-requested transition not yet settled).
@@ -75,8 +75,10 @@ class ComponentInspect:
 
     state: ServiceState
     image_revision: str = ""  # org.opencontainers.image.revision label; empty if absent
-    health: str = ""          # "healthy" | "unhealthy" | "starting" | "" (no health check)
-    running_digest: str = ""  # sha256:... from image RepoDigests; empty when unresolvable
+    health: str = ""  # "healthy" | "unhealthy" | "starting" | "" (no health check)
+    running_digest: str = (
+        ""  # sha256:... from image RepoDigests; empty when unresolvable
+    )
 
 
 @dataclass
@@ -88,18 +90,24 @@ class ServiceRecord:
     state: ServiceState = ServiceState.UNKNOWN
     last_error: str = ""
     updated_at: float = field(default_factory=time.time)
-    container_name: str = ""     # Docker container name; if blank, falls back to `name`
+    container_name: str = ""  # Docker container name; if blank, falls back to `name`
     image_revision: str = ""
     health: str = ""
-    deployed_image_digest: str = ""   # sha256 digest of the currently running image
-    previous_image_digest: str = ""  # sha256 digest of the image before the last deploy (enables rollback)
+    deployed_image_digest: str = ""  # sha256 digest of the currently running image
+    previous_image_digest: str = (
+        ""  # sha256 digest of the image before the last deploy (enables rollback)
+    )
     update_available: bool = False
     latest_registry_digest: str = ""
-    component_id: str = ""  # non-empty for sibling records; set to primary component name
+    component_id: str = (
+        ""  # non-empty for sibling records; set to primary component name
+    )
 
     def to_status(self) -> "ServiceStatus":
         if not self.deployed_image_digest or not self.latest_registry_digest:
-            update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
+            update_state: Literal["unknown", "up-to-date", "update-available"] = (
+                "unknown"
+            )
         elif self.deployed_image_digest == self.latest_registry_digest:
             update_state = "up-to-date"
         else:
@@ -119,7 +127,9 @@ class ServiceRecord:
         )
 
     def to_list_item(self) -> "ServiceListItem":
-        return ServiceListItem(name=self.name, state=self.state, update_available=self.update_available)
+        return ServiceListItem(
+            name=self.name, state=self.state, update_available=self.update_available
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +148,8 @@ class ServiceStatus(BaseModel):
     last_error: Optional[str] = None
     updated_at: float = Field(default_factory=time.time)
     update_available: bool = False
-    running_digest: str = ""   # deployed_image_digest short-form (full sha256)
-    latest_digest: str = ""    # last known registry manifest digest
+    running_digest: str = ""  # deployed_image_digest short-form (full sha256)
+    latest_digest: str = ""  # last known registry manifest digest
     update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
     has_config_yaml: bool = False
 
@@ -193,8 +203,8 @@ class ServiceHealthResponse(BaseModel):
 class DeployOutcome:
     """Result of a ``deploy()`` call on the execution backend."""
 
-    deployed_digest: str   # sha256 digest of the newly pulled/started image
-    previous_digest: str   # sha256 digest of the image that was running before
+    deployed_digest: str  # sha256 digest of the newly pulled/started image
+    previous_digest: str  # sha256 digest of the image that was running before
     state: ServiceState
 
 
@@ -202,14 +212,16 @@ class DeployOutcome:
 class RollbackOutcome:
     """Result of a ``rollback()`` call on the execution backend."""
 
-    deployed_digest: str   # sha256 digest of the image now running (the prior digest)
+    deployed_digest: str  # sha256 digest of the image now running (the prior digest)
     state: ServiceState
 
 
 class DeployRequest(BaseModel):
     """Optional image override for a deploy request."""
 
-    image: Optional[str] = None  # override image ref; if None, uses ComponentConfig.image
+    image: Optional[str] = (
+        None  # override image ref; if None, uses ComponentConfig.image
+    )
 
 
 class DeployResponse(BaseModel):

@@ -100,14 +100,14 @@ class FileStore(ServiceStore):
                 health=d.get("health", ""),
                 deployed_image_digest=d.get("deployed_image_digest", ""),
                 previous_image_digest=d.get("previous_image_digest", ""),
-                update_available=d.get('update_available', False),
-                latest_registry_digest=d.get('latest_registry_digest', ''),
-                component_id=d.get('component_id', ''),
+                update_available=d.get("update_available", False),
+                latest_registry_digest=d.get("latest_registry_digest", ""),
+                component_id=d.get("component_id", ""),
             )
         return records
 
     async def _save(self, records: dict[str, ServiceRecord]) -> None:
-        raw: dict[str, dict] = {}
+        raw: dict[str, dict[str, object]] = {}
         for name, r in records.items():
             raw[name] = {
                 "image": r.image,
@@ -124,7 +124,9 @@ class FileStore(ServiceStore):
                 "component_id": r.component_id,
             }
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(yaml.safe_dump(raw, default_flow_style=False), encoding="utf-8")
+        self._path.write_text(
+            yaml.safe_dump(raw, default_flow_style=False), encoding="utf-8"
+        )
 
     async def get(self, name: str) -> ServiceRecord | None:
         records = await self._load()

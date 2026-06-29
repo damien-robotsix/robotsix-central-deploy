@@ -32,28 +32,31 @@ class ConfigYamlStore:
         raw = self._path.read_text(encoding="utf-8").strip()
         if not raw:
             return {}
-        return json.loads(raw)
+        data: dict[str, Any] = json.loads(raw)
+        return data
 
     async def _save(self, data: dict[str, Any]) -> None:
         tmp = self._path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
         tmp.rename(self._path)
 
-    async def get_template(self, name: str) -> dict | None:
+    async def get_template(self, name: str) -> dict[str, Any] | None:
         data = await self._load()
-        entry = data.get(name)
+        entry: dict[str, Any] | None = data.get(name)
         if entry is None:
             return None
-        return entry.get("template")
+        template: dict[str, Any] | None = entry.get("template")
+        return template
 
-    async def get_current(self, name: str) -> dict | None:
+    async def get_current(self, name: str) -> dict[str, Any] | None:
         data = await self._load()
-        entry = data.get(name)
+        entry: dict[str, Any] | None = data.get(name)
         if entry is None:
             return None
-        return entry.get("current")
+        current: dict[str, Any] | None = entry.get("current")
+        return current
 
-    async def save_template(self, name: str, template: dict) -> None:
+    async def save_template(self, name: str, template: dict[str, Any]) -> None:
         """Store/overwrite *template*; preserve existing *current* if present."""
         async with self._lock:
             data = await self._load()
@@ -62,7 +65,7 @@ class ConfigYamlStore:
             data[name] = existing
             await self._save(data)
 
-    async def update_current(self, name: str, current: dict) -> None:
+    async def update_current(self, name: str, current: dict[str, Any]) -> None:
         """Update only the *current* dict for *name*."""
         async with self._lock:
             data = await self._load()

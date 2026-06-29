@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 import httpx
 from fastapi import HTTPException, WebSocket
@@ -24,25 +24,34 @@ logger = logging.getLogger(__name__)
 PROXY_NETWORK: str = "central-deploy-proxy"
 
 #: Request headers that MUST NOT be forwarded upstream (hop-by-hop).
-_HOP_BY_HOP: frozenset[str] = frozenset({
-    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
-    "te", "trailers", "transfer-encoding", "upgrade",
-    "host",  # rewritten to the target host
-})
+_HOP_BY_HOP: frozenset[str] = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "host",  # rewritten to the target host
+    }
+)
 
 #: Response headers to strip from upstream before returning to the client.
-_RESPONSE_STRIP: frozenset[str] = frozenset({
-    "connection", "keep-alive", "transfer-encoding",
-    "content-length",  # stale — every response is streamed
-})
+_RESPONSE_STRIP: frozenset[str] = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "transfer-encoding",
+        "content-length",  # stale — every response is streamed
+    }
+)
 
 
 def filter_hop_by_hop(headers: dict[str, str]) -> dict[str, str]:
     """Return a copy of *headers* with hop-by-hop entries removed."""
-    return {
-        k: v for k, v in headers.items()
-        if k.lower() not in _HOP_BY_HOP
-    }
+    return {k: v for k, v in headers.items() if k.lower() not in _HOP_BY_HOP}
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +78,7 @@ async def http_proxy(
     # -- Build forwarded headers --------------------------------------------
     headers = filter_hop_by_hop(dict(request.headers))
 
-    headers["x-forwarded-for"] = (
-        request.client.host if request.client else "unknown"
-    )
+    headers["x-forwarded-for"] = request.client.host if request.client else "unknown"
     headers["x-forwarded-proto"] = request.url.scheme
     headers["x-forwarded-host"] = request.headers.get("host", "")
 
@@ -90,7 +97,9 @@ async def http_proxy(
         )
     except httpx.ConnectError:
         await client.aclose()
-        raise HTTPException(status_code=502, detail="Bad Gateway — upstream unreachable")
+        raise HTTPException(
+            status_code=502, detail="Bad Gateway — upstream unreachable"
+        )
     except httpx.TimeoutException:
         await client.aclose()
         raise HTTPException(status_code=504, detail="Gateway Timeout")
@@ -107,7 +116,7 @@ async def http_proxy(
     content_type: str = upstream_resp.headers.get("content-type", "")
 
     # -- Stream response body (and close client when done) ------------------
-    async def _stream_and_close():
+    async def _stream_and_close() -> AsyncIterator[bytes]:
         try:
             async for chunk in upstream_resp.aiter_bytes():
                 yield chunk
@@ -151,6 +160,7 @@ async def ws_proxy(
         target_ws_url,
         additional_headers=additional_headers,
     ) as backend_ws:
+
         async def _client_to_backend() -> None:
             try:
                 while True:

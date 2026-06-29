@@ -185,7 +185,9 @@ class TestMergeConfig:
         assert isinstance(result["port"], int)
 
     def test_merge_coerces_bool_from_string(self):
-        result = _merge_config({"enabled": True}, {"enabled": True}, {"enabled": "false"})
+        result = _merge_config(
+            {"enabled": True}, {"enabled": True}, {"enabled": "false"}
+        )
         assert result == {"enabled": False}
         assert isinstance(result["enabled"], bool)
 
@@ -194,7 +196,9 @@ class TestMergeConfig:
         assert result == {"ratio": 1.25}
 
     def test_merge_string_leaf_unchanged(self):
-        result = _merge_config({"host": "localhost"}, {"host": "localhost"}, {"host": "10.0.0.1"})
+        result = _merge_config(
+            {"host": "localhost"}, {"host": "localhost"}, {"host": "10.0.0.1"}
+        )
         assert result == {"host": "10.0.0.1"}
 
     def test_merge_coerces_nested_typed_leaf(self):
@@ -211,5 +215,7 @@ class TestMergeConfig:
         assert result == {"port": "not-a-number"}
 
     def test_merge_coerces_list_from_json_string(self):
-        result = _merge_config({"hosts": ["a"]}, {"hosts": ["a"]}, {"hosts": '["x", "y"]'})
+        result = _merge_config(
+            {"hosts": ["a"]}, {"hosts": ["a"]}, {"hosts": '["x", "y"]'}
+        )
         assert result == {"hosts": ["x", "y"]}

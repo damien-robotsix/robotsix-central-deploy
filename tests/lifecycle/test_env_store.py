@@ -70,40 +70,52 @@ def store_path(tmp_path: Path) -> Path:
 
 
 class TestEnvStoreUpsertAndGet:
-    async def test_get_empty_store_returns_default(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_get_empty_store_returns_default(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         config = await store.get("chat")
         assert config.env == {}
         assert config.secret_tokens == {}
 
-    async def test_upsert_then_get_preserves_env(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_upsert_then_get_preserves_env(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"LOG_LEVEL": "debug"}, {})
         config = await store.get("chat")
         assert config.env == {"LOG_LEVEL": "debug"}
         assert config.secret_tokens == {}
 
-    async def test_upsert_merges_not_replaces(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_upsert_merges_not_replaces(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"A": "1"}, {})
         await store.upsert("chat", {"B": "2"}, {})
         config = await store.get("chat")
         assert config.env == {"A": "1", "B": "2"}
 
-    async def test_upsert_overwrites_existing_keys(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_upsert_overwrites_existing_keys(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"A": "1"}, {})
         await store.upsert("chat", {"A": "new"}, {})
         config = await store.get("chat")
         assert config.env == {"A": "new"}
 
-    async def test_stored_json_does_not_contain_plaintext(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_stored_json_does_not_contain_plaintext(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {}, {"API_KEY": "super-secret"})
         raw_text = store_path.read_text()
         assert "super-secret" not in raw_text
 
-    async def test_stored_secret_is_fernet_token(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_stored_secret_is_fernet_token(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {}, {"API_KEY": "s3cret"})
         config = await store.get("chat")
@@ -111,7 +123,9 @@ class TestEnvStoreUpsertAndGet:
         # Token should be decryptable
         assert key_manager.decrypt(token) == "s3cret"
 
-    async def test_upsert_preserves_other_components(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_upsert_preserves_other_components(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"A": "1"}, {})
         await store.upsert("mail", {"B": "2"}, {})
@@ -120,24 +134,32 @@ class TestEnvStoreUpsertAndGet:
 
 
 class TestEnvStoreGetMergedEnv:
-    async def test_merged_base_only(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_merged_base_only(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         merged = await store.get_merged_env("chat", {"DEFAULT": "val"})
         assert merged == {"DEFAULT": "val"}
 
-    async def test_merged_stored_overrides_base(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_merged_stored_overrides_base(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"KEY": "user-val"}, {})
         merged = await store.get_merged_env("chat", {"KEY": "base-val"})
         assert merged == {"KEY": "user-val"}
 
-    async def test_merged_secrets_overrides_base(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_merged_secrets_overrides_base(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {}, {"TOKEN": "my-token"})
         merged = await store.get_merged_env("chat", {"TOKEN": "base-token"})
         assert merged == {"TOKEN": "my-token"}
 
-    async def test_merged_env_overrides_secret_on_collision(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_merged_env_overrides_secret_on_collision(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         """Secrets are applied last, so they win over stored plaintext env on collision."""
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"KEY": "env-val"}, {"KEY": "secret-val"})
@@ -145,14 +167,18 @@ class TestEnvStoreGetMergedEnv:
         # Secret applied last wins over stored env
         assert merged == {"KEY": "secret-val"}
 
-    async def test_merged_all_layers(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_merged_all_layers(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert(
             "chat",
             {"URL": "env-url", "SHARED": "env-shared"},
             {"SECRET": "secret-val", "SHARED": "secret-wins"},
         )
-        merged = await store.get_merged_env("chat", {"URL": "base-url", "SHARED": "base-shared"})
+        merged = await store.get_merged_env(
+            "chat", {"URL": "base-url", "SHARED": "base-shared"}
+        )
         assert merged == {
             "URL": "env-url",
             "SHARED": "secret-wins",
@@ -161,30 +187,40 @@ class TestEnvStoreGetMergedEnv:
 
 
 class TestEnvStoreDeleteKey:
-    async def test_delete_existing_env_key(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_delete_existing_env_key(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"A": "1", "B": "2"}, {})
         assert await store.delete_key("chat", "A") is True
         config = await store.get("chat")
         assert config.env == {"B": "2"}
 
-    async def test_delete_existing_secret_key(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_delete_existing_secret_key(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {}, {"TOKEN": "val"})
         assert await store.delete_key("chat", "TOKEN") is True
         config = await store.get("chat")
         assert config.secret_tokens == {}
 
-    async def test_delete_absent_key_returns_false(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_delete_absent_key_returns_false(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"A": "1"}, {})
         assert await store.delete_key("chat", "B") is False
 
-    async def test_delete_absent_component_returns_false(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_delete_absent_component_returns_false(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         assert await store.delete_key("nonexistent", "KEY") is False
 
-    async def test_delete_removes_component_entry_when_empty(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_delete_removes_component_entry_when_empty(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"A": "1"}, {})
         await store.delete_key("chat", "A")
@@ -194,7 +230,9 @@ class TestEnvStoreDeleteKey:
 
 
 class TestEnvStoreSurvivesRestart:
-    async def test_data_survives_new_instance(self, store_path: Path, key_manager: SecretKeyManager):
+    async def test_data_survives_new_instance(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
         store1 = EnvStore(store_path, key_manager)
         await store1.upsert("chat", {"A": "1"}, {"S": "val"})
 

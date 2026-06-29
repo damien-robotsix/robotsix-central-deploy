@@ -127,13 +127,17 @@ class TestBasicAuth:
         assert resp.status_code == 401
         assert "www-authenticate" in {k.lower() for k in resp.headers}
 
-    async def test_wrong_username_with_correct_password_succeeds(self, client: AsyncClient):
+    async def test_wrong_username_with_correct_password_succeeds(
+        self, client: AsyncClient
+    ):
         # Username is ignored — only the password matters against api_key.
         # Wrong username with correct password should succeed.
         resp = await client.get("/services", headers=self._basic_header(username="bad"))
         assert resp.status_code == 200
 
-    async def test_api_key_not_accepted_when_only_basic_configured(self, client: AsyncClient):
+    async def test_api_key_not_accepted_when_only_basic_configured(
+        self, client: AsyncClient
+    ):
         resp = await client.get("/services", headers={"X-API-Key": "some-key"})
         assert resp.status_code == 401
 
@@ -236,9 +240,7 @@ class TestUsernamePasswordAuth:
         assert resp.status_code == 401
 
     async def test_start_with_valid_credentials_returns_200(self, client: AsyncClient):
-        resp = await client.post(
-            "/services/svc/start", headers=self._basic_header()
-        )
+        resp = await client.post("/services/svc/start", headers=self._basic_header())
         assert resp.status_code == 200
 
 
@@ -319,5 +321,7 @@ class TestHealthUnauthenticated:
 
     async def test_health_with_basic_auth_succeeds(self, client: AsyncClient):
         encoded = base64.b64encode(b"myuser:mypass").decode()
-        resp = await client.get("/health", headers={"Authorization": f"Basic {encoded}"})
+        resp = await client.get(
+            "/health", headers={"Authorization": f"Basic {encoded}"}
+        )
         assert resp.status_code == 200

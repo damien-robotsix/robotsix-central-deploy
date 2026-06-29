@@ -15,11 +15,21 @@ dependencies = [
     "websockets>=12.0",
 ]
 
-[project.optional-dependencies]
+# Dev tooling as a PEP 735 dependency-group (the fleet convention), pulled
+# in automatically on `uv sync` via [tool.uv] default-groups so the shared
+# python-ci.yml's `uv run mypy/ruff` steps find their tools.
+[dependency-groups]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
+    "mypy>=1.0",
+    "coverage>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
 ]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [project.scripts]
 robotsix-lifecycle = "robotsix_central_deploy.lifecycle.cli:main"
@@ -34,3 +44,17 @@ testpaths = ["tests"]
 
 [tool.setuptools.package-data]
 "robotsix_central_deploy" = ["ui/*.html", "ui/*.md"]
+
+[tool.mypy]
+strict = true
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+
+[tool.deptry]
+known_first_party = ["robotsix_central_deploy"]
+per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff"], "DEP003" = ["starlette", "requests"] }

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    # The reusable python-ci.yml's nested `tests` job uploads SARIF, so it
+    # requests `security-events: write`. A caller job MUST grant at least
+    # that, or GitHub rejects the reusable-workflow call with a
+    # startup_failure ("nested job 'tests' is requesting …").
+    permissions:
+      contents: read
+      security-events: write
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@5cd8c1facb02299da618979e7a55f1953f9c075a  # main
+    with:
+      python-version: "3.14"
+      # central-deploy declares no `tracing` extra; the reusable defaults
+      # install-extras to "tracing", so pin it empty to avoid a failing
+      # `uv sync --extra tracing`.
+      install-extras: ""
+      cov-package: "robotsix_central_deploy"
+      coverage-threshold: "80"
+      mypy-advisory: true
+    secrets: inherit

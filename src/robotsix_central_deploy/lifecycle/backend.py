@@ -12,10 +12,17 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..gateway.proxy import PROXY_NETWORK
-from .models import ComponentInspect, DeployOutcome, DockerDfStats, RollbackOutcome, ServiceRecord, ServiceState
+from .models import (
+    ComponentInspect,
+    DeployOutcome,
+    DockerDfStats,
+    RollbackOutcome,
+    ServiceRecord,
+    ServiceState,
+)
 
 if TYPE_CHECKING:
     from ..registry.models import ComponentConfig
@@ -59,7 +66,7 @@ class ExecutionBackend(ABC):
     ) -> RollbackOutcome: ...
 
     @abstractmethod
-    async def stream_logs(
+    def stream_logs(
         self,
         service: ServiceRecord,
         tail: int = 100,
@@ -73,7 +80,9 @@ class ExecutionBackend(ABC):
         ...
 
     @abstractmethod
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(
+        self, volume_name: str, config_dict: dict[str, Any]
+    ) -> None:
         """Write *config_dict* as YAML into a Docker named volume."""
         ...
 
@@ -122,11 +131,22 @@ class NoopBackend(ExecutionBackend):
     async def status(self, service: ServiceRecord) -> ComponentInspect:
         return ComponentInspect(state=service.state)
 
-    async def deploy(self, service: ServiceRecord, config, image_ref: str) -> DeployOutcome:
-        return DeployOutcome(deployed_digest="sha256:noop", previous_digest="", state=ServiceState.RUNNING)
+    async def deploy(
+        self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
+    ) -> DeployOutcome:
+        return DeployOutcome(
+            deployed_digest="sha256:noop",
+            previous_digest="",
+            state=ServiceState.RUNNING,
+        )
 
-    async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
-        return RollbackOutcome(deployed_digest=service.previous_image_digest or "sha256:noop", state=ServiceState.RUNNING)
+    async def rollback(
+        self, service: ServiceRecord, config: "ComponentConfig"
+    ) -> RollbackOutcome:
+        return RollbackOutcome(
+            deployed_digest=service.previous_image_digest or "sha256:noop",
+            state=ServiceState.RUNNING,
+        )
 
     async def stream_logs(
         self,
@@ -140,14 +160,22 @@ class NoopBackend(ExecutionBackend):
     async def disk_df(self) -> DockerDfStats:
         return DockerDfStats()
 
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(
+        self, volume_name: str, config_dict: dict[str, Any]
+    ) -> None:
         pass
 
     async def read_config_from_volume(self, volume_name: str) -> dict:
         return {}
 
     async def run_config_assist(
-        self, image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+        self,
+        image,
+        command_str,
+        volume_name,
+        volume_mount_path,
+        env_dict,
+        timeout_seconds=60,
     ) -> str:
         return "[noop backend]"
 
@@ -162,19 +190,28 @@ class DockerBackend(ExecutionBackend):
 
     async def start(self, service: ServiceRecord) -> ServiceState:
         if not service.image:
-            logger.warning("Service %r has no image — cannot start via Docker", service.name)
+            logger.warning(
+                "Service %r has no image — cannot start via Docker", service.name
+            )
             return ServiceState.FAILED
 
         # Try `docker start` (container may already exist), fall back to `docker run`.
         rc, _, stderr = await _run(
-            "docker", "start", service.name,
+            "docker",
+            "start",
+            service.name,
         )
         if rc == 0:
             return ServiceState.RUNNING
 
         # Container may not exist — create and start it.
         rc, _, stderr = await _run(
-            "docker", "run", "-d", "--name", service.name, service.image,
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            service.name,
+            service.image,
         )
         if rc != 0:
             logger.error("docker run %s failed: %s", service.name, stderr)
@@ -211,14 +248,25 @@ class DockerBackend(ExecutionBackend):
         return ServiceState.RUNNING
 
     async def status(self, service: ServiceRecord) -> ComponentInspect:
-        state = await self._inspect_state(service.container_name or service.name) or ServiceState.UNKNOWN
+        state = (
+            await self._inspect_state(service.container_name or service.name)
+            or ServiceState.UNKNOWN
+        )
         return ComponentInspect(state=state)
 
-    async def deploy(self, service: ServiceRecord, config, image_ref: str) -> DeployOutcome:
-        raise NotImplementedError("deploy not supported for DockerBackend — use DockerSdkBackend")
+    async def deploy(
+        self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
+    ) -> DeployOutcome:
+        raise NotImplementedError(
+            "deploy not supported for DockerBackend — use DockerSdkBackend"
+        )
 
-    async def rollback(self, service: ServiceRecord, config) -> RollbackOutcome:
-        raise NotImplementedError("rollback not supported for DockerBackend — use DockerSdkBackend")
+    async def rollback(
+        self, service: ServiceRecord, config: "ComponentConfig"
+    ) -> RollbackOutcome:
+        raise NotImplementedError(
+            "rollback not supported for DockerBackend — use DockerSdkBackend"
+        )
 
     async def stream_logs(
         self,
@@ -233,7 +281,9 @@ class DockerBackend(ExecutionBackend):
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()
 
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(
+        self, volume_name: str, config_dict: dict[str, Any]
+    ) -> None:
         raise NotImplementedError(
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -244,7 +294,13 @@ class DockerBackend(ExecutionBackend):
         )
 
     async def run_config_assist(
-        self, image, command_str, volume_name, volume_mount_path, env_dict, timeout_seconds=60
+        self,
+        image,
+        command_str,
+        volume_name,
+        volume_mount_path,
+        env_dict,
+        timeout_seconds=60,
     ) -> str:
         raise NotImplementedError(
             "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
@@ -253,7 +309,11 @@ class DockerBackend(ExecutionBackend):
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
         rc, stdout, _stderr = await _run(
-            "docker", "inspect", "-f", "{{.State.Status}}", container_name,
+            "docker",
+            "inspect",
+            "-f",
+            "{{.State.Status}}",
+            container_name,
         )
         if rc != 0:
             return None  # Container not found → treat as unknown.
@@ -285,7 +345,8 @@ async def _run(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout,
+            proc.communicate(),
+            timeout=timeout,
         )
         return (
             proc.returncode or 0,
@@ -340,14 +401,16 @@ class DockerSdkBackend(ExecutionBackend):
         }
         return mapping.get(status, ServiceState.UNKNOWN)
 
-    async def _get_container(self, name: str):
+    async def _get_container(self, name: str) -> Any:
         """Run ``containers.get`` in the default executor and map known errors."""
         import docker
 
         loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(
-                None, self._client.containers.get, name,
+                None,
+                self._client.containers.get,
+                name,
             )
         except docker.errors.NotFound:
             return None
@@ -372,7 +435,7 @@ class DockerSdkBackend(ExecutionBackend):
 
         loop = asyncio.get_running_loop()
 
-        def _inspect():
+        def _inspect() -> ComponentInspect:
             state_str = container.attrs["State"]["Status"]
             state = self._state_from_docker(state_str)
 
@@ -380,7 +443,8 @@ class DockerSdkBackend(ExecutionBackend):
             revision = ""
             try:
                 revision = container.image.labels.get(
-                    "org.opencontainers.image.revision", "",
+                    "org.opencontainers.image.revision",
+                    "",
                 )
             except Exception:
                 pass
@@ -417,7 +481,9 @@ class DockerSdkBackend(ExecutionBackend):
                 pass  # Gracefully degrade; digest stays ""
 
             return ComponentInspect(
-                state=state, image_revision=revision, health=health,
+                state=state,
+                image_revision=revision,
+                health=health,
                 running_digest=running_digest,
             )
 
@@ -509,7 +575,7 @@ class DockerSdkBackend(ExecutionBackend):
 
     # -- deploy / rollback --------------------------------------------------
 
-    def _create_container(self, config: "ComponentConfig", image_ref: str):
+    def _create_container(self, config: "ComponentConfig", image_ref: str) -> Any:
         """Create a Docker container from a ComponentConfig spec (synchronous)."""
 
         # Host ports are intentionally NOT published: the gateway reaches
@@ -524,7 +590,10 @@ class DockerSdkBackend(ExecutionBackend):
         }
         if config.claude_mount:
             import os
-            claude_host = self._claude_host_mount_path or os.path.expanduser("~/.claude")
+
+            claude_host = self._claude_host_mount_path or os.path.expanduser(
+                "~/.claude"
+            )
             volumes[claude_host] = {"bind": "/root/.claude", "mode": "rw"}
         healthcheck = None
         if config.health_check:
@@ -546,7 +615,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             detach=True,
-            restart_policy={"Name": "unless-stopped"},
+            restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]
             network=PROXY_NETWORK,
         )
 
@@ -559,10 +628,12 @@ class DockerSdkBackend(ExecutionBackend):
             if container is None:
                 raise RuntimeError(f"Container {name} disappeared during health wait")
 
-            def _poll():
+            def _poll() -> str:
                 container.reload()
                 h = container.attrs["State"].get("Health")
-                return h["Status"] if h else "healthy"  # no healthcheck → treat as healthy
+                return (
+                    h["Status"] if h else "healthy"
+                )  # no healthcheck → treat as healthy
 
             status = await loop.run_in_executor(None, _poll)
             if status == "healthy":
@@ -570,9 +641,11 @@ class DockerSdkBackend(ExecutionBackend):
             if status == "unhealthy":
                 raise RuntimeError(f"Container {name} is unhealthy after deploy")
             await asyncio.sleep(2)
-        logger.warning("Health wait timed out for %s after %.0fs — proceeding", name, timeout)
+        logger.warning(
+            "Health wait timed out for %s after %.0fs — proceeding", name, timeout
+        )
 
-    def _stop_and_remove(self, container) -> None:
+    def _stop_and_remove(self, container: Any) -> None:
         """Stop and force-remove a container (synchronous, best-effort stop)."""
         try:
             container.stop(timeout=30)
@@ -598,11 +671,15 @@ class DockerSdkBackend(ExecutionBackend):
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
         # Derive manifest digest from RepoDigests (comparable to registry
         # Docker-Content-Digest header), falling back to config digest.
-        repo_without_tag = image_ref.rsplit(':', 1)[0]
-        repo_digests = image.attrs.get('RepoDigests', [])
+        repo_without_tag = image_ref.rsplit(":", 1)[0]
+        repo_digests = image.attrs.get("RepoDigests", [])
         new_digest: str = next(
-            (rd.split('@')[1] for rd in repo_digests if rd.startswith(repo_without_tag + '@')),
-            image.id,
+            (
+                rd.split("@")[1]
+                for rd in repo_digests
+                if rd.startswith(repo_without_tag + "@")
+            ),
+            image.id or "",
         )
 
         # Step 2 — snapshot current container's image digest (for rollback)
@@ -610,26 +687,36 @@ class DockerSdkBackend(ExecutionBackend):
         existing = await self._get_container(name)
         if existing is not None:
             try:
-                prior_digest = await loop.run_in_executor(None, lambda: existing.image.id)
+                prior_digest = await loop.run_in_executor(
+                    None, lambda: existing.image.id
+                )
             except Exception:
                 pass
 
         # Step 3 — stop + remove old container (if present)
         if existing is not None:
             try:
-                await loop.run_in_executor(None, lambda: self._stop_and_remove(existing))
+                await loop.run_in_executor(
+                    None, lambda: self._stop_and_remove(existing)
+                )
             except docker.errors.APIError as exc:
-                raise RuntimeError(f"Failed to remove existing container {name!r}: {exc}") from exc
+                raise RuntimeError(
+                    f"Failed to remove existing container {name!r}: {exc}"
+                ) from exc
 
         # Step 4 — create + start new container
         try:
             # Pre-create named volumes
             for vol_name in config.named_volumes:
                 try:
-                    await loop.run_in_executor(None, self._client.volumes.create, vol_name)
+                    await loop.run_in_executor(
+                        None, self._client.volumes.create, vol_name
+                    )
                 except docker.errors.APIError as exc:
                     if exc.status_code == 409:
-                        logger.info("Volume %s already exists, skipping creation", vol_name)
+                        logger.info(
+                            "Volume %s already exists, skipping creation", vol_name
+                        )
                     else:
                         raise RuntimeError(
                             f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
@@ -648,7 +735,8 @@ class DockerSdkBackend(ExecutionBackend):
             if prior_digest:
                 logger.error(
                     "deploy %s failed after container removal — attempting restore from %s",
-                    name, prior_digest,
+                    name,
+                    prior_digest,
                 )
                 try:
                     restore = await loop.run_in_executor(
@@ -658,7 +746,9 @@ class DockerSdkBackend(ExecutionBackend):
                     logger.info("Restored %s from prior digest %s", name, prior_digest)
                 except Exception as restore_exc:
                     logger.error("Restore of %s also failed: %s", name, restore_exc)
-            raise RuntimeError(f"Container create/start failed for {name!r}: {exc}") from exc
+            raise RuntimeError(
+                f"Container create/start failed for {name!r}: {exc}"
+            ) from exc
 
         # Step 5 — health wait (if configured)
         if config.health_check:
@@ -677,16 +767,22 @@ class DockerSdkBackend(ExecutionBackend):
         import docker
 
         name = self._container_name(service)
-        target_digest = service.previous_image_digest  # guaranteed non-empty by server layer
+        target_digest = (
+            service.previous_image_digest
+        )  # guaranteed non-empty by server layer
         loop = asyncio.get_running_loop()
 
         # Stop + remove current container
         existing = await self._get_container(name)
         if existing is not None:
             try:
-                await loop.run_in_executor(None, lambda: self._stop_and_remove(existing))
+                await loop.run_in_executor(
+                    None, lambda: self._stop_and_remove(existing)
+                )
             except docker.errors.APIError as exc:
-                raise RuntimeError(f"Failed to remove container {name!r} for rollback: {exc}") from exc
+                raise RuntimeError(
+                    f"Failed to remove container {name!r} for rollback: {exc}"
+                ) from exc
 
         # Create + start from prior digest
         try:
@@ -702,9 +798,13 @@ class DockerSdkBackend(ExecutionBackend):
         if config.health_check:
             await self._wait_healthy(name, timeout=60.0)
 
-        return RollbackOutcome(deployed_digest=target_digest, state=ServiceState.RUNNING)
+        return RollbackOutcome(
+            deployed_digest=target_digest, state=ServiceState.RUNNING
+        )
 
-    async def write_config_to_volume(self, volume_name: str, config_dict: dict) -> None:
+    async def write_config_to_volume(
+        self, volume_name: str, config_dict: dict[str, Any]
+    ) -> None:
         """Write *config_dict* as YAML into a Docker named volume via a
         temporary busybox container.
 
@@ -715,7 +815,9 @@ class DockerSdkBackend(ExecutionBackend):
         import docker
         import yaml
 
-        yaml_content = yaml.dump(config_dict, default_flow_style=False, allow_unicode=True)
+        yaml_content = yaml.dump(
+            config_dict, default_flow_style=False, allow_unicode=True
+        )
         encoded = base64.b64encode(yaml_content.encode()).decode()
         # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
         cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.yaml && chmod 777 /config && chmod 666 /config/config.yaml"
@@ -730,17 +832,21 @@ class DockerSdkBackend(ExecutionBackend):
                     remove=True,
                 )
             except docker.errors.APIError as exc:
-                raise RuntimeError(f"write_config_to_volume failed for {volume_name}: {exc}") from exc
+                raise RuntimeError(
+                    f"write_config_to_volume failed for {volume_name}: {exc}"
+                ) from exc
 
         await loop.run_in_executor(None, _run)
 
     async def read_config_from_volume(self, volume_name: str) -> dict:
         """Read /config/config.yaml from a named volume via a temporary busybox container."""
         import yaml
+
         loop = asyncio.get_running_loop()
 
         def _run() -> dict:
             import docker
+
             try:
                 raw = self._client.containers.run(
                     "busybox",
@@ -768,6 +874,7 @@ class DockerSdkBackend(ExecutionBackend):
     ) -> str:
         """Run a one-shot container from *image*, mount config volume at *volume_mount_path*."""
         import requests.exceptions
+
         loop = asyncio.get_running_loop()
 
         def _run() -> str:
@@ -780,9 +887,9 @@ class DockerSdkBackend(ExecutionBackend):
             try:
                 container.start()
                 result = container.wait(timeout=timeout_seconds)
-                logs: str = container.logs(
-                    stdout=True, stderr=True
-                ).decode(errors="replace")
+                logs: str = container.logs(stdout=True, stderr=True).decode(
+                    errors="replace"
+                )
                 exit_code = result.get("StatusCode", 0)
                 if exit_code != 0:
                     raise RuntimeError(
@@ -794,9 +901,7 @@ class DockerSdkBackend(ExecutionBackend):
                     container.kill()
                 except Exception:
                     pass
-                raise TimeoutError(
-                    f"config-assist timed out after {timeout_seconds}s"
-                )
+                raise TimeoutError(f"config-assist timed out after {timeout_seconds}s")
             finally:
                 try:
                     container.remove(force=True)
@@ -837,7 +942,8 @@ class DockerSdkBackend(ExecutionBackend):
                 None, lambda: container.logs(**kwargs)
             )
             while True:
-                def _next_chunk():
+
+                def _next_chunk() -> tuple[bytes | None, bool]:
                     try:
                         return next(log_iter), False
                     except StopIteration:
@@ -846,7 +952,11 @@ class DockerSdkBackend(ExecutionBackend):
                 chunk, exhausted = await loop.run_in_executor(None, _next_chunk)
                 if exhausted:
                     break
-                yield chunk if isinstance(chunk, bytes) else chunk.encode()
+                yield (
+                    chunk
+                    if isinstance(chunk, bytes)
+                    else (chunk.encode() if chunk is not None else b"")
+                )
         except asyncio.CancelledError:
             raise
         except docker.errors.APIError as exc:
@@ -872,9 +982,7 @@ class DockerSdkBackend(ExecutionBackend):
         images_size = sum(img.get("Size", 0) for img in images)
         builder_size = result.get("BuilderSize", 0)
         reclaimable = sum(
-            item.get("Size", 0)
-            for item in build_cache
-            if not item.get("InUse", True)
+            item.get("Size", 0) for item in build_cache if not item.get("InUse", True)
         )
         return DockerDfStats(
             images_size_bytes=images_size,

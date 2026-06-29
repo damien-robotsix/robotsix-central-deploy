@@ -34,10 +34,7 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
         return RedirectResponse(url=_safe_next(next), status_code=303)
-    page = (
-        _LOGIN_HTML.replace("{{next}}", _html.escape(next))
-        .replace("{{error}}", "")
-    )
+    page = _LOGIN_HTML.replace("{{next}}", _html.escape(next)).replace("{{error}}", "")
     return HTMLResponse(content=page)
 
 
@@ -56,17 +53,15 @@ async def login_submit(request: Request) -> Response:
     if not cfg.auth_required:
         authed = True
     elif cfg.auth_username and cfg.auth_password:
-        authed = (
-            hmac.compare_digest(username, cfg.auth_username)
-            and hmac.compare_digest(password, cfg.auth_password)
-        )
+        authed = hmac.compare_digest(
+            username, cfg.auth_username
+        ) and hmac.compare_digest(password, cfg.auth_password)
     elif cfg.api_key:
         authed = hmac.compare_digest(password, cfg.api_key)
 
     if not authed:
-        page = (
-            _LOGIN_HTML.replace("{{next}}", _html.escape(next_url))
-            .replace("{{error}}", "Invalid credentials")
+        page = _LOGIN_HTML.replace("{{next}}", _html.escape(next_url)).replace(
+            "{{error}}", "Invalid credentials"
         )
         return HTMLResponse(content=page, status_code=401)
 

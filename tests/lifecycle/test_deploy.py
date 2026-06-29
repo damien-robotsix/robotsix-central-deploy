@@ -29,6 +29,7 @@ from robotsix_central_deploy.lifecycle import server as server_mod
 # Helper: a minimal component config for testing
 # ---------------------------------------------------------------------------
 
+
 def _make_config(component_id: str = "svc-a", image: str = "repo:v1"):
     return ComponentConfig(
         id=component_id,
@@ -122,7 +123,9 @@ class TestDeployEndpoint:
 
     async def _seed(self, name: str = "svc-a"):
         store = server_mod.app.state.store
-        await store.put(ServiceRecord(name=name, state=ServiceState.STOPPED, image="repo:v1"))
+        await store.put(
+            ServiceRecord(name=name, state=ServiceState.STOPPED, image="repo:v1")
+        )
 
     async def test_deploy_uses_config_image_when_body_omitted(
         self, client: AsyncClient, auth_headers: dict, registry
@@ -133,7 +136,9 @@ class TestDeployEndpoint:
         data = resp.json()
         assert data["name"] == "svc-a"
         assert data["action"] == "deploy"
-        assert data["deployed_digest"] == "sha256:noop"  # NoopBackend always returns this
+        assert (
+            data["deployed_digest"] == "sha256:noop"
+        )  # NoopBackend always returns this
         assert data["current_state"] == ServiceState.RUNNING.value
 
     async def test_deploy_with_image_override(
@@ -233,7 +238,7 @@ class TestDeployEndpoint:
         assert rec is not None
         # After rollback: previous becomes deployed, deployed becomes previous
         assert rec.deployed_image_digest == "sha256:old456"  # rolled-back-to
-        assert rec.previous_image_digest == "sha256:noop"    # what was running
+        assert rec.previous_image_digest == "sha256:noop"  # what was running
         assert rec.image_revision == "sha256:old456"
 
     async def test_rollback_404_on_unknown_service(
@@ -423,7 +428,7 @@ class TestDockerSdkBackendDeploy:
         client.containers.get.side_effect = [
             client._errors.NotFound("nope"),  # existing lookup
             self._make_container(health_status="starting"),  # poll 1
-            self._make_container(health_status="healthy"),   # poll 2 → done
+            self._make_container(health_status="healthy"),  # poll 2 → done
         ]
 
         record = ServiceRecord(name="svc-a", container_name="svc-a")
@@ -451,12 +456,13 @@ class TestDockerSdkBackendDeploy:
         client.volumes.create.assert_any_call("vol_b")
 
         # Assert volumes.create() was called BEFORE containers.create()
-        vol_calls = [c.args for c in client.volumes.create.call_args_list]
         create_call = client.containers.create.call_args_list[0]
         # We can verify containers.create happened after by checking both were called
         assert client.containers.create.called
         # Verify create_kwargs still include the regular mounts (not the named volumes)
-        assert create_call.kwargs["volumes"] == {"/data": {"bind": "/data", "mode": "rw"}}
+        assert create_call.kwargs["volumes"] == {
+            "/data": {"bind": "/data", "mode": "rw"}
+        }
 
     async def test_deploy_precreates_volume_already_exists(self, backend):
         """volumes.create raises APIError 409 (Conflict) — handled gracefully, deploy continues."""

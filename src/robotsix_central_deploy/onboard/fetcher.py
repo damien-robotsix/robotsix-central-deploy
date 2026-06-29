@@ -7,6 +7,8 @@ from pathlib import Path
 
 from robotsix_central_deploy.onboard.models import FetchError
 
+__all__ = ["FetchError", "RepoFiles", "fetch_compose_bytes", "fetch_repo_files"]
+
 
 @dataclass
 class RepoFiles:

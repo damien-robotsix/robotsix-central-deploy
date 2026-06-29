@@ -7,7 +7,11 @@ import pytest
 
 from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend, NoopBackend
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
-from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping, ServiceConfig
+from robotsix_central_deploy.registry.models import (
+    ComponentConfig,
+    PortMapping,
+    ServiceConfig,
+)
 
 
 class TestNoopBackend:
@@ -317,7 +321,9 @@ class TestDockerSdkBackendNoHostPorts:
             container_name="test-svc",
             ports=[PortMapping(host=8080, container=8080)],
         )
-        record = ServiceRecord(name="test-svc", container_name="test-svc", state=ServiceState.STOPPED)
+        record = ServiceRecord(
+            name="test-svc", container_name="test-svc", state=ServiceState.STOPPED
+        )
 
         outcome = await b.deploy(record, config, "test:latest")
         assert outcome.state == ServiceState.RUNNING

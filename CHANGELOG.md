@@ -47,6 +47,13 @@ All notable changes to robotsix-central-deploy.
   all `ROBOTSIX_LIFECYCLE_*` environment variables (host, port, API key, store
   backend/path, execution backend).
 
+- **Fleet alignment bootstrap** — added `.robotsix-mill/config.yaml`,
+  `.github/workflows/ci.yml` (calling robotsix-mill reusable `python-ci.yml`),
+  and `AGENT.md`. Added `[tool.mypy]` with `strict = true` and
+  `[tool.coverage]` with `fail_under = 80` to `pyproject.toml`. Added
+  `mypy`, `coverage`, `pytest-cov`, and `ruff` to dev dependencies.
+  Fixed all `mypy --strict` type errors across the codebase.
+
 - **Per-component config.yaml support** — central-deploy now fetches and parses
   `config/config.yaml` from onboarded repos at preflight time, persists the schema
   and user-saved values in `ConfigYamlStore`, exposes `GET`/`PUT /services/{name}/config`

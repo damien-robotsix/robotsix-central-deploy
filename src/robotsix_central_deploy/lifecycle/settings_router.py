@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator
 from starlette.requests import Request
 
@@ -56,8 +56,7 @@ class SystemSettingsUpdate(BaseModel):
         normalised = v.upper()
         if normalised not in VALID_LOG_LEVELS:
             raise ValueError(
-                f"Unknown log level '{v}'. "
-                f"Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
+                f"Unknown log level '{v}'. Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
             )
         return normalised
 
@@ -81,7 +80,8 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
 
 
 async def _get_settings_store(request: Request) -> SystemSettingsStore:
-    return request.app.state.settings_store
+    store: object = request.app.state.settings_store
+    return store  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +138,9 @@ async def put_settings(
     new = SystemSettings(
         ghcr_token=body.ghcr_token if body.ghcr_token != SECRET else current.ghcr_token,
         auth_username=body.auth_username,
-        auth_password=body.auth_password if body.auth_password != SECRET else current.auth_password,
+        auth_password=body.auth_password
+        if body.auth_password != SECRET
+        else current.auth_password,
         disk_warn_bytes=body.disk_warn_bytes,
         registry_check_interval=body.registry_check_interval,
         log_level=body.log_level,
@@ -158,7 +160,7 @@ async def put_settings(
 
     # Hot-apply ghcr_token to the running RegistryChecker so that
     # future registry polls use the updated token without restart.
-    checker = getattr(request.app.state, 'registry_checker', None)
+    checker = getattr(request.app.state, "registry_checker", None)
     if checker is not None:
         checker.set_ghcr_token(new.ghcr_token)
 

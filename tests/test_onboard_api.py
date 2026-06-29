@@ -6,7 +6,6 @@ fetch/compose functions so no real git clone or Docker daemon is needed.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +16,11 @@ from robotsix_central_deploy.lifecycle.backend import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
-from robotsix_central_deploy.onboard.models import DerivedSpec, ParseError, SiblingDerivedSpec
+from robotsix_central_deploy.onboard.models import (
+    DerivedSpec,
+    ParseError,
+    SiblingDerivedSpec,
+)
 from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
@@ -35,7 +38,9 @@ from robotsix_central_deploy.lifecycle import server as server_mod
 # ---------------------------------------------------------------------------
 
 
-def _make_derived_spec(name: str = "test-svc", image: str = "ghcr.io/org/test-svc:main") -> DerivedSpec:
+def _make_derived_spec(
+    name: str = "test-svc", image: str = "ghcr.io/org/test-svc:main"
+) -> DerivedSpec:
     return DerivedSpec(
         name=name,
         git_url="https://github.com/org/test-svc.git",
@@ -59,8 +64,13 @@ async def _seed_store_record(name: str = "svc-a") -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_globals(monkeypatch):
-    """Wire a fresh store/backend/config/registry/config_store before each test."""
+def _reset_globals(monkeypatch, tmp_path):
+    """Wire a fresh store/backend/config/registry/config_store before each test.
+
+    All file-backed stores use the per-test ``tmp_path`` so tests stay
+    isolated under parallel (xdist) execution — a shared fixed path under
+    /tmp leaks state across workers.
+    """
     monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
@@ -70,11 +80,7 @@ def _reset_globals(monkeypatch):
     store = InMemoryStore()
     backend = NoopBackend()
     registry = ComponentRegistry([])
-    config_store = ComponentConfigStore(Path("/tmp/test_component_configs.json"))  # noqa: S108
-
-    # Remove any stale test file
-    if config_store._path.exists():
-        config_store._path.unlink()
+    config_store = ComponentConfigStore(tmp_path / "component_configs.json")
 
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = MagicMock(return_value=None)
@@ -90,8 +96,12 @@ def _reset_globals(monkeypatch):
     server_mod.app.state.registry = registry
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.component_config_store = config_store
-    server_mod.app.state.config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
-    server_mod.app.state.env_store = EnvStore(Path("/tmp/test_env_store.json"), SecretKeyManager(Path("/tmp/test_secret_key")))  # noqa: S108
+    server_mod.app.state.config_yaml_store = ConfigYamlStore(
+        tmp_path / "config_yaml.json"
+    )
+    server_mod.app.state.env_store = EnvStore(
+        tmp_path / "env_store.json", SecretKeyManager(tmp_path / "secret_key")
+    )
 
 
 @pytest.fixture
@@ -112,13 +122,17 @@ def auth_headers() -> dict[str, str]:
 
 
 class TestOnboardPreflight:
-    async def test_returns_spec_on_success(self, client: AsyncClient, auth_headers: dict):
+    async def test_returns_spec_on_success(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         spec = _make_derived_spec("cool-app")
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
-                return_value=RepoFiles(compose_bytes=b"fake compose bytes", config_yaml=None),
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_yaml=None
+                ),
             ),
             patch(
                 "robotsix_central_deploy.onboard.parser.parse_compose",
@@ -127,7 +141,10 @@ class TestOnboardPreflight:
         ):
             resp = await client.post(
                 "/onboard/preflight",
-                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
                 headers=auth_headers,
             )
 
@@ -138,7 +155,9 @@ class TestOnboardPreflight:
         assert data["spec"]["image"] == "ghcr.io/org/test-svc:main"
         assert data["spec"]["git_url"] == "https://github.com/org/test-svc.git"
 
-    async def test_non_https_url_returns_422(self, client: AsyncClient, auth_headers: dict):
+    async def test_non_https_url_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
         resp = await client.post(
             "/onboard/preflight",
             json={"git_url": "http://github.com/org/repo.git", "name": "my-app"},
@@ -150,7 +169,9 @@ class TestOnboardPreflight:
         assert "https" in data["error"].lower()
 
     async def test_parse_error_returns_422_with_violations(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         with (
             patch(
@@ -175,7 +196,9 @@ class TestOnboardPreflight:
         assert data["violations"] == ["violation 1", "violation 2"]
 
     async def test_name_already_in_store_returns_409(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         await _seed_store_record("my-app")
 
@@ -188,11 +211,16 @@ class TestOnboardPreflight:
         assert "already exists" in resp.json()["error"]
 
     async def test_invalid_name_slug_returns_422(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         resp = await client.post(
             "/onboard/preflight",
-            json={"git_url": "https://github.com/org/repo.git", "name": "Invalid_Name!"},
+            json={
+                "git_url": "https://github.com/org/repo.git",
+                "name": "Invalid_Name!",
+            },
             headers=auth_headers,
         )
         assert resp.status_code == 422
@@ -206,7 +234,9 @@ class TestOnboardPreflight:
 
 class TestOnboardConfirm:
     async def test_confirm_creates_component_and_returns_200(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         spec = _make_derived_spec("new-svc")
         store: InMemoryStore = server_mod.app.state.store
@@ -236,7 +266,9 @@ class TestOnboardConfirm:
         assert record.state == ServiceState.RUNNING
 
     async def test_confirm_duplicate_name_returns_409(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         await _seed_store_record("existing-svc")
         spec = _make_derived_spec("existing-svc")
@@ -250,7 +282,9 @@ class TestOnboardConfirm:
         assert "already exists" in resp.json()["error"]
 
     async def test_confirm_deploy_failure_rolls_back_and_returns_500(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         spec = _make_derived_spec("fail-svc")
         store: InMemoryStore = server_mod.app.state.store
@@ -282,7 +316,9 @@ class TestOnboardConfirm:
         assert registry.get("fail-svc") is None
 
     async def test_confirm_uses_container_name_override(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         """The created ServiceRecord should use container_name from DerivedSpec when set."""
         spec = _make_derived_spec("broker")
@@ -346,7 +382,9 @@ def _make_multi_service_derived_spec(name: str = "multi-svc") -> DerivedSpec:
 
 class TestMultiServiceOnboardConfirm:
     async def test_confirm_multi_service_creates_sibling_record(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         """POST /onboard/confirm with multi-service spec creates sibling record."""
         spec = _make_multi_service_derived_spec("multi-svc")
@@ -384,7 +422,9 @@ class TestMultiServiceOnboardConfirm:
         assert all_configs[0].siblings[0].service_key == "worker"
 
     async def test_confirm_multi_service_rollback_on_sibling_deploy_failure(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         """If sibling deploy fails, primary AND sibling records are removed."""
         spec = _make_multi_service_derived_spec("fail-multi")
@@ -403,7 +443,9 @@ class TestMultiServiceOnboardConfirm:
             raise RuntimeError("simulated sibling deploy failure")
 
         with patch.object(
-            server_mod.app.state.backend, "deploy", side_effect=failing_deploy,
+            server_mod.app.state.backend,
+            "deploy",
+            side_effect=failing_deploy,
         ):
             resp = await client.post(
                 "/onboard/confirm",
@@ -425,7 +467,9 @@ class TestMultiServiceOnboardConfirm:
         assert registry.get("fail-multi") is None
 
     async def test_confirm_single_service_siblings_empty_unchanged(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         """Single-service confirm: no sibling records, existing behavior preserved."""
         spec = _make_derived_spec("plain-svc")
@@ -450,7 +494,9 @@ class TestMultiServiceOnboardConfirm:
         assert all_records[0].name == "plain-svc"
 
     async def test_preflight_multi_service_returns_siblings(
-        self, client: AsyncClient, auth_headers: dict,
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
     ):
         """POST /onboard/preflight mocked to return 2-service parse includes siblings."""
         spec = _make_multi_service_derived_spec("auto-mail")
@@ -458,7 +504,9 @@ class TestMultiServiceOnboardConfirm:
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
-                return_value=RepoFiles(compose_bytes=b"fake compose bytes", config_yaml=None),
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_yaml=None
+                ),
             ),
             patch(
                 "robotsix_central_deploy.onboard.parser.parse_compose",
@@ -467,7 +515,10 @@ class TestMultiServiceOnboardConfirm:
         ):
             resp = await client.post(
                 "/onboard/preflight",
-                json={"git_url": "https://github.com/org/auto-mail.git", "name": "auto-mail"},
+                json={
+                    "git_url": "https://github.com/org/auto-mail.git",
+                    "name": "auto-mail",
+                },
                 headers=auth_headers,
             )
 
@@ -489,7 +540,9 @@ class TestOnboardPreflightWithConfig:
         self, client: AsyncClient, auth_headers: dict
     ):
         spec = _make_derived_spec("cool-app")
-        spec.config_volume = "cool-app-config"  # required by preflight gate when config.yaml present
+        spec.config_volume = (
+            "cool-app-config"  # required by preflight gate when config.yaml present
+        )
         config_yaml_bytes = yaml.dump(
             {"host": "localhost", "port": 8080, "password": ""}
         ).encode()
@@ -509,7 +562,10 @@ class TestOnboardPreflightWithConfig:
         ):
             resp = await client.post(
                 "/onboard/preflight",
-                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
                 headers=auth_headers,
             )
 
@@ -517,7 +573,9 @@ class TestOnboardPreflightWithConfig:
         data = resp.json()
         assert "spec" in data
         assert data["spec"]["config_schema"] == {
-            "host": "localhost", "port": 8080, "password": "",
+            "host": "localhost",
+            "port": 8080,
+            "password": "",
         }
 
     async def test_preflight_config_schema_null_when_absent(
@@ -529,7 +587,8 @@ class TestOnboardPreflightWithConfig:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_yaml=None,
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=None,
                 ),
             ),
             patch(
@@ -539,7 +598,10 @@ class TestOnboardPreflightWithConfig:
         ):
             resp = await client.post(
                 "/onboard/preflight",
-                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
                 headers=auth_headers,
             )
 
@@ -567,7 +629,10 @@ class TestOnboardPreflightWithConfig:
         ):
             resp = await client.post(
                 "/onboard/preflight",
-                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
                 headers=auth_headers,
             )
 
@@ -581,9 +646,7 @@ class TestOnboardPreflightWithConfig:
         """Preflight returns 422 when config.yaml is present but no robotsix.deploy.config-target label."""
         spec = _make_derived_spec("cool-app")
         # config_volume NOT set — simulates missing config-target label
-        config_yaml_bytes = yaml.dump(
-            {"host": "localhost", "port": 8080}
-        ).encode()
+        config_yaml_bytes = yaml.dump({"host": "localhost", "port": 8080}).encode()
 
         with (
             patch(
@@ -600,7 +663,10 @@ class TestOnboardPreflightWithConfig:
         ):
             resp = await client.post(
                 "/onboard/preflight",
-                json={"git_url": "https://github.com/org/cool-app.git", "name": "cool-app"},
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
                 headers=auth_headers,
             )
 
@@ -634,7 +700,9 @@ class TestOnboardConfirmWithConfig:
             return await original_write(volume_name, config_dict)
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
         )
 
         resp = await client.post(
@@ -720,7 +788,9 @@ class TestOnboardConfirmWithConfig:
             return await original_write(volume_name, config_dict)
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
         )
 
         resp = await client.post(
@@ -737,7 +807,11 @@ class TestOnboardConfirmWithConfig:
         # Merged config written to volume — user values overlay template defaults
         assert len(captured) == 1
         assert captured[0][0] == "cfg-svc-data"
-        assert captured[0][1] == {"host": "10.0.0.1", "password": "s3cret", "port": 8080}
+        assert captured[0][1] == {
+            "host": "10.0.0.1",
+            "password": "s3cret",
+            "port": 8080,
+        }
 
         # current stored in ConfigYamlStore reflects entered values
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
@@ -761,7 +835,9 @@ class TestOnboardConfirmWithConfig:
             return await original_write(volume_name, config_dict)
 
         monkeypatch.setattr(
-            server_mod.app.state.backend, "write_config_to_volume", _fake_write,
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
         )
 
         # No config_values field at all

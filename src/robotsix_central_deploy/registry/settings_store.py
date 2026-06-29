@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, field_validator
 
@@ -28,7 +29,9 @@ class SystemSettings(BaseModel):
     registry_check_interval: int = 300  # seconds; 0 = disabled
     log_level: str = "INFO"
     gateway_base_domain: str = ""  # e.g. "deploy.robotsix.net"
-    claude_host_mount_path: str = ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
+    claude_host_mount_path: str = (
+        ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
+    )
 
     @field_validator("log_level")
     @classmethod
@@ -36,8 +39,7 @@ class SystemSettings(BaseModel):
         normalised = v.upper()
         if normalised not in VALID_LOG_LEVELS:
             raise ValueError(
-                f"Unknown log level '{v}'. "
-                f"Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
+                f"Unknown log level '{v}'. Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
             )
         return normalised
 
@@ -60,7 +62,7 @@ class SystemSettingsStore:
         if not self._path.exists():
             return SystemSettings()
         try:
-            raw: dict = json.loads(self._path.read_text(encoding="utf-8"))
+            raw: dict[str, object] = json.loads(self._path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             logger.error(
                 "SystemSettingsStore: failed to read %s — %s; treating store as empty",
@@ -93,7 +95,7 @@ class SystemSettingsStore:
     # Overlay stored settings onto a LifecycleConfig
     # ------------------------------------------------------------------
 
-    def overlay(self, config):
+    def overlay(self, config: Any) -> Any:
         """Return a *copy* of *config* with every stored setting overlaid.
 
         All stored values take precedence over env-var defaults — an entry
@@ -105,8 +107,6 @@ class SystemSettingsStore:
         """
         if not self._path.exists():
             return config
-
-        from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 
         stored = self._load()
         return config.model_copy(

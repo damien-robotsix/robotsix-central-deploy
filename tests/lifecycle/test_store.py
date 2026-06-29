@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
-from robotsix_central_deploy.lifecycle.store import FileStore, InMemoryStore, ServiceStore
+from robotsix_central_deploy.lifecycle.store import (
+    FileStore,
+    InMemoryStore,
+    ServiceStore,
+)
 
 
 @pytest.fixture
@@ -90,7 +94,9 @@ class TestFileStoreSpecific:
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "state.yaml"
             store1 = FileStore(path)
-            await store1.put(ServiceRecord(name="survivor", state=ServiceState.RUNNING, image="i:v2"))
+            await store1.put(
+                ServiceRecord(name="survivor", state=ServiceState.RUNNING, image="i:v2")
+            )
 
             store2 = FileStore(path)
             got = await store2.get("survivor")
