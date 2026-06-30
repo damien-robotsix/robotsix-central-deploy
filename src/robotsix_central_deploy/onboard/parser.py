@@ -88,7 +88,7 @@ def _parse_ports(raw_ports: Any) -> tuple[list[PortMapping], list[str]]:
                         protocol=proto,
                     )
                 )
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 violations.append(f"invalid port string: {entry!r}")
         elif isinstance(entry, dict):
             # long-form: {target, published, protocol}
@@ -100,7 +100,7 @@ def _parse_ports(raw_ports: Any) -> tuple[list[PortMapping], list[str]]:
                         protocol=str(entry.get("protocol", "tcp")),
                     )
                 )
-            except (KeyError, ValueError, TypeError):
+            except KeyError, ValueError, TypeError:
                 violations.append(f"invalid port mapping: {entry!r}")
         else:
             violations.append(f"unrecognised port entry: {entry!r}")
@@ -208,13 +208,13 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
 
     try:
         interval = _parse_go_duration(str(raw_hc.get("interval", "30s")))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         violations.append(f"invalid healthcheck interval: {raw_hc.get('interval')!r}")
         interval = 30
 
     try:
         timeout = _parse_go_duration(str(raw_hc.get("timeout", "10s")))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         violations.append(f"invalid healthcheck timeout: {raw_hc.get('timeout')!r}")
         timeout = 10
 
@@ -225,7 +225,7 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
 
     try:
         start_period = _parse_go_duration(str(raw_hc.get("start_period", "0s")))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         violations.append(
             f"invalid healthcheck start_period: {raw_hc.get('start_period')!r}"
         )

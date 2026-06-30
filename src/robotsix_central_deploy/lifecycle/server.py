@@ -1608,7 +1608,7 @@ def _coerce_to_template(tval: object, sval: object) -> object:
     if isinstance(tval, (list, dict)):
         try:
             return json.loads(sval)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return sval
     return sval
 
@@ -1919,7 +1919,7 @@ def _derive_account_id(
             elif isinstance(node, list):
                 try:
                     node = node[int(part)]
-                except (ValueError, IndexError):
+                except ValueError, IndexError:
                     node = None
             else:
                 node = None
