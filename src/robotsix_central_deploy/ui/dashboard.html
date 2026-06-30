@@ -2140,7 +2140,7 @@ async function loadVolumeDir(path) {
 
   try {
     const resp = await fetch(
-      `/volumes/${encodeURIComponent(currentVolumeName)}/ls?path=${encodeURIComponent(path)}`,
+      `/volumes/${encodeURIComponent(currentVolumeName)}/ls?path=${encodeURIComponent(path || '/')}`,
       { headers: authHeaders(), credentials: 'same-origin' }
     );
     const data = await resp.json().catch(() => ({}));
