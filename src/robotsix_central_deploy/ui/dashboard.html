@@ -48,6 +48,9 @@
   .actions button { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #475569; border-radius: 3px; background: #1e293b; color: #cbd5e1; cursor: pointer; }
   .actions button:hover:not(:disabled) { background: #334155; border-color: var(--blue); }
   .actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .reclaim-btn { padding: 2px 8px; font-size: 0.75rem; border: 1px solid #475569; border-radius: 3px; background: #1e293b; color: #cbd5e1; cursor: pointer; margin-left: 8px; }
+  .reclaim-btn:hover:not(:disabled) { background: #334155; border-color: var(--blue); }
+  .reclaim-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .logs-link { font-size: 0.82rem; color: var(--grey); text-decoration: none; cursor: pointer; }
 
   /* Log viewer modal */
@@ -328,6 +331,7 @@
 <section class="disk-panel">
   <h2>Disk Usage</h2>
   <div id="disk-content">Loading…</div>
+  <div id="disk-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
 </section>
 
 <section class="disk-panel" id="volume-audit-panel" style="display:none">
@@ -710,6 +714,34 @@ async function fetchDiskUsage() {
     }
 }
 
+async function reclaimBuildCache() {
+    const btn = document.getElementById('reclaim-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    const toast = document.getElementById('disk-toast');
+    try {
+        const resp = await fetch('/disk/reclaim', {
+            method: 'POST',
+            headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+            credentials: 'same-origin',
+        });
+        if (!resp.ok) {
+            const body = await resp.json().catch(() => ({}));
+            throw new Error(body.error || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        const freed = fmt_bytes(data.space_reclaimed_bytes || 0);
+        toast.textContent = `\u2713 Reclaimed ${freed}.`;
+        toast.style.color = 'var(--green)';
+        await fetchDiskUsage();
+    } catch (e) {
+        toast.textContent = `Reclaim failed: ${e.message}`;
+        toast.style.color = 'var(--red)';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 function fmt_gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GiB'; }
 
 function fmt_bytes(bytes) {
@@ -746,7 +778,7 @@ function renderDiskPanel(data) {
           <tr><th>Host free</th><td>${fmt_bytes(data.free_bytes)}</td></tr>
           <tr><th>Docker images (host total)</th><td>${fmt_bytes(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_bytes(data.docker.build_cache_size_bytes)}</td></tr>
-          <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}</td></tr>
+          <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}${data.docker.build_cache_reclaimable_bytes > 0 ? ` <button id="reclaim-btn" class="reclaim-btn" onclick="reclaimBuildCache()">Reclaim</button>` : ''}</td></tr>
         </table>${volTable}`;
 }
 

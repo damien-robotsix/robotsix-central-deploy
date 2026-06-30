@@ -7,7 +7,8 @@ All notable changes to robotsix-central-deploy.
 - **Reclaim build cache**: `POST /disk/reclaim` endpoint triggers Docker build-cache
   pruning via `ExecutionBackend.prune_builds()`. Returns `{"space_reclaimed_bytes": <int>}`.
   Noop and CLI backends return `0`; the SDK backend calls `docker builder prune` and
-  reports the `SpaceReclaimed` value from the Docker API.
+  reports the `SpaceReclaimed` value from the Docker API. Dashboard UI now includes a
+  "Reclaim" button next to the "Build cache reclaimable" row on the disk panel.
 - **Account name input in auto-detect**: The config-assist seed bar now shows an
   "Account name" text input when the component has account seeds. The value is sent as
   `account_name` in the request body and, when non-empty, overrides the email-derived
