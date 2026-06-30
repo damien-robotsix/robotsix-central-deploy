@@ -120,7 +120,6 @@ class ExecutionBackend(ABC):
         Returns 0 on error or when the volume is inaccessible.
         """
 
-
     @abstractmethod
     async def list_volume_path(
         self, volume_name: str, rel_path: str
