@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Settings form secret-field placeholders**: `ghcr_token` and `auth_password`
+  now render as `••• set — enter a new value to change` placeholder when configured
+  (instead of disabled `***` in the value, which was indistinguishable from empty).
+  Saving without clicking Change preserves the stored secret via `'***'` sentinel.
 - **Settings GET reflects env-var credentials**: `GET /settings` now reads
   from the effective config (env vars overlaid by stored settings) instead of
   the raw store, so env-var-supplied auth credentials appear in the UI even
