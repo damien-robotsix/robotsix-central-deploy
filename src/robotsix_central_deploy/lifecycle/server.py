@@ -1555,9 +1555,76 @@ def _seed_for_detect(
     return result
 
 
+def _relocate_account_seed_values(
+    values: dict,
+    seeds: list["ConfigAssistSeed"],
+    src_idx: int,
+    dst_idx: int,
+) -> None:
+    """Move seed values from ``accounts[src_idx]`` to ``accounts[dst_idx]`` in-place.
+
+    For each seed whose key starts with ``accounts.<src_idx>.``, extracts
+    the value from the source slot and sets it on the destination slot —
+    but ONLY when the destination slot does not already carry a non-empty
+    value for that same seed key (so pre-populated multi-account submits
+    from tests are not double-moved).
+
+    ``"***"`` sentinels (unchanged secrets) are skipped — they already
+    carry the correct meaning at the source and should not be relocated.
+    """
+    accts: list[dict[str, Any]] = values.setdefault("accounts", [])
+    while len(accts) <= max(src_idx, dst_idx):
+        accts.append({})
+    src_acct: dict = accts[src_idx] if src_idx < len(accts) else {}
+    dst_acct: dict = accts[dst_idx]
+
+    for seed in seeds:
+        parts = seed.key.split(".")
+        if len(parts) < 3 or parts[0] != "accounts" or parts[1] != str(src_idx):
+            continue
+
+        # Check whether destination already has a non-empty value.
+        dst_node: dict[str, Any] = dst_acct
+        for p in parts[2:-1]:
+            if not isinstance(dst_node, dict):
+                dst_node = {}
+                break
+            dst_node = dst_node.get(p, {})
+        if (
+            isinstance(dst_node, dict)
+            and parts[-1] in dst_node
+            and dst_node[parts[-1]] not in (None, "", "***")
+        ):
+            continue  # already present at destination — nothing to move
+
+        # Navigate to the leaf dict containing the key at source.
+        node: dict[str, Any] = src_acct
+        for p in parts[2:-1]:
+            if not isinstance(node, dict):
+                node = {}
+                break
+            node = node.get(p, {})
+        last = parts[-1]
+        if not isinstance(node, dict) or last not in node:
+            continue
+        val = node[last]
+        if isinstance(val, str) and val == "***":
+            continue  # unchanged secret — stays at source
+        del node[last]
+        # Place at destination.
+        dst_node2: dict[str, Any] = dst_acct
+        for p in parts[2:-1]:
+            if isinstance(dst_node2, dict):
+                dst_node2 = dst_node2.setdefault(p, {})
+            else:
+                break
+        if isinstance(dst_node2, dict):
+            dst_node2[last] = val
+
+
 def _derive_account_id(
     seeds: list["ConfigAssistSeed"],
-    partial: dict,
+    partial: dict[str, Any],
     n: int,
 ) -> str:
     """Derive a slug-based account ID for a new account slot at index *n*.
@@ -1594,7 +1661,7 @@ def _derive_account_id(
     return f"accounts-{n}"
 
 
-def _resolve_placeholders(command_str: str, values: dict) -> str:
+def _resolve_placeholders(command_str: str, values: dict[str, Any]) -> str:
     """Substitute ``{dotted.path}`` placeholders in *command_str* from *values*.
 
     Each placeholder is a dot-separated path of dict keys and list indices
@@ -1633,7 +1700,7 @@ def _resolve_placeholders(command_str: str, values: dict) -> str:
     return re.sub(r"\{([^{}]+)\}", _replacer, command_str)
 
 
-def _deep_merge(base: dict, overlay: dict) -> dict:
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge *overlay* into *base*, returning a new dict.
 
     Leaf values from *overlay* overwrite *base*; nested dicts are merged
@@ -1665,7 +1732,9 @@ class ConfigUpdate(BaseModel):
 
 
 class ConfigAssistRequest(BaseModel):
-    values: dict  # current (partial) form values — same shape as ConfigUpdate.values
+    values: dict[
+        str, Any
+    ]  # current (partial) form values — same shape as ConfigUpdate.values
     target_account_index: int | None = None
     # None  → infer: first-setup if no accounts exist, else add-new
     # int N → update account N if N < len(existing_accounts), else add-new
@@ -1892,9 +1961,17 @@ async def run_config_assist(
             assist_command,
         )
 
-    # For add_new: ensure partial has a derived ID at accounts[target_idx]["id"]
-    # so that {accounts.N.id} resolves during placeholder substitution.
+    # For add_new: the frontend seed bar collects values under the
+    # template index (accounts.0.*); relocate them to the target slot
+    # so the volume seed write targets the new account (not the existing
+    # one) and {accounts.N.*} placeholders resolve correctly.
     if mode == "add_new":
+        _relocate_account_seed_values(
+            body.values, comp_cfg.config_assist_seeds, 0, target_idx
+        )
+        # Re-merge partial now that seed values are at the target index.
+        partial = _merge_config(template, existing, body.values)
+
         new_id = _derive_account_id(comp_cfg.config_assist_seeds, partial, target_idx)
         acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
         while len(acct_list) <= target_idx:

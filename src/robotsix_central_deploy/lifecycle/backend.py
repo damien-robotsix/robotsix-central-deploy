@@ -630,7 +630,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             detach=True,
-            restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]
+            restart_policy={"Name": "unless-stopped"},
             network=PROXY_NETWORK,
         )
 
