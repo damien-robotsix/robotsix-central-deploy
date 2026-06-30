@@ -93,7 +93,7 @@ class ExecutionBackend(ABC):
         ...
 
     @abstractmethod
-    async def read_config_from_volume(self, volume_name: str) -> dict:
+    async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Read /config/config.yaml from a named volume; return parsed dict (empty if absent)."""
         ...
 
@@ -121,7 +121,9 @@ class ExecutionBackend(ABC):
         """
 
     @abstractmethod
-    async def list_volume_dir(self, volume_name: str, rel_path: str) -> list[dict]:
+    async def list_volume_dir(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
         """Return one entry per immediate child of ``/vol/<rel_path>``.
 
         Each entry is ``{"name": str, "type": "file"|"dir", "size_bytes": int}``
@@ -132,7 +134,7 @@ class ExecutionBackend(ABC):
     @abstractmethod
     async def read_volume_file(
         self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Return ``{"size_bytes": int, "content": str|None, "binary": bool,
         "truncated": bool}`` for the file at ``/vol/<rel_path>``.
 
@@ -140,7 +142,6 @@ class ExecutionBackend(ABC):
         decode failure).  *truncated* is True when the file exceeded
         *max_bytes*.
         """
-        ...
         ...
 
 
@@ -204,7 +205,7 @@ class NoopBackend(ExecutionBackend):
     ) -> None:
         pass
 
-    async def read_config_from_volume(self, volume_name: str) -> dict:
+    async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         return {}
 
     async def run_config_assist(
@@ -221,12 +222,14 @@ class NoopBackend(ExecutionBackend):
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0
 
-    async def list_volume_dir(self, volume_name: str, rel_path: str) -> list[dict]:
+    async def list_volume_dir(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
         raise NotImplementedError("list_volume_dir not supported for NoopBackend")
 
     async def read_volume_file(
         self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         raise NotImplementedError("read_volume_file not supported for NoopBackend")
 
 
@@ -342,7 +345,7 @@ class DockerBackend(ExecutionBackend):
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
-    async def read_config_from_volume(self, volume_name: str) -> dict:
+    async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         raise NotImplementedError(
             "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -363,14 +366,16 @@ class DockerBackend(ExecutionBackend):
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0  # CLI backend lacks volume-inspection support; placeholder.
 
-    async def list_volume_dir(self, volume_name: str, rel_path: str) -> list[dict]:
+    async def list_volume_dir(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
         raise NotImplementedError(
             "list_volume_dir not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def read_volume_file(
         self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         raise NotImplementedError(
             "read_volume_file not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -652,7 +657,7 @@ class DockerSdkBackend(ExecutionBackend):
         # container_name:container_port (gateway/router.py). Publishing host
         # ports caused "port is already allocated" conflicts with existing
         # host-bound services.
-        ports: dict = {}
+        ports: dict[str, Any] = {}
         volumes = {
             m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
             for m in config.mounts
@@ -907,13 +912,13 @@ class DockerSdkBackend(ExecutionBackend):
 
         await loop.run_in_executor(None, _run)
 
-    async def read_config_from_volume(self, volume_name: str) -> dict:
+    async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Read /config/config.yaml from a named volume via a temporary busybox container."""
         import yaml
 
         loop = asyncio.get_running_loop()
 
-        def _run() -> dict:
+        def _run() -> dict[str, Any]:
             import docker
 
             try:
@@ -955,7 +960,9 @@ class DockerSdkBackend(ExecutionBackend):
             logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
             return 0
 
-    async def list_volume_dir(self, volume_name: str, rel_path: str) -> list[dict]:
+    async def list_volume_dir(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
         """List immediate children of ``/vol/<rel_path>`` via a one-shot busybox container."""
         loop = asyncio.get_running_loop()
         # Shell script: iterate /vol/$1, emit tab-delimited  type\tsize\tname
@@ -985,7 +992,7 @@ class DockerSdkBackend(ExecutionBackend):
                 remove=True,
             ),
         )
-        entries: list[dict] = []
+        entries: list[dict[str, Any]] = []
         for line in raw.decode(errors="replace").splitlines():
             line = line.strip()
             if not line:
@@ -1003,7 +1010,7 @@ class DockerSdkBackend(ExecutionBackend):
 
     async def read_volume_file(
         self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Read ``/vol/<rel_path>`` via a one-shot busybox container.
 
         Returns size, content (or None for binary), binary flag, truncated flag.
