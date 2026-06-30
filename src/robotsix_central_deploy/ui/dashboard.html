@@ -1355,6 +1355,12 @@ function _renderConfigNode(schema, current, prefix, container) {
     const fullKey = prefix ? prefix + '.' + key : key;
     const currentVal = (current != null) ? current[key] : undefined;
 
+    // default_account is implicit now (the board shows all mailboxes); hide it
+    // from the form. _merge_config keeps the stored value, so sends still work.
+    if (fullKey === 'default_account') {
+      continue;
+    }
+
     if (key.startsWith('oauth2_')) {
       oauth2Entries.push({ key, schemaVal, fullKey, currentVal });
       continue;
