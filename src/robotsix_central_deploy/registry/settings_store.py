@@ -22,7 +22,6 @@ VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 class SystemSettings(BaseModel):
     """Operator-configurable runtime settings for central-deploy."""
 
-    ghcr_token: str = ""
     auth_username: str = ""
     auth_password: str = ""
     disk_warn_pct: float = 10.0  # % free
@@ -111,7 +110,6 @@ class SystemSettingsStore:
         stored = self._load()
         return config.model_copy(
             update={
-                "ghcr_token": stored.ghcr_token,
                 "auth_username": stored.auth_username,
                 "auth_password": stored.auth_password,
                 "disk_warn_pct": stored.disk_warn_pct,
