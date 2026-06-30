@@ -1485,31 +1485,20 @@ _CONFIG_SECRET_SENTINEL = "SECRET"
 ``config/config.yaml``. Any other value (empty string, default text,
 integer, etc.) is NOT treated as a secret."""
 
-_SECRET_NAME_TOKENS: tuple[str, ...] = (
-    "password",
-    "secret",
-    "token",
-    "key",
-)
-
-
-def _is_secret_name(key: str) -> bool:
-    """Return True if *key* (a YAML field name) looks like a secret field.
-
-    Checked at template-generation time only.  Substring match is
-    intentional: ``smtp_password``, ``api_key``, ``oauth_token`` all hit.
-    """
-    lower = key.lower()
-    return any(tok in lower for tok in _SECRET_NAME_TOKENS)
-
 
 def _annotate_secret_sentinels(template: object) -> object:
-    """Walk *template* (from parse_config_yaml) and mark secret leaves.
+    """Walk *template* (from parse_config_yaml) and normalise secret leaves.
 
-    Rules (applied in priority order):
+    Secrets are detected **purely by the explicit ``SECRET`` sentinel** —
+    a template author marks a sensitive leaf by setting its value to
+    ``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``) in the
+    component's ``config/config.yaml``. There is no name-based heuristic:
+    a field named ``api_key`` or ``password`` is a plain editable field
+    unless its template value is ``"SECRET"`` (this is what lets a genuinely
+    non-secret ``langfuse.public_key`` render as an ordinary input).
+
+    Rules:
     - value already equals ``_CONFIG_SECRET_SENTINEL`` → keep
-    - ``_is_secret_name(key)`` is True for a scalar leaf → replace with
-      ``_CONFIG_SECRET_SENTINEL``
     - dict value → recurse
     - list where first item is a dict → annotate first item, return
       ``[annotated_item]`` (single-element template list, consistent with
@@ -1525,8 +1514,6 @@ def _annotate_secret_sentinels(template: object) -> object:
             result[key] = _annotate_secret_sentinels(val)
         elif isinstance(val, list) and val and isinstance(val[0], dict):
             result[key] = [_annotate_secret_sentinels(val[0])]
-        elif val == _CONFIG_SECRET_SENTINEL or _is_secret_name(key):
-            result[key] = _CONFIG_SECRET_SENTINEL
         else:
             result[key] = val
     return result
@@ -1684,7 +1671,25 @@ def _merge_config(
                 result[key] = tval
         return result
 
-    return _recursive(template, existing, submitted)
+    merged = _recursive(template, existing, submitted)
+    # Belt-and-suspenders: a secret leaf that was never submitted (or whose
+    # whole parent section was absent from the form) would otherwise reach
+    # storage as the literal "SECRET" sentinel — and be ingested as a real
+    # credential by components that read config.yaml directly (e.g. auto-mail,
+    # which has no split-config sanitiser). Strip every residual sentinel.
+    return _strip_secret_sentinels(merged)
+
+
+def _strip_secret_sentinels(value: Any) -> Any:
+    """Recursively replace any residual ``_CONFIG_SECRET_SENTINEL`` scalar
+    with ``""`` so the deployed config never contains the literal sentinel."""
+    if value == _CONFIG_SECRET_SENTINEL:
+        return ""
+    if isinstance(value, dict):
+        return {k: _strip_secret_sentinels(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_strip_secret_sentinels(v) for v in value]
+    return value
 
 
 _ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")

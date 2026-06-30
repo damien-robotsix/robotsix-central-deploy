@@ -618,8 +618,12 @@ class TestOnboardPreflightWithConfig:
         spec.config_volume = (
             "cool-app-config"  # required by preflight gate when config.yaml present
         )
+        # Secret leaves are detected by the explicit "SECRET" sentinel only
+        # (no name-based heuristic): a leaf must carry "SECRET" in the repo's
+        # config.yaml to render as a masked field. A blank "password" stays an
+        # ordinary editable field.
         config_yaml_bytes = yaml.dump(
-            {"host": "localhost", "port": 8080, "password": ""}
+            {"host": "localhost", "port": 8080, "password": "SECRET"}
         ).encode()
 
         with (
