@@ -2034,9 +2034,7 @@ async def run_config_assist(
         # Write only the new account's seed fields (not template defaults).
         item_template = (template.get("accounts") or [{}])[0]
         new_acct_vals = (
-            submitted_accts[target_idx]
-            if target_idx < len(submitted_accts)
-            else {}
+            submitted_accts[target_idx] if target_idx < len(submitted_accts) else {}
         )
         new_acct_seed = _seed_for_detect(item_template, {}, new_acct_vals)
         detect_seed: dict[str, Any] = {
