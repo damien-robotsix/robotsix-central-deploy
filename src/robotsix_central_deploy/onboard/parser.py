@@ -30,6 +30,7 @@ _GO_DURATION_RE = re.compile(
 
 HEADER = b"# central-deploy-contract-version: 1"
 CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
+HOST_DOCKER_SOCK_LABEL = "robotsix.deploy.host-docker-sock"
 STATEFUL_LABEL = "robotsix.deploy.stateful"
 PRIMARY_LABEL = "robotsix.deploy.primary"
 LABEL_CONFIG_TARGET = "robotsix.deploy.config-target"
@@ -248,11 +249,12 @@ def _parse_one_service(
     *,
     component_name: str,
     prefix: str = "",
+    is_primary: bool = False,
 ) -> tuple[dict[str, Any], list[str]]:
     """Parse a single service dict (primary or sibling) into a result dict + violations.
 
     The result dict has keys: image, env, ports, volume_mounts, health_check,
-    claude_mount, container_name.
+    claude_mount, host_docker_sock, container_name.
     """
     violations: list[str] = []
 
@@ -293,6 +295,19 @@ def _parse_one_service(
         val = labels.get(CLAUDE_MOUNT_LABEL)
         if isinstance(val, str) and val.strip().lower() == "true":
             claude_mount = True
+
+    # Labels — host-docker-sock
+    host_docker_sock = False
+    if isinstance(labels, dict):
+        val = labels.get(HOST_DOCKER_SOCK_LABEL)
+        if isinstance(val, str) and val.strip().lower() == "true":
+            host_docker_sock = True
+    # Primary-guard: host-docker-sock is only valid on non-primary services.
+    if host_docker_sock and is_primary:
+        violations.append(
+            f"{prefix}{HOST_DOCKER_SOCK_LABEL} is not permitted on the primary "
+            f"service — apply it only to a hardened non-primary (socket-proxy) sibling"
+        )
 
     # Labels — config-target (resolve to named-volume name)
     config_volume: str | None = None
@@ -377,6 +392,7 @@ def _parse_one_service(
         "volume_mounts": volume_mounts,
         "health_check": health_check,
         "claude_mount": claude_mount,
+        "host_docker_sock": host_docker_sock,
         "container_name": container_name,
         "command": command,
         "entrypoint": entrypoint,
@@ -452,7 +468,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         raise ParseError(violations)
 
     primary_parsed, primary_violations = _parse_one_service(
-        primary_svc, primary_key, component_name=name, prefix=""
+        primary_svc, primary_key, component_name=name, prefix="", is_primary=True
     )
     violations.extend(primary_violations)
 
@@ -478,6 +494,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 volume_mounts=sib_parsed["volume_mounts"],
                 env=sib_parsed["env"],
                 claude_mount=sib_parsed["claude_mount"],
+                host_docker_sock=sib_parsed["host_docker_sock"],
                 health_check=sib_parsed["health_check"],
                 command=sib_parsed["command"],
                 entrypoint=sib_parsed["entrypoint"],
@@ -531,6 +548,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         stateful_volumes=stateful_volumes,
         env=primary_parsed["env"],
         claude_mount=primary_parsed["claude_mount"],
+        host_docker_sock=primary_parsed["host_docker_sock"],
         health_check=primary_parsed["health_check"],
         command=primary_parsed["command"],
         entrypoint=primary_parsed["entrypoint"],

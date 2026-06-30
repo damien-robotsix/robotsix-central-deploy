@@ -24,6 +24,7 @@ class SiblingDerivedSpec(BaseModel):
     volume_mounts: list[VolumeMount] = []
     env: dict[str, str] = {}
     claude_mount: bool = False
+    host_docker_sock: bool = False
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
@@ -40,6 +41,7 @@ class DerivedSpec(BaseModel):
     stateful_volumes: list[str]  # volume names flagged robotsix.deploy.stateful=true
     env: dict[str, str]  # keys from compose; "" for secrets, preset string for defaults
     claude_mount: bool
+    host_docker_sock: bool
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None

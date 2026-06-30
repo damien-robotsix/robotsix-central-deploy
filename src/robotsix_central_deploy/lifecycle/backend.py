@@ -669,6 +669,11 @@ class DockerSdkBackend(ExecutionBackend):
                 "~/.claude"
             )
             volumes[claude_host] = {"bind": "/root/.claude", "mode": "rw"}
+        if config.host_docker_sock:
+            volumes["/var/run/docker.sock"] = {
+                "bind": "/var/run/docker.sock",
+                "mode": "ro",
+            }
         healthcheck = None
         if config.health_check:
             hc = config.health_check
