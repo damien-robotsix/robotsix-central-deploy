@@ -307,23 +307,6 @@
 
 <div id="disk-warning" class="banner banner-warn" style="display:none"></div>
 
-<section class="disk-panel">
-  <h2>Disk Usage</h2>
-  <div id="disk-content">Loading…</div>
-</section>
-
-<section class="disk-panel" id="volume-audit-panel" style="display:none">
-  <div class="disk-header">
-    <span class="disk-title">Volume Audit</span>
-    <span id="volume-audit-timestamp" class="disk-meta"></span>
-  </div>
-  <div id="volume-audit-content"></div>
-  <div id="volume-audit-findings" style="display:none">
-    <strong>Recent findings:</strong>
-    <ul id="volume-audit-findings-list"></ul>
-  </div>
-</section>
-
 <table>
   <thead>
     <tr>
@@ -341,6 +324,23 @@
     <tr><td colspan="8" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
   </tbody>
 </table>
+
+<section class="disk-panel">
+  <h2>Disk Usage</h2>
+  <div id="disk-content">Loading…</div>
+</section>
+
+<section class="disk-panel" id="volume-audit-panel" style="display:none">
+  <div class="disk-header">
+    <span class="disk-title">Volume Audit</span>
+    <span id="volume-audit-timestamp" class="disk-meta"></span>
+  </div>
+  <div id="volume-audit-content"></div>
+  <div id="volume-audit-findings" style="display:none">
+    <strong>Recent findings:</strong>
+    <ul id="volume-audit-findings-list"></ul>
+  </div>
+</section>
 
 <div id="env-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="env-modal-title">
   <div class="env-panel">
@@ -733,6 +733,16 @@ async function fetchDiskUsage() {
 
 function fmt_gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GiB'; }
 
+function fmt_bytes(bytes) {
+    if (bytes === null || bytes === undefined) return '\u2014';
+    const abs = Math.abs(bytes);
+    if (abs < 1024)        return bytes.toFixed(0) + '\u00a0B';
+    if (abs < 1_048_576)   return (bytes / 1024).toFixed(1) + '\u00a0KB';
+    if (abs < 1_073_741_824) return (bytes / 1_048_576).toFixed(1) + '\u00a0MB';
+    if (abs < 1_099_511_627_776) return (bytes / 1_073_741_824).toFixed(1) + '\u00a0GB';
+    return (bytes / 1_099_511_627_776).toFixed(1) + '\u00a0TB';
+}
+
 function renderDiskPanel(data) {
     const usedPct = Math.round(data.used_bytes / data.total_bytes * 100);
     const freePct = data.total_bytes > 0 ? data.free_bytes / data.total_bytes * 100 : 100;
@@ -743,22 +753,21 @@ function renderDiskPanel(data) {
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
-        `<tr><th style="font-weight:400;">${escHtml(v.name)}${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_gb(v.size_bytes)}</td></tr>`
+        `<tr><th style="font-weight:400;">${escHtml(v.name)}${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
     ).join('');
     const volTable = vols.length
         ? `<table style="margin-top:10px;"><tr><th colspan="2" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
         : '';
     document.getElementById('disk-content').innerHTML = `
         <table>
-          <tr><th>Host total</th><td>${fmt_gb(data.total_bytes)}</td></tr>
-          <tr><th>Host used</th><td>${fmt_gb(data.used_bytes)}
+          <tr><th>Host total</th><td>${fmt_bytes(data.total_bytes)}</td></tr>
+          <tr><th>Host used</th><td>${fmt_bytes(data.used_bytes)}
             <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
             ${usedPct}%</td></tr>
-          <tr><th>Host free</th><td>${fmt_gb(data.free_bytes)}</td></tr>
-          <tr><th>Warn threshold</th><td>free &lt; ${data.warn_threshold_pct}%</td></tr>
-          <tr><th>Docker images (host total)</th><td>${fmt_gb(data.docker.images_size_bytes)}</td></tr>
-          <tr><th>Docker build cache</th><td>${fmt_gb(data.docker.build_cache_size_bytes)}</td></tr>
-          <tr><th>Build cache reclaimable</th><td>${fmt_gb(data.docker.build_cache_reclaimable_bytes)}</td></tr>
+          <tr><th>Host free</th><td>${fmt_bytes(data.free_bytes)}</td></tr>
+          <tr><th>Docker images (host total)</th><td>${fmt_bytes(data.docker.images_size_bytes)}</td></tr>
+          <tr><th>Docker build cache</th><td>${fmt_bytes(data.docker.build_cache_size_bytes)}</td></tr>
+          <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}</td></tr>
         </table>${volTable}`;
 }
 
