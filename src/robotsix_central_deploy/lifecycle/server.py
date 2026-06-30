@@ -404,6 +404,49 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
     return request.app.state.component_config_store  # type: ignore[no-any-return]
 
 
+def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "DerivedSpec":
+    """Prefix all named-volume hosts with the component name.
+
+    Converts image-hardcoded names (e.g. ``auto-mail-config``) into
+    per-component names (e.g. ``mail-auto-mail-config``) so two components
+    from the same image never share storage.
+    """
+    from robotsix_central_deploy.onboard.models import SiblingDerivedSpec  # noqa: PLC0415
+    from robotsix_central_deploy.registry.models import VolumeMount  # noqa: PLC0415
+
+    old_to_new: dict[str, str] = {}
+
+    def _rename(vm: VolumeMount) -> VolumeMount:
+        new_host = f"{component_name}-{vm.host}"
+        old_to_new[vm.host] = new_host
+        return vm.model_copy(update={"host": new_host})
+
+    new_primary_mounts = [_rename(vm) for vm in spec.volume_mounts]
+
+    new_siblings: list[SiblingDerivedSpec] = [
+        sib.model_copy(
+            update={"volume_mounts": [_rename(vm) for vm in sib.volume_mounts]}
+        )
+        for sib in spec.siblings
+    ]
+
+    new_stateful = [old_to_new.get(v, v) for v in spec.stateful_volumes]
+    new_config_vol = (
+        old_to_new.get(spec.config_volume, spec.config_volume)
+        if spec.config_volume is not None
+        else None
+    )
+
+    return spec.model_copy(
+        update={
+            "volume_mounts": new_primary_mounts,
+            "siblings": new_siblings,
+            "stateful_volumes": new_stateful,
+            "config_volume": new_config_vol,
+        }
+    )
+
+
 def _fetch_fresh_config_assist(
     git_url: str, name: str
 ) -> tuple[str | None, list[ConfigAssistSeed]]:
@@ -2281,6 +2324,7 @@ async def onboard_preflight(
     req: OnboardPreflightRequest,
     _: None = Depends(verify_auth),
     store: ServiceStore = Depends(_get_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
 ) -> OnboardPreflightResponse:
     """Fetch and parse a service repo's docker-compose.yml, returning a DerivedSpec.
 
@@ -2365,6 +2409,31 @@ async def onboard_preflight(
             },
         )
 
+    # Volume-collision preflight: check that would-be namespaced volume names
+    # do not collide with any existing component's named_volumes.
+    candidate_volumes: set[str] = {
+        f"{req.name}-{vm.host}" for vm in derived_spec.volume_mounts
+    } | {
+        f"{req.name}-{vm.host}"
+        for sib in derived_spec.siblings
+        for vm in sib.volume_mounts
+    }
+    if candidate_volumes:
+        collisions: list[str] = []
+        for existing_cfg in component_config_store.all():  # synchronous
+            for vol in sorted(candidate_volumes & set(existing_cfg.named_volumes)):
+                collisions.append(
+                    f"'{vol}' is already owned by component '{existing_cfg.id}'"
+                )
+        if collisions:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "onboarding would create volume name collision(s) with existing component(s)",
+                    "collisions": collisions,
+                },
+            )
+
     return OnboardPreflightResponse(spec=derived_spec)
 
 
@@ -2386,6 +2455,10 @@ async def onboard_confirm(
 ) -> OnboardConfirmResponse:
     """Persist a reviewed DerivedSpec, deploy the container, and register the component."""
     spec = req.spec
+
+    # Namespace volume names so two components from the same image
+    # never share Docker named volumes.
+    spec = _namespace_spec_volumes(spec, spec.name)
 
     # Race-condition guard: re-check name not already in store
     existing = await store.get(spec.name)

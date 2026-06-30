@@ -226,6 +226,78 @@ class TestOnboardPreflight:
         assert resp.status_code == 422
         assert "error" in resp.json()
 
+    async def test_volume_collision_returns_409(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Preflight detects that namespaced volumes would collide with an existing component."""
+        # Seed an existing component with namespaced volumes.
+        from robotsix_central_deploy.registry.models import (
+            ComponentConfig,
+        )
+
+        existing = ComponentConfig(
+            id="mail",
+            image="ghcr.io/org/mail:main",
+            container_name="mail",
+            ports=[],
+            mounts=[],
+            env={},
+            named_volumes=[
+                "mail-auto-mail-config",
+                "mail-auto-mail-data",
+                "mail-auto-mail-logs",
+            ],
+        )
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        await config_store.put(existing)
+
+        # Build a DerivedSpec that (after namespacing) would produce the same volumes.
+        spec = DerivedSpec(
+            name="mail",  # same name as existing → "mail-auto-mail-config" etc.
+            git_url="https://github.com/org/auto-mail.git",
+            image="ghcr.io/org/auto-mail:main",
+            ports=[],
+            volume_mounts=[
+                VolumeMount(host="auto-mail-config", container="/config"),
+                VolumeMount(host="auto-mail-data", container="/data"),
+                VolumeMount(host="auto-mail-logs", container="/logs"),
+            ],
+            stateful_volumes=["auto-mail-data"],
+            env={},
+            claude_mount=False,
+        )
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_yaml=None
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/auto-mail.git",
+                    "name": "mail",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 409
+        data = resp.json()
+        assert "error" in data
+        assert "collisions" in data
+        assert any("mail-auto-mail-config" in c for c in data["collisions"])
+        assert any("mail-auto-mail-data" in c for c in data["collisions"])
+        assert any("mail-auto-mail-logs" in c for c in data["collisions"])
+
 
 # ---------------------------------------------------------------------------
 # POST /onboard/confirm
@@ -718,16 +790,16 @@ class TestOnboardConfirmWithConfig:
         template = await store.get_template("cfg-svc")
         assert template == {"host": "localhost", "password": ""}
 
-        # Volume written via backend — uses the real config volume, not synthetic
+        # Volume written via backend — uses the real config volume (now namespaced), not synthetic
         assert len(captured) == 1
-        assert captured[0][0] == "cfg-svc-data"
+        assert captured[0][0] == "cfg-svc-cfg-svc-data"
         assert captured[0][1] == {"host": "localhost", "password": ""}
 
         # named_volumes includes the config volume (from spec.volume_mounts)
         registry_obj: ComponentRegistry = server_mod.app.state.registry
         in_memory_config = registry_obj.get("cfg-svc")
         assert in_memory_config is not None
-        assert "cfg-svc-data" in in_memory_config.named_volumes
+        assert "cfg-svc-cfg-svc-data" in in_memory_config.named_volumes
 
     async def test_confirm_deploy_failure_cleans_up_config_yaml_store(
         self, client: AsyncClient, auth_headers: dict
@@ -806,7 +878,7 @@ class TestOnboardConfirmWithConfig:
 
         # Merged config written to volume — user values overlay template defaults
         assert len(captured) == 1
-        assert captured[0][0] == "cfg-svc-data"
+        assert captured[0][0] == "cfg-svc-cfg-svc-data"
         assert captured[0][1] == {
             "host": "10.0.0.1",
             "password": "s3cret",
