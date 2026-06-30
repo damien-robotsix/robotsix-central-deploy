@@ -400,3 +400,126 @@ class TestDockerSdkBackendCommandAndEntrypoint:
         b._create_container(config, "test:latest")
         _, kwargs = client.containers.create.call_args
         assert kwargs["entrypoint"] is None
+
+
+# ---------------------------------------------------------------------------
+# Volume directory listing & file reading (DockerSdkBackend)
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendVolumeBrowser:
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    async def test_list_volume_dir_empty_root(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b""
+        result = await b.list_volume_dir("test-vol", "")
+        assert result == []
+
+    async def test_list_volume_dir_files_and_dirs(self, backend):
+        b, client = backend
+        client.containers.run.return_value = (
+            b"dir\t0\tsubdir\nfile\t1024\tconfig.yaml\nfile\t512\tnotes.txt\n"
+        )
+        result = await b.list_volume_dir("test-vol", "")
+        assert len(result) == 3
+        assert result[0] == {"name": "subdir", "type": "dir", "size_bytes": 0}
+        assert result[1] == {
+            "name": "config.yaml",
+            "type": "file",
+            "size_bytes": 1024,
+        }
+        assert result[2] == {
+            "name": "notes.txt",
+            "type": "file",
+            "size_bytes": 512,
+        }
+
+    async def test_list_volume_dir_passes_rel_path_as_positional_arg(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b""
+        await b.list_volume_dir("test-vol", "subdir/logs")
+        call_args = client.containers.run.call_args
+        command = call_args[1]["command"]
+        # command = ["sh", "-c", script, "sh", rel_path]
+        # $0="sh", $1="subdir/logs"
+        assert command[4] == "subdir/logs"
+
+    async def test_list_volume_dir_read_only_mount(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b""
+        await b.list_volume_dir("test-vol", "")
+        call_kwargs = client.containers.run.call_args[1]
+        vol_mount = call_kwargs["volumes"]["test-vol"]
+        assert vol_mount["mode"] == "ro"
+
+    async def test_read_volume_file_text(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b"42\nhello world\n"
+        result = await b.read_volume_file("test-vol", "notes.txt", 1_048_576)
+        assert result["size_bytes"] == 42
+        assert result["content"] == "hello world\n"
+        assert result["binary"] is False
+        assert result["truncated"] is False
+
+    async def test_read_volume_file_truncation(self, backend):
+        b, client = backend
+        # Content is 10 bytes, max_bytes=4 → truncated
+        client.containers.run.return_value = b"100\n0123456789\n"
+        result = await b.read_volume_file("test-vol", "big.txt", 4)
+        assert result["size_bytes"] == 100
+        assert result["truncated"] is True
+        assert result["content"] == "0123"
+        assert result["binary"] is False
+
+    async def test_read_volume_file_binary_nul_byte(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b"256\nsome text\x00here\n"
+        result = await b.read_volume_file("test-vol", "data.db", 1_048_576)
+        assert result["binary"] is True
+        assert result["content"] is None
+
+    async def test_read_volume_file_binary_decode_error(self, backend):
+        b, client = backend
+        # Raw bytes that are not valid UTF-8
+        client.containers.run.return_value = b"4\n\x80\x81\x82\x83\n"
+        result = await b.read_volume_file("test-vol", "bad.bin", 1_048_576)
+        assert result["binary"] is True
+        assert result["content"] is None
+
+    async def test_read_volume_file_empty_size(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b"0\n\n"
+        result = await b.read_volume_file("test-vol", "empty.txt", 1_048_576)
+        assert result["size_bytes"] == 0
+        assert result["content"] == "\n"
+        assert result["binary"] is False
+        assert result["truncated"] is False
+
+    # -- NoopBackend stubs --
+
+    async def test_noop_list_volume_dir_raises(self):
+        from robotsix_central_deploy.lifecycle.backend import NoopBackend
+
+        b = NoopBackend()
+        with pytest.raises(NotImplementedError):
+            await b.list_volume_dir("v", "")
+
+    async def test_noop_read_volume_file_raises(self):
+        from robotsix_central_deploy.lifecycle.backend import NoopBackend
+
+        b = NoopBackend()
+        with pytest.raises(NotImplementedError):
+            await b.read_volume_file("v", "f", 100)
