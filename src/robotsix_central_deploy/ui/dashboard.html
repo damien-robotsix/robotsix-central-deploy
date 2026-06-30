@@ -639,11 +639,22 @@ function renderRow(svc) {
   const badgeClass = `badge-${state}`;
   const rev = svc.image_revision || '';
   const revShort = rev ? rev.slice(0, 12) : '\u2014';
-  const health = svc.health || '';
+  // Use rollup health for display when available; fall back to primary-only health.
+  const health = svc.overall_health || svc.health || '';
   let healthClass = 'health-unknown';
   if (health === 'healthy') healthClass = 'health-healthy';
   else if (health === 'unhealthy') healthClass = 'health-unhealthy';
   const healthDisplay = health || '\u2014';
+
+  // Build per-container breakdown tooltip when siblings are present.
+  let healthTitle = '';
+  if (svc.sibling_health && svc.sibling_health.length > 0) {
+    const lines = [
+      `primary: ${svc.health || '\u2014'}`,
+      ...(svc.sibling_health).map(s => `${s.name}: ${s.health || '\u2014'}`),
+    ];
+    healthTitle = lines.join('\n');
+  }
   const lastError = svc.last_error || '';
 
   let errorHtml = '';
@@ -683,7 +694,7 @@ function renderRow(svc) {
     <td>${escHtml(svc.name)}${statefulWarning}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
     <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
-    <td><span class="${healthClass}">${escHtml(healthDisplay)}</span></td>
+    <td><span class="${healthClass}" title="${escAttr(healthTitle)}">${escHtml(healthDisplay)}</span></td>
     <td>${updateBadge}</td>
     <td class="actions">
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
