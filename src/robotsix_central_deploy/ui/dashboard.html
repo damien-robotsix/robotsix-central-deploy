@@ -466,19 +466,6 @@
   <form id="settings-form" onsubmit="saveSettings(event)">
     <table style="margin-bottom:20px;">
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Dashboard Username</td>
-        <td style="padding:6px 12px;">
-          <input id="s-auth-username" type="text" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Dashboard Password</td>
-        <td style="padding:6px 12px;">
-          <input id="s-auth-password" type="password" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" disabled />
-          <button type="button" class="btn-secondary" onclick="changeSecret('s-auth-password')" style="font-size:0.75rem;margin-left:6px;">Change</button>
-        </td>
-      </tr>
-      <tr>
         <td colspan="2" style="padding:2px 12px 10px;font-size:0.78rem;color:#64748b;">
           ⚠️ Dashboard authentication takes effect only when <strong>both</strong> username and password are set.
         </td>
@@ -1977,17 +1964,6 @@ async function loadSettings() {
     var res = await fetch('/settings', { headers: authHeaders(), credentials: 'same-origin' });
     if (!res.ok) { showToast('Error loading settings: HTTP ' + res.status, 'error'); return; }
     var s = await res.json();
-    document.getElementById('s-auth-username').value = s.auth_username;
-    // s-auth-password
-    if (s.auth_password === '***') {
-      document.getElementById('s-auth-password').value = '';
-      document.getElementById('s-auth-password').placeholder = '\u2022\u2022\u2022 set \u2014 enter a new value to change';
-      document.getElementById('s-auth-password').disabled = true;
-    } else {
-      document.getElementById('s-auth-password').value = s.auth_password;
-      document.getElementById('s-auth-password').placeholder = '';
-      document.getElementById('s-auth-password').disabled = false;
-    }
     document.getElementById('s-disk-warn').value = s.disk_warn_pct;
     document.getElementById('s-reg-interval').value = s.registry_check_interval;
     document.getElementById('s-log-level').value = s.log_level;
@@ -2003,10 +1979,6 @@ async function loadSettings() {
 async function saveSettings(event) {
   event.preventDefault();
   var body = {
-    auth_username: document.getElementById('s-auth-username').value,
-    auth_password: document.getElementById('s-auth-password').disabled
-      ? '***'
-      : document.getElementById('s-auth-password').value,
     disk_warn_pct: parseFloat(document.getElementById('s-disk-warn').value),
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
     log_level: document.getElementById('s-log-level').value,
