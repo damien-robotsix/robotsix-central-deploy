@@ -127,7 +127,7 @@
   .disk-title { font-size: 1.1rem; color: var(--blue); }
   .disk-meta  { font-size: 0.8rem; color: var(--grey); }
   .disk-bar-wrap { width:200px; height:12px; background:#334155; border-radius:6px; display:inline-block; vertical-align:middle; }
-  .disk-bar-fill { height:100%; border-radius:6px; background:#4ade80; }
+  .disk-bar-fill { display:block; height:100%; border-radius:6px; background:#4ade80; }
   .disk-bar-fill.warn { background:#f87171; }
 
   /* Buttons */
@@ -771,11 +771,9 @@ function renderDiskPanel(data) {
         : '';
     document.getElementById('disk-content').innerHTML = `
         <table>
-          <tr><th>Host total</th><td>${fmt_bytes(data.total_bytes)}</td></tr>
           <tr><th>Host used</th><td>${fmt_bytes(data.used_bytes)}
             <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
             ${usedPct}%</td></tr>
-          <tr><th>Host free</th><td>${fmt_bytes(data.free_bytes)}</td></tr>
           <tr><th>Docker images (host total)</th><td>${fmt_bytes(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_bytes(data.docker.build_cache_size_bytes)}</td></tr>
           <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}${data.docker.build_cache_reclaimable_bytes > 0 ? ` <button id="reclaim-btn" class="reclaim-btn" onclick="reclaimBuildCache()">Reclaim</button>` : ''}</td></tr>
