@@ -2003,7 +2003,7 @@ async def run_config_assist(
         # Restore existing account slots verbatim from storage so the seed
         # bar's overwrite of accounts[0].* and the form's empty-string secret
         # fields do not corrupt existing accounts during the re-merge.
-        submitted_accts: list = body.values.setdefault("accounts", [])
+        submitted_accts: list[dict[str, Any]] = body.values.setdefault("accounts", [])
         for i, ea in enumerate(existing_accounts):
             if i < len(submitted_accts):
                 submitted_accts[i] = dict(ea)
