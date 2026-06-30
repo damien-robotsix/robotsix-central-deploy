@@ -173,7 +173,7 @@ class TestVolumeBrowserHappyPath:
         await _register_component_with_volume(store, "svc9", "vol9")
 
         mock_backend = MagicMock()
-        mock_backend.list_volume_dir = AsyncMock(
+        mock_backend.list_volume_path = AsyncMock(
             return_value=[
                 {"name": "config.yaml", "type": "file", "size_bytes": 2048},
                 {"name": "data", "type": "dir", "size_bytes": 0},
@@ -196,7 +196,7 @@ class TestVolumeBrowserHappyPath:
         assert data["entries"][1]["name"] == "data"
         assert data["entries"][1]["type"] == "dir"
         assert data["entries"][1]["size_bytes"] == 0
-        mock_backend.list_volume_dir.assert_called_once_with("vol9", "")
+        mock_backend.list_volume_path.assert_called_once_with("vol9", "")
 
     async def test_cat_returns_file_content(self, client: AsyncClient):
         """When backend supports browsing, cat returns file content info."""
@@ -204,7 +204,7 @@ class TestVolumeBrowserHappyPath:
         await _register_component_with_volume(store, "svc10", "vol10")
 
         mock_backend = MagicMock()
-        mock_backend.list_volume_dir = AsyncMock()
+        mock_backend.list_volume_path = AsyncMock()
         mock_backend.read_volume_file = AsyncMock(
             return_value={
                 "size_bytes": 100,

@@ -422,18 +422,18 @@ class TestDockerSdkBackendVolumeBrowser:
             b = DockerSdkBackend()
             yield b, client_mock
 
-    async def test_list_volume_dir_empty_root(self, backend):
+    async def test_list_volume_path_empty_root(self, backend):
         b, client = backend
         client.containers.run.return_value = b""
-        result = await b.list_volume_dir("test-vol", "")
+        result = await b.list_volume_path("test-vol", "")
         assert result == []
 
-    async def test_list_volume_dir_files_and_dirs(self, backend):
+    async def test_list_volume_path_files_and_dirs(self, backend):
         b, client = backend
         client.containers.run.return_value = (
             b"dir\t0\tsubdir\nfile\t1024\tconfig.yaml\nfile\t512\tnotes.txt\n"
         )
-        result = await b.list_volume_dir("test-vol", "")
+        result = await b.list_volume_path("test-vol", "")
         assert len(result) == 3
         assert result[0] == {"name": "subdir", "type": "dir", "size_bytes": 0}
         assert result[1] == {
@@ -447,20 +447,20 @@ class TestDockerSdkBackendVolumeBrowser:
             "size_bytes": 512,
         }
 
-    async def test_list_volume_dir_passes_rel_path_as_positional_arg(self, backend):
+    async def test_list_volume_path_passes_rel_path_as_positional_arg(self, backend):
         b, client = backend
         client.containers.run.return_value = b""
-        await b.list_volume_dir("test-vol", "subdir/logs")
+        await b.list_volume_path("test-vol", "subdir/logs")
         call_args = client.containers.run.call_args
         command = call_args[1]["command"]
         # command = ["sh", "-c", script, "sh", rel_path]
         # $0="sh", $1="subdir/logs"
         assert command[4] == "subdir/logs"
 
-    async def test_list_volume_dir_read_only_mount(self, backend):
+    async def test_list_volume_path_read_only_mount(self, backend):
         b, client = backend
         client.containers.run.return_value = b""
-        await b.list_volume_dir("test-vol", "")
+        await b.list_volume_path("test-vol", "")
         call_kwargs = client.containers.run.call_args[1]
         vol_mount = call_kwargs["volumes"]["test-vol"]
         assert vol_mount["mode"] == "ro"
@@ -510,12 +510,12 @@ class TestDockerSdkBackendVolumeBrowser:
 
     # -- NoopBackend stubs --
 
-    async def test_noop_list_volume_dir_raises(self):
+    async def test_noop_list_volume_path_raises(self):
         from robotsix_central_deploy.lifecycle.backend import NoopBackend
 
         b = NoopBackend()
         with pytest.raises(NotImplementedError):
-            await b.list_volume_dir("v", "")
+            await b.list_volume_path("v", "")
 
     async def test_noop_read_volume_file_raises(self):
         from robotsix_central_deploy.lifecycle.backend import NoopBackend
