@@ -37,6 +37,7 @@ from .config import LifecycleConfig
 from .error_handlers import register_error_handlers
 from .models import (
     ActionResponse,
+    ContainerHealthSummary,
     DeployRequest,
     DeployResponse,
     DiskUsageResponse,
@@ -563,6 +564,29 @@ async def _get_sibling_pairs(
     return pairs
 
 
+def _compute_overall_health(
+    primary_health: str,
+    siblings: list["ContainerHealthSummary"],
+) -> str:
+    """Rollup health across primary + healthchecked siblings.
+
+    Containers without a Docker healthcheck report health='' and are
+    treated as neutral (excluded from the rollup).
+    Returns '' when no container has a healthcheck configured.
+    """
+    candidates = [primary_health] + [s.health for s in siblings]
+    checked = [h for h in candidates if h]  # non-empty → has healthcheck
+    if not checked:
+        return ""
+    if any(h == "unhealthy" for h in checked):
+        return "unhealthy"
+    if any(h == "starting" for h in checked):
+        return "starting"
+    if all(h == "healthy" for h in checked):
+        return "healthy"
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Health probe
 # ---------------------------------------------------------------------------
@@ -735,6 +759,7 @@ async def get_service_status(
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     record = await _get_or_create_record(name, store)
@@ -780,6 +805,40 @@ async def get_service_status(
     cfg = component_config_store.get(name)
     if cfg is not None:
         result.has_config_yaml = cfg.has_config_yaml
+
+    # -- Sibling health fan-out ------------------------------------------
+    comp_config = registry.get(name)  # ComponentConfig or None
+    sibling_summaries: list[ContainerHealthSummary] = []
+    if comp_config and comp_config.siblings:
+        for _sib_config, sib_record in await _get_sibling_pairs(
+            name, comp_config, store
+        ):
+            try:
+                sib_inspect = await backend.status(sib_record)
+            except Exception:
+                logger.warning(
+                    "failed to inspect sibling '%s'; skipping", sib_record.name
+                )
+                continue
+            sib_changed = (
+                sib_inspect.state != sib_record.state
+                or sib_inspect.health != sib_record.health
+            )
+            if sib_changed:
+                sib_record.state = sib_inspect.state
+                sib_record.health = sib_inspect.health
+                await store.put(sib_record)
+            sibling_summaries.append(
+                ContainerHealthSummary(
+                    name=sib_record.name,
+                    health=sib_inspect.health,
+                    state=sib_inspect.state,
+                )
+            )
+    result.sibling_health = sibling_summaries
+    result.overall_health = _compute_overall_health(inspect.health, sibling_summaries)
+    # -------------------------------------------------------------------
+
     return result
 
 
