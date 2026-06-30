@@ -4,6 +4,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Volume namespacing for onboarding**: `onboard_confirm` now prefixes all
+  named-volume host names with the component name (e.g. `mail-auto-mail-config`
+  instead of `auto-mail-config`) so two components from the same Docker image
+  never share storage. `onboard_preflight` gains a volume-collision check (HTTP
+  409) that prevents onboarding when the namespaced names would collide with an
+  existing component's `named_volumes`.
 - **Fix auto-detect add-account config corruption**: Fixed four bugs in `POST
   /services/{name}/config/assist` add_new mode that together corrupted existing
   accounts when adding a new one via auto-detect. The user-provided account name (or
