@@ -1766,6 +1766,9 @@ class ConfigAssistRequest(BaseModel):
     target_account_index: int | None = None
     # None  → infer: first-setup if no accounts exist, else add-new
     # int N → update account N if N < len(existing_accounts), else add-new
+    account_name: str | None = None
+    # Optional account name for add-new mode — overrides the derive-from-email
+    # heuristic. Slugified automatically before use.
 
 
 class ConfigAssistResponse(BaseModel):
@@ -2001,6 +2004,12 @@ async def run_config_assist(
         partial = _merge_config(template, existing, body.values)
 
         new_id = _derive_account_id(comp_cfg.config_assist_seeds, partial, target_idx)
+        if body.account_name:
+            _name_slug = _re.sub(r"[^a-z0-9]+", "-", body.account_name.lower()).strip(
+                "-"
+            )[:40]
+            if _name_slug:
+                new_id = _name_slug
         acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
         while len(acct_list) <= target_idx:
             acct_list.append({})
@@ -2066,13 +2075,6 @@ async def run_config_assist(
     # Merge detected fields into the submitted config so the detected
     # output never clobbers other fields the user already entered.
     merged = _deep_merge(partial, filled)
-
-    # Normalize default_account to first account's id if absent/empty
-    accounts = merged.get("accounts")
-    if isinstance(accounts, list) and accounts:
-        first_id = accounts[0].get("id") if isinstance(accounts[0], dict) else None
-        if first_id and not merged.get("default_account"):
-            merged["default_account"] = first_id
 
     # Persist detected config so GET /config shows it and Save is idempotent
     await config_yaml_store.update_current(name, merged)

@@ -1588,6 +1588,15 @@ function _injectConfigAssistUI() {
   if (!_configAssistCommand) return;
 
   // Build seed inputs for each declared seed key.
+  const hasAccountSeeds = _configAssistSeeds.some(s => s.key.startsWith('accounts.'));
+  const accountNameHtml = hasAccountSeeds ? `
+    <label class="seed-label" style="font-size:0.85rem;margin-left:0.75rem;white-space:nowrap;">
+      Account name:
+      <input id="config-assist-account-name" type="text" placeholder="e.g. gmail"
+             style="width:8rem;margin-left:0.25rem;"
+             aria-label="Name/ID for the new account" />
+    </label>` : '';
+
   const seedInputsHtml = _configAssistSeeds.map(seed => {
     // Use declared label if present; otherwise derive from last non-numeric segment.
     const derivedLabel = seed.key.split('.').filter(s => !/^\d+$/.test(s)).pop() || seed.key;
@@ -1609,7 +1618,7 @@ function _injectConfigAssistUI() {
   bar.innerHTML = `
     <button id="config-assist-btn" class="btn-secondary"
             onclick="runConfigAssist()">Auto-detect / Assist</button>
-    ${seedInputsHtml}
+    ${accountNameHtml}${seedInputsHtml}
     <span id="config-assist-spinner" style="display:none;margin-left:0.5rem;">&#x27F3; Running&hellip;</span>
   `;
   document.getElementById('config-form-body').appendChild(bar);
@@ -1641,11 +1650,15 @@ async function runConfigAssist() {
     }
   }
 
+  // Include account name override if the input is present and non-empty.
+  const _accountNameInput = document.getElementById('config-assist-account-name');
+  const _accountNameVal = _accountNameInput ? _accountNameInput.value.trim() : '';
+
   try {
     const resp = await fetch(`/services/${encodeURIComponent(_configComponent)}/config/assist`, {
       method: 'POST',
       headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
-      body: JSON.stringify({ values }),
+      body: JSON.stringify(Object.assign({ values }, _accountNameVal ? { account_name: _accountNameVal } : {})),
     });
     const data = await resp.json();
     out.style.display = 'block';

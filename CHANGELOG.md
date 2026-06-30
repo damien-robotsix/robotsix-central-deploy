@@ -8,6 +8,11 @@ All notable changes to robotsix-central-deploy.
   pruning via `ExecutionBackend.prune_builds()`. Returns `{"space_reclaimed_bytes": <int>}`.
   Noop and CLI backends return `0`; the SDK backend calls `docker builder prune` and
   reports the `SpaceReclaimed` value from the Docker API.
+- **Account name input in auto-detect**: The config-assist seed bar now shows an
+  "Account name" text input when the component has account seeds. The value is sent as
+  `account_name` in the request body and, when non-empty, overrides the email-derived
+  account id slug in `add_new` mode. Removed automatic `default_account` normalization
+  from the assist endpoint.
 - **Centralized error handlers**: extracted inline `HTTPException` handler into
   `register_error_handlers()` in `lifecycle/error_handlers.py`. Added handlers for
   `RequestValidationError` (422 with structured `ErrorDetail` envelope) and a

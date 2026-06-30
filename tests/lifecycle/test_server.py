@@ -2282,12 +2282,12 @@ class TestConfigAssist:
         assert current["accounts"][0]["imap"]["host"] == "ssl0.ovh.net"
         assert current["accounts"][0]["smtp"]["host"] == "ssl0.ovh.net"
 
-    async def test_config_assist_normalizes_default_account(
+    async def test_config_assist_account_name_override(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        """When detected config has accounts[0].id but no default_account,
-        default_account is set to that id."""
-        await _seed_store("mail2")
+        """A POST with account_name="My Gmail" in add_new mode stores the
+        slugified id "my-gmail", overriding the email-derived fallback."""
+        await _seed_store("mail3")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = {
             "accounts": [
@@ -2299,20 +2299,34 @@ class TestConfigAssist:
                 }
             ]
         }
-        await store.save_template("mail2", template)
+        await store.save_template("mail3", template)
+        # Seed an existing account so that mode becomes add_new (not first_setup).
+        await store.update_current(
+            "mail3",
+            {
+                "accounts": [
+                    {
+                        "id": "existing-acct",
+                        "imap": {"host": "imap.example.com"},
+                        "smtp": {"host": "smtp.example.com"},
+                    }
+                ]
+            },
+        )
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
         cfg = ComponentConfig(
-            id="mail2",
+            id="mail3",
             image="mail:latest",
-            container_name="mail2",
+            container_name="mail3",
             has_config_yaml=True,
-            config_volume="mail2-config",
+            config_volume="mail3-config",
             config_assist_command="detect",
             config_assist_seeds=[
-                ConfigAssistSeed(key="accounts.0.auth.username"),
+                ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+                ConfigAssistSeed(key="accounts.0.auth.password", label="Password"),
             ],
-            mounts=[VolumeMount(host="mail2-config", container="/config")],
+            mounts=[VolumeMount(host="mail3-config", container="/config")],
         )
         await config_store.put(cfg)
 
@@ -2322,12 +2336,17 @@ class TestConfigAssist:
         detected = {
             "accounts": [
                 {
-                    "id": "acct-1",
+                    "id": "existing-acct",
                     "imap": {"host": "imap.example.com"},
                     "smtp": {"host": "smtp.example.com"},
-                }
+                },
+                {
+                    "id": "my-gmail",
+                    "imap": {"host": "imap.other.com"},
+                    "smtp": {"host": "smtp.other.com"},
+                    "auth": {"username": "new@x.com", "password": "x"},
+                },
             ]
-            # No default_account — should be normalized
         }
 
         async def _fake_read_config(volume_name: str) -> dict:
@@ -2343,18 +2362,26 @@ class TestConfigAssist:
         )
 
         resp = await client.post(
-            "/services/mail2/config/assist",
-            json={"values": {"accounts": [{"id": "acct-1"}]}},
+            "/services/mail3/config/assist",
+            json={
+                "values": {
+                    "accounts": [{"auth": {"username": "new@x.com", "password": "x"}}]
+                },
+                "account_name": "My Gmail",
+            },
             headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["config"]["default_account"] == "acct-1"
+        # add_new → new account at index 1, named via account_name slugification
+        assert len(data["config"]["accounts"]) >= 2
+        assert data["config"]["accounts"][1]["id"] == "my-gmail"
 
         # Also persisted
-        current = await store.get_current("mail2")
+        current = await store.get_current("mail3")
         assert current is not None
-        assert current["default_account"] == "acct-1"
+        assert len(current["accounts"]) >= 2
+        assert current["accounts"][1]["id"] == "my-gmail"
 
     async def test_add_second_account_leaves_first_intact(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
