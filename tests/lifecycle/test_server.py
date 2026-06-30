@@ -3187,3 +3187,157 @@ class TestConfigAssist:
         # In first_setup, accounts.0. placeholders are resolved from the
         # submitted values — verify the value made it into the command.
         assert "user@example.com" in cmd
+
+    async def test_office365_imap_host_sets_oauth2_flag(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+                ConfigAssistSeed(key="accounts.0.auth.password", label="Password"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "imap": {"host": "outlook.office365.com"},
+                        "smtp": {"host": "smtp.office365.com"},
+                        "auth": {"username": "user@example.com", "password": "hunter2"},
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "auth": {
+                                "username": "user@example.com",
+                                "password": "hunter2",
+                            }
+                        }
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config"]["accounts"][0]["auth"]["oauth2_provider"] == "microsoft"
+        assert "password" not in data["config"]["accounts"][0]["auth"]
+        assert "Microsoft/Office365" in data["output"]
+        assert "Authorize button" in data["output"]
+
+    async def test_office365_smtp_only_triggers_flag(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                    "auth": {"username": "", "password": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command="detect",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
+                ConfigAssistSeed(key="accounts.0.auth.password", label="Password"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "imap": {"host": "imap.example.com"},
+                        "smtp": {"host": "smtp.office365.com"},
+                        "auth": {"username": "user@example.com", "password": "hunter2"},
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "auth": {
+                                "username": "user@example.com",
+                                "password": "hunter2",
+                            }
+                        }
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["config"]["accounts"][0]["auth"]["oauth2_provider"] == "microsoft"
+        assert "Microsoft/Office365" in data["output"]
