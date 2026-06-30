@@ -175,6 +175,26 @@ class TestSettingsRouter:
         assert data["ghcr_token"] == ""
         assert data["auth_password"] == ""
 
+    async def test_get_settings_reflects_env_vars_when_no_store_file(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        """When no settings file exists, GET /settings must reflect env-var
+        credentials from app.state.config rather than returning empty defaults."""
+        # Simulate env-var credentials in the running config.
+        original_config = server_mod.app.state.config
+        server_mod.app.state.config = original_config.model_copy(
+            update={"auth_username": "env-user", "auth_password": "env-pass"}
+        )
+        try:
+            # No settings file written — settings_store is empty.
+            resp = await client.get("/settings", headers=auth_headers)
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["auth_username"] == "env-user"
+            assert data["auth_password"] == "***"  # non-empty → masked
+        finally:
+            server_mod.app.state.config = original_config
+
     async def test_get_settings_requires_auth(
         self, client: AsyncClient, settings_store
     ):

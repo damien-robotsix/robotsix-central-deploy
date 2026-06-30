@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Settings GET reflects env-var credentials**: `GET /settings` now reads
+  from the effective config (env vars overlaid by stored settings) instead of
+  the raw store, so env-var-supplied auth credentials appear in the UI even
+  before the operator has saved settings via the UI.
 - **Volume audit subsystem**: New optional `volume_audit` module that periodically
   scans Docker named volumes for size and growth-over-time tracking. Growth
   threshold breaches are reported through a pluggable `report_finding` seam
