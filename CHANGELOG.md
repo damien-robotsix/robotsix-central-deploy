@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Volume audit findings are now filed as board tickets when board API settings
+  are configured (`ROBOTSIX_LIFECYCLE_BOARD_API_URL`, `ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN`,
+  `ROBOTSIX_LIFECYCLE_BOARD_REPO_ID`). The `robotsix-board-agent` library is now
+  a project dependency.
 - **Fix circular import in volume_audit**: moved `ExecutionBackend` and `LifecycleConfig`
   imports in `volume_audit/scheduler.py` under `TYPE_CHECKING` to break a circular import
   chain (`lifecycle` → `server` → `volume_audit.scheduler` → `lifecycle.backend`) that

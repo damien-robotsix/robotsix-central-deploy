@@ -60,11 +60,11 @@ class TestVolumeAuditScheduler:
         import robotsix_central_deploy.volume_audit.scheduler as sched_mod
 
         called_with = []
-        monkeypatch.setattr(
-            sched_mod,
-            "report_finding",
-            lambda finding, path: called_with.append(finding),
-        )
+
+        async def _fake_report(finding, path, config=None):
+            called_with.append(finding)
+
+        monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
 
         sched, backend, store = _make_scheduler(tmp_path)
         comp = ComponentConfig(

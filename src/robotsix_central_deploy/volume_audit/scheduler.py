@@ -119,7 +119,7 @@ class VolumeAuditScheduler:
         # 4. Emit findings through the report seam
         for finding in findings:
             try:
-                report_finding(finding, self._findings_path)
+                await report_finding(finding, self._findings_path, self._config)
             except Exception as exc:
                 logger.error(
                     "report_finding failed for %s: %s", finding.volume_name, exc

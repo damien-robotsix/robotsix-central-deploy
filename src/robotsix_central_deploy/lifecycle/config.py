@@ -93,6 +93,11 @@ class LifecycleConfig(BaseSettings):
     volume_audit_min_delta_bytes: int = 10_485_760
     # ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES (default 10 MiB)
 
+    # Board integration (for filing audit-finding tickets and other automations)
+    board_api_url: str = ""  # ROBOTSIX_LIFECYCLE_BOARD_API_URL
+    board_api_token: str = ""  # ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN
+    board_repo_id: str = ""  # ROBOTSIX_LIFECYCLE_BOARD_REPO_ID
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

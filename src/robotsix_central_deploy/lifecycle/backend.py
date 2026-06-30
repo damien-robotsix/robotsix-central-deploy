@@ -1041,7 +1041,7 @@ class DockerSdkBackend(ExecutionBackend):
         lines = raw.split(b"\n", 1)
         try:
             size_bytes = int(lines[0].strip())
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             size_bytes = 0
         body = lines[1] if len(lines) > 1 else b""
 
