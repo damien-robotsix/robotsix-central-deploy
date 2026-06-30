@@ -122,9 +122,7 @@ class VolumeAuditScheduler:
         try:
             for finding in findings:
                 try:
-                    await report_finding(
-                        finding, self._findings_path, board_client
-                    )
+                    await report_finding(finding, self._findings_path, board_client)
                 except Exception as exc:
                     logger.error(
                         "report_finding failed for %s: %s",
@@ -136,9 +134,7 @@ class VolumeAuditScheduler:
                 try:
                     await board_client.close()
                 except Exception as exc:
-                    logger.error(
-                        "Failed to close board client: %s", exc
-                    )
+                    logger.error("Failed to close board client: %s", exc)
 
         # 5. Persist new snapshot and update in-memory state
         self._save_snapshots(current)
@@ -167,9 +163,7 @@ class VolumeAuditScheduler:
                 )
                 return BoardClient(settings)
             except Exception as exc:
-                logger.error(
-                    "Failed to create board client: %s", exc
-                )
+                logger.error("Failed to create board client: %s", exc)
                 return None
         return None
 
