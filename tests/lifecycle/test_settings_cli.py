@@ -301,9 +301,7 @@ class TestSettingsFirstBoot:
             # Effective config should also reflect the seeded username.
             assert app.state.config.auth_username == "admin"
 
-    async def test_lifespan_seeds_env_username_when_set(
-        self, tmp_path, monkeypatch
-    ):
+    async def test_lifespan_seeds_env_username_when_set(self, tmp_path, monkeypatch):
         """First-boot: lifespan uses env-var username instead of 'admin' fallback."""
         settings_path = tmp_path / "settings.json"
         monkeypatch.setenv(
