@@ -1,9 +1,6 @@
 src/robotsix_central_deploy/registry/loader.py:0: error: Library stubs not installed for "yaml"  [import-untyped]
 src/robotsix_central_deploy/onboard/parser.py:0: error: Library stubs not installed for "yaml"  [import-untyped]
 src/robotsix_central_deploy/lifecycle/store.py:0: error: Library stubs not installed for "yaml"  [import-untyped]
-src/robotsix_central_deploy/lifecycle/store.py:0: note: Hint: "python3 -m pip install types-PyYAML"
-src/robotsix_central_deploy/lifecycle/store.py:0: note: (or run "mypy --install-types" to install all missing stub packages)
-src/robotsix_central_deploy/lifecycle/store.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Library stubs not installed for "docker"  [import-untyped]
