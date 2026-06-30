@@ -668,9 +668,7 @@ async def list_volume_path_route(
 ) -> VolumeLsResponse:
     rel_path = _safe_volume_path(path)
     entries = await backend.list_volume_path(name, rel_path)
-    return VolumeLsResponse(
-        entries=[VolumeEntryModel(**e) for e in entries]
-    )
+    return VolumeLsResponse(entries=[VolumeEntryModel(**e) for e in entries])
 
 
 @app.get("/volumes/{name}/cat")

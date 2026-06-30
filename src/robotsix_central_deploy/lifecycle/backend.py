@@ -135,9 +135,7 @@ class ExecutionBackend(ABC):
         ...
 
     @abstractmethod
-    async def read_volume_file(
-        self, volume_name: str, rel_path: str
-    ) -> bytes:
+    async def read_volume_file(self, volume_name: str, rel_path: str) -> bytes:
         """Return up to 262144 bytes (256 KB) of file at *rel_path* in *volume_name*.
 
         *rel_path* must point to a file (not a directory).
@@ -224,11 +222,13 @@ class NoopBackend(ExecutionBackend):
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0
 
-    async def list_volume_path(self, volume_name: str, rel_path: str) -> list[dict[str, Any]]:
+    async def list_volume_path(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
         return []
 
     async def read_volume_file(self, volume_name: str, rel_path: str) -> bytes:
-        return b''
+        return b""
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +364,9 @@ class DockerBackend(ExecutionBackend):
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0  # CLI backend lacks volume-inspection support; placeholder.
 
-    async def list_volume_path(self, volume_name: str, rel_path: str) -> list[dict[str, Any]]:
+    async def list_volume_path(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
         raise NotImplementedError("Use DockerSdkBackend for volume browsing")
 
     async def read_volume_file(self, volume_name: str, rel_path: str) -> bytes:
@@ -962,7 +964,7 @@ class DockerSdkBackend(ExecutionBackend):
         LIST_SCRIPT = (
             'TARGET=/vol; [ -n "$1" ] && TARGET="$TARGET/$1"\n'
             'find "$TARGET" -maxdepth 1 -mindepth 1 '
-            '-exec sh -c \''
+            "-exec sh -c '"
             'p="$1"; n="${p##*/}"; '
             'if [ -d "$p" ]; then printf "d\\t0\\t%s\\n" "$n"; '
             'else printf "f\\t%s\\t%s\\n" "$(stat -c %s "$p")" "$n"; fi'
@@ -987,11 +989,13 @@ class DockerSdkBackend(ExecutionBackend):
                 parts = line.split("\t", 2)
                 if len(parts) < 3:
                     continue
-                entries.append({
-                    "is_dir": parts[0] == "d",
-                    "size_bytes": int(parts[1]),
-                    "name": parts[2],
-                })
+                entries.append(
+                    {
+                        "is_dir": parts[0] == "d",
+                        "size_bytes": int(parts[1]),
+                        "name": parts[2],
+                    }
+                )
             entries.sort(key=lambda e: (not e["is_dir"], e["name"]))
             return entries
         except Exception as exc:
@@ -1000,9 +1004,7 @@ class DockerSdkBackend(ExecutionBackend):
             )
             return []
 
-    async def read_volume_file(
-        self, volume_name: str, rel_path: str
-    ) -> bytes:
+    async def read_volume_file(self, volume_name: str, rel_path: str) -> bytes:
         loop = asyncio.get_running_loop()
         try:
             raw: bytes = await loop.run_in_executor(
