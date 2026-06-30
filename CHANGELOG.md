@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Volume browser endpoints**: added `GET /volumes/{name}/ls?path=` and
+  `GET /volumes/{name}/cat?path=` to list files and read text content from
+  a component's named volumes (read-only, auth-protected, path-traversal safe).
+
 - **Volume namespacing for onboarding**: `onboard_confirm` now prefixes all
   named-volume host names with the component name (e.g. `mail-auto-mail-config`
   instead of `auto-mail-config`) so two components from the same Docker image

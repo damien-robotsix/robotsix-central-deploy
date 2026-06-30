@@ -70,6 +70,9 @@ _registry_checker: RegistryChecker | None = None
 _http_client: httpx.AsyncClient | None = None
 _volume_audit_scheduler: VolumeAuditScheduler | None = None
 
+#: Maximum bytes returned by ``GET /volumes/{name}/cat`` (1 MiB).
+VOLUME_CAT_MAX_BYTES: int = 1_048_576
+
 
 # ---------------------------------------------------------------------------
 # Onboard request / response models
@@ -112,6 +115,65 @@ class EnvResponse(BaseModel):
 class EnvUpdate(BaseModel):
     env: dict[str, str] = {}
     secrets: dict[str, str] = {}
+
+
+# ---------------------------------------------------------------------------
+# Volume browser models
+# ---------------------------------------------------------------------------
+
+
+class VolumeEntry(BaseModel):
+    name: str
+    type: str  # "file" or "dir"
+    size_bytes: int
+
+
+class VolumeListResponse(BaseModel):
+    entries: list[VolumeEntry]
+
+
+class VolumeFileResponse(BaseModel):
+    size_bytes: int
+    content: str | None
+    binary: bool
+    truncated: bool
+
+
+# ---------------------------------------------------------------------------
+# Path traversal guard for volume browser
+# ---------------------------------------------------------------------------
+
+
+def _validate_volume_path(rel_path: str) -> str:
+    """Normalise and validate a volume-relative path.
+
+    Returns the normalised form (leading ``/`` stripped, ``.`` → ``""``).
+    Raises ``HTTPException(400)`` on traversal / NUL.
+    """
+    if "\x00" in rel_path:
+        raise HTTPException(status_code=400, detail="Path contains NUL byte")
+    # Strip a single leading slash so callers can pass "/" or "/foo".
+    if rel_path.startswith("/"):
+        rel_path = rel_path[1:]
+    # Collapse to a clean relative path.
+    norm = str(Path(rel_path))
+    if norm == ".":
+        norm = ""
+    if ".." in Path(norm).parts:
+        raise HTTPException(status_code=400, detail="Path traversal not allowed")
+    return norm
+
+
+def _assert_volume_browsable(name: str, store: ComponentConfigStore) -> None:
+    """Raise 404 if *name* is not in any component's ``named_volumes``."""
+    allowed: set[str] = set()
+    for cfg in store.all():
+        allowed.update(cfg.named_volumes)
+    if name not in allowed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Volume '{name}' not found or not browsable",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +621,74 @@ async def get_volume_audit(
         return VolumeAuditResponse(enabled=False)
     scheduler: VolumeAuditScheduler = app.state.volume_audit_scheduler
     return scheduler.get_audit_response()
+
+
+# ---------------------------------------------------------------------------
+# GET /volumes/{name}/ls  —  list files in a data volume
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/volumes/{name}/ls",
+    response_model=VolumeListResponse,
+    summary="List files in a data volume",
+)
+async def list_volume_files(
+    name: str,
+    path: str = "",
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> VolumeListResponse:
+    """Return immediate children of a directory within a named volume.
+
+    Only volumes declared in at least one component's ``named_volumes`` are
+    browsable.  ``path`` defaults to the volume root.
+    """
+    _assert_volume_browsable(name, component_config_store)
+    rel = _validate_volume_path(path)
+    try:
+        entries_raw = await backend.list_volume_dir(name, rel)
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=501,
+            detail="Volume browsing not supported by this backend",
+        )
+    return VolumeListResponse(entries=[VolumeEntry(**e) for e in entries_raw])
+
+
+# ---------------------------------------------------------------------------
+# GET /volumes/{name}/cat  —  read a text file from a data volume
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/volumes/{name}/cat",
+    response_model=VolumeFileResponse,
+    summary="Read a text file from a data volume",
+)
+async def cat_volume_file(
+    name: str,
+    path: str = "",
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> VolumeFileResponse:
+    """Return the text content of a file within a named volume.
+
+    Files larger than ``VOLUME_CAT_MAX_BYTES`` are truncated (``truncated=True``).
+    Binary files (NUL byte or non-UTF-8) return ``binary=True`` and ``content=null``.
+    """
+    _assert_volume_browsable(name, component_config_store)
+    rel = _validate_volume_path(path)
+    try:
+        result = await backend.read_volume_file(name, rel, VOLUME_CAT_MAX_BYTES)
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=501,
+            detail="Volume browsing not supported by this backend",
+        )
+    return VolumeFileResponse(**result)
 
 
 # ---------------------------------------------------------------------------
