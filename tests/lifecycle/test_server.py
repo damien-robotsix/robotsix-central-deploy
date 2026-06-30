@@ -2635,7 +2635,8 @@ class TestConfigAssist:
         assert "{accounts.1." not in cmd
 
         # Volume write: existing account NOT clobbered
-        assert len(captured_writes) == 1
+        # 2 writes: [0] pre-detect seed, [1] cleaned config written back (#114)
+        assert len(captured_writes) == 2
         vol_accts = captured_writes[0]["accounts"]
         assert vol_accts[0]["id"] == "ovh"
         assert vol_accts[0]["auth"]["username"] == "ovh-user@ovh.com"
@@ -2935,7 +2936,8 @@ class TestConfigAssist:
         assert accounts[3]["auth"]["username"] == "damien.robotsix@gmail.com"
 
         # --- Volume pre-detect write ---
-        assert len(captured_writes) == 1
+        # 2 writes: [0] pre-detect seed, [1] cleaned config written back (#114)
+        assert len(captured_writes) == 2
         seed = captured_writes[0]
         seed_accts = seed["accounts"]
         assert len(seed_accts) == 4  # 3 existing + 1 new seed
