@@ -279,3 +279,9 @@ class DiskUsageResponse(BaseModel):
     free_bytes: int
     warn_threshold_pct: float
     docker: DockerDfStats
+
+
+class ReclaimResponse(BaseModel):
+    """Result of a build-cache reclaim operation."""
+
+    space_reclaimed_bytes: int

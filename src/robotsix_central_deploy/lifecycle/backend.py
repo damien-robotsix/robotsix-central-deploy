@@ -81,6 +81,11 @@ class ExecutionBackend(ABC):
         ...
 
     @abstractmethod
+    async def prune_builds(self) -> int:
+        """Prune Docker build cache. Returns bytes reclaimed."""
+        ...
+
+    @abstractmethod
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
@@ -168,6 +173,9 @@ class NoopBackend(ExecutionBackend):
 
     async def disk_df(self) -> DockerDfStats:
         return DockerDfStats()
+
+    async def prune_builds(self) -> int:
+        return 0
 
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
@@ -292,6 +300,10 @@ class DockerBackend(ExecutionBackend):
     async def disk_df(self) -> DockerDfStats:
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()
+
+    async def prune_builds(self) -> int:
+        # CLI backend does not support build prune.
+        return 0
 
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
@@ -1046,3 +1058,9 @@ class DockerSdkBackend(ExecutionBackend):
             build_cache_reclaimable_bytes=reclaimable,
             volumes=volumes,
         )
+
+    async def prune_builds(self) -> int:
+        """Call Docker builder prune API and return bytes reclaimed."""
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, self._client.api.prune_builds)
+        return int(result.get("SpaceReclaimed", 0))

@@ -4,6 +4,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Reclaim build cache**: `POST /disk/reclaim` endpoint triggers Docker build-cache
+  pruning via `ExecutionBackend.prune_builds()`. Returns `{"space_reclaimed_bytes": <int>}`.
+  Noop and CLI backends return `0`; the SDK backend calls `docker builder prune` and
+  reports the `SpaceReclaimed` value from the Docker API.
 - **Centralized error handlers**: extracted inline `HTTPException` handler into
   `register_error_handlers()` in `lifecycle/error_handlers.py`. Added handlers for
   `RequestValidationError` (422 with structured `ErrorDetail` envelope) and a
