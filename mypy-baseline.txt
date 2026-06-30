@@ -11,12 +11,10 @@ src/robotsix_central_deploy/lifecycle/backend.py:0: note: Hint: "python3 -m pip 
 src/robotsix_central_deploy/lifecycle/backend.py:0: note: (or run "mypy --install-types" to install all missing stub packages)
 src/robotsix_central_deploy/lifecycle/backend.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_central_deploy/lifecycle/backend.py:0: error: Unused "type: ignore" comment  [unused-ignore]
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Library stubs not installed for "yaml"  [import-untyped]
 src/robotsix_central_deploy/lifecycle/backend.py:0: note: Hint: "python3 -m pip install types-PyYAML"
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_central_deploy/lifecycle/backend.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
-src/robotsix_central_deploy/lifecycle/server.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_central_deploy/lifecycle/server.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_central_deploy/lifecycle/server.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 src/robotsix_central_deploy/lifecycle/server.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
