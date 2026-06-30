@@ -2123,6 +2123,31 @@ async def run_config_assist(
     else:
         merged = _deep_merge(partial, filled)
 
+    # Post-process: drop unconfigured accounts (e.g. the leftover onboard
+    # template slot such as an empty 'main') and ensure default_account points
+    # at a real configured account — otherwise the board fails to load with
+    # "default_account_id ... is not one of the configured accounts".
+    accts_obj = merged.get("accounts")
+    if isinstance(accts_obj, list):
+        kept: list[Any] = []
+        for a in accts_obj:
+            if not isinstance(a, dict):
+                continue
+            auth = a.get("auth")
+            imap = a.get("imap")
+            user = auth.get("username") if isinstance(auth, dict) else None
+            host = imap.get("host") if isinstance(imap, dict) else None
+            if user or host:
+                kept.append(a)
+        merged["accounts"] = kept
+        kept_ids = [a.get("id") for a in kept]
+        if kept and merged.get("default_account") not in kept_ids:
+            merged["default_account"] = kept[0].get("id", "")
+
+    # Write the cleaned config back to the volume so the board reads the
+    # de-stubbed config with a valid default_account (the detect output left
+    # the empty template slot and/or default_account='main').
+    await backend.write_config_to_volume(comp_cfg.config_volume, merged)
     # Persist detected config so GET /config shows it and Save is idempotent
     await config_yaml_store.update_current(name, merged)
 
