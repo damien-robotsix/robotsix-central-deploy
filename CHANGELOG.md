@@ -4,6 +4,8 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Dashboard: primary row health badge now reflects overall component health (primary + siblings) with a per-container breakdown tooltip on hover.
+
 - **Sibling health in component status**: `GET /services/{name}` now includes
   `sibling_health` (per-container health snapshots for sibling services) and
   `overall_health` (a component-level rollup that considers the primary plus
