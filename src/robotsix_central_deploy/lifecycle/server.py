@@ -2006,13 +2006,18 @@ async def run_config_assist(
 
     # Fetch config template + existing current
     template = await config_yaml_store.get_template(name) or {}
-    existing = await config_yaml_store.get_current(name) or template
+    current_raw = await config_yaml_store.get_current(name)
+    existing = current_raw or template
     partial = _merge_config(template, existing, body.values)
 
     # --- Account-aware mode resolution ---
     existing_accounts: list[dict[str, Any]] = (
-        [a for a in existing.get("accounts", []) if isinstance(a, dict) and a.get("id")]
-        if isinstance(existing.get("accounts"), list)
+        [
+            a
+            for a in current_raw.get("accounts", [])
+            if isinstance(a, dict) and a.get("id")
+        ]
+        if current_raw is not None and isinstance(current_raw.get("accounts"), list)
         else []
     )
     req_idx = body.target_account_index
@@ -2162,7 +2167,10 @@ async def run_config_assist(
             {k: v for k, v in partial.items() if k != "accounts"},
             {k: v for k, v in filled.items() if k != "accounts"},
         )
-        merged["accounts"] = list(existing.get("accounts", [])) + [merged_new_acct]
+        assert (
+            current_raw is not None
+        )  # add_new mode only reachable when current_raw is set
+        merged["accounts"] = list(current_raw.get("accounts", [])) + [merged_new_acct]
     else:
         merged = _deep_merge(partial, filled)
 

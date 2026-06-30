@@ -3189,6 +3189,216 @@ class TestConfigAssist:
         # submitted values — verify the value made it into the command.
         assert "user@example.com" in cmd
 
+    async def test_no_main_stub_on_fresh_onboard(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Fresh onboard with a template containing an id='main' placeholder
+        must NOT enter add_new mode — the placeholder should not count as an
+        existing account.  After detect, get_current returns exactly one
+        account, id != 'main', with imap/auth filled from detect output."""
+        await _seed_store("fresh-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "main",
+                    "auth": {"username": "", "password": ""},
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("fresh-mail", template)
+        # Do NOT call store.update_current — simulates a fresh onboard.
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="fresh-mail",
+            image="fresh-mail:latest",
+            container_name="fresh-mail",
+            has_config_yaml=True,
+            config_volume="fresh-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="fresh-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "x-com",
+                        "auth": {"username": "x@y.com", "password": "secret"},
+                        "imap": {"host": "imap.x.com"},
+                        "smtp": {"host": "smtp.x.com"},
+                    }
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/fresh-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "auth": {
+                                "username": "x@y.com",
+                                "password": "secret",
+                            }
+                        }
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 1, (
+            f"Expected 1 account after fresh onboard, got {len(accounts)}: {accounts}"
+        )
+        assert accounts[0].get("id") != "main", (
+            "Placeholder 'main' should have been replaced"
+        )
+        assert accounts[0]["imap"]["host"] == "imap.x.com"
+        assert accounts[0]["auth"]["username"] == "x@y.com"
+
+        # Verify persistence
+        current = await store.get_current("fresh-mail")
+        assert current is not None
+        assert len(current["accounts"]) == 1
+        assert current["accounts"][0].get("id") != "main"
+
+    async def test_existing_accounts_preserved_add_new(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Regression guard: after Edit 1, add_new mode still works correctly.
+        Pre-seed one real account; send a second via the seed bar.
+        After assist, get_current returns exactly two accounts:
+        slot 0 matches the pre-existing account, slot 1 has the new imap host."""
+        await _seed_store("mail-multi")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "main",
+                    "auth": {"username": "", "password": ""},
+                    "imap": {"host": ""},
+                    "smtp": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("mail-multi", template)
+        # Pre-seed one real account — add_new should be reachable.
+        await store.update_current(
+            "mail-multi",
+            {
+                "accounts": [
+                    {
+                        "id": "existing",
+                        "auth": {"username": "a@b.com", "password": "x"},
+                        "imap": {"host": "imap.b.com"},
+                        "smtp": {"host": "smtp.b.com"},
+                    }
+                ]
+            },
+        )
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="mail-multi",
+            image="mail-multi:latest",
+            container_name="mail-multi",
+            has_config_yaml=True,
+            config_volume="mail-multi-config",
+            config_assist_command="detect --overwrite",
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+                ConfigAssistSeed(key="accounts.0.auth.password"),
+            ],
+            mounts=[VolumeMount(host="mail-multi-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        async def _fake_run_assist(*args, **kwargs) -> str:
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "existing",
+                        "auth": {"username": "a@b.com", "password": "x"},
+                        "imap": {"host": "imap.b.com"},
+                        "smtp": {"host": "smtp.b.com"},
+                    },
+                    {
+                        "id": "new-acct",
+                        "auth": {"username": "n@c.com", "password": "y"},
+                        "imap": {"host": "imap.c.com"},
+                        "smtp": {"host": "smtp.c.com"},
+                    },
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/mail-multi/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "auth": {
+                                "username": "n@c.com",
+                                "password": "y",
+                            }
+                        }
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 2, (
+            f"Expected 2 accounts, got {len(accounts)}: {accounts}"
+        )
+        assert accounts[0]["id"] == "existing"
+        assert accounts[1]["imap"]["host"] == "imap.c.com"
+
+        # Verify persistence
+        current = await store.get_current("mail-multi")
+        assert current is not None
+        assert len(current["accounts"]) == 2
+        assert current["accounts"][0]["id"] == "existing"
+        assert current["accounts"][1]["imap"]["host"] == "imap.c.com"
+
     async def test_office365_imap_host_sets_oauth2_flag(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
