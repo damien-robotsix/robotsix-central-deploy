@@ -48,7 +48,7 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | Variable | Default | Description |
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_DISK_PATH` | `/` | Filesystem path to monitor for disk usage. Set to `/host_root` when running containerised with a host-root bind mount. |
-| `ROBOTSIX_LIFECYCLE_DISK_WARN_BYTES` | `5368709120` (5 GiB) | Disk usage warning threshold in bytes. A warning is emitted when free space on `DISK_PATH` drops below this value. |
+| `ROBOTSIX_LIFECYCLE_DISK_WARN_PERCENT` | `10.0` (10%) | Disk usage warning threshold as a percentage of total disk. A warning is emitted when free space drops below this percentage. Changed from `DISK_WARN_BYTES` (integer bytes) to `DISK_WARN_PERCENT` (float percent). |
 
 ### Registry
 
