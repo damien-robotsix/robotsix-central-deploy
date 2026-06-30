@@ -1677,7 +1677,10 @@ def _merge_config(
     # storage as the literal "SECRET" sentinel — and be ingested as a real
     # credential by components that read config.yaml directly (e.g. auto-mail,
     # which has no split-config sanitiser). Strip every residual sentinel.
-    return _strip_secret_sentinels(merged)
+    # ``merged`` is always a dict at the top level, so the recursive strip
+    # returns a dict here; the typed local narrows the ``Any`` for mypy.
+    stripped: dict[str, Any] = _strip_secret_sentinels(merged)
+    return stripped
 
 
 def _strip_secret_sentinels(value: Any) -> Any:
