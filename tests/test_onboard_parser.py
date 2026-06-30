@@ -321,6 +321,50 @@ services:
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.claude_mount is False
 
+    def test_host_docker_sock_true_on_sibling(self):
+        """host-docker-sock label on a non-primary sibling parses to True."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  app:
+    image: ghcr.io/damien-robotsix/app:main
+    labels:
+      robotsix.deploy.primary: "true"
+  socket-proxy:
+    image: ghcr.io/damien-robotsix/socket-proxy:main
+    labels:
+      robotsix.deploy.host-docker-sock: "true"
+"""
+        spec = parse_compose(_bytes(y), name="app", git_url="https://x.com/r.git")
+        assert spec.host_docker_sock is False
+        assert len(spec.siblings) == 1
+        assert spec.siblings[0].host_docker_sock is True
+
+    def test_host_docker_sock_not_present(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.host_docker_sock is False
+
+    def test_host_docker_sock_on_primary_raises(self):
+        """host-docker-sock is rejected on the primary service."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.host-docker-sock: "true"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "robotsix.deploy.host-docker-sock" in str(exc.value)
+        assert "primary" in str(exc.value).lower()
+
     def test_stateful_volume_label(self):
         y = """\
 # central-deploy-contract-version: 1

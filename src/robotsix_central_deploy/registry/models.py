@@ -37,6 +37,7 @@ class ServiceConfig(BaseModel):
     mounts: list[VolumeMount] = []
     env: dict[str, str] = {}
     claude_mount: bool = False
+    host_docker_sock: bool = False
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
@@ -65,6 +66,7 @@ class ComponentConfig(BaseModel):
     env: dict[str, str] = {}
     health_check: Optional[HealthCheck] = None
     claude_mount: bool = False
+    host_docker_sock: bool = False
     named_volumes: list[str] = []  # volume names to pre-create at deploy time
     stateful_volumes: list[
         str

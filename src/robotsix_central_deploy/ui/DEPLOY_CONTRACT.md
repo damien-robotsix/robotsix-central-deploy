@@ -184,6 +184,36 @@ This is the **single permitted host bind-mount** in the contract.
   in central-deploy's persisted component spec and takes effect on the next
   start.
 
+### `robotsix.deploy.host-docker-sock: "true"` (service-level, non-primary only)
+
+Opt-in label that makes central-deploy bind the host Docker socket into the
+labeled service at container-create time.
+
+- When present with value `"true"`, central-deploy injects an additional
+  bind-mount at run time:
+  - **Host path:** `/var/run/docker.sock`
+  - **Container path:** `/var/run/docker.sock`
+  - **Mode:** read-only (`ro`)
+- This mount does **not** appear in the compose `volumes:` list and MUST NOT
+  be declared in the top-level `volumes:` section.
+- **Only valid on a non-primary service.** Applying it to the primary service
+  (or to a single-service compose, which is implicitly primary) is a **parse
+  error**.
+
+> **⚠ SECURITY.** The host Docker socket grants the labeled container
+> **root-equivalent control of the host Docker daemon** — anything that can
+> reach this socket can start privileged containers, mount the host
+> filesystem, and effectively become root on the host. This label MUST be
+> applied **only** to a hardened socket-proxy sibling (e.g. a filtering
+> proxy such as `tecnativa/docker-socket-proxy`) that mediates access for the
+> rest of the component — **never** to the primary application container. The
+> mount is read-only (`ro`), which prevents writes to the socket file itself
+> but does **not** by itself prevent privileged Docker API calls; the
+> hardened proxy is what constrains the API surface.
+
+This label is **additive** and v1-compatible: composes that omit it behave
+exactly as before (no socket mount).
+
 ### `robotsix.deploy.config-target` (service-level)
 
 Full in-container path to the config file the app reads (e.g.
@@ -257,6 +287,7 @@ volumes:
 | N>1 services, no service has `robotsix.deploy.primary: "true"` | **Parse error.** |
 | N>1 services, multiple services have `robotsix.deploy.primary: "true"` | **Parse error.** |
 | Host bind-mount in `volumes` (without `claude-mount` label) | **Parse error.** |
+| `robotsix.deploy.host-docker-sock: "true"` on the primary service | **Parse error.** (non-primary services only) |
 | Top-level keys other than `version`, `services`, `volumes` | Silently ignored. |
 | `version` (top-level compose version string)   | Silently ignored. |
 | Labels outside `robotsix.deploy.*` namespace   | Silently ignored. |
@@ -345,6 +376,7 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `services.<name>.environment` keys | `env: dict[str, str]` | Values stored as `""` until set via UI. |
 | `services.<name>.healthcheck` | `health_check: Optional[HealthCheck]` | Durations (Go strings) → integer seconds.  `HealthCheck(test, interval_seconds, timeout_seconds, retries, start_period_seconds)`. |
 | `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/root/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
+| `labels.robotsix.deploy.host-docker-sock: "true"` | `host_docker_sock: bool` *(+ runtime injection)* | Non-primary only (parse error on primary). At deploy time binds `/var/run/docker.sock` → `/var/run/docker.sock` **read-only**.  **Not** stored in `ComponentConfig.mounts`.  ⚠ Grants root-equivalent host Docker control — hardened socket-proxy siblings only. |
 | `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
 | `labels.robotsix.deploy.config-target` | `ComponentConfig.config_volume` | Full in-container path to config.yaml. Resolved to the named-volume name from the matching volume mount. Required when `config/config.yaml` is present. |
 | Non-primary service entire block | `ComponentConfig.siblings[*]` (`ServiceConfig`) | One `ServiceConfig` per sibling. |

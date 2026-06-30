@@ -50,6 +50,7 @@ def _make_derived_spec(
         stateful_volumes=["test_data"],
         env={"KEY": "val"},
         claude_mount=False,
+        host_docker_sock=False,
     )
 
 
@@ -267,6 +268,7 @@ class TestOnboardPreflight:
             stateful_volumes=["auto-mail-data"],
             env={},
             claude_mount=False,
+            host_docker_sock=False,
         )
 
         with (
@@ -434,6 +436,7 @@ def _make_multi_service_derived_spec(name: str = "multi-svc") -> DerivedSpec:
         stateful_volumes=[],
         env={"PRIMARY_KEY": "val"},
         claude_mount=False,
+        host_docker_sock=False,
         siblings=[
             SiblingDerivedSpec(
                 service_key="worker",
