@@ -5,10 +5,12 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..lifecycle.backend import ExecutionBackend
-from ..lifecycle.config import LifecycleConfig
+if TYPE_CHECKING:
+    from ..lifecycle.backend import ExecutionBackend
+    from ..lifecycle.config import LifecycleConfig
+
 from ..registry.config_store import ComponentConfigStore
 from .growth import compute_growth_records
 from .models import (

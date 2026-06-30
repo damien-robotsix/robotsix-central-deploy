@@ -4,6 +4,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Fix circular import in volume_audit**: moved `ExecutionBackend` and `LifecycleConfig`
+  imports in `volume_audit/scheduler.py` under `TYPE_CHECKING` to break a circular import
+  chain (`lifecycle` → `server` → `volume_audit.scheduler` → `lifecycle.backend`) that
+  caused `ImportError` during test collection.
+
 - Dashboard: primary row health badge now reflects overall component health (primary + siblings) with a per-container breakdown tooltip on hover.
 
 - **Sibling health in component status**: `GET /services/{name}` now includes
