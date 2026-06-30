@@ -82,7 +82,7 @@ class TestDiskEndpoint:
         assert "total_bytes" in data
         assert "used_bytes" in data
         assert "free_bytes" in data
-        assert "warn_threshold_bytes" in data
+        assert "warn_threshold_pct" in data
         assert "docker" in data
         assert data["total_bytes"] == 100_000_000
         assert data["used_bytes"] == 60_000_000
@@ -115,11 +115,11 @@ class TestDiskEndpoint:
                 free=10_737_000_000,
             ),
         )
-        server_mod.app.state.config.disk_warn_percent = 1.0
+        server_mod.app.state.config.disk_warn_pct = 10.0
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["free_bytes"] > data["warn_threshold_bytes"]
+        assert data["warn_threshold_pct"] == 10.0
 
     async def test_warning_when_free_below_threshold(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -134,11 +134,11 @@ class TestDiskEndpoint:
                 free=2_147_000_000,
             ),
         )
-        server_mod.app.state.config.disk_warn_percent = 99.0
+        server_mod.app.state.config.disk_warn_pct = 10.0
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["free_bytes"] < data["warn_threshold_bytes"]
+        assert data["warn_threshold_pct"] == 10.0
 
     async def test_disk_path_used(
         self, client: AsyncClient, auth_headers: dict, monkeypatch

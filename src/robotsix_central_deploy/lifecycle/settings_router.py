@@ -33,7 +33,7 @@ class SystemSettingsResponse(BaseModel):
     ghcr_token: str = ""
     auth_username: str = ""
     auth_password: str = ""
-    disk_warn_percent: float = 10.0
+    disk_warn_pct: float = 10.0
     registry_check_interval: int = 300
     log_level: str = "INFO"
     gateway_base_domain: str = ""
@@ -44,7 +44,7 @@ class SystemSettingsUpdate(BaseModel):
     ghcr_token: str = ""
     auth_username: str = ""
     auth_password: str = ""
-    disk_warn_percent: float = 10.0
+    disk_warn_pct: float = 10.0
     registry_check_interval: int = 300
     log_level: str = "INFO"
     gateway_base_domain: str = ""
@@ -71,7 +71,7 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         ghcr_token=SECRET_MASK if settings.ghcr_token else "",
         auth_username=settings.auth_username,
         auth_password=SECRET_MASK if settings.auth_password else "",
-        disk_warn_percent=settings.disk_warn_percent,
+        disk_warn_pct=settings.disk_warn_pct,
         registry_check_interval=settings.registry_check_interval,
         log_level=settings.log_level,
         gateway_base_domain=settings.gateway_base_domain,
@@ -107,7 +107,7 @@ async def get_settings(
         ghcr_token=effective_config.ghcr_token,
         auth_username=effective_config.auth_username,
         auth_password=effective_config.auth_password,
-        disk_warn_percent=effective_config.disk_warn_percent,
+        disk_warn_pct=effective_config.disk_warn_pct,
         registry_check_interval=effective_config.registry_check_interval,
         log_level=effective_config.log_level,
         gateway_base_domain=effective_config.gateway_base_domain,
@@ -157,7 +157,7 @@ async def put_settings(
         auth_password=body.auth_password
         if body.auth_password != SECRET
         else current.auth_password,
-        disk_warn_percent=body.disk_warn_percent,
+        disk_warn_pct=body.disk_warn_pct,
         registry_check_interval=body.registry_check_interval,
         log_level=body.log_level,
         gateway_base_domain=body.gateway_base_domain,

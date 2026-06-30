@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Settings disk warning threshold:** `disk_warn_bytes` renamed to `disk_warn_pct`
+  (a float percentage, default 10.0%).  The Settings form now accepts "Disk Warning
+  (% free)" with a `step=0.1` numeric input, and the `/disk` endpoint returns
+  `warn_threshold_pct` instead of `warn_threshold_bytes`.  The disk panel displays a
+  "Warn threshold" row and a dynamic banner like "⚠ Low disk space — free space is
+  below X%!".  Existing `settings.json` files with the old `disk_warn_bytes` key
+  silently drop it and use the 10.0% default.
 - **Settings form secret-field placeholders**: `ghcr_token` and `auth_password`
   now render as `••• set — enter a new value to change` placeholder when configured
   (instead of disabled `***` in the value, which was indistinguishable from empty).
