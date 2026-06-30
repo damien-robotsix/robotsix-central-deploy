@@ -2548,6 +2548,19 @@ class TestConfigAssist:
         )
         await config_store.put(cfg)
 
+        # Capture the pre-detect volume write so we can verify existing
+        # accounts are not clobbered.
+        captured_writes: list[dict] = []
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured_writes.append(dict(config_dict))
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
+        )
+
         received_command: list[str] = []
 
         async def _fake_run_assist(
@@ -2620,6 +2633,12 @@ class TestConfigAssist:
         # {accounts.1.auth.username}.
         assert "damien.robotsix@gmail.com" in cmd
         assert "{accounts.1." not in cmd
+
+        # Volume write: existing account NOT clobbered
+        assert len(captured_writes) == 1
+        vol_accts = captured_writes[0]["accounts"]
+        assert vol_accts[0]["id"] == "ovh"
+        assert vol_accts[0]["auth"]["username"] == "ovh-user@ovh.com"
 
     async def test_update_nth_account_uses_overwrite(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -2741,6 +2760,337 @@ class TestConfigAssist:
         assert "--overwrite" in cmd
         assert "updated@example.com" in cmd
         assert "accounts.0." not in cmd
+
+    async def test_add_account_three_existing_seed_bar_preserves_all(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When 3 accounts exist (e.g. ovh + gmail + gmail-robotsix) and the
+        seed bar clobbers accounts[0].auth.username, all existing accounts
+        must be preserved verbatim — no credential corruption, no
+        re-detection, and the new account lands at the correct index."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "",
+                    "auth": {"username": "", "password": "SECRET"},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+        await store.update_current(
+            "auto-mail",
+            {
+                "accounts": [
+                    {
+                        "id": "ovh",
+                        "auth": {"username": "ovh@ovh.com", "password": "secret-ovh"},
+                        "imap": {"host": "imap.ovh.com"},
+                    },
+                    {
+                        "id": "gmail",
+                        "auth": {
+                            "username": "g@g.com",
+                            "password": "secret-gmail",
+                        },
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                    {
+                        "id": "gmail-robotsix",
+                        "auth": {"username": "r@g.com", "password": "secret-r"},
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                ]
+            },
+        )
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        # Capture the pre-detect volume write to verify existing accounts
+        # are written verbatim (not clobbered by seed bar).
+        captured_writes: list[dict] = []
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured_writes.append(dict(config_dict))
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
+        )
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "ovh",
+                        "auth": {
+                            "username": "ovh@ovh.com",
+                            "password": "secret-ovh",
+                        },
+                        "imap": {"host": "imap.ovh.com"},
+                    },
+                    {
+                        "id": "gmail",
+                        "auth": {
+                            "username": "g@g.com",
+                            "password": "secret-gmail",
+                        },
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                    {
+                        "id": "gmail-robotsix",
+                        "auth": {"username": "r@g.com", "password": "secret-r"},
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                    {
+                        "id": "damien-robotsix-gmail-com",
+                        "auth": {"username": "damien.robotsix@gmail.com"},
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        # Simulate real frontend: all 3 existing accounts + seed bar
+        # clobbering slot 0 username (form secret fields are empty strings).
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "id": "ovh",
+                            "auth": {
+                                "username": "damien.robotsix@gmail.com",
+                                "password": "",
+                            },
+                        },
+                        {
+                            "id": "gmail",
+                            "auth": {"username": "g@g.com", "password": ""},
+                        },
+                        {
+                            "id": "gmail-robotsix",
+                            "auth": {"username": "r@g.com", "password": ""},
+                        },
+                    ]
+                }
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 4
+
+        # --- Existing accounts preserved verbatim ---
+        assert accounts[0]["id"] == "ovh"
+        assert accounts[0]["auth"]["username"] == "ovh@ovh.com"
+        assert accounts[1]["id"] == "gmail"
+        assert accounts[1]["auth"]["username"] == "g@g.com"
+        assert accounts[2]["id"] == "gmail-robotsix"
+        assert accounts[2]["auth"]["username"] == "r@g.com"
+
+        # New account lands at index 3 with derived id
+        assert accounts[3]["id"] == "damien-robotsix-gmail-com"
+        assert accounts[3]["auth"]["username"] == "damien.robotsix@gmail.com"
+
+        # --- Volume pre-detect write ---
+        assert len(captured_writes) == 1
+        seed = captured_writes[0]
+        seed_accts = seed["accounts"]
+        assert len(seed_accts) == 4  # 3 existing + 1 new seed
+
+        # Existing account 0 (ovh) NOT clobbered in volume write
+        assert seed_accts[0]["auth"]["username"] == "ovh@ovh.com"
+        assert seed_accts[0]["auth"]["password"] == "secret-ovh"
+        # Existing account 1 (gmail) preserved
+        assert seed_accts[1]["auth"]["username"] == "g@g.com"
+        assert seed_accts[1]["auth"]["password"] == "secret-gmail"
+        # Existing account 2 (gmail-robotsix) preserved
+        assert seed_accts[2]["auth"]["username"] == "r@g.com"
+        assert seed_accts[2]["auth"]["password"] == "secret-r"
+
+        # New account seed has the submitted email only (sparse)
+        assert seed_accts[3]["auth"]["username"] == "damien.robotsix@gmail.com"
+
+        # --- Command ---
+        assert len(received_command) == 1
+        cmd = received_command[0]
+        assert "damien.robotsix@gmail.com" in cmd
+        assert "--id damien-robotsix-gmail-com" in cmd
+        assert "--overwrite" not in cmd
+
+    async def test_add_account_name_used_when_template_id_is_placeholder(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Template has <account-N> placeholder default; the user-supplied
+        account_name must override it and must NOT leak into the command
+        or stored config."""
+        await _seed_store("auto-mail")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        template = {
+            "accounts": [
+                {
+                    "id": "<account-N>",
+                    "auth": {"username": "", "password": "SECRET"},
+                    "imap": {"host": ""},
+                }
+            ]
+        }
+        await store.save_template("auto-mail", template)
+        await store.update_current(
+            "auto-mail",
+            {
+                "accounts": [
+                    {
+                        "id": "main",
+                        "auth": {"username": "old@example.com"},
+                        "imap": {"host": "imap.old.com"},
+                    }
+                ]
+            },
+        )
+
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="auto-mail",
+            image="auto-mail:latest",
+            container_name="auto-mail",
+            has_config_yaml=True,
+            config_volume="auto-mail-config",
+            config_assist_command=(
+                "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
+            ),
+            config_assist_seeds=[
+                ConfigAssistSeed(key="accounts.0.auth.username"),
+            ],
+            mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        )
+        await config_store.put(cfg)
+
+        # Suppress volume write (not relevant for this test).
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            pass
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
+        )
+
+        received_command: list[str] = []
+
+        async def _fake_run_assist(
+            image,
+            command_str,
+            volume_name,
+            volume_mount_path,
+            env_dict,
+            timeout_seconds=60,
+        ) -> str:
+            received_command.append(command_str)
+            return "detect: OK"
+
+        async def _fake_read_config(volume_name: str) -> dict:
+            return {
+                "accounts": [
+                    {
+                        "id": "main",
+                        "auth": {"username": "old@example.com"},
+                        "imap": {"host": "imap.old.com"},
+                    },
+                    {
+                        "id": "mygmail",
+                        "auth": {"username": "new@x.com"},
+                        "imap": {"host": "imap.gmail.com"},
+                    },
+                ]
+            }
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "run_config_assist", _fake_run_assist
+        )
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "read_config_from_volume",
+            _fake_read_config,
+        )
+
+        resp = await client.post(
+            "/services/auto-mail/config/assist",
+            json={
+                "values": {
+                    "accounts": [
+                        {
+                            "id": "main",
+                            "auth": {"username": "old@example.com", "password": ""},
+                        },
+                        {
+                            "auth": {"username": "new@x.com", "password": ""},
+                        },
+                    ]
+                },
+                "account_name": "mygmail",
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        accounts = data["config"]["accounts"]
+        assert len(accounts) == 2
+
+        # New account id is the user-supplied name, not <account-N>
+        assert accounts[1]["id"] == "mygmail"
+
+        # No <account-N> placeholder anywhere in the response
+        for acct in accounts:
+            assert "<account-N>" not in str(acct)
+
+        # Command contains --id mygmail, not <account-N>
+        assert len(received_command) == 1
+        cmd = received_command[0]
+        assert "--id mygmail" in cmd
+        assert "<account-N>" not in cmd
 
     async def test_first_setup_no_accounts_backward_compat(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
