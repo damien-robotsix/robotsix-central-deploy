@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import posixpath
 import re
 import shutil
 from collections.abc import AsyncIterator
@@ -28,7 +29,7 @@ from typing import Any
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from .auth import verify_auth
@@ -115,6 +116,16 @@ class EnvResponse(BaseModel):
 class EnvUpdate(BaseModel):
     env: dict[str, str] = {}
     secrets: dict[str, str] = {}
+
+
+class VolumeEntryModel(BaseModel):
+    name: str
+    is_dir: bool
+    size_bytes: int
+
+
+class VolumeLsResponse(BaseModel):
+    entries: list[VolumeEntryModel]
 
 
 # ---------------------------------------------------------------------------
@@ -466,6 +477,31 @@ async def _get_component_config_store(request: Request) -> ComponentConfigStore:
     return request.app.state.component_config_store  # type: ignore[no-any-return]
 
 
+def _safe_volume_path(raw: str) -> str:
+    """Normalise *raw* path and return a safe relative path confined to the volume root.
+
+    posixpath.normpath clamps all '..' components that would escape '/', so
+    normpath('/' + '../../etc/passwd') == '/etc/passwd'. Stripping the leading '/'
+    gives 'etc/passwd', which inside the container maps to '/vol/etc/passwd' — safe.
+    Empty string is valid (volume root).
+    """
+    normalized = posixpath.normpath("/" + raw.strip("/"))
+    return normalized.lstrip("/")
+
+
+_BINARY_EXTENSIONS: frozenset[str] = frozenset(
+    {".db", ".db-wal", ".db-shm", ".db-journal", ".sqlite", ".sqlite3"}
+)
+
+
+def _is_binary(rel_path: str, data: bytes) -> bool:
+    """Return True when the file should be refused as binary."""
+    ext = posixpath.splitext(rel_path)[1].lower()
+    if ext in _BINARY_EXTENSIONS:
+        return True
+    return b"\x00" in data[:8192]  # NUL-byte sniff
+
+
 def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "DerivedSpec":
     """Prefix all named-volume hosts with the component name.
 
@@ -623,73 +659,43 @@ async def get_volume_audit(
     return scheduler.get_audit_response()
 
 
-# ---------------------------------------------------------------------------
-# GET /volumes/{name}/ls  —  list files in a data volume
-# ---------------------------------------------------------------------------
-
-
-@app.get(
-    "/volumes/{name}/ls",
-    response_model=VolumeListResponse,
-    summary="List files in a data volume",
-)
-async def list_volume_files(
+@app.get("/volumes/{name}/ls", response_model=VolumeLsResponse)
+async def list_volume_path_route(
     name: str,
-    path: str = "",
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    path: str = Query(default=""),
     _auth: None = Depends(verify_auth),
-) -> VolumeListResponse:
-    """Return immediate children of a directory within a named volume.
-
-    Only volumes declared in at least one component's ``named_volumes`` are
-    browsable.  ``path`` defaults to the volume root.
-    """
-    _assert_volume_browsable(name, component_config_store)
-    rel = _validate_volume_path(path)
-    try:
-        entries_raw = await backend.list_volume_dir(name, rel)
-    except NotImplementedError:
-        raise HTTPException(
-            status_code=501,
-            detail="Volume browsing not supported by this backend",
-        )
-    return VolumeListResponse(entries=[VolumeEntry(**e) for e in entries_raw])
+    backend: ExecutionBackend = Depends(_get_backend),
+) -> VolumeLsResponse:
+    rel_path = _safe_volume_path(path)
+    entries = await backend.list_volume_path(name, rel_path)
+    return VolumeLsResponse(
+        entries=[VolumeEntryModel(**e) for e in entries]
+    )
 
 
-# ---------------------------------------------------------------------------
-# GET /volumes/{name}/cat  —  read a text file from a data volume
-# ---------------------------------------------------------------------------
-
-
-@app.get(
-    "/volumes/{name}/cat",
-    response_model=VolumeFileResponse,
-    summary="Read a text file from a data volume",
-)
+@app.get("/volumes/{name}/cat")
 async def cat_volume_file(
     name: str,
-    path: str = "",
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    path: str = Query(...),
     _auth: None = Depends(verify_auth),
-) -> VolumeFileResponse:
-    """Return the text content of a file within a named volume.
-
-    Files larger than ``VOLUME_CAT_MAX_BYTES`` are truncated (``truncated=True``).
-    Binary files (NUL byte or non-UTF-8) return ``binary=True`` and ``content=null``.
-    """
-    _assert_volume_browsable(name, component_config_store)
-    rel = _validate_volume_path(path)
-    try:
-        result = await backend.read_volume_file(name, rel, VOLUME_CAT_MAX_BYTES)
-    except NotImplementedError:
+    backend: ExecutionBackend = Depends(_get_backend),
+) -> PlainTextResponse:
+    rel_path = _safe_volume_path(path)
+    if not rel_path:
         raise HTTPException(
-            status_code=501,
-            detail="Volume browsing not supported by this backend",
+            status_code=400,
+            detail="path must point to a file, not the volume root",
         )
-    return VolumeFileResponse(**result)
-
+    data = await backend.read_volume_file(name, rel_path)
+    if _is_binary(rel_path, data):
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "Binary file — cannot display. "
+                "Unsupported format (database, binary blob)."
+            ),
+        )
+    return PlainTextResponse(data.decode("utf-8", errors="replace"))
 
 # ---------------------------------------------------------------------------
 # GET /services

@@ -120,27 +120,29 @@ class ExecutionBackend(ABC):
         Returns 0 on error or when the volume is inaccessible.
         """
 
+
     @abstractmethod
-    async def list_volume_dir(
+    async def list_volume_path(
         self, volume_name: str, rel_path: str
     ) -> list[dict[str, Any]]:
-        """Return one entry per immediate child of ``/vol/<rel_path>``.
+        """List entries one level deep at *rel_path* inside *volume_name*.
 
-        Each entry is ``{"name": str, "type": "file"|"dir", "size_bytes": int}``
-        (dirs report size_bytes 0).
+        Each entry is a dict: {"name": str, "is_dir": bool, "size_bytes": int}.
+        Dirs come before files; within each group, sorted alphabetically by name.
+        *rel_path* is a relative POSIX path (empty string = volume root).
+        Returns [] on any Docker / filesystem error.
         """
         ...
 
     @abstractmethod
     async def read_volume_file(
-        self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict[str, Any]:
-        """Return ``{"size_bytes": int, "content": str|None, "binary": bool,
-        "truncated": bool}`` for the file at ``/vol/<rel_path>``.
+        self, volume_name: str, rel_path: str
+    ) -> bytes:
+        """Return up to 262144 bytes (256 KB) of file at *rel_path* in *volume_name*.
 
-        *content* is None when the file is binary (NUL byte or UTF-8
-        decode failure).  *truncated* is True when the file exceeded
-        *max_bytes*.
+        *rel_path* must point to a file (not a directory).
+        Returns b'' on any error or absent file.
+        Binary vs text discrimination is the caller's responsibility.
         """
         ...
 
@@ -222,15 +224,11 @@ class NoopBackend(ExecutionBackend):
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0
 
-    async def list_volume_dir(
-        self, volume_name: str, rel_path: str
-    ) -> list[dict[str, Any]]:
-        raise NotImplementedError("list_volume_dir not supported for NoopBackend")
+    async def list_volume_path(self, volume_name: str, rel_path: str) -> list[dict[str, Any]]:
+        return []
 
-    async def read_volume_file(
-        self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict[str, Any]:
-        raise NotImplementedError("read_volume_file not supported for NoopBackend")
+    async def read_volume_file(self, volume_name: str, rel_path: str) -> bytes:
+        return b''
 
 
 # ---------------------------------------------------------------------------
@@ -366,19 +364,11 @@ class DockerBackend(ExecutionBackend):
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0  # CLI backend lacks volume-inspection support; placeholder.
 
-    async def list_volume_dir(
-        self, volume_name: str, rel_path: str
-    ) -> list[dict[str, Any]]:
-        raise NotImplementedError(
-            "list_volume_dir not supported for DockerBackend — use DockerSdkBackend"
-        )
+    async def list_volume_path(self, volume_name: str, rel_path: str) -> list[dict[str, Any]]:
+        raise NotImplementedError("Use DockerSdkBackend for volume browsing")
 
-    async def read_volume_file(
-        self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict[str, Any]:
-        raise NotImplementedError(
-            "read_volume_file not supported for DockerBackend — use DockerSdkBackend"
-        )
+    async def read_volume_file(self, volume_name: str, rel_path: str) -> bytes:
+        raise NotImplementedError("Use DockerSdkBackend for volume browsing")
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
@@ -965,104 +955,71 @@ class DockerSdkBackend(ExecutionBackend):
             logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
             return 0
 
-    async def list_volume_dir(
+    async def list_volume_path(
         self, volume_name: str, rel_path: str
     ) -> list[dict[str, Any]]:
-        """List immediate children of ``/vol/<rel_path>`` via a one-shot busybox container."""
         loop = asyncio.get_running_loop()
-        # Shell script: iterate /vol/$1, emit tab-delimited  type\tsize\tname
-        # per child.  $1 is the normalised relative path (positional arg, not
-        # interpolated).  Directories report size 0.
-        script = (
-            'target="/vol/$1"\n'
-            'for f in "$target"/* "$target"/.*; do\n'
-            '  [ ! -e "$f" ] && continue\n'
-            '  bn=$(basename "$f")\n'
-            '  [ "$bn" = "." ] && continue\n'
-            '  [ "$bn" = ".." ] && continue\n'
-            '  if [ -d "$f" ]; then\n'
-            '    printf "dir\\t0\\t%s\\n" "$bn"\n'
-            '  elif [ -f "$f" ]; then\n'
-            '    sz=$(stat -c "%s" "$f" 2>/dev/null || echo 0)\n'
-            '    printf "file\\t%s\\t%s\\n" "$sz" "$bn"\n'
-            "  fi\n"
-            "done\n"
+        LIST_SCRIPT = (
+            'TARGET=/vol; [ -n "$1" ] && TARGET="$TARGET/$1"\n'
+            'find "$TARGET" -maxdepth 1 -mindepth 1 '
+            '-exec sh -c \''
+            'p="$1"; n="${p##*/}"; '
+            'if [ -d "$p" ]; then printf "d\\t0\\t%s\\n" "$n"; '
+            'else printf "f\\t%s\\t%s\\n" "$(stat -c %s "$p")" "$n"; fi'
+            "' _ {} \\; 2>/dev/null"
         )
-        raw: bytes = await loop.run_in_executor(
-            None,
-            lambda: self._client.containers.run(
-                "busybox",
-                command=["sh", "-c", script, "sh", rel_path],
-                volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                remove=True,
-            ),
-        )
-        entries: list[dict[str, Any]] = []
-        for line in raw.decode(errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split("\t", 2)
-            if len(parts) != 3:
-                continue
-            typ, size_str, name = parts
-            try:
-                size_bytes = int(size_str)
-            except ValueError:
-                size_bytes = 0
-            entries.append({"name": name, "type": typ, "size_bytes": size_bytes})
-        return entries
+        try:
+            raw: bytes = await loop.run_in_executor(
+                None,
+                lambda: self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", LIST_SCRIPT, "sh", rel_path],
+                    volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
+                    remove=True,
+                ),
+            )
+            text = raw.decode("utf-8", errors="replace")
+            entries: list[dict[str, Any]] = []
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split("\t", 2)
+                if len(parts) < 3:
+                    continue
+                entries.append({
+                    "is_dir": parts[0] == "d",
+                    "size_bytes": int(parts[1]),
+                    "name": parts[2],
+                })
+            entries.sort(key=lambda e: (not e["is_dir"], e["name"]))
+            return entries
+        except Exception as exc:
+            logger.warning(
+                "list_volume_path(%r, %r) failed: %s", volume_name, rel_path, exc
+            )
+            return []
 
     async def read_volume_file(
-        self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict[str, Any]:
-        """Read ``/vol/<rel_path>`` via a one-shot busybox container.
-
-        Returns size, content (or None for binary), binary flag, truncated flag.
-        """
+        self, volume_name: str, rel_path: str
+    ) -> bytes:
         loop = asyncio.get_running_loop()
-        # $1 = rel_path, $2 = max_bytes+1 (head limit)
-        script = (
-            'target="/vol/$1"\n'
-            "maxp1=$2\n"
-            'stat -c "%s" "$target" 2>/dev/null || echo 0\n'
-            'head -c "$maxp1" "$target" 2>/dev/null || true\n'
-        )
-        raw: bytes = await loop.run_in_executor(
-            None,
-            lambda: self._client.containers.run(
-                "busybox",
-                command=["sh", "-c", script, "sh", rel_path, str(max_bytes + 1)],
-                volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                remove=True,
-            ),
-        )
-        # First line is the file size; the rest is the file content.
-        lines = raw.split(b"\n", 1)
         try:
-            size_bytes = int(lines[0].strip())
-        except (ValueError, IndexError):
-            size_bytes = 0
-        body = lines[1] if len(lines) > 1 else b""
-
-        truncated = len(body) > max_bytes
-        if truncated:
-            body = body[:max_bytes]
-
-        binary = b"\x00" in body
-        content: str | None = None
-        if not binary:
-            try:
-                content = body.decode("utf-8")
-            except UnicodeDecodeError:
-                binary = True
-
-        return {
-            "size_bytes": size_bytes,
-            "content": content,
-            "binary": binary,
-            "truncated": truncated,
-        }
+            raw: bytes = await loop.run_in_executor(
+                None,
+                lambda: self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", 'head -c 262144 "/vol/$1"', "sh", rel_path],
+                    volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
+                    remove=True,
+                ),
+            )
+            return raw
+        except Exception as exc:
+            logger.warning(
+                "read_volume_file(%r, %r) failed: %s", volume_name, rel_path, exc
+            )
+            return b""
 
     async def run_config_assist(
         self,

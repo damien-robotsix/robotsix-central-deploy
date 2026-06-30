@@ -294,75 +294,59 @@
     padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow-y: auto;
     white-space: pre-wrap; margin-top: 0.5rem;
   }
-  /* Volume browser modal */
-  .vb-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    z-index: 102; align-items: center; justify-content: center;
+  /* ── Volume browser modal ──────────────────────────── */
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: center; justify-content: center; z-index: 1000;
   }
-  .vb-overlay.open { display: flex; }
-  .vb-panel {
-    background: #0f172a; border: 1px solid #334155; border-radius: 8px;
-    width: min(720px, 92vw); max-height: 85vh; display: flex; flex-direction: column;
-    overflow: hidden;
+  .modal.open { display: flex; }
+  .modal-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.25rem; min-width: 480px; max-width: 680px;
+    max-height: 85vh; overflow-y: auto; width: 100%;
   }
-  .vb-header {
+  .modal-header {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 20px; border-bottom: 1px solid #1e293b;
+    margin-bottom: 0.75rem;
   }
-  .vb-header h2 { font-size: 1.05rem; color: var(--blue); margin: 0; }
-  .vb-close {
-    background: none; border: 1px solid #475569; border-radius: 4px;
-    color: #94a3b8; font-size: 1.1rem; width: 30px; height: 30px;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  .modal-header h3 { font-size: 1rem; color: #e2e8f0; font-weight: 600; margin: 0; }
+  .modal-header button {
+    background: none; border: none; color: #94a3b8; font-size: 1.25rem;
+    cursor: pointer; line-height: 1;
   }
-  .vb-close:hover { background: #1e293b; color: #e2e8f0; }
-  .vb-breadcrumb {
-    padding: 8px 20px; font-size: 0.82rem; color: #94a3b8;
-    border-bottom: 1px solid #1e293b; display: flex; align-items: center; gap: 6px;
+  .modal-header button:hover { color: #fff; }
+  .modal-subheader {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem; font-size: 0.82rem; color: #94a3b8;
   }
-  .vb-breadcrumb button {
+  .modal-subheader button {
+    background: none; border: none; color: #94a3b8; cursor: pointer;
+    font-size: 1rem;
+  }
+  .breadcrumb { margin-bottom: 0.75rem; font-size: 0.82rem; color: #94a3b8; }
+  .breadcrumb button { font-size: 0.82rem; }
+  .file-content {
+    background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 4px;
+    max-height: 400px; overflow: auto; font-size: 0.78rem; white-space: pre;
+    margin: 0;
+  }
+  .error-msg {
+    background: var(--red-bg); color: var(--red); border: 1px solid var(--red);
+    padding: 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 0.82rem;
+  }
+  .link-btn {
     background: none; border: none; color: var(--blue); cursor: pointer;
-    font-size: 0.82rem; padding: 0; text-decoration: underline;
+    font-size: 0.82rem; padding: 0; text-align: left;
   }
-  .vb-breadcrumb button:hover { color: #93c5fd; }
-  .vb-listing {
-    flex: 1; overflow-y: auto; padding: 10px 20px; min-height: 80px;
+  .link-btn:hover { text-decoration: underline; }
+  .volume-listing { width: 100%; border-collapse: collapse; }
+  .volume-listing td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .volume-listing .size { text-align: right; color: #94a3b8; font-size: 0.78rem; }
+  .btn-small {
+    background: var(--blue); color: #fff; border: none; border-radius: 4px;
+    padding: 2px 8px; font-size: 0.72rem; cursor: pointer;
   }
-  .vb-listing table { width: 100%; border-collapse: collapse; }
-  .vb-listing th { text-align: left; padding: 5px 8px; font-size: 0.78rem; color: #64748b; font-weight: 600; }
-  .vb-listing td { padding: 5px 8px; font-size: 0.85rem; border-bottom: 1px solid #1e293b; }
-  .vb-listing tr:hover td { background: #1a2332; }
-  .vb-entry {
-    color: var(--blue); cursor: pointer; text-decoration: none;
-  }
-  .vb-entry:hover { color: #93c5fd; text-decoration: underline; }
-  .vb-dir::before { content: '\01F4C1 '; }
-  .vb-file::before { content: '\01F4C4 '; }
-  .vb-parent { color: #94a3b8; cursor: pointer; font-size: 0.82rem; }
-  .vb-parent:hover { color: #e2e8f0; }
-  .vb-content-area {
-    border-top: 1px solid #1e293b; padding: 12px 20px; max-height: 45vh;
-    overflow-y: auto; display: none;
-  }
-  .vb-content-area.open { display: block; }
-  .vb-content-area pre {
-    background: #1e1e1e; color: #d4d4d4; font-size: 0.78rem;
-    padding: 10px; border-radius: 4px; white-space: pre-wrap;
-    word-break: break-all; margin: 0; max-height: 38vh; overflow-y: auto;
-  }
-  .vb-content-meta {
-    font-size: 0.75rem; color: #94a3b8; margin-bottom: 6px;
-  }
-  .vb-error {
-    padding: 8px 20px; font-size: 0.82rem; color: var(--red);
-    background: var(--red-bg); border-top: 1px solid var(--red);
-    display: none;
-  }
-  .vb-error.open { display: block; }
-  .volume-name-cell {
-    color: var(--blue); cursor: pointer; text-decoration: none;
-  }
-  .volume-name-cell:hover { color: #93c5fd; text-decoration: underline; }
+  .btn-small:hover { opacity: 0.85; }
 </style>
 </head>
 <body>
@@ -465,6 +449,25 @@
     <div class="log-body">
       <pre id="log-output"></pre>
     </div>
+  </div>
+</div>
+
+<div id="volume-browser-modal" class="modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="volume-browser-title">Volume browser</h3>
+      <button onclick="closeVolumeBrowser()">✕</button>
+    </div>
+    <nav id="volume-browser-breadcrumb" class="breadcrumb"></nav>
+    <div id="volume-browser-listing"></div>
+    <div id="volume-browser-file-view" style="display:none">
+      <div class="modal-subheader">
+        <span id="volume-browser-file-path"></span>
+        <button onclick="closeVolumeFileView()">✕</button>
+      </div>
+      <pre id="volume-browser-pre" class="file-content"></pre>
+    </div>
+    <p id="volume-browser-error" class="error-msg" style="display:none"></p>
   </div>
 </div>
 
@@ -595,19 +598,6 @@
   <div id="settings-toast" style="margin-top:12px;font-size:0.85rem;"></div>
 </div>
 
-<!-- Volume browser modal -->
-<div id="vb-modal" class="vb-overlay" role="dialog" aria-modal="true" aria-labelledby="vb-modal-title">
-  <div class="vb-panel">
-    <div class="vb-header">
-      <h2 id="vb-modal-title">Volume: <span id="vb-volume-name"></span></h2>
-      <button class="vb-close" onclick="closeVolumeBrowser()" title="Close">&times;</button>
-    </div>
-    <div id="vb-breadcrumb" class="vb-breadcrumb"></div>
-    <div id="vb-listing" class="vb-listing"></div>
-    <div id="vb-content-area" class="vb-content-area"></div>
-    <div id="vb-error" class="vb-error"></div>
-  </div>
-</div>
 
 <script>
 let logAbortController = null;
@@ -842,10 +832,16 @@ function renderDiskPanel(data) {
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
-        `<tr><th style="font-weight:400;"><span class="volume-name-cell" onclick="openVolumeBrowser('${escAttr(v.name)}')">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
+        `<tr>
+  <th>${escHtml(v.name)}</th>
+  <td class="size">${fmt_bytes(v.size_bytes)}${
+    v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'
+  }</td>
+  <td><button class="btn-small" onclick="openVolumeBrowser(${escHtml(JSON.stringify(v.name))})">Browse</button></td>
+</tr>`
     ).join('');
     const volTable = vols.length
-        ? `<table style="margin-top:10px;"><tr><th colspan="2" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
+        ? `<table style="margin-top:10px;"><tr><th colspan="3" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
         : '';
     document.getElementById('disk-content').innerHTML = `
         <table>
@@ -1158,6 +1154,113 @@ function openEnvModal(name) {
 function closeEnvModal() {
   document.getElementById('env-modal').classList.remove('open');
   currentEnvComponent = null;
+}
+
+// ── Volume browser modal ──────────────────────────────────────────
+
+let _vbVolume = null, _vbPath = '';
+
+function openVolumeBrowser(volName) {
+  _vbVolume = volName;
+  _vbPath = '';
+  document.getElementById('volume-browser-title').textContent = 'Browse: ' + volName;
+  document.getElementById('volume-browser-file-view').style.display = 'none';
+  document.getElementById('volume-browser-error').style.display = 'none';
+  document.getElementById('volume-browser-modal').classList.add('open');
+  _vbLoad();
+}
+
+function closeVolumeBrowser() {
+  document.getElementById('volume-browser-modal').classList.remove('open');
+  _vbVolume = null;
+  _vbPath = '';
+}
+
+function closeVolumeFileView() {
+  document.getElementById('volume-browser-file-view').style.display = 'none';
+}
+
+async function _vbLoad() {
+  const listEl = document.getElementById('volume-browser-listing');
+  listEl.textContent = 'Loading\u2026';
+  const qs = new URLSearchParams({ path: _vbPath });
+  const r = await fetch(
+    `/volumes/${encodeURIComponent(_vbVolume)}/ls?${qs}`,
+    { credentials: 'same-origin' }
+  );
+  if (!r.ok) { _vbError(await r.text()); return; }
+  const { entries } = await r.json();
+  _vbBreadcrumb();
+  _vbRenderListing(entries, listEl);
+}
+
+function _vbBreadcrumb() {
+  const el = document.getElementById('volume-browser-breadcrumb');
+  const parts = _vbPath ? _vbPath.split('/') : [];
+  // root link
+  let html = `<button class="link-btn" onclick="_vbNav('')">${escHtml(_vbVolume)}</button>`;
+  let acc = '';
+  parts.forEach((p, i) => {
+    acc = acc ? acc + '/' + p : p;
+    html += ' / ';
+    if (i < parts.length - 1) {
+      // intermediate segment: clickable, path captured via JSON.stringify
+      html += `<button class="link-btn" onclick="_vbNav(${escHtml(JSON.stringify(acc))})">${escHtml(p)}</button>`;
+    } else {
+      html += escHtml(p); // current segment: plain text
+    }
+  });
+  el.innerHTML = html;
+}
+
+function _vbRenderListing(entries, listEl) {
+  if (!entries.length) { listEl.textContent = '(empty)'; return; }
+  const rows = entries.map(e => {
+    const icon = e.is_dir ? '\uD83D\uDCC1' : '\uD83D\uDCC4'; // 📁 or 📄
+    const label = e.is_dir ? e.name + '/' : e.name;
+    const fullPath = _vbPath ? _vbPath + '/' + e.name : e.name;
+    const pathArg = escHtml(JSON.stringify(fullPath));
+    const action = e.is_dir
+      ? `onclick="_vbNav(${pathArg})"`
+      : `onclick="_vbOpenFile(${pathArg})"`;
+    const size = e.is_dir ? '\u2014' : fmt_bytes(e.size_bytes);
+    return `<tr>
+      <td><button class="link-btn" ${action}>${icon} ${escHtml(label)}</button></td>
+      <td class="size">${size}</td>
+    </tr>`;
+  });
+  listEl.innerHTML = `<table class="volume-listing"><tbody>${rows.join('')}</tbody></table>`;
+}
+
+async function _vbNav(path) {
+  _vbPath = path;
+  document.getElementById('volume-browser-file-view').style.display = 'none';
+  document.getElementById('volume-browser-error').style.display = 'none';
+  await _vbLoad();
+}
+
+async function _vbOpenFile(filePath) {
+  document.getElementById('volume-browser-error').style.display = 'none';
+  const qs = new URLSearchParams({ path: filePath });
+  const r = await fetch(
+    `/volumes/${encodeURIComponent(_vbVolume)}/cat?${qs}`,
+    { credentials: 'same-origin' }
+  );
+  if (!r.ok) {
+    _vbError(await r.text());
+    return;
+  }
+  const text = await r.text();
+  document.getElementById('volume-browser-file-path').textContent = filePath;
+  document.getElementById('volume-browser-pre').textContent = text;
+  document.getElementById('volume-browser-file-view').style.display = 'block';
+}
+
+function _vbError(msg) {
+  const el = document.getElementById('volume-browser-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('volume-browser-listing').textContent = '';
 }
 
 async function fetchEnvConfig(name) {
@@ -2108,152 +2211,12 @@ async function saveSettings(event) {
 
 // ── Volume browser ────────────────────────────────────────────────
 
-let currentVolumeName = null;
-let currentVolumePath = '';
-
-function openVolumeBrowser(name) {
-  currentVolumeName = name;
-  currentVolumePath = '';
-  document.getElementById('vb-volume-name').textContent = name;
-  document.getElementById('vb-error').classList.remove('open');
-  document.getElementById('vb-content-area').classList.remove('open');
-  document.getElementById('vb-content-area').innerHTML = '';
-  document.getElementById('vb-modal').classList.add('open');
-  loadVolumeDir('');
-}
-
-function closeVolumeBrowser() {
-  document.getElementById('vb-modal').classList.remove('open');
-  currentVolumeName = null;
-  currentVolumePath = '';
-}
-
-async function loadVolumeDir(path) {
-  const errorEl = document.getElementById('vb-error');
-  const listingEl = document.getElementById('vb-listing');
-  const breadcrumbEl = document.getElementById('vb-breadcrumb');
-  const contentArea = document.getElementById('vb-content-area');
-  errorEl.classList.remove('open');
-  contentArea.classList.remove('open');
-  contentArea.innerHTML = '';
-  listingEl.innerHTML = '<div style="color:#64748b;font-size:0.82rem;">Loading\u2026</div>';
-
-  try {
-    const resp = await fetch(
-      `/volumes/${encodeURIComponent(currentVolumeName)}/ls?path=${encodeURIComponent(path || '/')}`,
-      { headers: authHeaders(), credentials: 'same-origin' }
-    );
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      const detail = data.error || data.detail || `HTTP ${resp.status}`;
-      if (resp.status === 404) {
-        showVbError('This volume is not browsable');
-      } else {
-        showVbError(detail);
-      }
-      listingEl.innerHTML = '';
-      return;
-    }
-
-    currentVolumePath = data.path || path;
-    renderBreadcrumb(currentVolumePath);
-    renderVolumeListing(data.entries || []);
-  } catch (e) {
-    showVbError(e.message);
-    listingEl.innerHTML = '';
-  }
-}
-
-function renderBreadcrumb(path) {
-  const el = document.getElementById('vb-breadcrumb');
-  const parts = (path || '').split('/').filter(Boolean);
-  let html = '<button onclick="loadVolumeDir(\'\')">/ (root)</button>';
-  let accum = '';
-  for (const p of parts) {
-    accum += '/' + p;
-    html += ` <span style="color:#475569;">/</span> <button onclick="loadVolumeDir('${escAttr(accum)}')">${escHtml(p)}</button>`;
-  }
-  el.innerHTML = html;
-}
-
-function renderVolumeListing(entries) {
-  const el = document.getElementById('vb-listing');
-  if (!entries || entries.length === 0) {
-    el.innerHTML = '<div style="color:#64748b;font-size:0.82rem;">(empty directory)</div>';
-    return;
-  }
-
-  // Show parent link if not at root
-  let parentRow = '';
-  if (currentVolumePath && currentVolumePath !== '' && currentVolumePath !== '/') {
-    const parentPath = currentVolumePath.substring(0, currentVolumePath.lastIndexOf('/')) || '';
-    parentRow = `<tr><td colspan="2"><span class="vb-parent" onclick="loadVolumeDir('${escAttr(parentPath || '')}')">\u2190 .. (parent)</span></td></tr>`;
-  }
-
-  const sorted = [...entries].sort((a, b) => {
-    if (a.type === b.type) return a.name.localeCompare(b.name);
-    return a.type === 'directory' ? -1 : 1;
-  });
-
-  const rows = sorted.map(e => {
-    const name = escHtml(e.name);
-    const size = e.size_bytes !== undefined ? fmt_bytes(e.size_bytes) : '\u2014';
-    const fullPath = (currentVolumePath ? currentVolumePath + '/' : '') + e.name;
-    if (e.type === 'directory') {
-      return `<tr><td><span class="vb-entry vb-dir" onclick="loadVolumeDir('${escAttr(fullPath)}')">${name}</span></td><td style="color:#64748b;">\u2014</td></tr>`;
-    }
-    return `<tr><td><span class="vb-entry vb-file" onclick="loadVolumeFile('${escAttr(fullPath)}', '${escAttr(e.name)}')">${name}</span></td><td style="color:#94a3b8;">${size}</td></tr>`;
-  }).join('');
-
-  el.innerHTML = `<table>${parentRow}${rows}</table>`;
-}
-
-async function loadVolumeFile(filePath, displayName) {
-  const errorEl = document.getElementById('vb-error');
-  const contentArea = document.getElementById('vb-content-area');
-  errorEl.classList.remove('open');
-
-  try {
-    const resp = await fetch(
-      `/volumes/${encodeURIComponent(currentVolumeName)}/cat?path=${encodeURIComponent(filePath)}`,
-      { headers: authHeaders(), credentials: 'same-origin' }
-    );
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      const detail = data.error || data.detail || `HTTP ${resp.status}`;
-      showVbError(detail);
-      return;
-    }
-
-    let metaHtml = `<span>${escHtml(displayName || filePath)}</span>`;
-    if (data.size_bytes !== undefined) {
-      metaHtml += ` <span style="color:#64748b;">(${fmt_bytes(data.size_bytes)})</span>`;
-    }
-    if (data.truncated) {
-      metaHtml += ' <span style="color:#f59e0b;">[truncated \u2014 showing first ' + escHtml(String(data.size_bytes || 'N')) + ' bytes]</span>';
-    }
-
-    if (data.binary) {
-      contentArea.innerHTML = `<div class="vb-content-meta">${metaHtml}</div><pre style="color:#f59e0b;">Binary file \u2014 not displayed</pre>`;
-    } else {
-      contentArea.innerHTML = `<div class="vb-content-meta">${metaHtml}</div><pre>${escHtml(data.content || '')}</pre>`;
-    }
-    contentArea.classList.add('open');
-  } catch (e) {
-    showVbError(e.message);
-  }
-}
-
-function showVbError(msg) {
-  const el = document.getElementById('vb-error');
-  el.textContent = msg;
-  el.classList.add('open');
 }
 
 // Bootstrap
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (document.getElementById('vb-modal').classList.contains('open')) {
+    if (document.getElementById('volume-browser-modal').classList.contains('open')) {
       closeVolumeBrowser();
     } else if (document.getElementById('onboard-modal').classList.contains('open')) {
       closeOnboardModal();
