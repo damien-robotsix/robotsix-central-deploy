@@ -1933,12 +1933,13 @@ function populateStep2(spec) {
 
   // Volumes
   var volsEl = document.getElementById('ob-volumes');
+  // No "starts EMPTY — migrate data before use" badge here: onboarding
+  // creates a brand-new component, so every volume legitimately starts
+  // empty and there is no prior data to migrate. The migrate caveat is
+  // only meaningful for an already-deployed service (see the dashboard
+  // service card's stateful-volume ⚠ tooltip).
   volsEl.innerHTML = spec.volume_mounts.map(function(m) {
-    var isStateful = spec.stateful_volumes.indexOf(m.host) !== -1;
-    var warn = isStateful
-      ? ' <span class="badge-amber">⚠ starts EMPTY — migrate data before use</span>'
-      : '';
-    return '<div>📦 <strong>' + escHtml(m.host) + '</strong> → ' + escHtml(m.container) + warn + '</div>';
+    return '<div>📦 <strong>' + escHtml(m.host) + '</strong> → ' + escHtml(m.container) + '</div>';
   }).join('');
 
   // Env — show only for repos WITHOUT config.yaml
