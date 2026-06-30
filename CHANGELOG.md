@@ -18,6 +18,8 @@ All notable changes to robotsix-central-deploy.
   (optional)", placeholder text "Leave blank for public images", and help row
   "Only required for private GHCR registry images." to clarify it is not
   required for public images.
+- **Dashboard panel for volume audit** — per-component volume sizes, growth
+  deltas, and flagged findings shown under the Disk Usage section.
 
 - **Fix: config-form Save corrupts multi-account configs** — five coordinated
   fixes for the `GET /config → form render → collectConfigValues → PUT /config`
