@@ -2144,6 +2144,29 @@ async def run_config_assist(
         if kept and merged.get("default_account") not in kept_ids:
             merged["default_account"] = kept[0].get("id", "")
 
+        # Office365 accounts: ensure oauth2_provider is flagged and prompt operator
+        _O365_SUFFIX = "office365.com"
+        _o365_detected = False
+        for _acct in kept:
+            _imap = _acct.get("imap")
+            _smtp = _acct.get("smtp")
+            _imap_host = _imap.get("host", "") if isinstance(_imap, dict) else ""
+            _smtp_host = _smtp.get("host", "") if isinstance(_smtp, dict) else ""
+            if _imap_host.endswith(_O365_SUFFIX) or _smtp_host.endswith(_O365_SUFFIX):
+                _acct_auth: Any = _acct.get("auth")
+                if not isinstance(_acct_auth, dict):
+                    _acct_auth = {}
+                    _acct["auth"] = _acct_auth
+                _acct_auth["oauth2_provider"] = "microsoft"
+                _acct_auth.pop("password", None)
+                _o365_detected = True
+        if _o365_detected:
+            _o365_msg = (
+                "Microsoft/Office365 account detected — authorize it from the "
+                "mail board (Authorize button) to connect."
+            )
+            output = f"{output}\n{_o365_msg}" if output.strip() else _o365_msg
+
     # Write the cleaned config back to the volume so the board reads the
     # de-stubbed config with a valid default_account (the detect output left
     # the empty template slot and/or default_account='main').
