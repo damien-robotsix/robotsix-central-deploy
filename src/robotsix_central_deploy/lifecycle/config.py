@@ -45,7 +45,7 @@ class LifecycleConfig(BaseSettings):
     disk_path: str = (
         "/"  # env: ROBOTSIX_LIFECYCLE_DISK_PATH — /host_root when containerised
     )
-    disk_warn_percent: float = 10.0  # env: ROBOTSIX_LIFECYCLE_DISK_WARN_PERCENT
+    disk_warn_pct: float = 10.0  # % free — env: ROBOTSIX_LIFECYCLE_DISK_WARN_PCT
 
     # Env / secrets persistence
     env_store_path: str = "component_env.json"  # ROBOTSIX_LIFECYCLE_ENV_STORE_PATH

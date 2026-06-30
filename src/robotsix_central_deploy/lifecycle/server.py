@@ -468,7 +468,7 @@ async def get_disk_usage(
         total_bytes=usage.total,
         used_bytes=usage.used,
         free_bytes=usage.free,
-        warn_threshold_bytes=int(config.disk_warn_percent / 100.0 * usage.total),
+        warn_threshold_pct=config.disk_warn_pct,
         docker=docker_df,
     )
 

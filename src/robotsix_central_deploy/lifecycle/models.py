@@ -277,5 +277,5 @@ class DiskUsageResponse(BaseModel):
     total_bytes: int
     used_bytes: int
     free_bytes: int
-    warn_threshold_bytes: int
+    warn_threshold_pct: float
     docker: DockerDfStats
