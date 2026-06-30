@@ -41,6 +41,7 @@ from .models import (
     DeployResponse,
     DiskUsageResponse,
     ErrorDetail,
+    ReclaimResponse,
     RollbackResponse,
     ServiceHealthResponse,
     ServiceListItem,
@@ -472,6 +473,16 @@ async def get_disk_usage(
         warn_threshold_pct=config.disk_warn_pct,
         docker=docker_df,
     )
+
+
+@app.post("/disk/reclaim", response_model=ReclaimResponse)
+async def reclaim_build_cache(
+    _auth: None = Depends(verify_auth),
+    backend: ExecutionBackend = Depends(_get_backend),
+) -> ReclaimResponse:
+    """Prune Docker build cache and return bytes freed."""
+    space_reclaimed = await backend.prune_builds()
+    return ReclaimResponse(space_reclaimed_bytes=space_reclaimed)
 
 
 # ---------------------------------------------------------------------------

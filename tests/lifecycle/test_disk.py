@@ -155,3 +155,25 @@ class TestDiskEndpoint:
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
         assert called_with == ["/host_root"]
+
+    async def test_reclaim_build_cache_noop(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post("/disk/reclaim", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["space_reclaimed_bytes"] == 0
+
+    async def test_reclaim_build_cache_returns_bytes(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        async def _fake_prune(self) -> int:
+            return 2_684_354_560  # 2.5 GiB
+
+        monkeypatch.setattr(server_mod.NoopBackend, "prune_builds", _fake_prune)
+        resp = await client.post("/disk/reclaim", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["space_reclaimed_bytes"] == 2_684_354_560
+
+    async def test_reclaim_requires_auth(self, client: AsyncClient):
+        resp = await client.post("/disk/reclaim")
+        assert resp.status_code in (401, 403)
