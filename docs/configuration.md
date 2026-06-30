@@ -75,3 +75,22 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | Variable | Default | Description |
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH` | `""` | Host mount path for Claude Desktop integration. |
+
+### Volume Audit
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_ENABLED` | `false` | Master on/off switch for the volume audit background scanner. |
+| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_INTERVAL_SECONDS` | `3600` | Interval in seconds between volume audit scan passes. |
+| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_SNAPSHOT_PATH` | `data/volume_audit_snapshots.json` | File path for persisted volume size snapshots. |
+| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_FINDINGS_PATH` | `data/volume_audit_findings.json` | File path for persisted audit findings. |
+| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_GROWTH_THRESHOLD_PCT` | `10.0` | Growth percentage threshold — a finding is emitted when a volume grows more than this percentage between scans. |
+| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES` | `10485760` (10 MiB) | Minimum absolute growth in bytes before a finding is emitted. |
+
+### Board Integration
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROBOTSIX_LIFECYCLE_BOARD_API_URL` | `""` | Base URL for the robotsix board API. When empty, board integration is disabled. |
+| `ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN` | `""` | API token for authenticating with the robotsix board. |
+| `ROBOTSIX_LIFECYCLE_BOARD_REPO_ID` | `""` | Repository ID on the robotsix board where tickets are filed. |

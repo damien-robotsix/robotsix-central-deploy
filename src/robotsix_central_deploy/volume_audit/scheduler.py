@@ -116,14 +116,29 @@ class VolumeAuditScheduler:
             self._config.volume_audit_min_delta_bytes,
         )
 
-        # 4. Emit findings through the report seam
-        for finding in findings:
-            try:
-                await report_finding(finding, self._findings_path, self._config)
-            except Exception as exc:
-                logger.error(
-                    "report_finding failed for %s: %s", finding.volume_name, exc
-                )
+        # 4. Create a single board client for this scan pass (reused across
+        #    all findings), then emit findings through the report seam.
+        board_client = await self._maybe_create_board_client()
+        try:
+            for finding in findings:
+                try:
+                    await report_finding(
+                        finding, self._findings_path, board_client
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "report_finding failed for %s: %s",
+                        finding.volume_name,
+                        exc,
+                    )
+        finally:
+            if board_client is not None:
+                try:
+                    await board_client.close()
+                except Exception as exc:
+                    logger.error(
+                        "Failed to close board client: %s", exc
+                    )
 
         # 5. Persist new snapshot and update in-memory state
         self._save_snapshots(current)
@@ -136,6 +151,27 @@ class VolumeAuditScheduler:
             len(findings),
         )
         return records
+
+    async def _maybe_create_board_client(self):
+        """Return a BoardClient if board integration is configured, else None."""
+        cfg = self._config
+        if cfg.board_api_url and cfg.board_api_token and cfg.board_repo_id:
+            try:
+                from robotsix_board_agent.client import BoardClient
+                from robotsix_board_agent.config import BoardAgentSettings
+
+                settings = BoardAgentSettings(
+                    board_api_url=cfg.board_api_url,
+                    board_api_token=cfg.board_api_token,
+                    board_repo_id=cfg.board_repo_id,
+                )
+                return BoardClient(settings)
+            except Exception as exc:
+                logger.error(
+                    "Failed to create board client: %s", exc
+                )
+                return None
+        return None
 
     async def loop(self, interval_seconds: int) -> None:
         """Run run_once() repeatedly with *interval_seconds* sleep between passes.

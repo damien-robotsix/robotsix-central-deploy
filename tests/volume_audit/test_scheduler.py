@@ -61,7 +61,7 @@ class TestVolumeAuditScheduler:
 
         called_with = []
 
-        async def _fake_report(finding, path, config=None):
+        async def _fake_report(finding, path, board_client=None):
             called_with.append(finding)
 
         monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
