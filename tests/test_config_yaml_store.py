@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -115,7 +116,6 @@ async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path)
 from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
     _CONFIG_SECRET_SENTINEL,
     _annotate_secret_sentinels,
-    _is_secret_name,
     _mask_secrets,
     _merge_config,
     _prune_unset,  # new
@@ -542,6 +542,26 @@ def test_merge_no_sentinel_literal_when_existing_dict_absent():
     assert result.get("archive", {}).get("namespace") != "***"
 
 
+def test_merge_unsubmitted_secret_leaf_never_persists_sentinel():
+    """A secret leaf absent from the submitted form must store "" — never the
+    literal "SECRET" sentinel (which would be ingested as a real credential by
+    components that read config.yaml directly)."""
+    # Leaf missing while its parent section IS submitted.
+    template = {"llm": {"api_key": _CONFIG_SECRET_SENTINEL, "model": "x"}}
+    result = _merge_config(template, {}, {"llm": {"model": "x"}})
+    assert result["llm"]["api_key"] == ""
+    assert result["llm"]["api_key"] != _CONFIG_SECRET_SENTINEL
+
+    # Whole section missing from the submitted form.
+    template2 = {
+        "host": "localhost",
+        "calendar": {"broker_token": _CONFIG_SECRET_SENTINEL},
+    }
+    result2 = _merge_config(template2, {}, {"host": "localhost"})
+    assert result2["calendar"]["broker_token"] == ""
+    assert _CONFIG_SECRET_SENTINEL not in json.dumps(result2)
+
+
 def test_merge_dict_branch_recurses_with_empty_existing():
     template = {"smtp": {"host": "", "port": 587, "password": _CONFIG_SECRET_SENTINEL}}
     existing: dict = {}
@@ -665,42 +685,22 @@ class TestConfigRoundTrip:
 
 
 # ---------------------------------------------------------------------------
-# _is_secret_name
-# ---------------------------------------------------------------------------
-
-
-class TestIsSecretName:
-    def test_password_true(self):
-        assert _is_secret_name("password") is True
-
-    def test_smtp_password_substring_true(self):
-        assert _is_secret_name("smtp_password") is True
-
-    def test_api_key_true(self):
-        assert _is_secret_name("api_key") is True
-
-    def test_token_true(self):
-        assert _is_secret_name("token") is True
-
-    def test_host_false(self):
-        assert _is_secret_name("host") is False
-
-    def test_port_false(self):
-        assert _is_secret_name("port") is False
-
-    def test_username_false(self):
-        assert _is_secret_name("username") is False
-
-
-# ---------------------------------------------------------------------------
 # _annotate_secret_sentinels
 # ---------------------------------------------------------------------------
 
 
 class TestAnnotateSecretSentinels:
-    def test_flat_dict_secret_key_marked(self):
+    def test_secret_named_blank_leaf_is_NOT_marked(self):
+        """Detection is sentinel-only: a ``password`` leaf left blank stays
+        blank (a plain editable field), NOT auto-marked as a secret."""
         result = _annotate_secret_sentinels(
             {"host": "localhost", "password": "", "port": 8080}
+        )
+        assert result == {"host": "localhost", "password": "", "port": 8080}
+
+    def test_explicit_sentinel_flat_preserved(self):
+        result = _annotate_secret_sentinels(
+            {"host": "localhost", "password": "SECRET", "port": 8080}
         )
         assert result == {"host": "localhost", "password": "SECRET", "port": 8080}
 
@@ -710,13 +710,21 @@ class TestAnnotateSecretSentinels:
         )
         assert result == {"host": "localhost", "port": 8080, "timeout": 30}
 
-    def test_nested_dict_secret_at_depth_two(self):
-        result = _annotate_secret_sentinels({"server": {"host": "", "api_key": ""}})
+    def test_non_secret_named_key_not_marked(self):
+        """A field whose name merely *looks* secret (``public_key``) is left
+        editable unless its value is the explicit sentinel."""
+        result = _annotate_secret_sentinels({"langfuse": {"public_key": ""}})
+        assert result == {"langfuse": {"public_key": ""}}
+
+    def test_nested_dict_explicit_sentinel_at_depth_two(self):
+        result = _annotate_secret_sentinels(
+            {"server": {"host": "", "api_key": "SECRET"}}
+        )
         assert result == {"server": {"host": "", "api_key": "SECRET"}}
 
-    def test_array_of_objects(self):
+    def test_array_of_objects_explicit_sentinel(self):
         result = _annotate_secret_sentinels(
-            {"accounts": [{"imap": {"host": "", "password": ""}}]}
+            {"accounts": [{"imap": {"host": "", "password": "SECRET"}}]}
         )
         assert result == {"accounts": [{"imap": {"host": "", "password": "SECRET"}}]}
 
@@ -731,7 +739,7 @@ class TestAnnotateSecretSentinels:
 
     def test_idempotent(self):
         """Calling twice yields the same result."""
-        template = {"password": "", "host": "localhost"}
+        template = {"password": "SECRET", "host": "localhost"}
         first = _annotate_secret_sentinels(template)
         second = _annotate_secret_sentinels(first)
         assert first == second
