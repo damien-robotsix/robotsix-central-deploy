@@ -271,6 +271,95 @@ class TestSettingsRouter:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Lifespan first-boot seed behaviour
+# ---------------------------------------------------------------------------
+
+
+class TestSettingsFirstBoot:
+    async def test_lifespan_seeds_default_username_when_no_env_and_no_file(
+        self, tmp_path, monkeypatch
+    ):
+        """First-boot: lifespan writes auth_username='admin' when nothing is configured."""
+        settings_path = tmp_path / "settings.json"
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        )
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_PASSWORD", raising=False)
+
+        from robotsix_central_deploy.lifecycle.server import app, lifespan
+
+        async with lifespan(app):
+            stored = await app.state.settings_store.get()
+            assert stored.auth_username == "admin"
+            assert stored.auth_password == ""
+            # Effective config should also reflect the seeded username.
+            assert app.state.config.auth_username == "admin"
+
+    async def test_lifespan_seeds_env_username_when_set(
+        self, tmp_path, monkeypatch
+    ):
+        """First-boot: lifespan uses env-var username instead of 'admin' fallback."""
+        settings_path = tmp_path / "settings.json"
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", "operator")
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_PASSWORD", raising=False)
+
+        from robotsix_central_deploy.lifecycle.server import app, lifespan
+
+        async with lifespan(app):
+            stored = await app.state.settings_store.get()
+            assert stored.auth_username == "operator"
+
+    async def test_lifespan_does_not_overwrite_existing_settings_file(
+        self, tmp_path, monkeypatch
+    ):
+        """When a settings file already exists, lifespan must not reseed it."""
+        settings_path = tmp_path / "settings.json"
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        )
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
+
+        from robotsix_central_deploy.registry.settings_store import (
+            SystemSettings,
+            SystemSettingsStore,
+        )
+
+        # Pre-write a file simulating a previous operator save.
+        store = SystemSettingsStore(settings_path)
+        await store.put(
+            SystemSettings(auth_username="custom-op", auth_password="secret")
+        )
+
+        from robotsix_central_deploy.lifecycle.server import app, lifespan
+
+        async with lifespan(app):
+            stored = await app.state.settings_store.get()
+            assert stored.auth_username == "custom-op"  # not overwritten with 'admin'
+            assert stored.auth_password == "secret"
+
+
+# ---------------------------------------------------------------------------
+# cli.main — argument parsing + uvicorn launch (mocked)
+# ---------------------------------------------------------------------------
+
+
 class TestCli:
     def test_main_defaults_invokes_uvicorn(self):
         fake_uvicorn = MagicMock()

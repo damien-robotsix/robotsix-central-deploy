@@ -204,10 +204,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.config_yaml_store = _config_yaml_store
 
     # -- System settings store (overlay persisted settings onto _config) ---
-    from ..registry.settings_store import SystemSettingsStore
+    from ..registry.settings_store import SystemSettings, SystemSettingsStore
 
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
     app.state.settings_store = settings_store
+
+    # Seed on first boot: write a settings file so the dashboard always
+    # shows a non-blank username. Uses the env-var value if set, else "admin".
+    if not settings_store._path.exists():
+        await settings_store.put(
+            SystemSettings(
+                auth_username=_config.auth_username or "admin",
+                auth_password=_config.auth_password,
+                disk_warn_pct=_config.disk_warn_pct,
+                registry_check_interval=_config.registry_check_interval,
+                log_level=_config.log_level,
+                gateway_base_domain=_config.gateway_base_domain,
+                claude_host_mount_path=_config.claude_host_mount_path,
+            )
+        )
+
     _config = settings_store.overlay(
         _config
     )  # returns new LifecycleConfig (or same if no file)
