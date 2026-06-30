@@ -20,17 +20,11 @@ class RegistryChecker:
     def __init__(
         self,
         http_client: httpx.AsyncClient,
-        ghcr_token: str = "",
         ttl_seconds: int = 300,
     ) -> None:
         self._client = http_client
-        self._ghcr_token = ghcr_token
         self._ttl = ttl_seconds
         self._cache: dict[str, _CacheEntry] = {}
-
-    def set_ghcr_token(self, token: str) -> None:
-        """Update the GHCR token used as a fallback for authenticated pulls."""
-        self._ghcr_token = token
 
     async def get_latest_digest(self, image_ref: str) -> str | None:
         """Return cached or freshly fetched manifest digest for *image_ref*.
@@ -59,11 +53,7 @@ class RegistryChecker:
             if registry_host != "ghcr.io":
                 return None  # only ghcr.io supported for now
 
-            # Try anonymous token first
             token = await self._fetch_ghcr_token(repo)
-            # If anonymous fails and a configured token exists, use it
-            if token is None and self._ghcr_token:
-                token = self._ghcr_token
 
             headers = {
                 "Accept": (

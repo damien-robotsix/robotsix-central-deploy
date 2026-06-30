@@ -52,7 +52,6 @@ class TestSystemSettingsStore:
         path = tmp_path / "settings.json"
         store = SystemSettingsStore(path)
         original = SystemSettings(
-            ghcr_token="tok",
             auth_username="op",
             auth_password="pw",
             disk_warn_pct=15.0,
@@ -70,7 +69,7 @@ class TestSystemSettingsStore:
     async def test_put_creates_parent_directory(self, tmp_path):
         path = tmp_path / "nested" / "deeper" / "settings.json"
         store = SystemSettingsStore(path)
-        await store.put(SystemSettings(ghcr_token="x"))
+        await store.put(SystemSettings())
         assert path.exists()
 
     async def test_get_corrupt_json_returns_defaults(self, tmp_path):
@@ -82,10 +81,9 @@ class TestSystemSettingsStore:
 
     async def test_overlay_missing_file_returns_config_unchanged(self, tmp_path):
         store = SystemSettingsStore(tmp_path / "missing.json")
-        cfg = LifecycleConfig(ghcr_token="env-token", log_level="ERROR")  # type: ignore[call-arg]
+        cfg = LifecycleConfig(log_level="ERROR")  # type: ignore[call-arg]
         result = store.overlay(cfg)
         assert result is cfg
-        assert result.ghcr_token == "env-token"
         assert result.log_level == "ERROR"
 
     async def test_overlay_existing_file_takes_precedence(self, tmp_path):
@@ -93,7 +91,6 @@ class TestSystemSettingsStore:
         store = SystemSettingsStore(path)
         await store.put(
             SystemSettings(
-                ghcr_token="stored-token",
                 auth_username="stored-user",
                 auth_password="stored-pw",
                 disk_warn_pct=15.0,
@@ -105,7 +102,6 @@ class TestSystemSettingsStore:
         )
 
         cfg = LifecycleConfig(  # type: ignore[call-arg]
-            ghcr_token="env-token",
             log_level="ERROR",
             gateway_base_domain="env.example.net",
         )
@@ -113,7 +109,6 @@ class TestSystemSettingsStore:
 
         # A copy, not the original.
         assert result is not cfg
-        assert result.ghcr_token == "stored-token"
         assert result.auth_username == "stored-user"
         assert result.auth_password == "stored-pw"
         assert result.disk_warn_pct == 15.0
@@ -122,7 +117,7 @@ class TestSystemSettingsStore:
         assert result.gateway_base_domain == "stored.example.net"
         assert result.claude_host_mount_path == "/stored/.claude"
         # Original untouched.
-        assert cfg.ghcr_token == "env-token"
+        assert cfg.log_level == "ERROR"
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +146,6 @@ class TestSettingsRouter:
     ):
         await settings_store.put(
             SystemSettings(
-                ghcr_token="real-token",
                 auth_username="operator",
                 auth_password="real-pw",
                 gateway_base_domain="deploy.example.net",
@@ -161,7 +155,6 @@ class TestSettingsRouter:
         resp = await client.get("/settings", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["ghcr_token"] == "***"
         assert data["auth_password"] == "***"
         assert data["auth_username"] == "operator"
         assert data["gateway_base_domain"] == "deploy.example.net"
@@ -172,7 +165,6 @@ class TestSettingsRouter:
         resp = await client.get("/settings", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["ghcr_token"] == ""
         assert data["auth_password"] == ""
 
     async def test_get_settings_reflects_env_vars_when_no_store_file(
@@ -207,7 +199,6 @@ class TestSettingsRouter:
         resp = await client.put(
             "/settings",
             json={
-                "ghcr_token": "new-token",
                 "auth_username": "newop",
                 "auth_password": "new-pw",
                 "disk_warn_pct": 15.0,
@@ -221,37 +212,26 @@ class TestSettingsRouter:
         assert resp.status_code == 200
         data = resp.json()
         # Secrets masked in the response.
-        assert data["ghcr_token"] == "***"
         assert data["auth_password"] == "***"
         assert data["auth_username"] == "newop"
         assert data["log_level"] == "WARNING"
 
         # Persisted to the store.
         stored = await settings_store.get()
-        assert stored.ghcr_token == "new-token"
         assert stored.auth_password == "new-pw"
         assert stored.disk_warn_pct == 15.0
 
         # Hot-applied into the running config.
-        assert server_mod.app.state.config.ghcr_token == "new-token"
         assert server_mod.app.state.config.gateway_base_domain == "new.example.net"
-
-        # registry_checker.set_ghcr_token called with the new token.
-        server_mod.app.state.registry_checker.set_ghcr_token.assert_called_with(
-            "new-token"
-        )
 
     async def test_put_settings_masked_secret_preserves_existing(
         self, client: AsyncClient, auth_headers, settings_store
     ):
-        await settings_store.put(
-            SystemSettings(ghcr_token="existing-token", auth_password="existing-pw")
-        )
+        await settings_store.put(SystemSettings(auth_password="existing-pw"))
 
         resp = await client.put(
             "/settings",
             json={
-                "ghcr_token": "***",
                 "auth_username": "op",
                 "auth_password": "***",
                 "log_level": "INFO",
@@ -261,7 +241,6 @@ class TestSettingsRouter:
         assert resp.status_code == 200
 
         stored = await settings_store.get()
-        assert stored.ghcr_token == "existing-token"
         assert stored.auth_password == "existing-pw"
 
     async def test_put_settings_invalid_log_level_returns_422(
@@ -281,7 +260,7 @@ class TestSettingsRouter:
         server_mod.app.state.registry_checker = None
         resp = await client.put(
             "/settings",
-            json={"ghcr_token": "tok", "log_level": "INFO"},
+            json={"log_level": "INFO"},
             headers=auth_headers,
         )
         assert resp.status_code == 200

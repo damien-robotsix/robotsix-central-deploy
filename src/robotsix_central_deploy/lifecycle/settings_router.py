@@ -30,7 +30,6 @@ SECRET_MASK = "***"
 
 
 class SystemSettingsResponse(BaseModel):
-    ghcr_token: str = ""
     auth_username: str = ""
     auth_password: str = ""
     disk_warn_pct: float = 10.0
@@ -41,7 +40,6 @@ class SystemSettingsResponse(BaseModel):
 
 
 class SystemSettingsUpdate(BaseModel):
-    ghcr_token: str = ""
     auth_username: str = ""
     auth_password: str = ""
     disk_warn_pct: float = 10.0
@@ -68,7 +66,6 @@ class SystemSettingsUpdate(BaseModel):
 
 def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
     return SystemSettingsResponse(
-        ghcr_token=SECRET_MASK if settings.ghcr_token else "",
         auth_username=settings.auth_username,
         auth_password=SECRET_MASK if settings.auth_password else "",
         disk_warn_pct=settings.disk_warn_pct,
@@ -104,7 +101,6 @@ async def get_settings(
     """
     effective_config = settings_store.overlay(request.app.state.config)
     effective = SystemSettings(
-        ghcr_token=effective_config.ghcr_token,
         auth_username=effective_config.auth_username,
         auth_password=effective_config.auth_password,
         disk_warn_pct=effective_config.disk_warn_pct,
@@ -152,7 +148,6 @@ async def put_settings(
 
     # Preserve secrets when masked value sent
     new = SystemSettings(
-        ghcr_token=body.ghcr_token if body.ghcr_token != SECRET else current.ghcr_token,
         auth_username=body.auth_username,
         auth_password=body.auth_password
         if body.auth_password != SECRET
@@ -173,11 +168,5 @@ async def put_settings(
 
     # Hot-apply log_level immediately
     logging.getLogger().setLevel(new.log_level)
-
-    # Hot-apply ghcr_token to the running RegistryChecker so that
-    # future registry polls use the updated token without restart.
-    checker = getattr(request.app.state, "registry_checker", None)
-    if checker is not None:
-        checker.set_ghcr_token(new.ghcr_token)
 
     return _mask_response(new)

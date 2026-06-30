@@ -56,7 +56,6 @@ class LifecycleConfig(BaseSettings):
     # env: ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH
 
     # Registry check
-    ghcr_token: str = ""  # ROBOTSIX_LIFECYCLE_GHCR_TOKEN
     registry_check_ttl: int = (
         300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL  (cache TTL, seconds)
     )

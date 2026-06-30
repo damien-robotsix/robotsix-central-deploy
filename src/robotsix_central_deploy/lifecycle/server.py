@@ -202,8 +202,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.env_store = _env_store
     app.state.config_yaml_store = _config_yaml_store
 
-    # -- System settings store (MUST come before RegistryChecker so that
-    #    the checker sees the overlaid ghcr_token) ------------------------
+    # -- System settings store (overlay persisted settings onto _config) ---
     from ..registry.settings_store import SystemSettingsStore
 
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
@@ -225,7 +224,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     http_client = httpx.AsyncClient(timeout=10.0)
     registry_checker = RegistryChecker(
         http_client,
-        ghcr_token=_config.ghcr_token,
         ttl_seconds=_config.registry_check_ttl,
     )
     app.state.registry_checker = registry_checker
