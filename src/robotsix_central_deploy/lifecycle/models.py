@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -190,7 +190,7 @@ class ErrorDetail(BaseModel):
     """Structured error response body."""
 
     error: str
-    detail: str = ""
+    detail: Any = ""
 
 
 class ServiceHealthResponse(BaseModel):

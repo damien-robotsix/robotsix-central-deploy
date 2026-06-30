@@ -28,12 +28,13 @@ from typing import Any
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.params import Body
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .auth import verify_auth
 from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from .config import LifecycleConfig
+from .error_handlers import register_error_handlers
 from .models import (
     ActionResponse,
     DeployRequest,
@@ -343,6 +344,8 @@ app = FastAPI(
         },
     },
 )
+
+register_error_handlers(app)
 
 app.include_router(ui_router)
 
@@ -2431,23 +2434,6 @@ async def onboard_confirm(
         name=spec.name,
         image=spec.image,
         state=record.state.value,
-    )
-
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    if isinstance(exc.detail, dict):
-        content = dict(exc.detail)
-        content.setdefault("error", str(exc.detail))
-        content.setdefault("detail", "")
-    elif isinstance(exc.detail, str):
-        content = ErrorDetail(error=exc.detail, detail="").model_dump()
-    else:
-        content = ErrorDetail(error=str(exc.detail), detail="").model_dump()
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=content,
-        headers=exc.headers if exc.headers else None,
     )
 
 
