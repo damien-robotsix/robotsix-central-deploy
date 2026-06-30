@@ -4,6 +4,16 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Fix auto-detect add-account config corruption**: Fixed four bugs in `POST
+  /services/{name}/config/assist` add_new mode that together corrupted existing
+  accounts when adding a new one via auto-detect. The user-provided account name (or
+  email-derived slug) is now always used as the new account's id, never a template
+  placeholder like `<account-N>`. Existing account credentials are preserved
+  verbatim in the pre-detect volume write so detect does not re-validate them. The
+  post-detect merge no longer replaces the accounts list wholesale — existing
+  accounts always come from storage. The seed bar's `accounts.0.*` overwrite no
+  longer corrupts existing account slot 0 during re-merge. Invalid account ids are
+  rejected with HTTP 422 before the detect command runs.
 - **Reclaim build cache**: `POST /disk/reclaim` endpoint triggers Docker build-cache
   pruning via `ExecutionBackend.prune_builds()`. Returns `{"space_reclaimed_bytes": <int>}`.
   Noop and CLI backends return `0`; the SDK backend calls `docker builder prune` and

@@ -2000,6 +2000,15 @@ async def run_config_assist(
         _relocate_account_seed_values(
             body.values, comp_cfg.config_assist_seeds, 0, target_idx
         )
+        # Restore existing account slots verbatim from storage so the seed
+        # bar's overwrite of accounts[0].* and the form's empty-string secret
+        # fields do not corrupt existing accounts during the re-merge.
+        submitted_accts: list[dict[str, Any]] = body.values.setdefault("accounts", [])
+        for i, ea in enumerate(existing_accounts):
+            if i < len(submitted_accts):
+                submitted_accts[i] = dict(ea)
+            else:
+                submitted_accts.append(dict(ea))
         # Re-merge partial now that seed values are at the target index.
         partial = _merge_config(template, existing, body.values)
 
@@ -2013,17 +2022,31 @@ async def run_config_assist(
         acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
         while len(acct_list) <= target_idx:
             acct_list.append({})
-        if not acct_list[target_idx].get("id"):
-            acct_list[target_idx]["id"] = new_id
+        acct_list[target_idx]["id"] = new_id
+        _validate_account_ids(partial)  # fail fast: id must match ^[A-Za-z0-9._-]+$
 
     # Write sparse seed config into the volume (only submitted keys, no
     # template-default empty strings).  This lets the detect program fill
     # in absent/null fields correctly instead of treating pre-existing
     # empty strings as "already configured".
-    await backend.write_config_to_volume(
-        comp_cfg.config_volume,
-        _seed_for_detect(template, existing, body.values),
-    )
+    if mode == "add_new":
+        # Write existing accounts verbatim so detect does not re-validate them.
+        # Write only the new account's seed fields (not template defaults).
+        item_template = (template.get("accounts") or [{}])[0]
+        new_acct_vals = (
+            submitted_accts[target_idx] if target_idx < len(submitted_accts) else {}
+        )
+        new_acct_seed = _seed_for_detect(item_template, {}, new_acct_vals)
+        detect_seed: dict[str, Any] = {
+            k: v for k, v in existing.items() if k != "accounts"
+        }
+        detect_seed["accounts"] = list(existing.get("accounts", [])) + [new_acct_seed]
+        await backend.write_config_to_volume(comp_cfg.config_volume, detect_seed)
+    else:
+        await backend.write_config_to_volume(
+            comp_cfg.config_volume,
+            _seed_for_detect(template, existing, body.values),
+        )
 
     # Resolve the container-side mount path for the config volume
     volume_mount_path = next(
@@ -2074,7 +2097,31 @@ async def run_config_assist(
 
     # Merge detected fields into the submitted config so the detected
     # output never clobbers other fields the user already entered.
-    merged = _deep_merge(partial, filled)
+    if mode == "add_new":
+        # _deep_merge replaces the accounts list wholesale. Guard: always take
+        # existing accounts from storage (not from what the detect program may
+        # have re-written), and only take the new account's slot from filled.
+        filled_accts = filled.get("accounts", [])
+        # Prefer the detected slot at target_idx; fall back to last entry.
+        new_acct_from_filled = (
+            filled_accts[target_idx]
+            if target_idx < len(filled_accts)
+            else (filled_accts[-1] if filled_accts else {})
+        )
+        new_acct_partial = (
+            partial["accounts"][target_idx]
+            if target_idx < len(partial.get("accounts", []))
+            else {}
+        )
+        merged_new_acct = _deep_merge(new_acct_partial, new_acct_from_filled)
+        # Merge non-accounts keys normally.
+        merged = _deep_merge(
+            {k: v for k, v in partial.items() if k != "accounts"},
+            {k: v for k, v in filled.items() if k != "accounts"},
+        )
+        merged["accounts"] = list(existing.get("accounts", [])) + [merged_new_acct]
+    else:
+        merged = _deep_merge(partial, filled)
 
     # Persist detected config so GET /config shows it and Save is idempotent
     await config_yaml_store.update_current(name, merged)
