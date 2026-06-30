@@ -4,6 +4,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Centralized error handlers**: extracted inline `HTTPException` handler into
+  `register_error_handlers()` in `lifecycle/error_handlers.py`. Added handlers for
+  `RequestValidationError` (422 with structured `ErrorDetail` envelope) and a
+  catch-all `Exception` handler (500 with safe, non-leaking response). All error
+  responses now share the `{"error": ..., "detail": ...}` shape.
 - **Settings disk warning threshold:** `disk_warn_bytes` renamed to `disk_warn_pct`
   (a float percentage, default 10.0%).  The Settings form now accepts "Disk Warning
   (% free)" with a `step=0.1` numeric input, and the `/disk` endpoint returns
