@@ -10,9 +10,9 @@ services:
       POST: "1"     # required to allow any POST method
       DELETE: "1"   # required for container removal during deploy
       IMAGES: "1"   # required for image pull
+      BUILD: "1"    # required for the "Reclaim build cache" button (POST /build/prune)
       # Everything else OFF:
       AUTH: "0"
-      BUILD: "0"
       COMMIT: "0"
       CONFIGS: "0"
       DISTRIBUTION: "0"
