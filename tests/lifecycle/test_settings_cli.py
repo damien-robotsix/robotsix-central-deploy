@@ -55,7 +55,7 @@ class TestSystemSettingsStore:
             ghcr_token="tok",
             auth_username="op",
             auth_password="pw",
-            disk_warn_bytes=123,
+            disk_warn_percent=5.0,
             registry_check_interval=42,
             log_level="WARNING",
             gateway_base_domain="deploy.example.net",
@@ -96,7 +96,7 @@ class TestSystemSettingsStore:
                 ghcr_token="stored-token",
                 auth_username="stored-user",
                 auth_password="stored-pw",
-                disk_warn_bytes=999,
+                disk_warn_percent=15.0,
                 registry_check_interval=60,
                 log_level="DEBUG",
                 gateway_base_domain="stored.example.net",
@@ -116,7 +116,7 @@ class TestSystemSettingsStore:
         assert result.ghcr_token == "stored-token"
         assert result.auth_username == "stored-user"
         assert result.auth_password == "stored-pw"
-        assert result.disk_warn_bytes == 999
+        assert result.disk_warn_percent == 15.0
         assert result.registry_check_interval == 60
         assert result.log_level == "DEBUG"
         assert result.gateway_base_domain == "stored.example.net"
@@ -210,7 +210,7 @@ class TestSettingsRouter:
                 "ghcr_token": "new-token",
                 "auth_username": "newop",
                 "auth_password": "new-pw",
-                "disk_warn_bytes": 777,
+                "disk_warn_percent": 7.7,
                 "registry_check_interval": 120,
                 "log_level": "warning",
                 "gateway_base_domain": "new.example.net",
@@ -230,7 +230,7 @@ class TestSettingsRouter:
         stored = await settings_store.get()
         assert stored.ghcr_token == "new-token"
         assert stored.auth_password == "new-pw"
-        assert stored.disk_warn_bytes == 777
+        assert stored.disk_warn_percent == 7.7
 
         # Hot-applied into the running config.
         assert server_mod.app.state.config.ghcr_token == "new-token"

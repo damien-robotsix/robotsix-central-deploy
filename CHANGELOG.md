@@ -8,6 +8,15 @@ All notable changes to robotsix-central-deploy.
   now render as `••• set — enter a new value to change` placeholder when configured
   (instead of disabled `***` in the value, which was indistinguishable from empty).
   Saving without clicking Change preserves the stored secret via `'***'` sentinel.
+- **Disk warning threshold as percentage**: renamed `disk_warn_bytes` to
+  `disk_warn_percent` (float, default 10.0) throughout the stack —
+  `SystemSettings`, `LifecycleConfig`, settings API models, and the dashboard
+  Settings form. `GET /disk` now computes `warn_threshold_bytes` as
+  `int(disk_warn_percent / 100.0 * total_bytes)` at request time. The env var
+  `ROBOTSIX_LIFECYCLE_DISK_WARN_BYTES` is replaced by
+  `ROBOTSIX_LIFECYCLE_DISK_WARN_PERCENT`. Old `settings.json` files with
+  `disk_warn_bytes` silently fall back to the 10% default.
+
 - **Settings GET reflects env-var credentials**: `GET /settings` now reads
   from the effective config (env vars overlaid by stored settings) instead of
   the raw store, so env-var-supplied auth credentials appear in the UI even
