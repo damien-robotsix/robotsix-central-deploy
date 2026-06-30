@@ -494,9 +494,9 @@
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Disk Warning (bytes)</td>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Disk Warning (%)</td>
         <td style="padding:6px 12px;">
-          <input id="s-disk-warn" type="number" step="1" min="0" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:200px;" />
+          <input id="s-disk-warn" type="number" step="0.1" min="0" max="100" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:100px;" />
         </td>
       </tr>
       <tr>
@@ -735,7 +735,9 @@ function fmt_gb(bytes) { return (bytes / 1073741824).toFixed(1) + ' GiB'; }
 function renderDiskPanel(data) {
     const usedPct = Math.round(data.used_bytes / data.total_bytes * 100);
     const warn = data.free_bytes < data.warn_threshold_bytes;
+    const warnPct = (data.warn_threshold_bytes / data.total_bytes * 100).toFixed(1);
     document.getElementById('disk-warning').style.display = warn ? '' : 'none';
+    document.getElementById('disk-warning').textContent = `⚠ Low disk space — free space is below ${warnPct}% threshold!`;
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
@@ -751,6 +753,7 @@ function renderDiskPanel(data) {
             <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
             ${usedPct}%</td></tr>
           <tr><th>Host free</th><td>${fmt_gb(data.free_bytes)}</td></tr>
+          <tr><th>Disk warning</th><td>warn when free &lt; ${warnPct}%</td></tr>
           <tr><th>Docker images (host total)</th><td>${fmt_gb(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_gb(data.docker.build_cache_size_bytes)}</td></tr>
           <tr><th>Build cache reclaimable</th><td>${fmt_gb(data.docker.build_cache_reclaimable_bytes)}</td></tr>
@@ -1979,7 +1982,7 @@ async function loadSettings() {
       document.getElementById('s-auth-password').placeholder = '';
       document.getElementById('s-auth-password').disabled = false;
     }
-    document.getElementById('s-disk-warn').value = s.disk_warn_bytes;
+    document.getElementById('s-disk-warn').value = s.disk_warn_percent;
     document.getElementById('s-reg-interval').value = s.registry_check_interval;
     document.getElementById('s-log-level').value = s.log_level;
     document.getElementById('s-gateway-domain').value = s.gateway_base_domain || '';
@@ -2001,7 +2004,7 @@ async function saveSettings(event) {
     auth_password: document.getElementById('s-auth-password').disabled
       ? '***'
       : document.getElementById('s-auth-password').value,
-    disk_warn_bytes: parseInt(document.getElementById('s-disk-warn').value),
+    disk_warn_percent: parseFloat(document.getElementById('s-disk-warn').value),
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
     log_level: document.getElementById('s-log-level').value,
     gateway_base_domain: document.getElementById('s-gateway-domain').value,

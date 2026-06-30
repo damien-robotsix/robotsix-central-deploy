@@ -25,7 +25,7 @@ class SystemSettings(BaseModel):
     ghcr_token: str = ""
     auth_username: str = ""
     auth_password: str = ""
-    disk_warn_bytes: int = 5_368_709_120  # 5 GiB
+    disk_warn_percent: float = 10.0  # percent of total disk
     registry_check_interval: int = 300  # seconds; 0 = disabled
     log_level: str = "INFO"
     gateway_base_domain: str = ""  # e.g. "deploy.robotsix.net"
@@ -114,7 +114,7 @@ class SystemSettingsStore:
                 "ghcr_token": stored.ghcr_token,
                 "auth_username": stored.auth_username,
                 "auth_password": stored.auth_password,
-                "disk_warn_bytes": stored.disk_warn_bytes,
+                "disk_warn_percent": stored.disk_warn_percent,
                 "registry_check_interval": stored.registry_check_interval,
                 "log_level": stored.log_level,
                 "gateway_base_domain": stored.gateway_base_domain,

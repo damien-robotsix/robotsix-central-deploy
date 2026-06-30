@@ -115,7 +115,7 @@ class TestDiskEndpoint:
                 free=10_737_000_000,
             ),
         )
-        server_mod.app.state.config.disk_warn_bytes = 5_368_709_120  # 5 GiB
+        server_mod.app.state.config.disk_warn_percent = 1.0
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
@@ -134,7 +134,7 @@ class TestDiskEndpoint:
                 free=2_147_000_000,
             ),
         )
-        server_mod.app.state.config.disk_warn_bytes = 5_368_709_120  # 5 GiB
+        server_mod.app.state.config.disk_warn_percent = 99.0
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
