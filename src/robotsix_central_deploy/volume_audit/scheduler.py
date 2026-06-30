@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from robotsix_board_agent.client import BoardClient
+
     from ..lifecycle.backend import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
 
@@ -148,7 +150,7 @@ class VolumeAuditScheduler:
         )
         return records
 
-    async def _maybe_create_board_client(self):
+    async def _maybe_create_board_client(self) -> BoardClient | None:
         """Return a BoardClient if board integration is configured, else None."""
         cfg = self._config
         if cfg.board_api_url and cfg.board_api_token and cfg.board_repo_id:
