@@ -1062,5 +1062,9 @@ class DockerSdkBackend(ExecutionBackend):
     async def prune_builds(self) -> int:
         """Call Docker builder prune API and return bytes reclaimed."""
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, self._client.api.prune_builds)
+        # all=True prunes the full build cache (not just dangling) so the button
+        # frees the reclaimable space the disk panel reports, not just a few KB.
+        result = await loop.run_in_executor(
+            None, lambda: self._client.api.prune_builds(all=True)
+        )
         return int(result.get("SpaceReclaimed", 0))
