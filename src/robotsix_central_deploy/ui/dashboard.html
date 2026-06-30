@@ -1942,6 +1942,7 @@ function changeSecret(inputId) {
   var inp = document.getElementById(inputId);
   inp.disabled = false;
   inp.value = '';
+  inp.placeholder = '';
   inp.focus();
 }
 
@@ -1957,11 +1958,27 @@ async function loadSettings() {
     var res = await fetch('/settings', { headers: authHeaders(), credentials: 'same-origin' });
     if (!res.ok) { showToast('Error loading settings: HTTP ' + res.status, 'error'); return; }
     var s = await res.json();
-    document.getElementById('s-ghcr-token').value = s.ghcr_token;
-    document.getElementById('s-ghcr-token').disabled = (s.ghcr_token === '***');
+    // s-ghcr-token
+    if (s.ghcr_token === '***') {
+      document.getElementById('s-ghcr-token').value = '';
+      document.getElementById('s-ghcr-token').placeholder = '\u2022\u2022\u2022 set \u2014 enter a new value to change';
+      document.getElementById('s-ghcr-token').disabled = true;
+    } else {
+      document.getElementById('s-ghcr-token').value = s.ghcr_token;
+      document.getElementById('s-ghcr-token').placeholder = 'Leave blank for public images';
+      document.getElementById('s-ghcr-token').disabled = false;
+    }
     document.getElementById('s-auth-username').value = s.auth_username;
-    document.getElementById('s-auth-password').value = s.auth_password;
-    document.getElementById('s-auth-password').disabled = (s.auth_password === '***');
+    // s-auth-password
+    if (s.auth_password === '***') {
+      document.getElementById('s-auth-password').value = '';
+      document.getElementById('s-auth-password').placeholder = '\u2022\u2022\u2022 set \u2014 enter a new value to change';
+      document.getElementById('s-auth-password').disabled = true;
+    } else {
+      document.getElementById('s-auth-password').value = s.auth_password;
+      document.getElementById('s-auth-password').placeholder = '';
+      document.getElementById('s-auth-password').disabled = false;
+    }
     document.getElementById('s-disk-warn').value = s.disk_warn_bytes;
     document.getElementById('s-reg-interval').value = s.registry_check_interval;
     document.getElementById('s-log-level').value = s.log_level;
@@ -1977,9 +1994,13 @@ async function loadSettings() {
 async function saveSettings(event) {
   event.preventDefault();
   var body = {
-    ghcr_token: document.getElementById('s-ghcr-token').value,
+    ghcr_token: document.getElementById('s-ghcr-token').disabled
+      ? '***'
+      : document.getElementById('s-ghcr-token').value,
     auth_username: document.getElementById('s-auth-username').value,
-    auth_password: document.getElementById('s-auth-password').value,
+    auth_password: document.getElementById('s-auth-password').disabled
+      ? '***'
+      : document.getElementById('s-auth-password').value,
     disk_warn_bytes: parseInt(document.getElementById('s-disk-warn').value),
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
     log_level: document.getElementById('s-log-level').value,
