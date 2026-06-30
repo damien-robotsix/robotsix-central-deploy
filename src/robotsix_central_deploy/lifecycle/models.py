@@ -140,6 +140,14 @@ class ServiceRecord:
 # ---------------------------------------------------------------------------
 
 
+class ContainerHealthSummary(BaseModel):
+    """Health snapshot for one sibling container."""
+
+    name: str  # sibling service name (e.g. "mail-ingester")
+    health: str = ""  # "healthy" | "unhealthy" | "starting" | "" (no healthcheck)
+    state: ServiceState = ServiceState.UNKNOWN
+
+
 class ServiceStatus(BaseModel):
     """Full status returned by ``GET /services/{name}``."""
 
@@ -155,6 +163,8 @@ class ServiceStatus(BaseModel):
     latest_digest: str = ""  # last known registry manifest digest
     update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
     has_config_yaml: bool = False
+    sibling_health: list[ContainerHealthSummary] = []
+    overall_health: str = ""  # rollup: "" | "healthy" | "unhealthy" | "starting"
 
 
 class ServiceListItem(BaseModel):

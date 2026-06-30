@@ -4,6 +4,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Sibling health in component status**: `GET /services/{name}` now includes
+  `sibling_health` (per-container health snapshots for sibling services) and
+  `overall_health` (a component-level rollup that considers the primary plus
+  all healthchecked siblings). Siblings without a Docker healthcheck are neutral
+  and do not affect the rollup.
+
 - **Volume browser**: added `GET /volumes/{name}/ls?path=` and
   `GET /volumes/{name}/cat?path=` backend endpoints plus a read-only
   volume-browser modal in the dashboard UI. Operators can click a volume
