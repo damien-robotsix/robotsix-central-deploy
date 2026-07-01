@@ -16,17 +16,17 @@ jobs:
       - name: Verify DEPLOY_CONTRACT.md is a symlink (not a stale copy)
         run: |
           set -euo pipefail
-          if [ ! -L docs/DEPLOY_CONTRACT.md ]; then
-            echo "::error::docs/DEPLOY_CONTRACT.md must be a symlink to the canonical copy"
+          if [ ! -L src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md ]; then
+            echo "::error::src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md must be a symlink to the canonical copy"
             exit 1
           fi
       - name: Verify DEPLOY_CONTRACT.md symlink target is correct
         run: |
           set -euo pipefail
-          target=$(readlink docs/DEPLOY_CONTRACT.md)
-          expected="../src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md"
+          target=$(readlink src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md)
+          expected="../../../docs/DEPLOY_CONTRACT.md"
           if [ "$target" != "$expected" ]; then
-            echo "::error::docs/DEPLOY_CONTRACT.md symlink target is '$target', expected '$expected'"
+            echo "::error::src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md symlink target is '$target', expected '$expected'"
             exit 1
           fi
       - name: Verify symlink resolves and content matches
