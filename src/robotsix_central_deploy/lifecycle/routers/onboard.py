@@ -33,10 +33,79 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig, ServiceConfig
+from ...onboard.models import DerivedSpec  # noqa: TCH001
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["onboard"])
+
+
+# ---------------------------------------------------------------------------
+# Private helpers extracted from long route handlers
+# ---------------------------------------------------------------------------
+
+
+async def _deploy_onboard_siblings(
+    spec: "DerivedSpec",
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    out_records: list[ServiceRecord],
+) -> None:
+    """Deploy all siblings from *spec* (best-effort).
+
+    Appends created records to *out_records* before each deploy so rollback
+    can clean up even when a sibling deploy fails partway through.
+    """
+    for sib in spec.siblings:
+        sib_name = f"{spec.name}-{sib.service_key}"
+        sib_component_config = ComponentConfig(
+            id=sib_name,
+            image=sib.image,
+            container_name=sib.container_name,
+            ports=sib.ports,
+            mounts=sib.volume_mounts,
+            env=sib.env,
+            health_check=sib.health_check,
+            claude_mount=sib.claude_mount,
+            host_docker_sock=sib.host_docker_sock,
+            named_volumes=[m.host for m in sib.volume_mounts],
+            command=sib.command,
+            entrypoint=sib.entrypoint,
+        )
+        sib_record = ServiceRecord(
+            name=sib_name,
+            container_name=sib.container_name,
+            image=sib.image,
+            component_id=spec.name,
+        )
+        await store.put(sib_record)
+        out_records.append(sib_record)
+
+        sib_outcome = await backend.deploy(sib_record, sib_component_config, sib.image)
+        sib_record.state = sib_outcome.state
+        sib_record.image = sib.image
+        sib_record.deployed_image_digest = sib_outcome.deployed_digest
+        sib_record.previous_image_digest = sib_outcome.previous_digest
+        await store.put(sib_record)
+
+
+async def _rollback_onboard(
+    name: str,
+    config_id: str,
+    store: ServiceStore,
+    config_yaml_store: ConfigYamlStore,
+    component_config_store: ComponentConfigStore,
+    registry: ComponentRegistry,
+    sibling_names: list[str] | None = None,
+) -> None:
+    """Best-effort rollback: clean up config, records, and registry entries."""
+    if sibling_names:
+        for sib_name in sibling_names:
+            await store.delete(sib_name)
+    await config_yaml_store.delete(name)
+    await component_config_store.delete(config_id)
+    registry.unregister(config_id)
+    await store.delete(name)
 
 
 # ---------------------------------------------------------------------------
@@ -284,11 +353,14 @@ async def onboard_confirm(
         outcome = await backend.deploy(record, config, config.image)
     except Exception as exc:
         logger.exception("onboard deploy failed for '%s'", spec.name)
-        # Best-effort rollback: remove config, record, and in-memory entry
-        await config_yaml_store.delete(spec.name)
-        await component_config_store.delete(config.id)
-        registry.unregister(config.id)
-        await store.delete(spec.name)
+        await _rollback_onboard(
+            spec.name,
+            config.id,
+            store,
+            config_yaml_store,
+            component_config_store,
+            registry,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": str(exc)},
@@ -305,49 +377,18 @@ async def onboard_confirm(
     # Deploy siblings
     sibling_records_created: list[ServiceRecord] = []
     try:
-        for sib in spec.siblings:
-            sib_name = f"{spec.name}-{sib.service_key}"
-            sib_component_config = ComponentConfig(
-                id=sib_name,
-                image=sib.image,
-                container_name=sib.container_name,
-                ports=sib.ports,
-                mounts=sib.volume_mounts,
-                env=sib.env,
-                health_check=sib.health_check,
-                claude_mount=sib.claude_mount,
-                host_docker_sock=sib.host_docker_sock,
-                named_volumes=[m.host for m in sib.volume_mounts],
-                command=sib.command,
-                entrypoint=sib.entrypoint,
-            )
-            sib_record = ServiceRecord(
-                name=sib_name,
-                container_name=sib.container_name,
-                image=sib.image,
-                component_id=spec.name,
-            )
-            await store.put(sib_record)
-            sibling_records_created.append(sib_record)
-
-            sib_outcome = await backend.deploy(
-                sib_record, sib_component_config, sib.image
-            )
-            sib_record.state = sib_outcome.state
-            sib_record.image = sib.image
-            sib_record.deployed_image_digest = sib_outcome.deployed_digest
-            sib_record.previous_image_digest = sib_outcome.previous_digest
-            await store.put(sib_record)
+        await _deploy_onboard_siblings(spec, store, backend, sibling_records_created)
     except Exception as exc:
         logger.exception("onboard sibling deploy failed for '%s'", spec.name)
-        # Delete all sibling records from store
-        for sr in sibling_records_created:
-            await store.delete(sr.name)
-        # Undo primary (existing rollback path)
-        await config_yaml_store.delete(spec.name)
-        await component_config_store.delete(config.id)
-        registry.unregister(config.id)
-        await store.delete(spec.name)
+        await _rollback_onboard(
+            spec.name,
+            config.id,
+            store,
+            config_yaml_store,
+            component_config_store,
+            registry,
+            sibling_names=[sr.name for sr in sibling_records_created],
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": str(exc)},

@@ -71,6 +71,312 @@ router = APIRouter(tags=["services"])
 
 
 # ---------------------------------------------------------------------------
+# Private helpers extracted from long route handlers
+# ---------------------------------------------------------------------------
+
+
+async def _gather_sibling_health(
+    name: str,
+    comp_config: ComponentConfig | None,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+) -> list[ContainerHealthSummary]:
+    """Collect health summaries for all siblings of *name* (best-effort)."""
+    sibling_summaries: list[ContainerHealthSummary] = []
+    if comp_config and comp_config.siblings:
+        for _sib_config, sib_record in await _get_sibling_pairs(
+            name, comp_config, store
+        ):
+            try:
+                sib_inspect = await backend.status(sib_record)
+            except Exception:
+                logger.warning(
+                    "failed to inspect sibling '%s'; skipping", sib_record.name
+                )
+                continue
+            sib_changed = (
+                sib_inspect.state != sib_record.state
+                or sib_inspect.health != sib_record.health
+            )
+            if sib_changed:
+                sib_record.state = sib_inspect.state
+                sib_record.health = sib_inspect.health
+                await store.put(sib_record)
+            sibling_summaries.append(
+                ContainerHealthSummary(
+                    name=sib_record.name,
+                    health=sib_inspect.health,
+                    state=sib_inspect.state,
+                )
+            )
+    return sibling_summaries
+
+
+async def _fanout_deploy_siblings(
+    name: str,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    registry: ComponentRegistry,
+    env_store: EnvStore,
+) -> None:
+    """Deploy all siblings of *name* (best-effort per sibling)."""
+    config_fresh = registry.get(name)
+    if not config_fresh or not config_fresh.siblings:
+        return
+    for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
+        sib_name = f"{name}-{sib_config.service_key}"
+        merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
+        effective_sib = ComponentConfig(
+            id=sib_name,
+            image=sib_config.image,
+            container_name=sib_config.container_name,
+            ports=sib_config.ports,
+            mounts=sib_config.mounts,
+            env=merged_env,
+            health_check=sib_config.health_check,
+            claude_mount=sib_config.claude_mount,
+            host_docker_sock=sib_config.host_docker_sock,
+            named_volumes=[m.host for m in sib_config.mounts],
+            command=sib_config.command,
+            entrypoint=sib_config.entrypoint,
+        )
+        try:
+            sib_outcome = await backend.deploy(
+                sib_record, effective_sib, sib_config.image
+            )
+            sib_record.state = sib_outcome.state
+            sib_record.image = sib_config.image
+            sib_record.deployed_image_digest = sib_outcome.deployed_digest
+            sib_record.previous_image_digest = sib_outcome.previous_digest
+            await store.put(sib_record)
+        except Exception:
+            logger.warning("deploy sibling '%s' failed", sib_name)
+
+
+async def _fanout_rollback_siblings(
+    name: str,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    registry: ComponentRegistry,
+    env_store: EnvStore,
+) -> None:
+    """Roll back all siblings of *name* (best-effort per sibling)."""
+    config_fresh = registry.get(name)
+    if not config_fresh or not config_fresh.siblings:
+        return
+    for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
+        if not sib_record.previous_image_digest:
+            logger.warning(
+                "rollback sibling '%s-%s': no prior digest — skipping",
+                name,
+                sib_config.service_key,
+            )
+            continue
+        sib_name = f"{name}-{sib_config.service_key}"
+        merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
+        effective_sib = ComponentConfig(
+            id=sib_name,
+            image=sib_config.image,
+            container_name=sib_config.container_name,
+            ports=sib_config.ports,
+            mounts=sib_config.mounts,
+            env=merged_env,
+            health_check=sib_config.health_check,
+            claude_mount=sib_config.claude_mount,
+            host_docker_sock=sib_config.host_docker_sock,
+            named_volumes=[m.host for m in sib_config.mounts],
+            command=sib_config.command,
+            entrypoint=sib_config.entrypoint,
+        )
+        try:
+            sib_outcome = await backend.rollback(sib_record, effective_sib)
+            old_dep_sib = sib_record.deployed_image_digest
+            old_prev_sib = sib_record.previous_image_digest
+            sib_record.state = sib_outcome.state
+            sib_record.deployed_image_digest = old_prev_sib
+            sib_record.previous_image_digest = old_dep_sib
+            sib_record.image_revision = old_prev_sib
+            await store.put(sib_record)
+        except Exception:
+            logger.warning(
+                "rollback sibling '%s-%s' failed",
+                name,
+                sib_config.service_key,
+            )
+
+
+async def _delete_component_volumes(
+    name: str,
+    config: ComponentConfig,
+    pairs: list[tuple[Any, Any]],
+    backend: ExecutionBackend,
+) -> None:
+    """Best-effort removal of volumes for *name* and its siblings."""
+    volumes: list[str] = list(config.named_volumes)
+    for sib_cfg, _sib_record in pairs:
+        volumes.extend(m.host for m in sib_cfg.mounts)
+    seen: set[str] = set()
+    for vol in volumes:
+        if vol in seen:
+            continue
+        seen.add(vol)
+        logger.info("delete %s: removing volume %s (remove_volumes=true)", name, vol)
+        try:
+            await backend.remove_volume(vol)
+        except Exception:
+            logger.warning(
+                "remove_volume failed for %s during delete of %s",
+                vol,
+                name,
+                exc_info=True,
+            )
+
+
+def _resolve_account_mode(
+    current_raw: dict[str, Any] | None,
+    target_account_index: int | None,
+    config_assist_seeds: list[Any],
+    template: dict[str, Any],
+    existing: dict[str, Any],
+    values: dict[str, Any],
+    account_name: str | None,
+    assist_command: str,
+) -> tuple[str, int, dict[str, Any], str]:
+    """Resolve account mode, target index, updated partial, and command.
+
+    Returns (mode, target_idx, partial, updated_assist_command).
+    Modifies *values* in-place for add_new relocation.
+    """
+    import re as _re  # noqa: PLC0415
+
+    existing_accounts: list[dict[str, Any]] = (
+        [
+            a
+            for a in current_raw.get("accounts", [])
+            if isinstance(a, dict) and a.get("id")
+        ]
+        if current_raw is not None and isinstance(current_raw.get("accounts"), list)
+        else []
+    )
+    req_idx = target_account_index
+
+    if req_idx is not None and req_idx < len(existing_accounts):
+        mode, target_idx = "update", req_idx
+    elif existing_accounts:  # req_idx is None OR req_idx >= len
+        mode, target_idx = "add_new", len(existing_accounts)
+    else:
+        mode, target_idx = "first_setup", 0
+
+    # Rewrite accounts.0.* placeholders to the target index in the command.
+    if target_idx != 0:
+        assist_command = _re.sub(
+            r"\{accounts\.0\.",
+            f"{{accounts.{target_idx}.",
+            assist_command,
+        )
+
+    # Sparse submission merge
+    partial = _merge_config(template, existing, values, prefer_existing_for_unset=True)
+
+    # For add_new: relocate seed values to the target slot, restore existing
+    # accounts, re-merge, and validate.
+    if mode == "add_new":
+        _relocate_account_seed_values(values, config_assist_seeds, 0, target_idx)
+        submitted_accts: list[dict[str, Any]] = values.setdefault("accounts", [])
+        for i, ea in enumerate(existing_accounts):
+            if i < len(submitted_accts):
+                submitted_accts[i] = dict(ea)
+            else:
+                submitted_accts.append(dict(ea))
+        partial = _merge_config(
+            template, existing, values, prefer_existing_for_unset=True
+        )
+
+        new_id = _derive_account_id(config_assist_seeds, partial, target_idx)
+        if account_name:
+            _name_slug = _re.sub(r"[^a-z0-9]+", "-", account_name.lower()).strip("-")[
+                :40
+            ]
+            if _name_slug:
+                new_id = _name_slug
+        acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
+        while len(acct_list) <= target_idx:
+            acct_list.append({})
+        acct_list[target_idx]["id"] = new_id
+        _validate_account_ids(partial)  # fail fast: id must match ^[A-Za-z0-9._-]+$
+
+    return mode, target_idx, partial, assist_command
+
+
+def _postprocess_config_assist(
+    merged: dict[str, Any], output: str
+) -> tuple[dict[str, Any], str]:
+    """Drop unconfigured accounts, fix default_account, detect Office365.
+
+    Returns (merged, output) — both may be mutated.
+    """
+    accts_obj = merged.get("accounts")
+    if not isinstance(accts_obj, list):
+        return merged, output
+
+    kept: list[Any] = []
+    for a in accts_obj:
+        if not isinstance(a, dict):
+            continue
+        auth = a.get("auth")
+        imap = a.get("imap")
+        user = auth.get("username") if isinstance(auth, dict) else None
+        host = imap.get("host") if isinstance(imap, dict) else None
+        if user or host:
+            kept.append(a)
+    merged["accounts"] = kept
+    kept_ids = [a.get("id") for a in kept]
+    if kept and merged.get("default_account") not in kept_ids:
+        merged["default_account"] = kept[0].get("id", "")
+
+    # Office365 accounts: ensure oauth2_provider is flagged and prompt operator
+    _O365_SUFFIX = "office365.com"
+    _o365_detected = False
+    for _acct in kept:
+        _imap = _acct.get("imap")
+        _smtp = _acct.get("smtp")
+        _imap_host = _imap.get("host", "") if isinstance(_imap, dict) else ""
+        _smtp_host = _smtp.get("host", "") if isinstance(_smtp, dict) else ""
+        if _imap_host.endswith(_O365_SUFFIX) or _smtp_host.endswith(_O365_SUFFIX):
+            _acct_auth: Any = _acct.get("auth")
+            if not isinstance(_acct_auth, dict):
+                _acct_auth = {}
+                _acct["auth"] = _acct_auth
+            _acct_auth["oauth2_provider"] = "microsoft"
+            _acct_auth.pop("password", None)
+            _o365_detected = True
+    if _o365_detected:
+        _o365_msg = (
+            "Microsoft/Office365 account detected — authorize it from the "
+            "mail board (Authorize button) to connect."
+        )
+        output = f"{output}\n{_o365_msg}" if output.strip() else _o365_msg
+
+    return merged, output
+
+
+def _build_assist_command(
+    assist_command: str,
+    partial: dict[str, Any],
+    mode: str,
+) -> str:
+    """Resolve placeholders in *assist_command* and strip --overwrite for add_new."""
+    resolved = shlex.join(
+        _resolve_placeholders(arg, partial) for arg in shlex.split(assist_command)
+    )
+    if mode == "add_new":
+        resolved = shlex.join(
+            arg for arg in shlex.split(resolved) if arg != "--overwrite"
+        )
+    return resolved
+
+
+# ---------------------------------------------------------------------------
 # GET /services
 # ---------------------------------------------------------------------------
 
@@ -163,33 +469,7 @@ async def get_service_status(
 
     # -- Sibling health fan-out ------------------------------------------
     comp_config = registry.get(name)  # ComponentConfig or None
-    sibling_summaries: list[ContainerHealthSummary] = []
-    if comp_config and comp_config.siblings:
-        for _sib_config, sib_record in await _get_sibling_pairs(
-            name, comp_config, store
-        ):
-            try:
-                sib_inspect = await backend.status(sib_record)
-            except Exception:
-                logger.warning(
-                    "failed to inspect sibling '%s'; skipping", sib_record.name
-                )
-                continue
-            sib_changed = (
-                sib_inspect.state != sib_record.state
-                or sib_inspect.health != sib_record.health
-            )
-            if sib_changed:
-                sib_record.state = sib_inspect.state
-                sib_record.health = sib_inspect.health
-                await store.put(sib_record)
-            sibling_summaries.append(
-                ContainerHealthSummary(
-                    name=sib_record.name,
-                    health=sib_inspect.health,
-                    state=sib_inspect.state,
-                )
-            )
+    sibling_summaries = await _gather_sibling_health(name, comp_config, store, backend)
     result.sibling_health = sibling_summaries
     result.overall_health = _compute_overall_health(inspect.health, sibling_summaries)
     # -------------------------------------------------------------------
@@ -600,38 +880,7 @@ async def deploy_service(
     await store.put(record)
 
     # Deploy siblings
-    config_fresh = registry.get(name)  # re-read for sibling env
-    if config_fresh and config_fresh.siblings:
-        for sib_config, sib_record in await _get_sibling_pairs(
-            name, config_fresh, store
-        ):
-            sib_name = f"{name}-{sib_config.service_key}"
-            merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
-            effective_sib = ComponentConfig(
-                id=sib_name,
-                image=sib_config.image,
-                container_name=sib_config.container_name,
-                ports=sib_config.ports,
-                mounts=sib_config.mounts,
-                env=merged_env,
-                health_check=sib_config.health_check,
-                claude_mount=sib_config.claude_mount,
-                host_docker_sock=sib_config.host_docker_sock,
-                named_volumes=[m.host for m in sib_config.mounts],
-                command=sib_config.command,
-                entrypoint=sib_config.entrypoint,
-            )
-            try:
-                sib_outcome = await backend.deploy(
-                    sib_record, effective_sib, sib_config.image
-                )
-                sib_record.state = sib_outcome.state
-                sib_record.image = sib_config.image
-                sib_record.deployed_image_digest = sib_outcome.deployed_digest
-                sib_record.previous_image_digest = sib_outcome.previous_digest
-                await store.put(sib_record)
-            except Exception:
-                logger.warning("deploy sibling '%s' failed", sib_name)
+    await _fanout_deploy_siblings(name, store, backend, registry, env_store)
 
     return DeployResponse(
         name=name,
@@ -708,49 +957,7 @@ async def rollback_service(
     await store.put(record)
 
     # Rollback siblings using each sibling's previous_image_digest
-    config_fresh = registry.get(name)
-    if config_fresh and config_fresh.siblings:
-        for sib_config, sib_record in await _get_sibling_pairs(
-            name, config_fresh, store
-        ):
-            if not sib_record.previous_image_digest:
-                logger.warning(
-                    "rollback sibling '%s-%s': no prior digest — skipping",
-                    name,
-                    sib_config.service_key,
-                )
-                continue
-            sib_name = f"{name}-{sib_config.service_key}"
-            merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
-            effective_sib = ComponentConfig(
-                id=sib_name,
-                image=sib_config.image,
-                container_name=sib_config.container_name,
-                ports=sib_config.ports,
-                mounts=sib_config.mounts,
-                env=merged_env,
-                health_check=sib_config.health_check,
-                claude_mount=sib_config.claude_mount,
-                host_docker_sock=sib_config.host_docker_sock,
-                named_volumes=[m.host for m in sib_config.mounts],
-                command=sib_config.command,
-                entrypoint=sib_config.entrypoint,
-            )
-            try:
-                sib_outcome = await backend.rollback(sib_record, effective_sib)
-                old_dep_sib = sib_record.deployed_image_digest
-                old_prev_sib = sib_record.previous_image_digest
-                sib_record.state = sib_outcome.state
-                sib_record.deployed_image_digest = old_prev_sib
-                sib_record.previous_image_digest = old_dep_sib
-                sib_record.image_revision = old_prev_sib
-                await store.put(sib_record)
-            except Exception:
-                logger.warning(
-                    "rollback sibling '%s-%s' failed",
-                    name,
-                    sib_config.service_key,
-                )
+    await _fanout_rollback_siblings(name, store, backend, registry, env_store)
 
     return RollbackResponse(
         name=name,
@@ -1022,77 +1229,17 @@ async def run_config_assist(
     template = await config_yaml_store.get_template(name) or {}
     current_raw = await config_yaml_store.get_current(name)
     existing = current_raw or template
-    # Sparse submission: body.values holds only the seed fields the operator
-    # typed, so untouched config (secrets like an LLM api_key, other sections)
-    # must be kept from *existing* rather than reset to template defaults.
-    partial = _merge_config(
-        template, existing, body.values, prefer_existing_for_unset=True
-    )
-
     # --- Account-aware mode resolution ---
-    existing_accounts: list[dict[str, Any]] = (
-        [
-            a
-            for a in current_raw.get("accounts", [])
-            if isinstance(a, dict) and a.get("id")
-        ]
-        if current_raw is not None and isinstance(current_raw.get("accounts"), list)
-        else []
+    mode, target_idx, partial, assist_command = _resolve_account_mode(
+        current_raw,
+        body.target_account_index,
+        comp_cfg.config_assist_seeds,
+        template,
+        existing,
+        body.values,
+        body.account_name,
+        comp_cfg.config_assist_command,
     )
-    req_idx = body.target_account_index
-
-    if req_idx is not None and req_idx < len(existing_accounts):
-        mode, target_idx = "update", req_idx
-    elif existing_accounts:  # req_idx is None OR req_idx >= len
-        mode, target_idx = "add_new", len(existing_accounts)
-    else:
-        mode, target_idx = "first_setup", 0
-
-    # Rewrite accounts.0.* placeholders to the target index in the command.
-    import re as _re  # noqa: PLC0415
-
-    assist_command = comp_cfg.config_assist_command
-    if target_idx != 0:
-        assist_command = _re.sub(
-            r"\{accounts\.0\.",
-            f"{{accounts.{target_idx}.",
-            assist_command,
-        )
-
-    # For add_new: the frontend seed bar collects values under the
-    # template index (accounts.0.*); relocate them to the target slot
-    # so the volume seed write targets the new account (not the existing
-    # one) and {accounts.N.*} placeholders resolve correctly.
-    if mode == "add_new":
-        _relocate_account_seed_values(
-            body.values, comp_cfg.config_assist_seeds, 0, target_idx
-        )
-        # Restore existing account slots verbatim from storage so the seed
-        # bar's overwrite of accounts[0].* and the form's empty-string secret
-        # fields do not corrupt existing accounts during the re-merge.
-        submitted_accts: list[dict[str, Any]] = body.values.setdefault("accounts", [])
-        for i, ea in enumerate(existing_accounts):
-            if i < len(submitted_accts):
-                submitted_accts[i] = dict(ea)
-            else:
-                submitted_accts.append(dict(ea))
-        # Re-merge partial now that seed values are at the target index.
-        partial = _merge_config(
-            template, existing, body.values, prefer_existing_for_unset=True
-        )
-
-        new_id = _derive_account_id(comp_cfg.config_assist_seeds, partial, target_idx)
-        if body.account_name:
-            _name_slug = _re.sub(r"[^a-z0-9]+", "-", body.account_name.lower()).strip(
-                "-"
-            )[:40]
-            if _name_slug:
-                new_id = _name_slug
-        acct_list: list[dict[str, Any]] = partial.setdefault("accounts", [])
-        while len(acct_list) <= target_idx:
-            acct_list.append({})
-        acct_list[target_idx]["id"] = new_id
-        _validate_account_ids(partial)  # fail fast: id must match ^[A-Za-z0-9._-]+$
 
     # Write sparse seed config into the volume (only submitted keys, no
     # template-default empty strings).  This lets the detect program fill
@@ -1102,6 +1249,7 @@ async def run_config_assist(
         # Write existing accounts verbatim so detect does not re-validate them.
         # Write only the new account's seed fields (not template defaults).
         item_template = (template.get("accounts") or [{}])[0]
+        submitted_accts = body.values.get("accounts", [])
         new_acct_vals = (
             submitted_accts[target_idx] if target_idx < len(submitted_accts) else {}
         )
@@ -1126,23 +1274,8 @@ async def run_config_assist(
     # Fetch decrypted env+secrets
     merged_env = await env_store.get_merged_env(name, comp_cfg.env)
 
-    # Substitute {seed} placeholders in the command with submitted values
-    # Substitute from the MERGED config (template+existing+submitted), not just
-    # body.values — so placeholders like {accounts.0.id} (not user-submitted, but
-    # present in the config) resolve instead of leaking the literal "{...}".
-    # Split into args FIRST, substitute per-arg, then re-quote — so a value
-    # containing spaces (e.g. a Google app password "abcd efgh ijkl mnop") stays
-    # a SINGLE argument instead of being split apart by the backend's shlex.split.
-    resolved_command = shlex.join(
-        _resolve_placeholders(arg, partial) for arg in shlex.split(assist_command)
-    )
-
-    # For add_new: the config-assist command template always includes
-    # --overwrite, but adding a new account should NOT overwrite.
-    if mode == "add_new":
-        resolved_command = shlex.join(
-            arg for arg in shlex.split(resolved_command) if arg != "--overwrite"
-        )
+    # Build resolved command from template with placeholder substitution
+    resolved_command = _build_assist_command(assist_command, partial, mode)
 
     # Run the one-shot container (60 s timeout)
     try:
@@ -1195,49 +1328,8 @@ async def run_config_assist(
     else:
         merged = _deep_merge(partial, filled)
 
-    # Post-process: drop unconfigured accounts (e.g. the leftover onboard
-    # template slot such as an empty 'main') and ensure default_account points
-    # at a real configured account — otherwise the board fails to load with
-    # "default_account_id ... is not one of the configured accounts".
-    accts_obj = merged.get("accounts")
-    if isinstance(accts_obj, list):
-        kept: list[Any] = []
-        for a in accts_obj:
-            if not isinstance(a, dict):
-                continue
-            auth = a.get("auth")
-            imap = a.get("imap")
-            user = auth.get("username") if isinstance(auth, dict) else None
-            host = imap.get("host") if isinstance(imap, dict) else None
-            if user or host:
-                kept.append(a)
-        merged["accounts"] = kept
-        kept_ids = [a.get("id") for a in kept]
-        if kept and merged.get("default_account") not in kept_ids:
-            merged["default_account"] = kept[0].get("id", "")
-
-        # Office365 accounts: ensure oauth2_provider is flagged and prompt operator
-        _O365_SUFFIX = "office365.com"
-        _o365_detected = False
-        for _acct in kept:
-            _imap = _acct.get("imap")
-            _smtp = _acct.get("smtp")
-            _imap_host = _imap.get("host", "") if isinstance(_imap, dict) else ""
-            _smtp_host = _smtp.get("host", "") if isinstance(_smtp, dict) else ""
-            if _imap_host.endswith(_O365_SUFFIX) or _smtp_host.endswith(_O365_SUFFIX):
-                _acct_auth: Any = _acct.get("auth")
-                if not isinstance(_acct_auth, dict):
-                    _acct_auth = {}
-                    _acct["auth"] = _acct_auth
-                _acct_auth["oauth2_provider"] = "microsoft"
-                _acct_auth.pop("password", None)
-                _o365_detected = True
-        if _o365_detected:
-            _o365_msg = (
-                "Microsoft/Office365 account detected — authorize it from the "
-                "mail board (Authorize button) to connect."
-            )
-            output = f"{output}\n{_o365_msg}" if output.strip() else _o365_msg
+    # Post-process: drop unconfigured accounts and detect Office365
+    merged, output = _postprocess_config_assist(merged, output)
 
     # Write the cleaned config back to the volume so the board reads the
     # de-stubbed config with a valid default_account (the detect output left
@@ -1325,36 +1417,8 @@ async def delete_service(
                 )
 
     # 4b. Best-effort volume removal (opt-in; IRREVERSIBLE).
-    # Only ever touch volumes declared by THIS component: the primary's
-    # named_volumes plus each sibling's mount hosts (siblings are
-    # ServiceConfig, which has no named_volumes field — deploy pre-creates
-    # sibling volumes as [m.host for m in sib_cfg.mounts], so we remove
-    # exactly that same set). De-duplicated; each removal is best-effort and
-    # cannot abort the delete.
     if remove_volumes:
-        volumes: list[str] = list(config.named_volumes)
-        for sib_cfg, _sib_record in pairs:
-            volumes.extend(m.host for m in sib_cfg.mounts)
-        seen: set[str] = set()
-        for vol in volumes:
-            if vol in seen:
-                continue
-            seen.add(vol)
-            logger.info(
-                "delete %s: removing volume %s (remove_volumes=true)", name, vol
-            )
-            try:
-                await backend.remove_volume(vol)
-            except Exception:
-                # Best-effort: a failed volume removal must never abort the
-                # component delete (DockerSdkBackend already swallows, but guard
-                # here too for defence in depth).
-                logger.warning(
-                    "remove_volume failed for %s during delete of %s",
-                    vol,
-                    name,
-                    exc_info=True,
-                )
+        await _delete_component_volumes(name, config, pairs, backend)
 
     # 5. Delete sibling records and env
     for sib_cfg, sib_record in pairs:
