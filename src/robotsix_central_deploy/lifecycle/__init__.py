@@ -10,7 +10,7 @@ from .models import (
 from .backend import ExecutionBackend, DockerBackend
 from .store import ServiceStore, InMemoryStore, FileStore
 from .config import LifecycleConfig
-from .server import app
+from .app import app
 
 __all__ = [
     "ServiceState",

@@ -4,6 +4,17 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix missing re-exports in ``lifecycle/server.py`` backward-compat shim: add ``shutil``, ``NoopBackend``, and ``_fetch_fresh_config_assist`` so test monkeypatches resolve correctly after the modular split.
+- Refactor monolithic `lifecycle/server.py` (2869 lines) into per-resource
+  modules using FastAPI's `APIRouter` pattern:
+  - `lifecycle/routers/health.py` — `/health`, `/disk`, `/disk/reclaim`
+  - `lifecycle/routers/services.py` — all `/services/{name}/...` endpoints
+  - `lifecycle/routers/volumes.py` — `/volumes/...` endpoints
+  - `lifecycle/routers/onboard.py` — `/onboard/preflight`, `/onboard/confirm`
+  - `lifecycle/schemas.py` — extracted Pydantic request/response models
+  - `lifecycle/deps.py` — dependency factories, helpers, lifespan
+  - `lifecycle/app.py` — FastAPI app assembly and router registration
+  - `lifecycle/server.py` — backward-compatibility re-export shim
 - Add `.yaml` extension to 6 periodic agent definition files (`audit`, `completeness_check`, `copy_paste`, `health`, `module_curator`, `test_gap`) so they are picked up by the periodic loader
 - Fix 15 mypy errors and switch mypy to blocking mode in CI: add `types-PyYAML` and `types-docker` stubs, annotate bare `dict` types in `server.py`, add type annotations to `NoopBackend.run_config_assist` and `DockerBackend.run_config_assist`, add `[[tool.mypy.overrides]]` for docker, and set `mypy-advisory: false` so new type errors fail the build.
 - Volume audit findings are now filed as board tickets when board API settings
