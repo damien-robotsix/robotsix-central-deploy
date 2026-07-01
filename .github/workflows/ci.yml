@@ -26,5 +26,5 @@ jobs:
       install-extras: ""
       cov-package: "robotsix_central_deploy"
       coverage-threshold: "80"
-      mypy-advisory: true
+      mypy-advisory: false
     secrets: inherit

@@ -27,6 +27,8 @@ dev = [
     "coverage>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.1",
+    "types-PyYAML>=6.0",
+    "types-docker>=7.1",
 ]
 docs = [
     "mkdocs-material>=9.5",
@@ -52,6 +54,10 @@ testpaths = ["tests"]
 
 [tool.mypy]
 strict = true
+
+[[tool.mypy.overrides]]
+module = "docker.*"
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["src"]

@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix 15 mypy errors and switch mypy to blocking mode in CI: add `types-PyYAML` and `types-docker` stubs, annotate bare `dict` types in `server.py`, add type annotations to `NoopBackend.run_config_assist` and `DockerBackend.run_config_assist`, add `[[tool.mypy.overrides]]` for docker, and set `mypy-advisory: false` so new type errors fail the build.
 - Volume audit findings are now filed as board tickets when board API settings
   are configured (`ROBOTSIX_LIFECYCLE_BOARD_API_URL`, `ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN`,
   `ROBOTSIX_LIFECYCLE_BOARD_REPO_ID`). The `robotsix-board-agent` library is now
