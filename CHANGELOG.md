@@ -12,6 +12,7 @@ All notable changes to robotsix-central-deploy.
   Dockerfile now copies the real `docs/DEPLOY_CONTRACT.md` into the installed
   package location. (Not caught by CI, which runs from the source tree where the
   symlink resolves.)
+- Add `dependency-review` CI job that uses `actions/dependency-review-action` pinned to commit SHA `2031cfc080254a8a887f58cffee85186f0e49e48` (`v4`), configured with `fail-on-severity: high`. This blocks PRs that introduce or upgrade to dependencies with high-severity known vulnerabilities.
 - Upgrade Debian system packages in Dockerfile base image to address CVEs in `python:3.14-slim` (perl, util-linux, tar, zlib1g, passwd, sysvinit-utils, and others).
 - Register gateway module in docs/modules.yaml with its reverse-proxy endpoints, dependencies, and test suite.
 - Add CodeQL SAST job to CI for taint-tracking vulnerability detection (security-extended and security-and-quality queries)
