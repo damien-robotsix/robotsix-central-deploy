@@ -877,6 +877,122 @@ class TestDeleteService:
         # Registry entry is gone
         assert server_mod.app.state.registry.get("svc-a") is None
 
+    async def test_remove_volumes_default_false_never_removes(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Default delete (remove_volumes omitted) must never touch volumes."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="svc-a",
+            image="svc-a:latest",
+            container_name="svc-a",
+            named_volumes=["svc-a-data"],
+        )
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+        await _seed_store("svc-a", image="svc-a:latest")
+
+        removed: list[str] = []
+
+        async def _fake_remove_volume(volume_name):
+            removed.append(volume_name)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "remove_volume", _fake_remove_volume
+        )
+
+        # No remove_volumes query param → default false.
+        resp = await client.delete("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 204
+        assert removed == []
+
+    async def test_remove_volumes_true_removes_primary_and_siblings_deduped(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """remove_volumes=true removes each unique volume once (primary + siblings)."""
+        from robotsix_central_deploy.registry.models import ServiceConfig
+
+        config_store = server_mod.app.state.component_config_store
+        store = server_mod.app.state.store
+
+        # Sibling declares a mount whose host is a named volume ("sib-data")
+        # plus a duplicate of the primary's volume ("shared-data") to exercise
+        # de-duplication.
+        sibling = ServiceConfig(
+            service_key="redis",
+            container_name="svc-a-redis",
+            image="redis:7",
+            mounts=[
+                VolumeMount(host="sib-data", container="/data"),
+                VolumeMount(host="shared-data", container="/shared"),
+            ],
+        )
+        cfg = ComponentConfig(
+            id="svc-a",
+            image="svc-a:latest",
+            container_name="svc-a",
+            named_volumes=["prim-data", "shared-data"],
+            siblings=[sibling],
+        )
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+        await store.put(ServiceRecord(name="svc-a", image="svc-a:latest"))
+        await store.put(ServiceRecord(name="svc-a-redis", image="redis:7"))
+
+        removed: list[str] = []
+
+        async def _fake_remove_volume(volume_name):
+            removed.append(volume_name)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "remove_volume", _fake_remove_volume
+        )
+
+        resp = await client.delete(
+            "/services/svc-a?remove_volumes=true", headers=auth_headers
+        )
+        assert resp.status_code == 204
+
+        # Each unique volume removed exactly once; "shared-data" de-duped.
+        assert sorted(removed) == ["prim-data", "shared-data", "sib-data"]
+        assert len(removed) == len(set(removed))
+
+        # Records still deleted alongside the volumes.
+        assert await store.get("svc-a") is None
+        assert await store.get("svc-a-redis") is None
+
+    async def test_remove_volume_error_does_not_abort_delete(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A remove_volume that raises must not abort the delete (still 204)."""
+        config_store = server_mod.app.state.component_config_store
+        store = server_mod.app.state.store
+        cfg = ComponentConfig(
+            id="svc-a",
+            image="svc-a:latest",
+            container_name="svc-a",
+            named_volumes=["svc-a-data"],
+        )
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+        await store.put(ServiceRecord(name="svc-a", image="svc-a:latest"))
+
+        async def _failing_remove_volume(volume_name):
+            raise RuntimeError("volume in use / NotFound")
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "remove_volume", _failing_remove_volume
+        )
+
+        resp = await client.delete(
+            "/services/svc-a?remove_volumes=true", headers=auth_headers
+        )
+        assert resp.status_code == 204
+
+        # Records were still deleted despite the volume-removal failure.
+        assert await store.get("svc-a") is None
+        assert config_store.get("svc-a") is None
+
 
 # ---------------------------------------------------------------------------
 # Lifecycle sibling fan-out

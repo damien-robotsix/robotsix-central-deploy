@@ -1081,7 +1081,21 @@ async function doRemove(name) {
   );
   if (!window.confirm(`Confirm: permanently remove "${name}"? This cannot be undone.`)) return;
 
-  const url = `/services/${encodeURIComponent(name)}?stop_container=${stopContainer}`;
+  // Destructive, opt-in data-volume removal. Default is UNCHECKED / NO:
+  // dismissing this prompt (Cancel) keeps the volumes and preserves today's
+  // behaviour. Only an explicit OK deletes the component's data volumes.
+  const removeVolumes = window.confirm(
+    `⚠ DELETE DATA VOLUMES for "${name}"?\n\n` +
+    `This is IRREVERSIBLE and destroys all stored data in the component's ` +
+    `named volumes.\n\n` +
+    `OK  → also delete data volumes (irreversible)\n` +
+    `Cancel → keep data volumes (default, safe)`
+  );
+
+  let url = `/services/${encodeURIComponent(name)}?stop_container=${stopContainer}`;
+  if (removeVolumes) {
+    url += `&remove_volumes=true`;
+  }
   try {
     const resp = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
     if (resp.status === 204) {
