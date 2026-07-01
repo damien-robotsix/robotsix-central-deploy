@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Upgrade Debian system packages in Dockerfile base image to address CVEs in `python:3.14-slim` (perl, util-linux, tar, zlib1g, passwd, sysvinit-utils, and others).
 - Register gateway module in docs/modules.yaml with its reverse-proxy endpoints, dependencies, and test suite.
 - Add CodeQL SAST job to CI for taint-tracking vulnerability detection (security-extended and security-and-quality queries)
 - Reverse DEPLOY_CONTRACT.md symlink direction: `docs/DEPLOY_CONTRACT.md` is now the canonical copy, `src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md` symlinks to it. CI guard updated accordingly.
