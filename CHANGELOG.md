@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix production image crash-loop: `ui/router.py` reads `DEPLOY_CONTRACT.md` at
+  import time, but `src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md` is a
+  symlink to the canonical `docs/DEPLOY_CONTRACT.md`, so the built wheel shipped
+  a dangling link and the app died on startup with `FileNotFoundError`. The
+  Dockerfile now copies the real `docs/DEPLOY_CONTRACT.md` into the installed
+  package location. (Not caught by CI, which runs from the source tree where the
+  symlink resolves.)
 - Upgrade Debian system packages in Dockerfile base image to address CVEs in `python:3.14-slim` (perl, util-linux, tar, zlib1g, passwd, sysvinit-utils, and others).
 - Register gateway module in docs/modules.yaml with its reverse-proxy endpoints, dependencies, and test suite.
 - Add CodeQL SAST job to CI for taint-tracking vulnerability detection (security-extended and security-and-quality queries)
