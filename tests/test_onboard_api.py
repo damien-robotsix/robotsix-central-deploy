@@ -753,6 +753,46 @@ class TestOnboardPreflightWithConfig:
         data = resp.json()
         assert "robotsix.deploy.config-target" in data["error"]
 
+    async def test_preflight_derives_schema_from_template_fallback(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """When config_yaml is None but config_yaml_template is set,
+        preflight derives a non-null config_schema from the template."""
+        spec = _make_derived_spec("cool-app")
+        spec.config_volume = "cool-app-config"
+        template_bytes = b"host: localhost\nport: 8080\n"
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=None,
+                    config_yaml_template=template_bytes,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["spec"]["config_schema"] is not None
+        assert "host" in data["spec"]["config_schema"]
+        assert "port" in data["spec"]["config_schema"]
+        assert data["spec"]["config_schema"]["host"] == "localhost"
+        assert data["spec"]["config_schema"]["port"] == 8080
+
 
 # ---------------------------------------------------------------------------
 # Confirm with config.yaml
