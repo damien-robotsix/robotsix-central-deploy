@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `.yaml` extension to 6 periodic agent definition files (`audit`, `completeness_check`, `copy_paste`, `health`, `module_curator`, `test_gap`) so they are picked up by the periodic loader
 - Fix 15 mypy errors and switch mypy to blocking mode in CI: add `types-PyYAML` and `types-docker` stubs, annotate bare `dict` types in `server.py`, add type annotations to `NoopBackend.run_config_assist` and `DockerBackend.run_config_assist`, add `[[tool.mypy.overrides]]` for docker, and set `mypy-advisory: false` so new type errors fail the build.
 - Volume audit findings are now filed as board tickets when board API settings
   are configured (`ROBOTSIX_LIFECYCLE_BOARD_API_URL`, `ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN`,
