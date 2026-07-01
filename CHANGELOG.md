@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Reverse DEPLOY_CONTRACT.md symlink direction: `docs/DEPLOY_CONTRACT.md` is now the canonical copy, `src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md` symlinks to it. CI guard updated accordingly.
 - Extract private helpers from long route handlers in `lifecycle/routers/`:
   `_gather_sibling_health`, `_fanout_deploy_siblings`, `_fanout_rollback_siblings`,
   `_delete_component_volumes`, `_resolve_account_mode`, `_postprocess_config_assist`
