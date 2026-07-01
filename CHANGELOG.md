@@ -15,6 +15,7 @@ All notable changes to robotsix-central-deploy.
   - `lifecycle/deps.py` — dependency factories, helpers, lifespan
   - `lifecycle/app.py` — FastAPI app assembly and router registration
   - `lifecycle/server.py` — backward-compatibility re-export shim
+- Deduplicate `DEPLOY_CONTRACT.md`: keep canonical copy in `src/robotsix_central_deploy/ui/` (where the server reads it) and replace `docs/DEPLOY_CONTRACT.md` with a symlink. Trim `README.md` to a minimal overview — full content lives in mkdocs. Add CI guard against accidental copy drift. (mill: Deduplicate DEPLOY_CONTRACT.md — eliminate identical copy in docs/ and src/robotsix_central_deploy/ui/ (20260701T091044Z-deduplicate-deploy-contract-md-eliminate-8f52))
 - Add `.yaml` extension to 6 periodic agent definition files (`audit`, `completeness_check`, `copy_paste`, `health`, `module_curator`, `test_gap`) so they are picked up by the periodic loader
 - Fix 15 mypy errors and switch mypy to blocking mode in CI: add `types-PyYAML` and `types-docker` stubs, annotate bare `dict` types in `server.py`, add type annotations to `NoopBackend.run_config_assist` and `DockerBackend.run_config_assist`, add `[[tool.mypy.overrides]]` for docker, and set `mypy-advisory: false` so new type errors fail the build.
 - Volume audit findings are now filed as board tickets when board API settings
