@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Enable the periodic security posture workflow to inspect CI workflows and pre-commit config against evolving OWASP/OpenSSF/SLSA best practices.
 - Remove dead code: `is_active()` function and `ACTIVE_STATES` constant from `lifecycle.models` (neither had any callers).
 - Remove stale `ROBOTSIX_LIFECYCLE_GHCR_TOKEN` documentation — the env var was never defined as a `LifecycleConfig` field, and `RegistryChecker` uses anonymous GHCR tokens fetched at runtime.
 - Fix config-assist blanking un-submitted config: `POST /services/{name}/config/assist`
