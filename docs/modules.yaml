@@ -28,6 +28,20 @@ modules:
     openapi: /openapi.json
     tests: tests/lifecycle/
 
+  gateway:
+    name: gateway
+    description: >
+      Reverse-proxy gateway — routes deploy.robotsix.net/<name>/... to
+      managed container services via HTTP and WebSocket proxying.
+    package: robotsix_central_deploy.gateway
+    dependencies:
+      - fastapi
+      - httpx
+    endpoints:
+      - GET /{name}
+      - GET /{name}/{path:path}
+    tests: tests/gateway/
+
   registry:
     name: registry
     description: >
