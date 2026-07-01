@@ -126,7 +126,6 @@ All settings loaded via `pydantic-settings` from environment or `.env.lifecycle`
 | `STORE_BACKEND` | `memory` | `memory` or `file` |
 | `EXECUTION_BACKEND` | `docker_sdk` | `docker_sdk`, `docker`, or `noop` |
 | `DOCKER_SOCKET_URL` | `unix:///var/run/docker.sock` | Docker daemon URL |
-| `GHCR_TOKEN` | `""` | GHCR auth token |
 | `REGISTRY_CHECK_INTERVAL` | `300` | Background check interval (0=disabled) |
 | `LOG_LEVEL` | `INFO` | Root logger level |
 

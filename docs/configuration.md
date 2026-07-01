@@ -54,7 +54,6 @@ The lifecycle server is configured via environment variables, all prefixed with 
 
 | Variable | Default | Description |
 |---|---|---|
-| `ROBOTSIX_LIFECYCLE_GHCR_TOKEN` | `""` | GitHub Container Registry token for authenticated registry checks. |
 | `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL` | `300` | Cache TTL in seconds for registry availability checks. |
 | `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL` | `300` | Background registry check interval in seconds. Set to `0` to disable periodic checks. |
 

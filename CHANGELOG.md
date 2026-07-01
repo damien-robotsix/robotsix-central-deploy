@@ -5,6 +5,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Remove dead code: `is_active()` function and `ACTIVE_STATES` constant from `lifecycle.models` (neither had any callers).
+- Remove stale `ROBOTSIX_LIFECYCLE_GHCR_TOKEN` documentation — the env var was never defined as a `LifecycleConfig` field, and `RegistryChecker` uses anonymous GHCR tokens fetched at runtime.
 - Add CI security scanning: `uv audit` for dependency vulnerabilities, ruff `S` (flake8-bandit) rules for SAST, Trivy container image scanning, and Gitleaks secret detection. Dockerfile converted to multi-stage to keep build-time tooling out of the runtime image.
 - Add dedicated unit tests for the onboard fetcher module in ``tests/onboard/test_fetcher.py``, exercising real local git repos for clone-and-read integration logic.
 - Fix missing re-exports in ``lifecycle/server.py`` backward-compat shim: add ``shutil``, ``NoopBackend``, and ``_fetch_fresh_config_assist`` so test monkeypatches resolve correctly after the modular split.
@@ -82,8 +83,8 @@ All notable changes to robotsix-central-deploy.
   "Warn threshold" row and a dynamic banner like "⚠ Low disk space — free space is
   below X%!".  Existing `settings.json` files with the old `disk_warn_bytes` key
   silently drop it and use the 10.0% default.
-- **Settings form secret-field placeholders**: `ghcr_token` and `auth_password`
-  now render as `••• set — enter a new value to change` placeholder when configured
+- **Settings form secret-field placeholders**: `auth_password`
+  now renders as `••• set — enter a new value to change` placeholder when configured
   (instead of disabled `***` in the value, which was indistinguishable from empty).
   Saving without clicking Change preserves the stored secret via `'***'` sentinel.
 - **Disk warning threshold as percentage**: renamed `disk_warn_bytes` to
@@ -328,8 +329,7 @@ All notable changes to robotsix-central-deploy.
   - `GET /services/{name}` now returns `update_available` (bool),
     `running_digest`, and `latest_digest` fields.
   - `GET /services` list items include `update_available`.
-  - New config options: `ROBOTSIX_LIFECYCLE_GHCR_TOKEN`,
-    `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL` (cache seconds, default 300),
+  - New config options: `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL` (cache seconds, default 300),
     `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL` (background poll seconds;
     0 disables).
   - `deployed_image_digest` now stores the manifest digest (from
