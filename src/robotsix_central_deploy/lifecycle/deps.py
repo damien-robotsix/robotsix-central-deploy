@@ -638,7 +638,11 @@ def _coerce_to_template(tval: object, sval: object) -> object:
 
 
 def _merge_config(
-    template: dict[str, Any], existing: dict[str, Any], submitted: dict[str, Any]
+    template: dict[str, Any],
+    existing: dict[str, Any],
+    submitted: dict[str, Any],
+    *,
+    prefer_existing_for_unset: bool = False,
 ) -> dict[str, Any]:
     """Deep-merge *submitted* over *existing*, respecting secret sentinel.
 
@@ -649,7 +653,18 @@ def _merge_config(
       fall back to ``""`` when there is no existing value).
     - Else: use the submitted value (coerced back to the template leaf's
       type, since the UI submits everything as strings) or, when the key
-      was not submitted, the template default.
+      was not submitted, fall back to the template default.
+
+    *prefer_existing_for_unset*: when True, a key absent from *submitted*
+    falls back to ``existing[key]`` (not the template default) whenever the
+    operator already has a value for it. This is for callers that pass a
+    SPARSE submission — e.g. config-assist, whose seed values include only
+    the few fields the operator typed. Without it, every field the operator
+    did not re-type (secrets like an LLM api_key, other config sections)
+    would be reset to the template default and silently lost. The Save form,
+    which renders every field, keeps the default (False) so an absent key
+    correctly means "cleared → reset to default". Repo-agnostic: no
+    knowledge of any particular config key.
     """
 
     def _recursive(
@@ -691,6 +706,11 @@ def _merge_config(
                 result[key] = i_existing.get(key, "")
             elif key in i_submitted:
                 result[key] = _coerce_to_template(tval, i_submitted[key])
+            elif prefer_existing_for_unset and key in i_existing:
+                # Sparse submission (e.g. config-assist): a key the operator
+                # did not re-type keeps their existing value instead of being
+                # reset to the template default and lost.
+                result[key] = i_existing[key]
             else:
                 result[key] = tval
         return result
