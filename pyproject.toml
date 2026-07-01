@@ -52,6 +52,9 @@ testpaths = ["tests"]
 [tool.setuptools.package-data]
 "robotsix_central_deploy" = ["ui/*.html", "ui/*.md"]
 
+[tool.ruff.lint]
+select = ["S"]
+
 [tool.mypy]
 strict = true
 

@@ -28,3 +28,57 @@ jobs:
       coverage-threshold: "80"
       mypy-advisory: false
     secrets: inherit
+
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        run: pip install uv
+      - name: Audit dependencies
+        run: uv audit
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITLEAKS_ENABLE_COMMENT: false
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Build Docker image
+        uses: docker/build-push-action@ee4ca427a2f43b6a16632044ca514c076267da23  # v6.19.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: robotsix-central-deploy:ci
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0
+        with:
+          image-ref: robotsix-central-deploy:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e  # v3.28.19
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
