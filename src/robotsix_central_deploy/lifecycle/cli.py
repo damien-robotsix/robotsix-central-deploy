@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 
 from .config import LifecycleConfig
+from .models import StoreBackend
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -21,7 +22,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--port", type=int, default=None, help="Bind port (default: 8100)"
     )
-    parser.add_argument("--store-backend", default=None, choices=("memory", "file"))
+    parser.add_argument("--store-backend", default=None, choices=tuple(StoreBackend))
     parser.add_argument("--execution-backend", default=None, choices=("docker", "noop"))
     parser.add_argument(
         "--api-key", default=None, help="API key for mutating endpoints"

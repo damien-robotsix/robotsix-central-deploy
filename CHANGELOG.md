@@ -15,6 +15,7 @@ All notable changes to robotsix-central-deploy.
   only by the sparse config-assist path) so untouched keys keep their existing value.
   Repo-agnostic — no knowledge of any specific config key. The Save form (which
   renders every field) keeps the previous "unset → template default" behaviour.
+- Define `HealthStatus`, `UpdateState`, `StoreBackend`, and `VolumeEntryType` `str, Enum` types in `lifecycle/models.py`; replace all duplicated hardcoded health/state/backend/volume-entry strings across `backend.py`, `deps.py`, `config.py`, `cli.py`, and `schemas.py` with canonical enum references. Add a CI `grep-lint` job to prevent raw-string backsliding.
 - Add CI security scanning: `uv audit` for dependency vulnerabilities, ruff `S` (flake8-bandit) rules for SAST, Trivy container image scanning, and Gitleaks secret detection. Dockerfile converted to multi-stage to keep build-time tooling out of the runtime image.
 - Add dedicated unit tests for the onboard fetcher module in ``tests/onboard/test_fetcher.py``, exercising real local git repos for clone-and-read integration logic.
 - Add orphan-volume pruning: `GET /volumes/orphans` lists Docker volumes owned

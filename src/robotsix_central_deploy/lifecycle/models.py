@@ -5,13 +5,13 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# State machine
+# Shared enumerations
 # ---------------------------------------------------------------------------
 
 
@@ -25,6 +25,37 @@ class ServiceState(str, Enum):
     RESTARTING = "restarting"
     FAILED = "failed"
     UNKNOWN = "unknown"
+
+
+class HealthStatus(str, Enum):
+    """Container health status — mirrors Docker health-check states."""
+
+    HEALTHY = "healthy"
+    UNHEALTHY = "unhealthy"
+    STARTING = "starting"
+    UNKNOWN = "unknown"
+
+
+class UpdateState(str, Enum):
+    """Image-update availability derived from registry polling."""
+
+    UNKNOWN = "unknown"
+    UP_TO_DATE = "up-to-date"
+    UPDATE_AVAILABLE = "update-available"
+
+
+class StoreBackend(str, Enum):
+    """Persistence backend for the lifecycle service store."""
+
+    MEMORY = "memory"
+    FILE = "file"
+
+
+class VolumeEntryType(str, Enum):
+    """Filesystem entry type returned by volume directory listing."""
+
+    FILE = "file"
+    DIR = "dir"
 
 
 #: Allowed transitions: state → set of reachable next states.
@@ -63,7 +94,7 @@ class ComponentInspect:
 
     state: ServiceState
     image_revision: str = ""  # org.opencontainers.image.revision label; empty if absent
-    health: str = ""  # "healthy" | "unhealthy" | "starting" | "" (no health check)
+    health: str = ""  # HealthStatus value or "" (no health check)
     running_digest: str = (
         ""  # sha256:... from image RepoDigests; empty when unresolvable
     )
@@ -93,13 +124,11 @@ class ServiceRecord:
 
     def to_status(self) -> "ServiceStatus":
         if not self.deployed_image_digest or not self.latest_registry_digest:
-            update_state: Literal["unknown", "up-to-date", "update-available"] = (
-                "unknown"
-            )
+            update_state = UpdateState.UNKNOWN
         elif self.deployed_image_digest == self.latest_registry_digest:
-            update_state = "up-to-date"
+            update_state = UpdateState.UP_TO_DATE
         else:
-            update_state = "update-available"
+            update_state = UpdateState.UPDATE_AVAILABLE
         return ServiceStatus(
             name=self.name,
             state=self.state,
@@ -110,7 +139,7 @@ class ServiceRecord:
             health=self.health,
             running_digest=self.deployed_image_digest,
             latest_digest=self.latest_registry_digest,
-            update_available=(update_state == "update-available"),
+            update_available=(update_state == UpdateState.UPDATE_AVAILABLE),
             update_state=update_state,
         )
 
@@ -132,7 +161,7 @@ class ContainerHealthSummary(BaseModel):
     """Health snapshot for one sibling container."""
 
     name: str  # sibling service name (e.g. "mail-ingester")
-    health: str = ""  # "healthy" | "unhealthy" | "starting" | "" (no healthcheck)
+    health: str = ""  # HealthStatus value or "" (no healthcheck)
     state: ServiceState = ServiceState.UNKNOWN
 
 
@@ -149,10 +178,10 @@ class ServiceStatus(BaseModel):
     update_available: bool = False
     running_digest: str = ""  # deployed_image_digest short-form (full sha256)
     latest_digest: str = ""  # last known registry manifest digest
-    update_state: Literal["unknown", "up-to-date", "update-available"] = "unknown"
+    update_state: UpdateState = UpdateState.UNKNOWN
     has_config_yaml: bool = False
     sibling_health: list[ContainerHealthSummary] = []
-    overall_health: str = ""  # rollup: "" | "healthy" | "unhealthy" | "starting"
+    overall_health: str = ""  # rollup: HealthStatus value or ""
 
 
 class ServiceListItem(BaseModel):
@@ -195,7 +224,7 @@ class ServiceHealthResponse(BaseModel):
     """Response for ``GET /services/{name}/health``."""
 
     name: str
-    health: str  # "healthy" | "unhealthy" | "starting" | "unknown"
+    health: str  # HealthStatus value
 
 
 # ---------------------------------------------------------------------------

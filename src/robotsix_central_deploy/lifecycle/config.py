@@ -9,6 +9,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .models import StoreBackend
+
 
 class LifecycleConfig(BaseSettings):
     """Configuration for the lifecycle server."""
@@ -27,7 +29,7 @@ class LifecycleConfig(BaseSettings):
     auth_username: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_USERNAME
     auth_password: str = ""  # ROBOTSIX_LIFECYCLE_AUTH_PASSWORD
     # Persistence
-    store_backend: str = "memory"  # "memory" | "file"
+    store_backend: StoreBackend = StoreBackend.MEMORY
     store_path: str = "lifecycle_state.yaml"
 
     # Execution backend

@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from robotsix_central_deploy.lifecycle.models import VolumeEntryType
 from robotsix_central_deploy.onboard.models import DerivedSpec  # noqa: TCH001
 from robotsix_central_deploy.registry.models import ConfigAssistSeed  # noqa: TCH001
 
@@ -61,7 +62,7 @@ class EnvUpdate(BaseModel):
 
 class VolumeEntry(BaseModel):
     name: str
-    type: str  # "file" or "dir"
+    type: VolumeEntryType
     size_bytes: int
 
 
