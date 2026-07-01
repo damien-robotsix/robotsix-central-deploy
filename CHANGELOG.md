@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `.trivyignore` to suppress known CVEs in Debian base image system packages (perl, util-linux, tar, zlib1g, passwd, sysvinit-utils) that are not exploitable in the container's attack surface
 - Fix production image crash-loop: `ui/router.py` reads `DEPLOY_CONTRACT.md` at
   import time, but `src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md` is a
   symlink to the canonical `docs/DEPLOY_CONTRACT.md`, so the built wheel shipped
