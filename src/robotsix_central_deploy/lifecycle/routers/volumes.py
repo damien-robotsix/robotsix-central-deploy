@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from ..auth import verify_auth
 from ..backend import ExecutionBackend
@@ -10,13 +10,22 @@ from ..config import LifecycleConfig
 from ..deps import (
     VOLUME_CAT_MAX_BYTES,
     _assert_volume_browsable,
+    _compute_orphan_volumes,
     _get_backend,
     _get_component_config_store,
     _get_config,
     _validate_volume_path,
 )
 from ...registry.config_store import ComponentConfigStore
-from ..schemas import VolumeEntry, VolumeFileResponse, VolumeListResponse
+from ..schemas import (
+    OrphanVolume,
+    OrphanVolumesResponse,
+    PruneVolumesRequest,
+    PruneVolumesResponse,
+    VolumeEntry,
+    VolumeFileResponse,
+    VolumeListResponse,
+)
 from ...volume_audit.models import VolumeAuditResponse
 from ...volume_audit.scheduler import VolumeAuditScheduler
 
@@ -34,6 +43,77 @@ async def get_volume_audit(
         return VolumeAuditResponse(enabled=False)
     scheduler: VolumeAuditScheduler = request.app.state.volume_audit_scheduler
     return scheduler.get_audit_response()
+
+
+@router.get(
+    "/volumes/orphans",
+    response_model=OrphanVolumesResponse,
+    summary="List Docker volumes owned by no component and not in use",
+)
+async def list_orphan_volumes(
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    _auth: None = Depends(verify_auth),
+) -> OrphanVolumesResponse:
+    """Return the prune-safe orphan volumes and their total size.
+
+    Orphans are Docker volumes declared by no registered component and not
+    attached to any container — leftovers from removed/re-onboarded components.
+    """
+    orphans = await _compute_orphan_volumes(backend, component_config_store)
+    return OrphanVolumesResponse(
+        volumes=[OrphanVolume(name=v.name, size_bytes=v.size_bytes) for v in orphans],
+        total_bytes=sum(v.size_bytes for v in orphans),
+    )
+
+
+@router.post(
+    "/volumes/prune",
+    response_model=PruneVolumesResponse,
+    summary="Remove orphan Docker volumes (owned by no component, not in use)",
+)
+async def prune_orphan_volumes(
+    body: PruneVolumesRequest | None = Body(default=None),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    _auth: None = Depends(verify_auth),
+) -> PruneVolumesResponse:
+    """Delete orphan volumes (IRREVERSIBLE).
+
+    The eligible set is recomputed server-side on every call — a component's
+    own volumes and in-use volumes are never touched even if their names are
+    passed in ``names``.  With no ``names`` (or ``names=null``) every orphan is
+    pruned; with an explicit list, only names that are still genuine orphans
+    are removed and the rest are reported under ``skipped``.
+    """
+    orphans = {
+        v.name: v
+        for v in await _compute_orphan_volumes(backend, component_config_store)
+    }
+    if body is not None and body.names is not None:
+        to_remove = [n for n in body.names if n in orphans]
+        skipped = [n for n in body.names if n not in orphans]
+    else:
+        to_remove = list(orphans)
+        skipped = []
+
+    for name in to_remove:
+        # Best-effort and non-raising (see ExecutionBackend.remove_volume).
+        await backend.remove_volume(name)
+
+    # Re-query to report only volumes that actually disappeared — remove_volume
+    # swallows errors, so success cannot be assumed from the call returning.
+    after = await _compute_orphan_volumes(backend, component_config_store)
+    still_present = {v.name for v in after}
+    removed = [n for n in to_remove if n not in still_present]
+    failed = [n for n in to_remove if n in still_present]
+    reclaimed = sum(orphans[n].size_bytes for n in removed)
+    return PruneVolumesResponse(
+        removed=removed,
+        skipped=skipped,
+        failed=failed,
+        space_reclaimed_bytes=reclaimed,
+    )
 
 
 @router.get(

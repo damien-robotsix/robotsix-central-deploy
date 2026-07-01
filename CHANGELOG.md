@@ -7,6 +7,12 @@ All notable changes to robotsix-central-deploy.
 - Remove dead code: `is_active()` function and `ACTIVE_STATES` constant from `lifecycle.models` (neither had any callers).
 - Add CI security scanning: `uv audit` for dependency vulnerabilities, ruff `S` (flake8-bandit) rules for SAST, Trivy container image scanning, and Gitleaks secret detection. Dockerfile converted to multi-stage to keep build-time tooling out of the runtime image.
 - Add dedicated unit tests for the onboard fetcher module in ``tests/onboard/test_fetcher.py``, exercising real local git repos for clone-and-read integration logic.
+- Add orphan-volume pruning: `GET /volumes/orphans` lists Docker volumes owned
+  by no registered component and not attached to any container, and
+  `POST /volumes/prune` removes them (IRREVERSIBLE). A component's own volumes
+  (even when stopped) and in-use volumes are never pruned; the eligible set is
+  recomputed server-side on every call. The dashboard gains an **Orphan Volumes**
+  panel with a "Prune all" button (shown only when orphans exist).
 - Fix missing re-exports in ``lifecycle/server.py`` backward-compat shim: add ``shutil``, ``NoopBackend``, and ``_fetch_fresh_config_assist`` so test monkeypatches resolve correctly after the modular split.
 - Refactor monolithic `lifecycle/server.py` (2869 lines) into per-resource
   modules using FastAPI's `APIRouter` pattern:
