@@ -210,12 +210,12 @@ class NoopBackend(ExecutionBackend):
 
     async def run_config_assist(
         self,
-        image,
-        command_str,
-        volume_name,
-        volume_mount_path,
-        env_dict,
-        timeout_seconds=60,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
     ) -> str:
         return "[noop backend]"
 
@@ -352,12 +352,12 @@ class DockerBackend(ExecutionBackend):
 
     async def run_config_assist(
         self,
-        image,
-        command_str,
-        volume_name,
-        volume_mount_path,
-        env_dict,
-        timeout_seconds=60,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
     ) -> str:
         raise NotImplementedError(
             "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
@@ -694,7 +694,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             detach=True,
-            restart_policy={"Name": "unless-stopped"},
+            restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
             network=PROXY_NETWORK,
         )
 

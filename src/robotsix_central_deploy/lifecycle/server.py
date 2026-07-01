@@ -94,7 +94,7 @@ class OnboardPreflightResponse(BaseModel):
 
 class OnboardConfirmRequest(BaseModel):
     spec: DerivedSpec  # env values now user-filled
-    config_values: dict | None = None  # optional, for config.yaml repos
+    config_values: dict[str, Any] | None = None  # optional, for config.yaml repos
 
 
 class OnboardConfirmResponse(BaseModel):
@@ -1826,7 +1826,7 @@ def _seed_for_detect(
 
 
 def _relocate_account_seed_values(
-    values: dict,
+    values: dict[str, Any],
     seeds: list["ConfigAssistSeed"],
     src_idx: int,
     dst_idx: int,
@@ -1845,8 +1845,8 @@ def _relocate_account_seed_values(
     accts: list[dict[str, Any]] = values.setdefault("accounts", [])
     while len(accts) <= max(src_idx, dst_idx):
         accts.append({})
-    src_acct: dict = accts[src_idx] if src_idx < len(accts) else {}
-    dst_acct: dict = accts[dst_idx]
+    src_acct: dict[str, Any] = accts[src_idx] if src_idx < len(accts) else {}
+    dst_acct: dict[str, Any] = accts[dst_idx]
 
     for seed in seeds:
         parts = seed.key.split(".")
