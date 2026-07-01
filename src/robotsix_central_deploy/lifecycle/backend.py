@@ -127,7 +127,7 @@ class ExecutionBackend(ABC):
     ) -> list[dict[str, Any]]:
         """Return one entry per immediate child of ``/vol/<rel_path>``.
 
-        Each entry is ``{"name": str, "type": "file"|"dir", "size_bytes": int}``
+        Each entry is ``{"name": str, "type": 'file'|'dir', "size_bytes": int}``
         (dirs report size_bytes 0).
         """
         ...
