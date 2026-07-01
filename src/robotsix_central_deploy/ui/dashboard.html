@@ -415,6 +415,15 @@
   </div>
 </section>
 
+<section class="disk-panel" id="orphan-volumes-panel" style="display:none">
+  <div class="disk-header">
+    <span class="disk-title">Orphan Volumes</span>
+    <span class="disk-meta">owned by no component &amp; not in use</span>
+  </div>
+  <div id="orphan-volumes-content"></div>
+  <div id="orphan-volumes-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
+</section>
+
 <div id="env-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="env-modal-title">
   <div class="env-panel">
     <div class="env-header">
@@ -946,10 +955,77 @@ function renderVolumeAuditPanel(data) {
   }
 }
 
+async function fetchOrphanVolumes() {
+  try {
+    const resp = await fetch('/volumes/orphans', {
+      headers: authHeaders(),
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) return;
+    renderOrphanVolumes(await resp.json());
+  } catch (_e) {
+    // silently skip — orphan panel is optional
+  }
+}
+
+function renderOrphanVolumes(data) {
+  const panel = document.getElementById('orphan-volumes-panel');
+  const vols = data.volumes || [];
+  if (vols.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+  const rows = vols.slice().sort((a, b) => b.size_bytes - a.size_bytes).map(v =>
+    `<tr><th style="font-weight:400;text-align:left;">${escHtml(v.name)}</th><td style="text-align:right;">${fmt_bytes(v.size_bytes)}</td></tr>`
+  ).join('');
+  document.getElementById('orphan-volumes-content').innerHTML = `
+    <table style="border-collapse:collapse;min-width:400px;">
+      <tr><th colspan="2" style="text-align:left;color:#94a3b8;padding:4px 12px;">
+        ${vols.length} orphan volume${vols.length === 1 ? '' : 's'} &middot; ${fmt_bytes(data.total_bytes)}
+        <button id="prune-vols-btn" class="reclaim-btn" onclick="pruneOrphanVolumes()">Prune all</button>
+      </th></tr>
+      ${rows}
+    </table>`;
+}
+
+async function pruneOrphanVolumes() {
+  const btn = document.getElementById('prune-vols-btn');
+  const toast = document.getElementById('orphan-volumes-toast');
+  if (!confirm('Permanently delete all orphan volumes? This destroys their data and cannot be undone.')) return;
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch('/volumes/prune', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    const freed = fmt_bytes(data.space_reclaimed_bytes || 0);
+    let msg = `✓ Removed ${data.removed.length} volume${data.removed.length === 1 ? '' : 's'} (${freed}).`;
+    if (data.failed && data.failed.length) msg += ` ${data.failed.length} could not be removed.`;
+    toast.textContent = msg;
+    toast.style.color = 'var(--green)';
+    await fetchOrphanVolumes();
+    await fetchDiskUsage();
+  } catch (e) {
+    toast.textContent = `Prune failed: ${e.message}`;
+    toast.style.color = 'var(--red)';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadDashboard() {
   hideError();
   fetchDiskUsage(); // fire-and-forget disk refresh alongside services
   fetchVolumeAudit(); // fire-and-forget volume audit refresh
+  fetchOrphanVolumes(); // fire-and-forget orphan-volume refresh
   try {
     const resp = await fetch('/services', { credentials: 'same-origin' });
     if (!resp.ok) {

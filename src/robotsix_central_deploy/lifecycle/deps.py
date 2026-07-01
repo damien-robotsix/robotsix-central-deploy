@@ -23,6 +23,7 @@ from .config import LifecycleConfig
 from .models import (
     ContainerHealthSummary,
     ServiceRecord,
+    VolumeStat,
 )
 from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
@@ -88,6 +89,24 @@ def _assert_volume_browsable(name: str, store: ComponentConfigStore) -> None:
             status_code=404,
             detail=f"Volume '{name}' not found or not browsable",
         )
+
+
+async def _compute_orphan_volumes(
+    backend: ExecutionBackend, store: ComponentConfigStore
+) -> list[VolumeStat]:
+    """Return Docker volumes safe to prune: owned by no registered component
+    AND not currently attached to any container.
+
+    A volume declared in some component's ``named_volumes`` is deliberately
+    excluded even when the component is stopped — its data must survive. A
+    volume attached to a container (``in_use``) is excluded because Docker
+    would refuse to remove it anyway and it is clearly still needed.
+    """
+    owned: set[str] = set()
+    for cfg in store.all():
+        owned.update(cfg.named_volumes)
+    df = await backend.disk_df()
+    return [v for v in df.volumes if v.name and v.name not in owned and not v.in_use]
 
 
 # ---------------------------------------------------------------------------

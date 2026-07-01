@@ -77,6 +77,36 @@ class VolumeFileResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Orphan-volume prune models
+# ---------------------------------------------------------------------------
+
+
+class OrphanVolume(BaseModel):
+    """A Docker volume owned by no registered component and not in use."""
+
+    name: str
+    size_bytes: int = 0
+
+
+class OrphanVolumesResponse(BaseModel):
+    volumes: list[OrphanVolume] = []
+    total_bytes: int = 0
+
+
+class PruneVolumesRequest(BaseModel):
+    # None → prune every orphan candidate; a list → prune only those names that
+    # are (still) genuine orphan candidates (others are reported under skipped).
+    names: list[str] | None = None
+
+
+class PruneVolumesResponse(BaseModel):
+    removed: list[str] = []  # volumes confirmed gone after the prune
+    skipped: list[str] = []  # requested names that were not eligible orphans
+    failed: list[str] = []  # eligible orphans that were still present afterwards
+    space_reclaimed_bytes: int = 0
+
+
+# ---------------------------------------------------------------------------
 # Config endpoint models
 # ---------------------------------------------------------------------------
 
