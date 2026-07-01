@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove dead code: `is_active()` function and `ACTIVE_STATES` constant from `lifecycle.models` (neither had any callers).
 - Add CI security scanning: `uv audit` for dependency vulnerabilities, ruff `S` (flake8-bandit) rules for SAST, Trivy container image scanning, and Gitleaks secret detection. Dockerfile converted to multi-stage to keep build-time tooling out of the runtime image.
 - Add dedicated unit tests for the onboard fetcher module in ``tests/onboard/test_fetcher.py``, exercising real local git repos for clone-and-read integration logic.
 - Fix missing re-exports in ``lifecycle/server.py`` backward-compat shim: add ``shutil``, ``NoopBackend``, and ``_fetch_fresh_config_assist`` so test monkeypatches resolve correctly after the modular split.

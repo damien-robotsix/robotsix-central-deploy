@@ -38,13 +38,6 @@ TRANSITIONS: dict[ServiceState, set[ServiceState]] = {
     ServiceState.UNKNOWN: {ServiceState.STARTING, ServiceState.STOPPING},
 }
 
-#: States that are considered "in-flight" (user-requested transition not yet settled).
-ACTIVE_STATES: set[ServiceState] = {
-    ServiceState.STARTING,
-    ServiceState.STOPPING,
-    ServiceState.RESTARTING,
-}
-
 #: States that are "at rest" — a subsequent start/stop produces a clean transition.
 RESTING_STATES: set[ServiceState] = {
     ServiceState.STOPPED,
@@ -57,11 +50,6 @@ RESTING_STATES: set[ServiceState] = {
 def can_transition(current: ServiceState, target: ServiceState) -> bool:
     """Return *True* if the state machine allows *current → target*."""
     return target in TRANSITIONS.get(current, set())
-
-
-def is_active(current: ServiceState) -> bool:
-    """Return *True* when a service is mid-transition."""
-    return current in ACTIVE_STATES
 
 
 # ---------------------------------------------------------------------------
