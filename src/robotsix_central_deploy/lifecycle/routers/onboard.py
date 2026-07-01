@@ -180,22 +180,27 @@ async def onboard_preflight(
             detail={"error": "compose validation failed", "violations": e.violations},
         )
 
-    # Parse config/config.yaml if present
-    if repo_files.config_yaml is not None:
+    # Parse config/config.yaml if present; fall back to config template
+    _config_bytes = (
+        repo_files.config_yaml
+        if repo_files.config_yaml is not None
+        else repo_files.config_yaml_template
+    )
+    if _config_bytes is not None:
         try:
             derived_spec.config_schema = _annotate_secret_sentinels(
-                parse_config_yaml(repo_files.config_yaml)
+                parse_config_yaml(_config_bytes)
             )  # type: ignore[assignment]
         except ConfigParseError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Preflight gate: config/config.yaml present but no config-target label
+    # Preflight gate: config (or template) present but no config-target label
     if derived_spec.config_schema is not None and derived_spec.config_volume is None:
         raise HTTPException(
             status_code=422,
             detail={
                 "error": (
-                    "repo has config/config.yaml but no service declares "
+                    "repo has a config file or template but no service declares "
                     "`robotsix.deploy.config-target` — add the label to "
                     "deploy/docker-compose.yml pointing to the full in-container "
                     "path of the config file (e.g. /home/mailbot/config/config.yaml)"

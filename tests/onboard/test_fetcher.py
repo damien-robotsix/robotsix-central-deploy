@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import yaml
 
 from robotsix_central_deploy.onboard.fetcher import (
     FetchError,
@@ -264,3 +265,163 @@ class TestFetchComposeBytes:
         ):
             with pytest.raises(FetchError, match="no deploy/docker-compose.yml found"):
                 fetch_compose_bytes("https://example.com/repo.git")
+
+
+# ---------------------------------------------------------------------------
+# helpers for extra files beyond _init_local_git_repo
+# ---------------------------------------------------------------------------
+
+
+def _add_and_commit(repo: Path, files: dict[str, bytes]) -> None:
+    """Write files into *repo* and commit them (existing repo)."""
+    for rel, content in files.items():
+        full = repo / rel
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_bytes(content)
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "."], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "add files"],
+        check=True,
+        capture_output=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# fetch_repo_files — config template fallback
+# ---------------------------------------------------------------------------
+
+
+class TestFetchRepoFilesTemplateFallback:
+    """Tests for the config_yaml_template fallback in ``fetch_repo_files``."""
+
+    def test_adjacent_example_yaml_used_when_config_absent(self, tmp_path: Path):
+        """When config/config.yaml is absent but config.example.yaml exists,
+        config_yaml_template is populated from the example file."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+        )
+        example_bytes = b"host: example.localhost\nport: 9090\n"
+        _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
+        _add_and_commit(
+            source_repo,
+            {"config/config.example.yaml": example_bytes},
+        )
+
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_real_git_clone_side_effect(source_repo),
+        ):
+            result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.config_yaml is None
+        assert result.config_yaml_template == example_bytes
+        parsed = yaml.safe_load(result.config_yaml_template)
+        assert parsed == {"host": "example.localhost", "port": 9090}
+
+    def test_label_template_path_used_when_adjacent_absent(self, tmp_path: Path):
+        """When neither config/config.yaml nor config.example.yaml exist,
+        but the compose carries robotsix.deploy.config-template pointing
+        to a committed file, config_yaml_template is populated."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+            b"    labels:\n"
+            b'      robotsix.deploy.config-template: "templates/schema.yaml"\n'
+        )
+        template_bytes = b"host: template.localhost\nport: 7070\n"
+        _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
+        _add_and_commit(
+            source_repo,
+            {"templates/schema.yaml": template_bytes},
+        )
+
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_real_git_clone_side_effect(source_repo),
+        ):
+            result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.config_yaml is None
+        assert result.config_yaml_template == template_bytes
+
+    def test_config_yaml_takes_precedence_over_template(self, tmp_path: Path):
+        """When config/config.yaml IS present, config_yaml_template is
+        left as None — the fallback block never runs."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+        )
+        config_bytes = b"host: real.localhost\n"
+        example_bytes = b"host: example.localhost\n"
+        _init_local_git_repo(
+            source_repo,
+            deploy_compose=compose_bytes,
+            config_yaml=config_bytes,
+        )
+        _add_and_commit(
+            source_repo,
+            {"config/config.example.yaml": example_bytes},
+        )
+
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_real_git_clone_side_effect(source_repo),
+        ):
+            result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.config_yaml == config_bytes
+        assert result.config_yaml_template is None
+
+    def test_no_fallback_when_neither_present(self, tmp_path: Path):
+        """When no config files at all exist, both fields are None."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+        )
+        _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
+
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_real_git_clone_side_effect(source_repo),
+        ):
+            result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.config_yaml is None
+        assert result.config_yaml_template is None
+
+    def test_label_template_traversal_rejected(self, tmp_path: Path):
+        """A label path with .. traversal is silently ignored."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+            b"    labels:\n"
+            b'      robotsix.deploy.config-template: "../../etc/passwd"\n'
+        )
+        _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
+
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_real_git_clone_side_effect(source_repo),
+        ):
+            result = fetch_repo_files("https://example.com/repo.git")
+
+        assert result.config_yaml is None
+        assert result.config_yaml_template is None
