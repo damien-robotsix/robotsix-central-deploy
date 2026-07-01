@@ -2204,14 +2204,14 @@ function renderVolumeListing(entries) {
 
   const sorted = [...entries].sort((a, b) => {
     if (a.type === b.type) return a.name.localeCompare(b.name);
-    return a.type === 'directory' ? -1 : 1;
+    return a.type === 'dir' ? -1 : 1;
   });
 
   const rows = sorted.map(e => {
     const name = escHtml(e.name);
     const size = e.size_bytes !== undefined ? fmt_bytes(e.size_bytes) : '\u2014';
     const fullPath = (currentVolumePath ? currentVolumePath + '/' : '') + e.name;
-    if (e.type === 'directory') {
+    if (e.type === 'dir') {
       return `<tr><td><span class="vb-entry vb-dir" onclick="loadVolumeDir('${escAttr(fullPath)}')">${name}</span></td><td style="color:#64748b;">\u2014</td></tr>`;
     }
     return `<tr><td><span class="vb-entry vb-file" onclick="loadVolumeFile('${escAttr(fullPath)}', '${escAttr(e.name)}')">${name}</span></td><td style="color:#94a3b8;">${size}</td></tr>`;
