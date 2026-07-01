@@ -22,8 +22,10 @@ from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBack
 from .config import LifecycleConfig
 from .models import (
     ContainerHealthSummary,
+    HealthStatus,
     ServiceRecord,
     VolumeStat,
+    StoreBackend,
 )
 from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
@@ -162,7 +164,7 @@ async def _registry_check_loop(
 
 
 def _build_store(cfg: LifecycleConfig) -> ServiceStore:
-    if cfg.store_backend == "file":
+    if cfg.store_backend == StoreBackend.FILE:
         return FileStore(cfg.effective_store_path)
     return InMemoryStore()
 
@@ -425,12 +427,12 @@ def _compute_overall_health(
     checked = [h for h in candidates if h]  # non-empty → has healthcheck
     if not checked:
         return ""
-    if any(h == "unhealthy" for h in checked):
-        return "unhealthy"
-    if any(h == "starting" for h in checked):
-        return "starting"
-    if all(h == "healthy" for h in checked):
-        return "healthy"
+    if any(h == HealthStatus.UNHEALTHY for h in checked):
+        return HealthStatus.UNHEALTHY
+    if any(h == HealthStatus.STARTING for h in checked):
+        return HealthStatus.STARTING
+    if all(h == HealthStatus.HEALTHY for h in checked):
+        return HealthStatus.HEALTHY
     return ""
 
 

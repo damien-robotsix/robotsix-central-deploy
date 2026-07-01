@@ -109,3 +109,49 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-results.sarif
+
+  grep-lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Flag raw health/state/backend strings outside enum definition
+        run: |
+          set -euo pipefail
+          violations=0
+          # Health strings (exclude models.py where the enum lives)
+          for pattern in '"healthy"' '"unhealthy"' '"starting"'; do
+            matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
+              --exclude='models.py' || true)
+            if [ -n "$matches" ]; then
+              echo "::error file={},line={}::Raw health string $pattern found outside models.py"
+              echo "$matches"
+              violations=$((violations + 1))
+            fi
+          done
+          # Update-state strings (exclude models.py)
+          for pattern in '"up-to-date"' '"update-available"'; do
+            matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
+              --exclude='models.py' || true)
+            if [ -n "$matches" ]; then
+              echo "::error file={},line={}::Raw update-state string $pattern found outside models.py"
+              echo "$matches"
+              violations=$((violations + 1))
+            fi
+          done
+          # Store-backend strings (exclude models.py and conftest)
+          for pattern in '"memory"' '"file"'; do
+            matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
+              --exclude='models.py' || true)
+            if [ -n "$matches" ]; then
+              echo "::error file={},line={}::Raw store-backend string $pattern found outside models.py"
+              echo "$matches"
+              violations=$((violations + 1))
+            fi
+          done
+          if [ "$violations" -gt 0 ]; then
+            echo "::error::Found $violations violation(s) of enum-only string policy"
+            exit 1
+          fi
+          echo "All grep-lint checks passed."

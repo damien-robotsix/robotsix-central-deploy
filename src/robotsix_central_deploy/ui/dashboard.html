@@ -40,7 +40,7 @@
   .badge-update-unknown        { background: rgba(148,163,184,0.18); color: var(--grey);  }
   .badge-ok                    { color: #4caf50; font-weight: bold; }
   .badge-warn                  { color: #ff9800; font-weight: bold; }
-  .health-healthy { color: var(--green); font-weight: 600; }
+  .health-healthy { color: var(--green); font-weight: 600; } /* HealthStatus enum: lifecycle/models.py */
   .health-unhealthy { color: var(--red); font-weight: 600; }
   .health-unknown { color: var(--grey); }
   .revision { font-family: monospace; font-size: 0.82rem; cursor: default; }
@@ -649,6 +649,7 @@ function renderRow(svc) {
   const rev = svc.image_revision || '';
   const revShort = rev ? rev.slice(0, 12) : '\u2014';
   // Use rollup health for display when available; fall back to primary-only health.
+  // Health values: see HealthStatus enum (lifecycle/models.py)
   const health = svc.overall_health || svc.health || '';
   let healthClass = 'health-unknown';
   if (health === 'healthy') healthClass = 'health-healthy';
@@ -672,6 +673,7 @@ function renderRow(svc) {
   }
 
   // Up-to-date badge
+  // Update-state values: see UpdateState enum (lifecycle/models.py)
   const updateState = svc.update_state || 'unknown';
   let updateBadge = '';
   if (updateState === 'up-to-date') {

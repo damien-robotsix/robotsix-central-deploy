@@ -19,6 +19,7 @@ from .models import (
     ComponentInspect,
     DeployOutcome,
     DockerDfStats,
+    HealthStatus,
     RollbackOutcome,
     ServiceRecord,
     ServiceState,
@@ -730,13 +731,13 @@ class DockerSdkBackend(ExecutionBackend):
                 container.reload()
                 h = container.attrs["State"].get("Health")
                 return (
-                    h["Status"] if h else "healthy"
+                    h["Status"] if h else HealthStatus.HEALTHY
                 )  # no healthcheck → treat as healthy
 
             status = await loop.run_in_executor(None, _poll)
-            if status == "healthy":
+            if status == HealthStatus.HEALTHY:
                 return
-            if status == "unhealthy":
+            if status == HealthStatus.UNHEALTHY:
                 raise RuntimeError(f"Container {name} is unhealthy after deploy")
             await asyncio.sleep(2)
         logger.warning(
