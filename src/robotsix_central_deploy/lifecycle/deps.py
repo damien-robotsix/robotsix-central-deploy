@@ -34,7 +34,7 @@ from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig, ServiceConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
-from ..volume_audit.scheduler import VolumeAuditScheduler
+from .volume_audit.scheduler import VolumeAuditScheduler
 from .store import FileStore, InMemoryStore, ServiceStore
 
 if TYPE_CHECKING:
