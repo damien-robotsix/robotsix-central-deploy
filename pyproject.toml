@@ -77,6 +77,9 @@ extend-select = ["S"]
 # S603 + S607: git clone via subprocess is constrained (https-only gate, temp dir);
 # the onboard endpoint is authenticated so this is an accepted risk.
 "src/robotsix_central_deploy/onboard/fetcher.py" = ["S603", "S607"]
+# S603 + S607: test infrastructure uses subprocess.run to create local git repos
+# with hardcoded, trusted arguments — no untrusted input flows through these calls.
+"tests/onboard/test_fetcher.py" = ["S603", "S607"]
 
 [tool.mypy]
 strict = true
