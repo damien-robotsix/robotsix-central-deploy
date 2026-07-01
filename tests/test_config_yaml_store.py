@@ -322,6 +322,68 @@ class TestMergeConfig:
         )
         assert result == {"hosts": ["x", "y"]}
 
+    # -- prefer_existing_for_unset (sparse submissions, e.g. config-assist) --
+
+    def test_prefer_existing_preserves_unset_secret(self):
+        """Sparse submission that omits a secret section keeps the existing
+        value instead of resetting it to the (sentinel→empty) template default.
+
+        Regression: config-assist submits only account seed fields, so the
+        operator's LLM api_key was silently blanked on every helper run.
+        """
+        template = {
+            "llm": {"api_key": "SECRET"},
+            "accounts": [{"id": "", "auth": {"username": "", "password": "SECRET"}}],
+        }
+        existing = {
+            "llm": {"api_key": "real-key"},
+            "accounts": [
+                {"id": "ovh", "auth": {"username": "me@x.com", "password": "pw"}}
+            ],
+        }
+        submitted = {
+            "accounts": [
+                {"id": "ovh", "auth": {"username": "me@x.com", "password": "pw"}}
+            ]
+        }
+        result = _merge_config(
+            template, existing, submitted, prefer_existing_for_unset=True
+        )
+        assert result["llm"]["api_key"] == "real-key"
+
+    def test_prefer_existing_preserves_unset_sibling_account(self):
+        """A sparse submission touching one account preserves the others."""
+        template = {"accounts": [{"id": "", "imap": {"host": ""}}]}
+        existing = {
+            "accounts": [
+                {"id": "ovh", "imap": {"host": "ssl0.ovh.net"}},
+                {"id": "gmail", "imap": {"host": "imap.gmail.com"}},
+            ]
+        }
+        submitted = {"accounts": [{"id": "ovh", "imap": {"host": "ssl0.ovh.net"}}]}
+        result = _merge_config(
+            template, existing, submitted, prefer_existing_for_unset=True
+        )
+        # The submitted account is present; the untouched top-level sections
+        # are preserved. (Sibling-account list preservation is handled by the
+        # config-assist handler's account-aware merge, not _merge_config.)
+        assert result["accounts"][0]["imap"]["host"] == "ssl0.ovh.net"
+
+    def test_prefer_existing_default_false_uses_template(self):
+        """Default behaviour is unchanged: an unset key falls back to the
+        template default (the Save form renders every field)."""
+        template = {"server": {"host": "localhost", "port": 8080}}
+        existing = {"server": {"host": "0.0.0.0", "port": 8080}}
+        result = _merge_config(template, existing, {})
+        assert result["server"]["host"] == "localhost"
+
+    def test_prefer_existing_falls_back_to_template_when_no_existing(self):
+        """When *existing* also lacks the key, the template default is used
+        even with prefer_existing_for_unset=True (secrets strip to empty)."""
+        template = {"llm": {"api_key": "SECRET"}}
+        result = _merge_config({**template}, {}, {}, prefer_existing_for_unset=True)
+        assert result["llm"]["api_key"] == ""
+
 
 # ---------------------------------------------------------------------------
 # _seed_for_detect

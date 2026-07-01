@@ -1022,7 +1022,12 @@ async def run_config_assist(
     template = await config_yaml_store.get_template(name) or {}
     current_raw = await config_yaml_store.get_current(name)
     existing = current_raw or template
-    partial = _merge_config(template, existing, body.values)
+    # Sparse submission: body.values holds only the seed fields the operator
+    # typed, so untouched config (secrets like an LLM api_key, other sections)
+    # must be kept from *existing* rather than reset to template defaults.
+    partial = _merge_config(
+        template, existing, body.values, prefer_existing_for_unset=True
+    )
 
     # --- Account-aware mode resolution ---
     existing_accounts: list[dict[str, Any]] = (
@@ -1072,7 +1077,9 @@ async def run_config_assist(
             else:
                 submitted_accts.append(dict(ea))
         # Re-merge partial now that seed values are at the target index.
-        partial = _merge_config(template, existing, body.values)
+        partial = _merge_config(
+            template, existing, body.values, prefer_existing_for_unset=True
+        )
 
         new_id = _derive_account_id(comp_cfg.config_assist_seeds, partial, target_idx)
         if body.account_name:

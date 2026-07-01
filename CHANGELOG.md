@@ -6,6 +6,14 @@ All notable changes to robotsix-central-deploy.
 
 - Remove dead code: `is_active()` function and `ACTIVE_STATES` constant from `lifecycle.models` (neither had any callers).
 - Remove stale `ROBOTSIX_LIFECYCLE_GHCR_TOKEN` documentation — the env var was never defined as a `LifecycleConfig` field, and `RegistryChecker` uses anonymous GHCR tokens fetched at runtime.
+- Fix config-assist blanking un-submitted config: `POST /services/{name}/config/assist`
+  submits only the seed fields the operator typed, but `_merge_config` reset every
+  other key to the template default — so an operator's LLM api_key / observability
+  config (any secret or section the assist form did not include) was silently wiped
+  on each helper run. `_merge_config` gains a `prefer_existing_for_unset` flag (used
+  only by the sparse config-assist path) so untouched keys keep their existing value.
+  Repo-agnostic — no knowledge of any specific config key. The Save form (which
+  renders every field) keeps the previous "unset → template default" behaviour.
 - Add CI security scanning: `uv audit` for dependency vulnerabilities, ruff `S` (flake8-bandit) rules for SAST, Trivy container image scanning, and Gitleaks secret detection. Dockerfile converted to multi-stage to keep build-time tooling out of the runtime image.
 - Add dedicated unit tests for the onboard fetcher module in ``tests/onboard/test_fetcher.py``, exercising real local git repos for clone-and-read integration logic.
 - Add orphan-volume pruning: `GET /volumes/orphans` lists Docker volumes owned
