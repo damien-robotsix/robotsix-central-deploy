@@ -53,7 +53,7 @@ testpaths = ["tests"]
 "robotsix_central_deploy" = ["ui/*.html", "ui/*.md"]
 
 [tool.ruff.lint]
-select = ["S"]
+extend-select = ["S"]
 
 [tool.mypy]
 strict = true

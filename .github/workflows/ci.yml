@@ -41,7 +41,7 @@ jobs:
       - name: Install uv
         run: pip install uv
       - name: Audit dependencies
-        run: uv audit
+        run: uv audit --frozen
 
   gitleaks:
     runs-on: ubuntu-latest
