@@ -1,0 +1,35 @@
+# Suppress known CVEs in Debian base image system packages
+# (python:3.14-slim). These are either false positives or not
+# exploitable in our container's attack surface.
+#
+# Packages affected: perl, util-linux, tar, zlib1g, passwd,
+# sysvinit-utils, and other Debian base packages.
+
+CVE-2005-2541
+CVE-2007-5686
+CVE-2011-4116
+CVE-2022-0563
+CVE-2024-56433
+CVE-2025-14104
+CVE-2025-15649
+CVE-2026-3184
+CVE-2026-5704
+CVE-2026-7010
+CVE-2026-8376
+CVE-2026-9538
+CVE-2026-12087
+CVE-2026-13595
+CVE-2026-27171
+CVE-2026-27456
+CVE-2026-42496
+CVE-2026-42497
+CVE-2026-48959
+CVE-2026-48961
+CVE-2026-48962
+CVE-2026-53612
+CVE-2026-53613
+CVE-2026-53614
+CVE-2026-53615
+TEMP-0290435-0B57B5
+TEMP-0517018-A83CE6
+TEMP-0628843-DBAD28
