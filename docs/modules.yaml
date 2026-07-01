@@ -86,11 +86,11 @@ modules:
       Docker volume audit subsystem — periodic scanning of managed named
       volumes, growth-over-time tracking with percentile and absolute-delta
       guards, and threshold-breach reporting via a pluggable report seam.
-    package: robotsix_central_deploy.volume_audit
+    package: robotsix_central_deploy.lifecycle.volume_audit
     dependencies:
       - pydantic
     config:
       env_prefix: ROBOTSIX_LIFECYCLE_
     endpoints:
       - GET /volumes/audit
-    tests: tests/volume_audit/ tests/lifecycle/test_volume_audit_endpoint.py
+    tests: tests/lifecycle/volume_audit/ tests/lifecycle/test_volume_audit_endpoint.py

@@ -5,7 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from robotsix_central_deploy.registry.models import ComponentConfig
-from robotsix_central_deploy.volume_audit.scheduler import VolumeAuditScheduler
+from robotsix_central_deploy.lifecycle.volume_audit.scheduler import (
+    VolumeAuditScheduler,
+)
 
 
 def _make_scheduler(
@@ -57,7 +59,7 @@ class TestVolumeAuditScheduler:
         self, tmp_path, monkeypatch
     ):
         """When a scan pass detects threshold-level growth, report_finding is called."""
-        import robotsix_central_deploy.volume_audit.scheduler as sched_mod
+        import robotsix_central_deploy.lifecycle.volume_audit.scheduler as sched_mod
 
         called_with = []
 
