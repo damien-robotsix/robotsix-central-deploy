@@ -55,6 +55,29 @@ testpaths = ["tests"]
 [tool.ruff.lint]
 extend-select = ["S"]
 
+[tool.ruff.lint.per-file-ignores]
+# Bandit S-rules are designed for production code.  Test files routinely use
+# hard-coded sentinel strings (S105/S106), bind to localhost/0.0.0.0 in test
+# fixtures (S104), assert freely (S101), and reference /tmp (S108).
+"tests/**/*.py" = ["S101", "S104", "S105", "S106", "S108"]
+# S101: type-narrowing asserts after explicit None / error-path checks —
+# they encode invariants, not security issues.
+"src/robotsix_central_deploy/gateway/router.py" = ["S101"]
+# S101: assert that store/backend/config were initialised (app-startup guard).
+"src/robotsix_central_deploy/lifecycle/deps.py" = ["S101", "S105", "S110"]
+# S110: best-effort inspection paths where failures are intentionally swallowed.
+"src/robotsix_central_deploy/lifecycle/backend.py" = ["S110"]
+# S104: 0.0.0.0 bind is intentional for the containerised service.
+# S105: "secrets.key" is a filename, not a hardcoded credential.
+"src/robotsix_central_deploy/lifecycle/config.py" = ["S104", "S105"]
+# S101 + S110: see notes above.
+"src/robotsix_central_deploy/lifecycle/routers/services.py" = ["S101", "S110"]
+# S105: SECRET_MASK is a sentinel placeholder, not a real credential.
+"src/robotsix_central_deploy/lifecycle/settings_router.py" = ["S105"]
+# S603 + S607: git clone via subprocess is constrained (https-only gate, temp dir);
+# the onboard endpoint is authenticated so this is an accepted risk.
+"src/robotsix_central_deploy/onboard/fetcher.py" = ["S603", "S607"]
+
 [tool.mypy]
 strict = true
 
