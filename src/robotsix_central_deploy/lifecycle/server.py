@@ -2444,6 +2444,10 @@ async def delete_service(
         default=True,
         description="Stop and remove the managed container (true) or leave it running (false)",
     ),
+    remove_volumes: bool = Query(
+        default=False,
+        description="Also delete the component's data volumes (IRREVERSIBLE — destroys stored data)",
+    ),
     store: ServiceStore = Depends(_get_store),
     config_store: ComponentConfigStore = Depends(_get_component_config_store),
     env_store: EnvStore = Depends(_get_env_store),
@@ -2496,6 +2500,38 @@ async def delete_service(
                 logger.warning(
                     "remove_container failed for %s during delete",
                     sib_record.name,
+                    exc_info=True,
+                )
+
+    # 4b. Best-effort volume removal (opt-in; IRREVERSIBLE).
+    # Only ever touch volumes declared by THIS component: the primary's
+    # named_volumes plus each sibling's mount hosts (siblings are
+    # ServiceConfig, which has no named_volumes field — deploy pre-creates
+    # sibling volumes as [m.host for m in sib_cfg.mounts], so we remove
+    # exactly that same set). De-duplicated; each removal is best-effort and
+    # cannot abort the delete.
+    if remove_volumes:
+        volumes: list[str] = list(config.named_volumes)
+        for sib_cfg, _sib_record in pairs:
+            volumes.extend(m.host for m in sib_cfg.mounts)
+        seen: set[str] = set()
+        for vol in volumes:
+            if vol in seen:
+                continue
+            seen.add(vol)
+            logger.info(
+                "delete %s: removing volume %s (remove_volumes=true)", name, vol
+            )
+            try:
+                await backend.remove_volume(vol)
+            except Exception:
+                # Best-effort: a failed volume removal must never abort the
+                # component delete (DockerSdkBackend already swallows, but guard
+                # here too for defence in depth).
+                logger.warning(
+                    "remove_volume failed for %s during delete of %s",
+                    vol,
+                    name,
                     exc_info=True,
                 )
 

@@ -144,6 +144,17 @@ class ExecutionBackend(ABC):
         """
         ...
 
+    @abstractmethod
+    async def remove_volume(self, volume_name: str) -> None:
+        """Remove the Docker named volume *volume_name*.
+
+        Best-effort and IRREVERSIBLE: destroys all data stored in the
+        volume.  Implementations must NOT raise on failure (a volume that
+        is already gone, or a transient removal error, must not abort the
+        caller) — they log and return instead.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -231,6 +242,9 @@ class NoopBackend(ExecutionBackend):
         self, volume_name: str, rel_path: str, max_bytes: int
     ) -> dict[str, Any]:
         raise NotImplementedError("read_volume_file not supported for NoopBackend")
+
+    async def remove_volume(self, volume_name: str) -> None:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +392,11 @@ class DockerBackend(ExecutionBackend):
     ) -> dict[str, Any]:
         raise NotImplementedError(
             "read_volume_file not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def remove_volume(self, volume_name: str) -> None:
+        raise NotImplementedError(
+            "remove_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
@@ -1063,6 +1082,27 @@ class DockerSdkBackend(ExecutionBackend):
             "binary": binary,
             "truncated": truncated,
         }
+
+    async def remove_volume(self, volume_name: str) -> None:
+        """Remove the Docker named volume *volume_name* (best-effort).
+
+        Swallows ``docker.errors.NotFound`` (already gone) and logs a
+        warning on any other error — never raises, so a failed volume
+        removal cannot abort a component delete.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        def _remove() -> None:
+            self._client.volumes.get(volume_name).remove(force=True)
+
+        try:
+            await loop.run_in_executor(None, _remove)
+        except docker.errors.NotFound:
+            pass
+        except Exception as exc:
+            logger.warning("remove_volume %s: %s", volume_name, exc)
 
     async def run_config_assist(
         self,

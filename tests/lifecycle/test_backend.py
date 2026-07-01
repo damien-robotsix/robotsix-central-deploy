@@ -153,6 +153,30 @@ class TestDockerSdkBackend:
         container.restart.assert_called_once()
         assert state == ServiceState.RUNNING
 
+    async def test_remove_volume_calls_get_and_remove_force(self, backend):
+        b, client = backend
+        volume = MagicMock()
+        client.volumes.get.return_value = volume
+        await b.remove_volume("svc-a-data")
+        client.volumes.get.assert_called_once_with("svc-a-data")
+        volume.remove.assert_called_once_with(force=True)
+
+    async def test_remove_volume_swallows_not_found(self, backend):
+        import docker
+
+        b, client = backend
+        client.volumes.get.side_effect = docker.errors.NotFound("gone")
+        # Must not raise — already-gone volume is a no-op.
+        await b.remove_volume("svc-a-data")
+
+    async def test_remove_volume_swallows_other_errors(self, backend):
+        b, client = backend
+        volume = MagicMock()
+        volume.remove.side_effect = RuntimeError("volume in use")
+        client.volumes.get.return_value = volume
+        # Best-effort: other errors are logged, not raised.
+        await b.remove_volume("svc-a-data")
+
     @pytest.mark.parametrize(
         "docker_status,expected",
         [
