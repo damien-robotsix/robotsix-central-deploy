@@ -228,7 +228,7 @@ services:
         y = b"not: valid: yaml: ["
         with pytest.raises(ParseError) as exc:
             parse_compose(y, name="foo", git_url="https://x.com/r.git")
-        assert "not valid YAML" in str(exc.value)
+        assert "docker-compose.yml parse error" in str(exc.value)
 
     def test_driver_not_local(self):
         y = """\

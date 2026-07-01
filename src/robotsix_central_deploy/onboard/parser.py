@@ -416,8 +416,8 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     # 2. YAML parse
     try:
         doc = yaml.safe_load(compose_bytes)
-    except yaml.YAMLError:
-        raise ParseError(["compose is not valid YAML"])
+    except yaml.YAMLError as exc:
+        raise ParseError([f"docker-compose.yml parse error: {exc}"]) from exc
 
     if not isinstance(doc, dict):
         violations.append("compose root must be a mapping")
@@ -576,5 +576,8 @@ def parse_config_yaml(config_bytes: bytes) -> dict[str, Any]:
     except yaml.YAMLError as exc:
         raise ConfigParseError(f"config/config.yaml parse error: {exc}") from exc
     if not isinstance(doc, dict):
-        raise ConfigParseError("config/config.yaml must be a top-level YAML mapping")
+        msg = "config/config.yaml must be a top-level YAML mapping"
+        if doc is not None:
+            msg += f" (got {type(doc).__name__})"
+        raise ConfigParseError(msg)
     return doc

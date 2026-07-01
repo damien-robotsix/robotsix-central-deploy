@@ -1064,6 +1064,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "robotsix-board-agent" },
+    { name = "robotsix-yaml-config" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "websockets" },
 ]
@@ -1094,6 +1095,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "robotsix-board-agent", git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=3b999fc697fd1112024160f6f5ba45bd89e7f5d0" },
+    { name = "robotsix-yaml-config", git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=d302ee4ada88905efa48333894ed19519f9f7920" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
     { name = "websockets", specifier = ">=12.0" },
 ]
@@ -1122,6 +1124,14 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic-ai-slim" },
     { name = "starlette" },
+]
+
+[[package]]
+name = "robotsix-yaml-config"
+version = "0.1.0"
+source = { git = "https://github.com/damien-robotsix/robotsix-yaml-config.git?rev=d302ee4ada88905efa48333894ed19519f9f7920#d302ee4ada88905efa48333894ed19519f9f7920" }
+dependencies = [
+    { name = "pyyaml" },
 ]
 
 [[package]]

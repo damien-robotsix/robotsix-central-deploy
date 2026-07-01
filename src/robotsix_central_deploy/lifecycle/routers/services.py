@@ -14,9 +14,10 @@ from fastapi.responses import StreamingResponse
 
 from ..auth import verify_auth
 from ..backend import ExecutionBackend
+from robotsix_yaml_config import deep_merge
+
 from ..deps import (
     _compute_overall_health,
-    _deep_merge,
     _derive_account_id,
     _get_backend,
     _get_component_config_store,
@@ -1300,7 +1301,7 @@ async def run_config_assist(
     # Merge detected fields into the submitted config so the detected
     # output never clobbers other fields the user already entered.
     if mode == "add_new":
-        # _deep_merge replaces the accounts list wholesale. Guard: always take
+        # deep_merge replaces the accounts list wholesale. Guard: always take
         # existing accounts from storage (not from what the detect program may
         # have re-written), and only take the new account's slot from filled.
         filled_accts = filled.get("accounts", [])
@@ -1315,10 +1316,10 @@ async def run_config_assist(
             if target_idx < len(partial.get("accounts", []))
             else {}
         )
-        merged_new_acct = _deep_merge(new_acct_partial, new_acct_from_filled)
+        merged_new_acct = deep_merge(dict(new_acct_partial), new_acct_from_filled)
         # Merge non-accounts keys normally.
-        merged = _deep_merge(
-            {k: v for k, v in partial.items() if k != "accounts"},
+        merged = deep_merge(
+            dict({k: v for k, v in partial.items() if k != "accounts"}),
             {k: v for k, v in filled.items() if k != "accounts"},
         )
         assert (
@@ -1326,7 +1327,7 @@ async def run_config_assist(
         )  # add_new mode only reachable when current_raw is set
         merged["accounts"] = list(current_raw.get("accounts", [])) + [merged_new_acct]
     else:
-        merged = _deep_merge(partial, filled)
+        merged = deep_merge(dict(partial), filled)
 
     # Post-process: drop unconfigured accounts and detect Office365
     merged, output = _postprocess_config_assist(merged, output)

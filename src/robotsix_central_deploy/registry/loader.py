@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-import yaml
+from robotsix_yaml_config import (
+    InvalidConfigStructureError,
+    YamlParseError,
+    YamlReadError,
+    read_yaml_file,
+)
 
 from .models import ComponentConfig
 
@@ -45,9 +50,13 @@ class ComponentRegistry:
         if not path.exists():
             raise RegistryLoadError(f"Registry file not found: {path}")
         try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
+            raw = read_yaml_file(path)
+        except YamlReadError as exc:
+            raise RegistryLoadError(f"Failed to read {path}: {exc}") from exc
+        except YamlParseError as exc:
             raise RegistryLoadError(f"Invalid YAML in {path}: {exc}") from exc
+        except InvalidConfigStructureError as exc:
+            raise RegistryLoadError(f"Invalid structure in {path}: {exc}") from exc
 
         if not isinstance(raw, dict) or "components" not in raw:
             raise RegistryLoadError(
