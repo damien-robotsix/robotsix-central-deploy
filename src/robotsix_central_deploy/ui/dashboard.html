@@ -424,6 +424,37 @@
   <div id="orphan-volumes-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
 </section>
 
+<div id="remove-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
+  <div class="env-panel" style="max-width:460px;">
+    <div class="env-header">
+      <h2 id="remove-modal-title">Remove <span id="remove-modal-component"></span></h2>
+      <button class="env-close" onclick="closeRemoveModal()" title="Close">&times;</button>
+    </div>
+    <div class="env-section">
+      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+        <input type="checkbox" id="remove-stop-container" checked>
+        <span>Stop &amp; remove the managed container
+          <span style="color:#94a3b8;font-size:0.78rem;">(uncheck for registry-only removal — leaves the container running)</span>
+        </span>
+      </label>
+    </div>
+    <div class="env-section" style="border:1px solid #c0392b;border-radius:4px;padding:10px 12px;background:#2a1013;">
+      <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;">
+        <input type="checkbox" id="remove-delete-volumes" onchange="updateRemoveBtn()">
+        <span>
+          <strong style="color:#f87171;">&#9888; Also delete data volumes</strong><br>
+          <span style="color:#fca5a5;font-size:0.8rem;">IRREVERSIBLE — permanently destroys all data in this component's named volumes. Leave unchecked to preserve the data (e.g. to re-add the component later).</span>
+        </span>
+      </label>
+    </div>
+    <div id="remove-modal-error" class="env-modal-error"></div>
+    <div class="env-footer">
+      <button class="btn-secondary" onclick="closeRemoveModal()">Cancel</button>
+      <button class="btn-danger" id="remove-confirm-btn" style="padding:6px 16px;" onclick="confirmRemove()">Remove component</button>
+    </div>
+  </div>
+</div>
+
 <div id="env-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="env-modal-title">
   <div class="env-panel">
     <div class="env-header">
@@ -1151,39 +1182,55 @@ async function doAction(name, action) {
   }
 }
 
-async function doRemove(name) {
-  const stopContainer = window.confirm(
-    `Remove component "${name}" from the registry?\n\n` +
-    `OK  → also stop and remove the managed container\n` +
-    `Cancel → keep the container running (registry-only removal)`
-  );
-  if (!window.confirm(`Confirm: permanently remove "${name}"? This cannot be undone.`)) return;
+let _removeTarget = null;
 
-  // Destructive, opt-in data-volume removal. Default is UNCHECKED / NO:
-  // dismissing this prompt (Cancel) keeps the volumes and preserves today's
-  // behaviour. Only an explicit OK deletes the component's data volumes.
-  const removeVolumes = window.confirm(
-    `⚠ DELETE DATA VOLUMES for "${name}"?\n\n` +
-    `This is IRREVERSIBLE and destroys all stored data in the component's ` +
-    `named volumes.\n\n` +
-    `OK  → also delete data volumes (irreversible)\n` +
-    `Cancel → keep data volumes (default, safe)`
-  );
+// Open the Remove modal. Data volumes are PRESERVED by default; deleting them
+// is an explicit, separately-warned opt-in (some components must keep their
+// data across a re-add).
+function doRemove(name) {
+  _removeTarget = name;
+  document.getElementById('remove-modal-component').textContent = name;
+  document.getElementById('remove-stop-container').checked = true;
+  document.getElementById('remove-delete-volumes').checked = false;
+  document.getElementById('remove-modal-error').textContent = '';
+  updateRemoveBtn();
+  document.getElementById('remove-modal').classList.add('open');
+}
 
+function updateRemoveBtn() {
+  const del = document.getElementById('remove-delete-volumes').checked;
+  const btn = document.getElementById('remove-confirm-btn');
+  btn.textContent = del ? '⚠ Remove + DELETE data volumes' : 'Remove component';
+}
+
+function closeRemoveModal() {
+  document.getElementById('remove-modal').classList.remove('open');
+  _removeTarget = null;
+}
+
+async function confirmRemove() {
+  const name = _removeTarget;
+  if (!name) return;
+  const stopContainer = document.getElementById('remove-stop-container').checked;
+  const removeVolumes = document.getElementById('remove-delete-volumes').checked;
   let url = `/services/${encodeURIComponent(name)}?stop_container=${stopContainer}`;
-  if (removeVolumes) {
-    url += `&remove_volumes=true`;
-  }
+  if (removeVolumes) url += `&remove_volumes=true`;
+  const btn = document.getElementById('remove-confirm-btn');
+  btn.disabled = true;
   try {
     const resp = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
     if (resp.status === 204) {
+      closeRemoveModal();
       await loadDashboard();
       return;
     }
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    alert(`Remove failed (${resp.status}): ${err.detail || resp.statusText}`);
+    document.getElementById('remove-modal-error').textContent =
+      `Remove failed (${resp.status}): ${err.detail || resp.statusText}`;
   } catch (e) {
-    alert(`Remove error: ${e.message}`);
+    document.getElementById('remove-modal-error').textContent = `Remove error: ${e.message}`;
+  } finally {
+    btn.disabled = false;
   }
 }
 
