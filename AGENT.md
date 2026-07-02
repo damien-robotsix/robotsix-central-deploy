@@ -138,7 +138,8 @@ src/robotsix_central_deploy/
 ├── onboard/          # Git clone + docker-compose parsing
 ├── registry/         # Component config, env/secrets, settings stores
 ├── registry_check/   # GHCR digest polling
-└── ui/               # Dashboard HTML + router
+├── ui/               # Dashboard HTML + router
+└── volume_audit/     # Background named-volume growth scanner
 ```
 
 ## Code Gotchas
@@ -147,5 +148,5 @@ src/robotsix_central_deploy/
 2. **Gateway router must be registered LAST** — it's a catch-all that would shadow specific API routes.
 3. **Registry check interval changes require restart** — captured at startup.
 4. **Fernet key loss is irrecoverable** — secrets must be re-entered if `secrets.key` is deleted.
-5. **Reserved names** (`ui`, `health`, `services`, `onboard`, `docs`, `openapi.json`, `redoc`, `disk`, `settings`, `help`) cannot be used as component slugs.
+5. **Reserved names** (`ui`, `health`, `services`, `onboard`, `docs`, `openapi.json`, `redoc`, `disk`, `settings`, `help`, `volumes`, `login`, `logout`) cannot be used as component slugs — see `RESERVED_NAMES` in `gateway/router.py`.
 6. **`NoopBackend` always reports `sha256:noop`** — never use in production.
