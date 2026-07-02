@@ -284,6 +284,21 @@ services:
             parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert "entrypoint:" in str(exc.value)
 
+    def test_port_typeerror_caught_as_parse_error(self):
+        """A TypeError during port parsing (e.g. int(list)) must surface as ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    ports:
+      - target: [1, 2]
+        published: "8080"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "invalid port mapping" in str(exc.value)
+
 
 # ---------------------------------------------------------------------------
 # parse_compose — labels
