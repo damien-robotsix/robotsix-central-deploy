@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Align with the robotsix-standards repo baseline: add the MIT `LICENSE` file, switch the build backend from setuptools to hatchling (with `allow-direct-references` for the git-pinned first-party deps), link to [robotsix-standards](https://github.com/damien-robotsix/robotsix-standards) from README/AGENT.md, and add a `mkdocs build --strict` CI gate. Hatchling resolves the `ui/DEPLOY_CONTRACT.md` symlink when building the wheel (setuptools shipped a dangling link), so the Dockerfile now copies `docs/DEPLOY_CONTRACT.md` into the build stage and drops the post-install site-packages copy workaround. `docs/DEPLOY_CONTRACT.md` now declares itself the canonical home of the deploy contract (the copy in robotsix-standards had drifted and is now a pointer page).
 - Dashboard onboard modal now polls `GET /onboard/jobs/{job_id}` after confirm, showing live deploy-phase progress (writing_config, deploying_primary, waiting_health, deploying_siblings, done, failed). The modal no longer waits on a single long request that could be dropped by nginx.
 - Onboard form: mark secret fields as optional with clearer placeholder text and informational notes explaining the fill-later flow via Configure → Save.
 - Fix ``AttributeError: 'State' object has no attribute 'job_registry'`` in lifecycle conftest fixture (the ``_reset_globals`` autouse fixture now initializes ``app.state.job_registry`` so validation-error tests on the onboard confirm endpoint don't crash before body validation).

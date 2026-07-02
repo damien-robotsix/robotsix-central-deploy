@@ -1,6 +1,9 @@
 # robotsix-central-deploy
 
 > **📖 Documentation:** [robotsix.net/central-deploy](https://robotsix.net/central-deploy/)
+>
+> **📐 Conventions:** this repo follows the shared
+> [robotsix-standards](https://github.com/damien-robotsix/robotsix-standards).
 
 Central deployment & lifecycle server for the robotsix suite — a single place to
 start, stop, restart, deploy, rollback, and inspect the status of each deployed
