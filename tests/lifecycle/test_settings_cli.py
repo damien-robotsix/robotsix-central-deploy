@@ -402,9 +402,7 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(
-            return_value=_make_lifecycle_config_from_env()
-        )
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
@@ -429,9 +427,7 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(
-            return_value=_make_lifecycle_config_from_env()
-        )
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
@@ -465,13 +461,13 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(
-            return_value=_make_lifecycle_config_from_env()
-        )
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
-                assert stored.auth_username == "custom-op"  # not overwritten with 'admin'
+                assert (
+                    stored.auth_username == "custom-op"
+                )  # not overwritten with 'admin'
                 assert stored.auth_password == "secret"
 
     async def test_lifespan_seeds_caretaker_defaults_when_no_env(
@@ -492,9 +488,7 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(
-            return_value=_make_lifecycle_config_from_env()
-        )
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
@@ -517,9 +511,7 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(
-            return_value=_make_lifecycle_config_from_env()
-        )
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
