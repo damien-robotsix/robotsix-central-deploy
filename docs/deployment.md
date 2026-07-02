@@ -37,7 +37,7 @@ Two records in the `robotsix.net` zone (OVH), both pointing at the server:
 
 | Record | Type | Purpose |
 |--------|------|---------|
-| `deploy.robotsix.net` | A | Dashboard + path-based gateway |
+| `deploy.robotsix.net` | A | Dashboard (legacy `/<name>/…` URLs redirect to subdomains) |
 | `*.deploy.robotsix.net` | A (wildcard) | Subdomain-based gateway — every component, present and future |
 
 Because of the wildcard record and the wildcard vhost below, **onboarding a
@@ -53,7 +53,7 @@ Deployed files (see [`nginx-deploy.conf`](nginx-deploy.conf) for contents):
 | File | Role |
 |------|------|
 | `/etc/nginx/conf.d/websocket-upgrade.conf` | `map $http_upgrade $connection_upgrade` — WebSocket upgrade support for the gateway relay |
-| `/etc/nginx/sites-available/deploy.robotsix.net` | Main vhost: dashboard, `/health` open, path-based gateway |
+| `/etc/nginx/sites-available/deploy.robotsix.net` | Main vhost: dashboard, `/health` open |
 | `/etc/nginx/sites-available/wildcard.deploy.robotsix.net` | Catch-all `*.deploy.robotsix.net` vhost for component subdomains |
 | `/etc/nginx/htpasswd/deploy.robotsix.net` | Basic-auth credentials (defense-in-depth in front of the app's own auth) |
 
@@ -107,7 +107,7 @@ browser ── https ──> nginx (basic auth, TLS, WS upgrade)
                         │ proxy_pass 127.0.0.1:8100
                         ▼
                 central-deploy (session/API auth)
-                        │ path- or Host-based routing
+                        │ Host-based (subdomain) routing
                         ▼
                 managed component containers
 ```

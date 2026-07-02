@@ -277,33 +277,6 @@ class TestHttpProxy:
         assert "boom" in exc_info.value.detail
         client.aclose.assert_awaited_once()
 
-    async def test_x_forwarded_prefix_injected_when_prefix_set(self):
-        """When *prefix* is passed, x-forwarded-prefix is included in
-        the upstream request headers."""
-        upstream = _make_upstream()
-        client = _make_client(upstream)
-        request = _make_request()
-
-        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
-            await http_proxy(
-                request, "http://backend:9000", "api/items", prefix="/mail"
-            )
-
-        fwd = client.build_request.call_args.kwargs["headers"]
-        assert fwd["x-forwarded-prefix"] == "/mail"
-
-    async def test_x_forwarded_prefix_absent_when_prefix_empty(self):
-        """When *prefix* is empty (default), x-forwarded-prefix is NOT set."""
-        upstream = _make_upstream()
-        client = _make_client(upstream)
-        request = _make_request()
-
-        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
-            await http_proxy(request, "http://backend:9000", "x")
-
-        fwd = client.build_request.call_args.kwargs["headers"]
-        assert "x-forwarded-prefix" not in fwd
-
 
 # ---------------------------------------------------------------------------
 # ws_proxy — fakes for the optional ``websockets`` dependency
@@ -499,33 +472,36 @@ def _build_app(*configs: ComponentConfig) -> FastAPI:
 
 
 class TestGatewayHttpRoutes:
-    async def test_bare_name_redirects_with_trailing_slash(self):
+    async def test_bare_name_redirects_to_subdomain(self):
+        app = _build_app_with_subdomain(_make_config("svc"))
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"Host": "test.example"},
+        ) as c:
+            resp = await c.get("/svc", follow_redirects=False)
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "https://svc.test.example/"
+
+    async def test_path_prefix_redirects_to_subdomain(self):
+        app = _build_app_with_subdomain(_make_config("svc", container_name="svc-ctr"))
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"Host": "test.example"},
+        ) as c:
+            resp = await c.get("/svc/api/thing?x=1", follow_redirects=False)
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "https://svc.test.example/api/thing?x=1"
+
+    async def test_path_prefix_without_base_domain_returns_404(self):
         app = _build_app(_make_config("svc"))
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as c:
-            resp = await c.get("/svc", follow_redirects=False)
-        assert resp.status_code == 307
-        assert resp.headers["location"] == "/svc/"
-
-    async def test_http_path_dispatches_to_http_proxy(self):
-        app = _build_app(_make_config("svc", container_name="svc-ctr"))
-
-        async def _fake_proxy(req, target_base, path, *, prefix=""):
-            return StreamingResponse(iter([b"proxied"]), status_code=299)
-
-        with patch.object(router_mod, "http_proxy", side_effect=_fake_proxy) as mock:
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as c:
-                resp = await c.get("/svc/api/thing?x=1")
-
-        assert resp.status_code == 299
-        assert resp.content == b"proxied"
-        # http_proxy got the container-derived base URL, the sub-path, and the
-        # gateway prefix for x-forwarded-prefix.
-        _, target_base, path = mock.call_args.args
-        assert target_base == "http://svc-ctr:9000"
-        assert path == "api/thing"
-        assert mock.call_args.kwargs["prefix"] == "/svc"
+            resp = await c.get("/svc/page")
+        assert resp.status_code == 404
 
     async def test_unknown_component_returns_404(self):
         app = _build_app(_make_config("svc"))
@@ -551,20 +527,18 @@ class TestGatewayHttpUnit:
     async def test_resolved_calls_http_proxy_with_target_base(self):
         cfg = _make_config("svc", container_name="svc-ctr")
         request = MagicMock()
-        request.headers = {"host": "deploy.example"}
+        request.headers = {"host": "svc.deploy.example"}
         request.app = _app_with_registry(ComponentRegistry([cfg]))
-        request.app.state.config = SimpleNamespace(gateway_base_domain="")
+        request.app.state.config = SimpleNamespace(gateway_base_domain="deploy.example")
 
         sentinel = StreamingResponse(iter([b""]))
         with patch.object(
             router_mod, "http_proxy", new=AsyncMock(return_value=sentinel)
         ) as mock:
-            result = await gateway_http(request, "svc/deep/path", _auth=None)
+            result = await gateway_http(request, "deep/path", _auth=None)
 
         assert result is sentinel
-        mock.assert_awaited_once_with(
-            request, "http://svc-ctr:9000", "deep/path", prefix="/svc"
-        )
+        mock.assert_awaited_once_with(request, "http://svc-ctr:9000", "deep/path")
 
     async def test_error_status_raises_http_exception(self):
         request = MagicMock()
@@ -587,15 +561,16 @@ def _make_ws(
     registry: object,
     token: str | None = None,
     valid: bool = True,
+    host: str = "svc.deploy.example",
 ) -> MagicMock:
     ws = MagicMock()
     ws.app.state.config.auth_required = auth_required
-    ws.app.state.config.gateway_base_domain = ""
+    ws.app.state.config.gateway_base_domain = "deploy.example"
     ws.app.state.registry = registry
     ws.cookies = {"session_token": token} if token is not None else {}
     ws.app.state.session_store = MagicMock()
     ws.app.state.session_store.validate = MagicMock(return_value=valid)
-    ws.headers = {"host": "deploy.example", "connection": "upgrade"}
+    ws.headers = {"host": host, "connection": "upgrade"}
     ws.accept = AsyncMock()
     ws.close = AsyncMock()
     return ws
@@ -607,7 +582,7 @@ class TestGatewayWs:
         ws = _make_ws(auth_required=False, registry=ComponentRegistry([cfg]))
 
         with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
-            await gateway_ws(ws, "svc/stream/sub")
+            await gateway_ws(ws, "stream/sub")
 
         ws.accept.assert_awaited_once()
         target = mock.call_args.args[1]
@@ -622,7 +597,7 @@ class TestGatewayWs:
         ws = _make_ws(auth_required=True, registry=ComponentRegistry([cfg]))
 
         with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
-            await gateway_ws(ws, "svc/x")
+            await gateway_ws(ws, "x")
 
         ws.close.assert_awaited_once_with(code=4008)
         ws.accept.assert_not_awaited()
@@ -638,28 +613,52 @@ class TestGatewayWs:
         )
 
         with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
-            await gateway_ws(ws, "svc/x")
+            await gateway_ws(ws, "x")
 
         ws.accept.assert_awaited_once()
         mock.assert_awaited_once()
 
     async def test_unknown_component_closes_4004(self):
-        ws = _make_ws(auth_required=False, registry=ComponentRegistry([]))
+        ws = _make_ws(
+            auth_required=False,
+            registry=ComponentRegistry([]),
+            host="ghost.deploy.example",
+        )
 
         with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
-            await gateway_ws(ws, "ghost/x")
+            await gateway_ws(ws, "x")
 
         ws.close.assert_awaited_once_with(code=4004)
         mock.assert_not_awaited()
 
     async def test_component_without_ports_closes_4011(self):
         cfg = _make_config("noports", ports=[])
-        ws = _make_ws(auth_required=False, registry=ComponentRegistry([cfg]))
+        ws = _make_ws(
+            auth_required=False,
+            registry=ComponentRegistry([cfg]),
+            host="noports.deploy.example",
+        )
 
         with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
-            await gateway_ws(ws, "noports/x")
+            await gateway_ws(ws, "x")
 
         ws.close.assert_awaited_once_with(code=4011)
+        mock.assert_not_awaited()
+
+    async def test_non_subdomain_host_closes_4004(self):
+        """Path-prefix WS routing was removed — non-subdomain hosts are rejected."""
+        cfg = _make_config("svc")
+        ws = _make_ws(
+            auth_required=False,
+            registry=ComponentRegistry([cfg]),
+            host="deploy.example",  # base domain, no component subdomain
+        )
+
+        with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
+            await gateway_ws(ws, "svc/x")
+
+        ws.close.assert_awaited_once_with(code=4004)
+        ws.accept.assert_not_awaited()
         mock.assert_not_awaited()
 
 
@@ -736,10 +735,10 @@ def _build_app_with_subdomain(
 
 
 class TestSubdomainRoutingHttp:
-    async def test_root_path_proxied_with_no_prefix(self):
+    async def test_root_path_proxied(self):
         app = _build_app_with_subdomain(_make_config("svc", container_name="svc-ctr"))
 
-        async def _fp(req, target_base, path, *, prefix=""):
+        async def _fp(req, target_base, path):
             return StreamingResponse(iter([b"ok"]), status_code=200)
 
         with patch.object(router_mod, "http_proxy", side_effect=_fp) as mock:
@@ -753,12 +752,11 @@ class TestSubdomainRoutingHttp:
         _, target_base, path = mock.call_args.args
         assert target_base == "http://svc-ctr:9000"
         assert path == ""
-        assert mock.call_args.kwargs.get("prefix", "") == ""
 
-    async def test_sub_path_proxied_with_no_prefix(self):
+    async def test_sub_path_proxied(self):
         app = _build_app_with_subdomain(_make_config("svc", container_name="svc-ctr"))
 
-        async def _fp(req, target_base, path, *, prefix=""):
+        async def _fp(req, target_base, path):
             return StreamingResponse(iter([b"ok"]), status_code=200)
 
         with patch.object(router_mod, "http_proxy", side_effect=_fp) as mock:
@@ -771,7 +769,6 @@ class TestSubdomainRoutingHttp:
         assert resp.status_code == 200
         _, _, path = mock.call_args.args
         assert path == "static/board.css"
-        assert mock.call_args.kwargs.get("prefix", "") == ""
 
     async def test_unknown_subdomain_component_returns_404(self):
         app = _build_app_with_subdomain(_make_config("svc"))
@@ -783,51 +780,32 @@ class TestSubdomainRoutingHttp:
             resp = await c.get("/board")
         assert resp.status_code == 404
 
-    async def test_non_subdomain_host_falls_back_to_path_prefix(self):
+    async def test_non_subdomain_host_redirects_to_subdomain(self):
+        """Legacy /<name>/... URLs redirect to the component subdomain."""
         app = _build_app_with_subdomain(_make_config("svc", container_name="svc-ctr"))
 
-        async def _fp(req, target_base, path, *, prefix=""):
-            return StreamingResponse(iter([b"ok"]), status_code=200)
-
-        with patch.object(router_mod, "http_proxy", side_effect=_fp) as mock:
-            async with AsyncClient(
-                transport=ASGITransport(app=app),
-                base_url="http://test",
-                headers={"Host": "test.example"},  # base domain, no subdomain
-            ) as c:
-                resp = await c.get("/svc/api")
-        assert resp.status_code == 200
-        _, _, path = mock.call_args.args
-        assert path == "api"
-        assert mock.call_args.kwargs["prefix"] == "/svc"
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Host": "test.example"},  # base domain, no subdomain
+        ) as c:
+            resp = await c.get("/svc/api", follow_redirects=False)
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "https://svc.test.example/api"
 
 
 # ---------------------------------------------------------------------------
-# Location rewrite tests (added to TestHttpProxy)
+# Upstream Location pass-through
 # ---------------------------------------------------------------------------
 
 
-class TestLocationRewrite:
-    async def test_location_not_rewritten_when_prefix_empty(self):
-        """Subdomain routing (prefix='') must NOT rewrite upstream Location."""
+class TestLocationPassThrough:
+    async def test_upstream_location_forwarded_unchanged(self):
+        """Subdomain routing must NOT rewrite upstream Location headers."""
         upstream = _make_upstream(status=302, extra_headers={"location": "/board"})
         client = _make_client(upstream)
         request = _make_request()
         with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
-            response = await http_proxy(
-                request, "http://backend:9000", "move", prefix=""
-            )
+            response = await http_proxy(request, "http://backend:9000", "move")
         await _drain(response)
         assert response.headers.get("location") == "/board"
-
-    async def test_location_rewritten_when_prefix_set(self):
-        """Path-prefix routing — upstream absolute Location receives the prefix."""
-        upstream = _make_upstream(status=302, extra_headers={"location": "/board"})
-        client = _make_client(upstream)
-        request = _make_request(headers={"host": "deploy.example"})
-        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
-            response = await http_proxy(
-                request, "http://backend:9000", "", prefix="/mail"
-            )
-        await _drain(response)
-        assert response.headers.get("location") == "/mail/board"

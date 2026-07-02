@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Remove path-prefix gateway routing.** `deploy.robotsix.net/<name>/...` URLs are no longer proxied — path-prefix proxying broke any component app serving absolute asset URLs (e.g. `/static/…`). Components are now reached exclusively via their subdomain (`<name>.deploy.robotsix.net`, requires `gateway_base_domain`); legacy path URLs 307-redirect to the subdomain. WebSocket gateway connections are subdomain-only (non-subdomain hosts close with 4004). `http_proxy` loses its `prefix` param and the `x-forwarded-prefix` header / Location-rewrite logic.
 - Record volume hash during config assist so drift detection works after auto-detected config changes.
 - Add a `dependency-review` CI job (`actions/dependency-review-action`, `fail-on-severity: high`) that blocks PRs introducing dependencies with known high-severity vulnerabilities. Requires the repository's Dependency graph to be enabled (now on).
 - Config drift UI: when a component's config has been edited out-of-band, the dashboard now shows a warning banner with Import/Edit-stale options, blocks blind Save with a conflict diff panel, and supports import-from-volume and explicit overwrite flows.

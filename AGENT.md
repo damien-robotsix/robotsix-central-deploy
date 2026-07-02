@@ -97,7 +97,7 @@ Two-phase process:
 
 ### Gateway Proxy
 
-Registered **last** on the FastAPI app. Maps `/{name}/{path}` to the managed container. HTTP requests proxied via `httpx.AsyncClient`, WebSocket via bidirectional relay.
+Registered **last** on the FastAPI app. Routes by Host subdomain: `{name}.{gateway_base_domain}` maps to the managed container (`gateway_base_domain` must be configured). HTTP requests proxied via `httpx.AsyncClient`, WebSocket via bidirectional relay. Legacy path-prefix URLs (`/{name}/{path}`) are **not proxied** — they 307-redirect to the component subdomain (path-prefix proxying broke apps serving absolute asset URLs).
 
 ## Execution Backends
 

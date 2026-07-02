@@ -1,7 +1,12 @@
-"""Gateway routes — reverse-proxy ``deploy.robotsix.net/<name>/...`` → managed containers.
+"""Gateway routes — reverse-proxy ``<name>.deploy.robotsix.net`` → managed containers.
+
+Components are routed by Host subdomain (``gateway_base_domain`` must be
+configured). Legacy path-prefix URLs (``deploy.robotsix.net/<name>/...``) are
+no longer proxied — path-prefix proxying broke any app that serves absolute
+asset URLs — and instead redirect to the component's subdomain.
 
 Registered LAST on the FastAPI app so that built-in routes (``/health``,
-``/services``, …) match before the catch-all ``/{name}`` prefix.
+``/services``, …) match before the catch-all ``/{path}``.
 """
 
 from __future__ import annotations
@@ -126,7 +131,7 @@ async def gateway_http_root(
         raise HTTPException(status_code=err_status)
     assert config is not None
     target_base = f"http://{config.container_name}:{config.ports[0].container}"
-    return await http_proxy(request, target_base, "", prefix="")
+    return await http_proxy(request, target_base, "")
 
 
 # ---------------------------------------------------------------------------
@@ -145,16 +150,12 @@ async def gateway_ws(websocket: WebSocket, path: str) -> None:
             await websocket.close(code=4008)
             return
 
-    # --- Component resolution ---
+    # --- Component resolution (subdomain only — WS cannot be redirected) ---
     name = _extract_subdomain_name(websocket.headers, websocket.app)
-    is_subdomain = name is not None
-    if not is_subdomain:
-        # Path-prefix routing: first segment is the component name
-        parts = path.split("/", 1)
-        name = parts[0]
-        path = parts[1] if len(parts) > 1 else ""
+    if name is None:
+        await websocket.close(code=4004)
+        return
 
-    assert name is not None  # narrowed above via is_subdomain / path split
     config, err_status = _resolve(websocket.app, name)
     if err_status is not None:
         ws_code: int = 4004 if err_status == 404 else 4011
@@ -164,8 +165,6 @@ async def gateway_ws(websocket: WebSocket, path: str) -> None:
 
     target = f"ws://{config.container_name}:{config.ports[0].container}/{path}"
     fwd_headers = filter_hop_by_hop(dict(websocket.headers))
-    if not is_subdomain:
-        fwd_headers["x-forwarded-prefix"] = f"/{name}"
 
     await websocket.accept()
     await ws_proxy(websocket, target, additional_headers=fwd_headers)
@@ -193,20 +192,29 @@ async def gateway_http(
             raise HTTPException(status_code=err_status)
         assert config is not None
         target_base = f"http://{config.container_name}:{config.ports[0].container}"
-        return await http_proxy(request, target_base, path, prefix="")
+        return await http_proxy(request, target_base, path)
 
-    # 2. Path-prefix routing (legacy): /<name>/...
+    # 2. Legacy path-prefix URL (/<name>/...): path-prefix proxying broke apps
+    # serving absolute asset URLs, so redirect to the component subdomain.
     parts = path.split("/", 1)
     prefix_name = parts[0]
-    rest: Optional[str] = parts[1] if len(parts) > 1 else None
+    rest: str = parts[1] if len(parts) > 1 else ""
 
-    if rest is None:
-        # Redirect bare /<name> → /<name>/ so relative assets resolve correctly
-        return RedirectResponse(url=f"/{prefix_name}/", status_code=307)
-
-    config, err_status = _resolve(request.app, prefix_name)
+    _, err_status = _resolve(request.app, prefix_name)
     if err_status:
         raise HTTPException(status_code=err_status)
-    assert config is not None
-    target_base = f"http://{config.container_name}:{config.ports[0].container}"
-    return await http_proxy(request, target_base, rest, prefix=f"/{prefix_name}")
+
+    base_domain: str = getattr(request.app.state.config, "gateway_base_domain", "")
+    if not base_domain:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Path-based gateway routing is no longer supported; "
+                "configure gateway_base_domain and use the component subdomain."
+            ),
+        )
+
+    url = f"https://{prefix_name}.{base_domain}/{rest}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+    return RedirectResponse(url=url, status_code=307)
