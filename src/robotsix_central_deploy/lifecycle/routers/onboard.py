@@ -314,13 +314,14 @@ async def _run_onboard_deploy_job(
 
         # Best-effort mill repo registration
         if config.repo_id:
-            import os
-
             from ...caretaker.mill_client import MillClient
 
+            mill_component_id = "mill"
+            if settings_store is not None:
+                mill_component_id = (await settings_store.get()).mill_component_id
             mill_url = MillClient.derive_url_from_registry(
-                registry, component_config_store
-            ) or os.environ.get("MILL_INGEST_URL")
+                registry, component_config_store, mill_component_id
+            )
             if mill_url and http_client is not None:
                 mc = MillClient(mill_url, http_client)
                 ok = await mc.register_repo(config.repo_id, spec.git_url)
@@ -486,7 +487,7 @@ async def onboard_confirm(
         repo_id = ""
 
     # Mill canonical opt-out: the mill component must never auto-update itself
-    caretaker_auto_update = config.id != "mill"
+    caretaker_auto_update = config.id != settings.mill_component_id
 
     config = config.model_copy(
         update={"repo_id": repo_id, "caretaker_auto_update": caretaker_auto_update}

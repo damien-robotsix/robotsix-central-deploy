@@ -33,6 +33,7 @@ class SystemSettings(BaseModel):
     )
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
+    mill_component_id: str = "mill"  # component id the caretaker reports to
 
     @field_validator("log_level")
     @classmethod
@@ -50,6 +51,14 @@ class SystemSettings(BaseModel):
         if v < 1:
             raise ValueError("caretaker_interval_hours must be >= 1")
         return v
+
+    @field_validator("mill_component_id")
+    @classmethod
+    def _validate_mill_component_id(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("mill_component_id must not be empty")
+        return stripped
 
 
 class SystemSettingsStore:
@@ -128,5 +137,6 @@ class SystemSettingsStore:
                 "claude_host_mount_path": stored.claude_host_mount_path,
                 "caretaker_enabled": stored.caretaker_enabled,
                 "caretaker_interval_hours": stored.caretaker_interval_hours,
+                "mill_component_id": stored.mill_component_id,
             }
         )

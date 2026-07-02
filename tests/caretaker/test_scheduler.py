@@ -21,6 +21,18 @@ from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 
 
+def _register_mill(ccs, mill_id="mill", port=9999):
+    """Make the mocked config store discover a mill component under *mill_id*."""
+    mill_cfg = MagicMock()
+    mill_cfg.ports = [MagicMock(host=port)]
+    default_cfg = MagicMock()
+    default_cfg.repo_id = "my-repo"
+    default_cfg.caretaker_auto_update = True
+    ccs.get = MagicMock(
+        side_effect=lambda cid: mill_cfg if cid == mill_id else default_cfg
+    )
+
+
 @pytest.fixture
 def scheduler_fixtures(tmp_path):
     from robotsix_central_deploy.lifecycle.config import LifecycleConfig
@@ -102,8 +114,7 @@ class TestScheduler:
             lambda path: (10**12, 9 * 10**11, 10**11),
         )
 
-        # Force mill URL via env
-        monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
+        _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
 
         # Make phase_health emit a finding with repo_id
@@ -123,12 +134,10 @@ class TestScheduler:
         assert report.mill_reachable is True
 
     @pytest.mark.asyncio
-    async def test_run_once_mill_unreachable_fallback(
-        self, scheduler_fixtures, monkeypatch
-    ):
+    async def test_run_once_mill_unreachable_fallback(self, scheduler_fixtures):
         scheduler, store, backend, ccs, http = scheduler_fixtures
 
-        monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
+        _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=False, status_code=500))
 
         record = ServiceRecord(
@@ -153,7 +162,7 @@ class TestScheduler:
     ):
         scheduler, store, backend, ccs, http = scheduler_fixtures
 
-        monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
+        _register_mill(ccs)
         store.list_all = AsyncMock(return_value=[])
         backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
 
@@ -171,10 +180,10 @@ class TestScheduler:
         assert report.local_only == 0
 
     @pytest.mark.asyncio
-    async def test_run_once_untracked_local_only(self, scheduler_fixtures, monkeypatch):
+    async def test_run_once_untracked_local_only(self, scheduler_fixtures):
         scheduler, store, backend, ccs, http = scheduler_fixtures
 
-        monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
+        _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
 
         # Component with no repo_id → local only
@@ -195,10 +204,10 @@ class TestScheduler:
         http.post.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_repo_id_in_ingest_payload(self, scheduler_fixtures, monkeypatch):
+    async def test_repo_id_in_ingest_payload(self, scheduler_fixtures):
         scheduler, store, backend, ccs, http = scheduler_fixtures
 
-        monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
+        _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
 
         record = ServiceRecord(
@@ -224,6 +233,38 @@ class TestScheduler:
                 assert json_body["kind"] == "health"
                 break
         assert found, "Expected ingest call with repo_id='specific-repo'"
+
+    @pytest.mark.asyncio
+    async def test_custom_mill_component_id(self, scheduler_fixtures):
+        """A mill onboarded under a non-default name is discovered via the
+        ``mill_component_id`` system setting."""
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        scheduler, store, backend, ccs, http = scheduler_fixtures
+
+        await scheduler._settings_store.put(
+            SystemSettings(caretaker_enabled=True, mill_component_id="my-mill")
+        )
+        # Only "my-mill" resolves; the default "mill" id does not exist.
+        mill_cfg = MagicMock()
+        mill_cfg.ports = [MagicMock(host=9999)]
+        ccs.get = MagicMock(
+            side_effect=lambda cid: mill_cfg if cid == "my-mill" else None
+        )
+        http.post = AsyncMock(return_value=MagicMock(is_success=True))
+
+        record = ServiceRecord(name="svc", image="repo:v1", repo_id="my-repo")
+        store.list_all = AsyncMock(return_value=[record])
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+
+        report = await scheduler.run_once()
+        assert report.mill_reported >= 1
+        assert report.mill_reachable is True
+        args, kwargs = http.post.call_args_list[0]
+        assert args[0].startswith("http://localhost:9999")
 
     @pytest.mark.asyncio
     async def test_get_status(self, scheduler_fixtures):

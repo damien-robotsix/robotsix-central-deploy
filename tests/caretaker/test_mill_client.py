@@ -99,3 +99,19 @@ class TestMillClient:
         config_store.get = MagicMock(return_value=None)
         url = MillClient.derive_url_from_registry(registry, config_store)
         assert url is None
+
+    def test_derive_url_uses_custom_component_id(self):
+        registry = ComponentRegistry([])
+        config_store = MagicMock(spec=ComponentConfigStore)
+        mill_cfg = ComponentConfig(
+            id="my-mill",
+            image="mill:latest",
+            container_name="my-mill",
+            ports=[PortMapping(host=9090, container=8080)],
+        )
+        config_store.get = MagicMock(
+            side_effect=lambda cid: mill_cfg if cid == "my-mill" else None
+        )
+        assert MillClient.derive_url_from_registry(registry, config_store) is None
+        url = MillClient.derive_url_from_registry(registry, config_store, "my-mill")
+        assert url == "http://localhost:9090"

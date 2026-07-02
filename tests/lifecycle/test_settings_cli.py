@@ -302,6 +302,31 @@ class TestSettingsRouter:
         assert "caretaker_interval_hours" in data
         assert data["caretaker_enabled"] is False
         assert data["caretaker_interval_hours"] == 24
+        assert data["mill_component_id"] == "mill"
+
+    async def test_put_settings_mill_component_id_persisted(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        resp = await client.put(
+            "/settings",
+            json={"log_level": "INFO", "mill_component_id": "my-mill"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["mill_component_id"] == "my-mill"
+
+        stored = await settings_store.get()
+        assert stored.mill_component_id == "my-mill"
+
+    async def test_put_settings_empty_mill_component_id_rejected(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        resp = await client.put(
+            "/settings",
+            json={"log_level": "INFO", "mill_component_id": "  "},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
 
     async def test_put_settings_invalid_caretaker_interval_returns_422(
         self, client: AsyncClient, auth_headers, settings_store

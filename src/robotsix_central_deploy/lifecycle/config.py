@@ -117,6 +117,7 @@ class LifecycleConfig(BaseSettings):
     # Caretaker
     caretaker_enabled: bool = False  # ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED
     caretaker_interval_hours: int = 24  # ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS
+    mill_component_id: str = "mill"  # component id the caretaker reports to
 
     @property
     def effective_store_path(self) -> Path:
