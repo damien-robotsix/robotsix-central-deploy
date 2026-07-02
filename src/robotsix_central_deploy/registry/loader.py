@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from robotsix_yaml_config import (
+from robotsix_central_deploy._yaml_utils import (
     InvalidConfigStructureError,
     YamlParseError,
     YamlReadError,

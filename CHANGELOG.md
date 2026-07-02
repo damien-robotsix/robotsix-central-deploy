@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Migrate from `robotsix-yaml-config` to `robotsix-config` dependency; YAML primitives (`read_yaml_file`, `deep_merge`, and the exception types) replaced with a local `_yaml_utils` module backed by `pyyaml`.
 - Render typed, validated inputs in the config form driven by JSON Schema (`config.schema.json`): number inputs for `integer`/`number`, checkboxes for `boolean`, dropdowns for `enum`, password inputs for `format:password` + `writeOnly:true`, text inputs for plain strings, and section groups for nested `object` types. Required fields are marked with `*` and defaults from `propSchema.default` are prefilled. Secret detection now uses schema metadata (`format` + `writeOnly`) instead of the old `"SECRET"` sentinel value.
 - Migrate config handling from YAML-sentinel templates to JSON Schema: onboard
   preflight now fetches `config/config.schema.json`, secrets are detected via

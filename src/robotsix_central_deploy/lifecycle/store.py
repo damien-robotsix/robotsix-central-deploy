@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from robotsix_yaml_config import read_yaml_file
+from robotsix_central_deploy._yaml_utils import read_yaml_file
 
 from .models import ServiceRecord, ServiceState
 
