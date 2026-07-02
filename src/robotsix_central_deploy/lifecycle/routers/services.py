@@ -392,6 +392,7 @@ async def list_services(
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ServiceListResponse:
+    """Return all managed services with their current state and optional config metadata."""
     records = await store.list_all()
     items: list[ServiceListItem] = []
     for r in records:
@@ -424,6 +425,12 @@ async def get_service_status(
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
+    """Return full status for a service: live state, health, image digests,
+    update availability, and sibling health.
+
+    Raises 404 if the service is not found. Persists refreshed state and
+    digest data to the store.
+    """
     record = await _get_or_create_record(name, store)
     # Refresh live state from backend (best-effort).
     inspect = await backend.status(record)
@@ -495,6 +502,10 @@ async def get_service_health(
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ServiceHealthResponse:
+    """Return the current health status string for a service.
+
+    Raises 404 if the service is not found.
+    """
     record = await _get_or_create_record(name, store)
     inspect = await backend.status(record)
     if inspect.health != record.health:
@@ -528,6 +539,12 @@ async def get_service_logs(
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> StreamingResponse:
+    """Stream container log output as a plain-text response.
+
+    Supports optional tail, since, and follow query parameters.
+    Raises 404 if the service is not found.
+    Raises 422 if tail is out of range (1-10000).
+    """
     record = await _get_or_create_record(name, store)
 
     async def log_gen() -> AsyncIterator[bytes]:
@@ -560,6 +577,13 @@ async def start_service(
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
+    """Start a service. Idempotent — returns success if already running or starting.
+
+    Transitions the service through STARTING to RUNNING (or FAILED on error).
+    Raises 404 on missing service, 409 if the current state does not allow a
+    start, and 500 on backend failure. Sibling services are started on a
+    best-effort basis.
+    """
     record = await _get_or_create_record(name, store)
     previous = record.state
 
@@ -650,6 +674,13 @@ async def stop_service(
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
+    """Stop a service. Idempotent — returns success if already stopped or stopping.
+
+    Transitions the service through STOPPING to STOPPED (or FAILED on error).
+    Raises 404 on missing service, 409 if the current state does not allow a
+    stop, and 500 on backend failure. Sibling services are stopped on a
+    best-effort basis.
+    """
     record = await _get_or_create_record(name, store)
     previous = record.state
 
@@ -738,6 +769,13 @@ async def restart_service(
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
+    """Restart a service. Idempotent — returns success if a restart is already in progress.
+
+    Transitions the service through RESTARTING to RUNNING (or FAILED on error).
+    Raises 404 on missing service, 409 if the current state does not allow a
+    restart, and 500 on backend failure. Sibling services are restarted on a
+    best-effort basis.
+    """
     record = await _get_or_create_record(name, store)
     previous = record.state
 
@@ -825,6 +863,15 @@ async def deploy_service(
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     _auth: None = Depends(verify_auth),
 ) -> DeployResponse:
+    """Pull and deploy a new image version for a service.
+
+    Optionally accepts a specific image reference; defaults to the component's
+    configured image. Writes merged config.yaml to the config volume before
+    starting when a config schema is present. Raises 404 if the service or
+    component config is not found, 503 if the registry checker is not loaded,
+    and 500 on backend failure. Sibling services are deployed on a best-effort
+    basis. Persists the new and previous image digests to the store.
+    """
     if body is None:
         body = DeployRequest()
 
@@ -914,6 +961,14 @@ async def rollback_service(
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> RollbackResponse:
+    """Roll back a service to its previously recorded image digest.
+
+    Swaps the deployed and previous digests in the store. Raises 404 if the
+    service or component config is not found, 409 if no prior digest is
+    recorded (run a deploy first), 503 if the registry checker is not loaded,
+    and 500 on backend failure. Sibling services are rolled back on a
+    best-effort basis.
+    """
     record = await _get_or_create_record(name, store)
 
     if not record.previous_image_digest:
@@ -984,6 +1039,11 @@ async def get_service_env(
     env_store: EnvStore = Depends(_get_env_store),
     _auth: None = Depends(verify_auth),
 ) -> EnvResponse:
+    """Return stored environment variables and masked secret keys for a service.
+
+    Secret values are never exposed — only the key names are returned, each
+    masked as ``"***"``. Raises 404 if the service is not found.
+    """
     await _get_or_create_record(name, store)
     config = await env_store.get(name)
     secrets_masked = {key: "***" for key in config.secret_tokens}
@@ -1008,6 +1068,10 @@ async def put_service_env(
     env_store: EnvStore = Depends(_get_env_store),
     _auth: None = Depends(verify_auth),
 ) -> None:
+    """Create or update environment variables and secrets for a service.
+
+    Returns 204 No Content on success. Raises 404 if the service is not found.
+    """
     await _get_or_create_record(name, store)
     await env_store.upsert(name, body.env, body.secrets)
 
@@ -1032,6 +1096,11 @@ async def delete_service_env_key(
     env_store: EnvStore = Depends(_get_env_store),
     _auth: None = Depends(verify_auth),
 ) -> None:
+    """Delete a single environment-variable or secret key for a service.
+
+    Returns 204 No Content on success. Raises 404 if the service or key
+    is not found.
+    """
     await _get_or_create_record(name, store)
     found = await env_store.delete_key(name, key)
     if not found:
@@ -1061,6 +1130,10 @@ async def get_service_config(
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ConfigResponse:
+    """Return the config.yaml schema and current masked values for a service.
+
+    Raises 404 if the service has no config schema.
+    """
     await _get_or_create_record(name, store)
     template = await config_yaml_store.get_template(name)
     if template is None:
@@ -1102,6 +1175,12 @@ async def put_service_config(
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
+    """Merge and save config.yaml values for a service, then write to the config volume.
+
+    Restarts the running container (and any siblings sharing the config
+    volume) so new values take effect immediately. Returns 204 No Content.
+    Raises 404 if the service has no config schema.
+    """
     await _get_or_create_record(name, store)
     template = await config_yaml_store.get_template(name)
     if template is None:
@@ -1179,6 +1258,14 @@ async def run_config_assist(
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ConfigAssistResponse:
+    """Run a repo-declared config-assist command in a one-shot container.
+
+    Fetches fresh config-assist metadata from the component's git repo, runs
+    the detect/assist command inside a temporary container with the config
+    volume mounted, and merges detected fields into the user-submitted values.
+    Raises 400 if no config-assist command or config volume is configured,
+    404 if the component is not found, and 504 if the assist command times out.
+    """
     comp_cfg = component_config_store.get(name)
     if comp_cfg is None:
         raise HTTPException(
@@ -1370,6 +1457,13 @@ async def delete_service(
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> None:
+    """Remove an onboarded component and optionally its container and volumes.
+
+    Deletes the service record, env/secrets, config.yaml, and component config.
+    Optionally stops and removes the Docker container (``stop_container``) and
+    deletes data volumes (``remove_volumes``, irreversible). Raises 404 if the
+    component is not found.
+    """
     # 1. Verify component exists in config store
     config = config_store.get(name)
     if config is None:

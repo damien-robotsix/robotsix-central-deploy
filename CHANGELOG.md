@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add docstrings to all 16 public route handlers in `lifecycle/routers/services.py`, covering purpose, error responses, and side effects (sibling fan-out, store writes).
 - PR #182 (docs: sync index and configuration pages with current code) — already merged; no further changes needed
 - Add regression test confirming `TypeError` during port parsing is caught as `ParseError`. The existing bare-comma `except ValueError, TypeError:` syntax is correct Python 3.14+ under PEP 758 — it catches both exception types and is the `ruff format`-preferred style.
 - Add `.pre-commit-config.yaml` with hooks for ruff, ruff-format, mypy, and common file checks (end-of-file, trailing-whitespace, merge-conflict, large-files)
