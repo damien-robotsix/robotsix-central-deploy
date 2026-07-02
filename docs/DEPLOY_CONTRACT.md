@@ -2,6 +2,12 @@
 
 > Version 1 — 2026-06-27
 
+> **Canonical home: this repository.** The contract is implemented by
+> central-deploy's parser and served by the running server
+> (`GET /help/deploy-contract`), so this copy versions with the code.
+> [robotsix-standards](https://github.com/damien-robotsix/robotsix-standards)
+> — the shared conventions for the rest of the stack — links here.
+
 This document is the authoritative specification for the `docker-compose.yml`
 shape required in any service repository managed by
 [central-deploy](https://deploy.robotsix.net).  Service repositories **MUST**
@@ -11,7 +17,7 @@ conform to this contract before the UI onboarding flow will accept them.
 
 ## § 0  Repository layout
 
-centrally-deploy expects the following files in a conforming service repo:
+central-deploy expects the following files in a conforming service repo:
 
 | Path | Role |
 |------|------|
