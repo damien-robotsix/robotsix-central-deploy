@@ -34,6 +34,10 @@ services:
       - internal
 
   central-deploy:
+    # Published by .github/workflows/release.yml on every push to main;
+    # `docker compose pull` updates it. `build: .` remains for local dev
+    # (`docker compose up --build`).
+    image: ghcr.io/damien-robotsix/robotsix-central-deploy:main
     build: .
     restart: unless-stopped
     environment:
