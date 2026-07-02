@@ -145,6 +145,24 @@ header as a line (conventionally the first line):
 
 - Optional override; see § 2 for semantics.
 
+### `services.<name>.command`
+
+- Overrides the Docker image's default **CMD** at container-create time.
+- Accepted in both **string** form (`"serve --port 8080"` → split with `shlex.split`) and **list** form (`["serve", "--port", "8080"]`).
+- When omitted or `null`, the image's built-in CMD is used unchanged.
+- An invalid type (e.g. a YAML mapping) is a **parse error**.
+- Applies to both the primary service and sibling services.
+- Maps to `ComponentConfig.command` / `ServiceConfig.command` → `Optional[list[str]]`.
+
+### `services.<name>.entrypoint`
+
+- Overrides the Docker image's default **ENTRYPOINT** at container-create time.
+- Accepted in both **string** form and **list** form (same rules as `command`).
+- When omitted or `null`, the image's built-in ENTRYPOINT is used unchanged.
+- An invalid type is a **parse error**.
+- Applies to both the primary service and sibling services.
+- Maps to `ComponentConfig.entrypoint` / `ServiceConfig.entrypoint` → `Optional[list[str]]`.
+
 ### `services.<name>.labels`
 
 - All labels outside the `robotsix.deploy.*` namespace are silently ignored.
@@ -307,7 +325,6 @@ volumes:
 | `services.<name>.build`                        | **Parse error.** Only pre-built images are supported (`BUILD=0` on socket-proxy). |
 | `services.<name>.depends_on`                   | Silently ignored. |
 | `services.<name>.networks`                     | Silently ignored.  Central-deploy manages container networking. |
-| `services.<name>.command` / `entrypoint`       | **Honoured.** Parsed (string form is `shlex`-split, list form taken as-is) and applied at container-create time, overriding the image CMD/ENTRYPOINT. Any other type is a **parse error**. When omitted, the image CMD/entrypoint is used as-is. |
 | N>1 services, no service has `robotsix.deploy.primary: "true"` | **Parse error.** |
 | N>1 services, multiple services have `robotsix.deploy.primary: "true"` | **Parse error.** |
 | Host bind-mount in `volumes` (without `claude-mount` label) | **Parse error.** |
@@ -399,6 +416,8 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `services.<name>.volumes[*]` (named) | `mounts: list[VolumeMount]` | `VolumeMount(host=<volume-name>, container=<path>, read_only=<bool>)`.  Host bind-mounts are rejected unless via `claude-mount` label. |
 | `services.<name>.environment` keys | `env: dict[str, str]` | Values stored as `""` until set via UI. |
 | `services.<name>.healthcheck` | `health_check: Optional[HealthCheck]` | Durations (Go strings) → integer seconds.  `HealthCheck(test, interval_seconds, timeout_seconds, retries, start_period_seconds)`. |
+| `services.<name>.command` | `command: Optional[list[str]]` | String → `shlex.split`; list accepted verbatim. Passed as `command=` to `containers.create()` for primary and each sibling. `None` when absent (image CMD unchanged). |
+| `services.<name>.entrypoint` | `entrypoint: Optional[list[str]]` | String → `shlex.split`; list accepted verbatim. Passed as `entrypoint=` to `containers.create()` for primary and each sibling. `None` when absent (image ENTRYPOINT unchanged). |
 | `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/root/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
 | `labels.robotsix.deploy.host-docker-sock: "true"` | `host_docker_sock: bool` *(+ runtime injection)* | Non-primary only (parse error on primary). At deploy time binds `/var/run/docker.sock` → `/var/run/docker.sock` **read-only**.  **Not** stored in `ComponentConfig.mounts`.  ⚠ Grants root-equivalent host Docker control — hardened socket-proxy siblings only. |
 | `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
@@ -484,6 +503,7 @@ services:
     image: ghcr.io/damien-robotsix/auto-mail:main
     labels:
       robotsix.deploy.primary: "true"
+    command: serve --port 8080
     ports:
       - "8202:8080"
     environment:
@@ -498,6 +518,7 @@ services:
 
   ingester:
     image: ghcr.io/damien-robotsix/auto-mail-ingester:main
+    command: ingest --watch --heartbeat-file /data/heartbeat
     environment:
       BOARD_URL: ""
       IMAP_PASSWORD: ""
@@ -516,6 +537,8 @@ In this example:
 - Sibling container: `auto-mail-ingester` (derived from `<name>-ingester`).
 - Gateway route: `deploy.robotsix.net/auto-mail/*` → primary's port 8202.
 - `mail-spool` volume declared at top level and flagged stateful → UI warning at onboard.
+
+> Both services use `command:` to supply the sub-command because the shared image has an ENTRYPOINT but no default CMD. Without `command:`, the container would print help and exit.
 
 ---
 
@@ -541,6 +564,8 @@ services:
       - <volume-name>:<path>
     environment:                        # optional (keys only)
       <KEY>: ""
+    command: ["<arg>", ...]             # optional; overrides image CMD
+    entrypoint: ["<cmd>", "..."]        # optional; overrides image ENTRYPOINT
     healthcheck:                        # optional
       test: ["CMD", "..."]
       interval: 30s
