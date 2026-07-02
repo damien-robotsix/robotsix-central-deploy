@@ -678,6 +678,16 @@
                         color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:120px;" />
         </td>
       </tr>
+      <tr id="s-mill-component-row" style="display:none">
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Mill Component</td>
+        <td style="padding:6px 12px;">
+          <input id="s-mill-component" type="text"
+                 placeholder="mill"
+                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
+                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">component id the caretaker reports findings to</span>
+        </td>
+      </tr>
     </table>
     <div style="display:flex;gap:8px;">
       <button type="submit" class="btn-primary">Save Settings</button>
@@ -2636,7 +2646,9 @@ async function loadSettings() {
     document.getElementById('s-claude-mount').value = s.claude_host_mount_path || '';
     document.getElementById('s-caretaker-enabled').checked = !!s.caretaker_enabled;
     document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
+    document.getElementById('s-mill-component').value = s.mill_component_id || 'mill';
     document.getElementById('s-caretaker-interval-row').style.display = s.caretaker_enabled ? '' : 'none';
+    document.getElementById('s-mill-component-row').style.display = s.caretaker_enabled ? '' : 'none';
     // Also update module-level variable used for service shortcut links
     gatewayBaseDomain = s.gateway_base_domain || '';
   } catch (e) {
@@ -2654,6 +2666,7 @@ async function saveSettings(event) {
     claude_host_mount_path: document.getElementById('s-claude-mount').value,
     caretaker_enabled: document.getElementById('s-caretaker-enabled').checked,
     caretaker_interval_hours: parseInt(document.getElementById('s-caretaker-interval').value),
+    mill_component_id: document.getElementById('s-mill-component').value.trim() || 'mill',
   };
   try {
     var res = await fetch('/settings', {
@@ -2678,6 +2691,7 @@ async function saveSettings(event) {
 function onCaretakerEnabledChange() {
   var enabled = document.getElementById('s-caretaker-enabled').checked;
   document.getElementById('s-caretaker-interval-row').style.display = enabled ? '' : 'none';
+  document.getElementById('s-mill-component-row').style.display = enabled ? '' : 'none';
 }
 
 async function checkCaretakerStatus() {

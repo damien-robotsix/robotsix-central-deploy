@@ -39,6 +39,7 @@ class SystemSettingsResponse(BaseModel):
     claude_host_mount_path: str = ""
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
+    mill_component_id: str = "mill"
 
 
 class SystemSettingsUpdate(BaseModel):
@@ -51,6 +52,7 @@ class SystemSettingsUpdate(BaseModel):
     claude_host_mount_path: str = ""
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
+    mill_component_id: str = "mill"
 
     @field_validator("log_level")
     @classmethod
@@ -69,6 +71,14 @@ class SystemSettingsUpdate(BaseModel):
             raise ValueError("caretaker_interval_hours must be >= 1")
         return v
 
+    @field_validator("mill_component_id")
+    @classmethod
+    def _validate_mill_component_id(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("mill_component_id must not be empty")
+        return stripped
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,6 +96,7 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         claude_host_mount_path=settings.claude_host_mount_path,
         caretaker_enabled=settings.caretaker_enabled,
         caretaker_interval_hours=settings.caretaker_interval_hours,
+        mill_component_id=settings.mill_component_id,
     )
 
 
@@ -123,6 +134,7 @@ async def get_settings(
         claude_host_mount_path=effective_config.claude_host_mount_path,
         caretaker_enabled=effective_config.caretaker_enabled,
         caretaker_interval_hours=effective_config.caretaker_interval_hours,
+        mill_component_id=effective_config.mill_component_id,
     )
     return _mask_response(effective)
 
@@ -174,6 +186,7 @@ async def put_settings(
         claude_host_mount_path=body.claude_host_mount_path,
         caretaker_enabled=body.caretaker_enabled,
         caretaker_interval_hours=body.caretaker_interval_hours,
+        mill_component_id=body.mill_component_id,
     )
 
     await settings_store.put(new)

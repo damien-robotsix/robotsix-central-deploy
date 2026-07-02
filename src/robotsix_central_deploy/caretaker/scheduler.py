@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -83,10 +82,14 @@ class CaretakerScheduler:
         mill_reported = 0
         local_only = 0
 
+        settings = await self._settings_store.get()
+
         # 1. Discover mill URL
         mill_url = MillClient.derive_url_from_registry(
-            self._registry, self._component_config_store
-        ) or os.environ.get("MILL_INGEST_URL")
+            self._registry,
+            self._component_config_store,
+            settings.mill_component_id,
+        )
         mill_client = MillClient(mill_url, self._http_client) if mill_url else None
 
         # 2. Phase: UPDATE
@@ -120,7 +123,6 @@ class CaretakerScheduler:
         # 4. Phase: VOLUMES
         if self._volume_audit_scheduler is not None:
             try:
-                settings = await self._settings_store.get()
                 volume_findings = await phase_volumes(
                     self._volume_audit_scheduler,
                     self._backend,

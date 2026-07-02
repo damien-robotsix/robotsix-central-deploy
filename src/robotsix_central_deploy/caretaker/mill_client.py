@@ -85,13 +85,16 @@ class MillClient:
     def derive_url_from_registry(
         registry: ComponentRegistry,
         component_config_store: ComponentConfigStore,
+        mill_component_id: str = "mill",
     ) -> str | None:
         """Find the mill component in the registry and derive its URL.
 
-        Returns ``http://localhost:{host_port}`` for the mill's first
-        port mapping, or None when no mill component is registered.
+        The component id to look up comes from the ``mill_component_id``
+        system setting (default ``"mill"``).  Returns
+        ``http://localhost:{host_port}`` for the mill's first port
+        mapping, or None when no such component is registered.
         """
-        mill_cfg = component_config_store.get("mill")
+        mill_cfg = component_config_store.get(mill_component_id)
         if mill_cfg is None:
             return None
         if not mill_cfg.ports:
