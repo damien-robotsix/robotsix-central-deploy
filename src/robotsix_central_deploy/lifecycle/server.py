@@ -21,13 +21,12 @@ from .backend import NoopBackend as NoopBackend  # noqa: F401
 
 # Config helpers (tests import these directly)
 from .deps import (  # noqa: F401
-    _CONFIG_SECRET_SENTINEL as _CONFIG_SECRET_SENTINEL,
-    _annotate_secret_sentinels as _annotate_secret_sentinels,
     _mask_secrets as _mask_secrets,
     _merge_config as _merge_config,
     _prune_unset as _prune_unset,
     _seed_for_detect as _seed_for_detect,
     _validate_account_ids as _validate_account_ids,
+    _validate_config_or_422 as _validate_config_or_422,
     _fetch_fresh_config_assist as _fetch_fresh_config_assist,
     _namespace_spec_volumes as _namespace_spec_volumes,
     VOLUME_CAT_MAX_BYTES as VOLUME_CAT_MAX_BYTES,
@@ -39,13 +38,12 @@ from ..volume_audit.models import VolumeAuditResponse as VolumeAuditResponse  # 
 __all__ = [
     "app",
     "lifespan",
-    "_CONFIG_SECRET_SENTINEL",
-    "_annotate_secret_sentinels",
     "_mask_secrets",
     "_merge_config",
     "_prune_unset",
     "_seed_for_detect",
     "_validate_account_ids",
+    "_validate_config_or_422",
     "_fetch_fresh_config_assist",
     "_namespace_spec_volumes",
     "VOLUME_CAT_MAX_BYTES",

@@ -64,7 +64,14 @@ async def client_with_component(
     await store.put(ServiceRecord(name="test-comp", image="ghcr.io/org/test:latest"))
 
     # Store a template
-    template = {"host": "localhost", "port": 8080, "password": "SECRET"}
+    template: dict = {
+        "type": "object",
+        "properties": {
+            "host": {"type": "string"},
+            "port": {"type": "integer"},
+            "password": {"type": "string", "format": "password", "writeOnly": True},
+        },
+    }
     await config_yaml_store.save_template("test-comp", template)
 
     transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]

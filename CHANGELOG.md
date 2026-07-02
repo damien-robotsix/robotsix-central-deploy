@@ -4,6 +4,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Migrate config handling from YAML-sentinel templates to JSON Schema: onboard
+  preflight now fetches `config/config.schema.json`, secrets are detected via
+  `format: password` + `writeOnly: true`, and submitted config is validated
+  against the schema before writing to the container volume. The old
+  `_CONFIG_SECRET_SENTINEL` / `_annotate_secret_sentinels` path is removed.
 - Fix `inspect_self` losing track of the server's own container after a watchtower self-update: the recreated container keeps the *previous* container's hostname (watchtower copies the config verbatim), so the container-id hostname lookup missed and `GET /system/update` reported `supported: false` until the next compose recreate. A fallback now scans running containers for a matching `Config.Hostname`.
 - **Fix self-update failing on first real use.** The one-shot watchtower launched by `POST /system/update` crashed twice: (1) watchtower 1.7.1's Docker client defaults to API 1.25, below modern daemons' minimum (1.44), panicking on the first API call — the updater now receives `DOCKER_API_VERSION` (`ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION`, default `1.44`); (2) recreating the central-deploy container 403'd because watchtower re-attaches networks via `POST /networks/{id}/connect`, which the socket proxy blocked — the compose socket-proxy scope now sets `NETWORKS: "1"`. Found live on server.robotsix.net; the failed run left the old container stopped, so deployments should update the socket-proxy (`docker compose up -d`) when picking this up.
 - Dashboard: add caretaker settings (enable/disable, interval) to System Settings panel, mill tracking opt-in to onboard flow, untracked badge for components without repo_id, and degraded-reporting banner when caretaker is enabled but mill is unreachable.

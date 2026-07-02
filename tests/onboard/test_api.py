@@ -6,10 +6,10 @@ fetch/compose functions so no real git clone or Docker daemon is needed.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import yaml
 from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import NoopBackend
@@ -40,6 +40,18 @@ from robotsix_central_deploy.registry.settings_store import (
 
 # Import the server module itself so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
+
+
+SAMPLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer", "default": 5432},
+        "api_key": {"type": "string", "format": "password", "writeOnly": True},
+    },
+    "required": ["host"],
+}
+"""Minimal valid JSON Schema used across onboard tests."""
 
 
 # ---------------------------------------------------------------------------
@@ -964,20 +976,15 @@ class TestOnboardPreflightWithConfig:
         spec.config_volume = (
             "cool-app-config"  # required by preflight gate when config.yaml present
         )
-        # Secret leaves are detected by the explicit "SECRET" sentinel only
-        # (no name-based heuristic): a leaf must carry "SECRET" in the repo's
-        # config.yaml to render as a masked field. A blank "password" stays an
-        # ordinary editable field.
-        config_yaml_bytes = yaml.dump(
-            {"host": "localhost", "port": 8080, "password": "SECRET"}
-        ).encode()
+        schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=config_yaml_bytes,
+                    config_yaml=None,
+                    config_schema_json=schema_json_bytes,
                 ),
             ),
             patch(
@@ -997,11 +1004,7 @@ class TestOnboardPreflightWithConfig:
         assert resp.status_code == 200
         data = resp.json()
         assert "spec" in data
-        assert data["spec"]["config_schema"] == {
-            "host": "localhost",
-            "port": 8080,
-            "password": "SECRET",
-        }
+        assert data["spec"]["config_schema"] == SAMPLE_SCHEMA
 
     async def test_preflight_config_schema_null_when_absent(
         self, client: AsyncClient, auth_headers: dict
@@ -1034,7 +1037,7 @@ class TestOnboardPreflightWithConfig:
         data = resp.json()
         assert data["spec"]["config_schema"] is None
 
-    async def test_preflight_invalid_config_yaml_returns_422(
+    async def test_preflight_invalid_config_schema_json_returns_422(
         self, client: AsyncClient, auth_headers: dict
     ):
         spec = _make_derived_spec("cool-app")
@@ -1044,7 +1047,8 @@ class TestOnboardPreflightWithConfig:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=b"- not a mapping\n",
+                    config_yaml=None,
+                    config_schema_json=b"{invalid",
                 ),
             ),
             patch(
@@ -1063,22 +1067,23 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "top-level YAML mapping" in data["error"]
+        assert "not valid JSON" in data["error"]
 
     async def test_preflight_gate_missing_config_target_label(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Preflight returns 422 when config.yaml is present but no robotsix.deploy.config-target label."""
+        """Preflight returns 422 when config schema is present but no robotsix.deploy.config-target label."""
         spec = _make_derived_spec("cool-app")
         # config_volume NOT set — simulates missing config-target label
-        config_yaml_bytes = yaml.dump({"host": "localhost", "port": 8080}).encode()
+        schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=config_yaml_bytes,
+                    config_yaml=None,
+                    config_schema_json=schema_json_bytes,
                 ),
             ),
             patch(
@@ -1102,10 +1107,10 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_gate_config_target_without_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Preflight returns 422 when config-target label is set but no config file or template is found."""
+        """Preflight returns 422 when config-target label is set but no config schema is found."""
         spec = _make_derived_spec("cool-app")
         spec.config_volume = "cool-app-config"
-        # config_schema will be None because fetch_repo_files returns no config_yaml or template
+        # config_schema will be None because config_schema_json is None
 
         with (
             patch(
@@ -1114,6 +1119,7 @@ class TestOnboardPreflightWithConfig:
                     compose_bytes=b"fake compose bytes",
                     config_yaml=None,
                     config_yaml_template=None,
+                    config_schema_json=None,
                 ),
             ),
             patch(
@@ -1134,22 +1140,21 @@ class TestOnboardPreflightWithConfig:
         data = resp.json()
         assert "no config file or template was found" in data["error"]
 
-    async def test_preflight_derives_schema_from_template_fallback(
+    async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """When config_yaml is None but config_yaml_template is set,
-        preflight derives a non-null config_schema from the template."""
+        """When only config.yaml exists (no schema JSON), config_schema is None."""
         spec = _make_derived_spec("cool-app")
-        spec.config_volume = "cool-app-config"
-        template_bytes = b"host: localhost\nport: 8080\n"
+        config_yaml_bytes = b"host: localhost\n"
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
-                    config_yaml_template=template_bytes,
+                    config_yaml=config_yaml_bytes,
+                    config_yaml_template=None,
+                    config_schema_json=None,
                 ),
             ),
             patch(
@@ -1168,11 +1173,7 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["spec"]["config_schema"] is not None
-        assert "host" in data["spec"]["config_schema"]
-        assert "port" in data["spec"]["config_schema"]
-        assert data["spec"]["config_schema"]["host"] == "localhost"
-        assert data["spec"]["config_schema"]["port"] == 8080
+        assert data["spec"]["config_schema"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -1185,7 +1186,13 @@ class TestOnboardConfirmWithConfig:
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         spec = _make_derived_spec("cfg-svc")
-        spec.config_schema = {"host": "localhost", "password": ""}
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "password": {"type": "string", "format": "password", "writeOnly": True},
+            },
+        }
         # Simulate a real compose: config-target label resolves to a volume
         # that's also declared as a named-volume mount.
         spec.config_volume = "cfg-svc-data"
@@ -1221,12 +1228,12 @@ class TestOnboardConfirmWithConfig:
         # Template saved in ConfigYamlStore
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = await store.get_template("cfg-svc")
-        assert template == {"host": "localhost", "password": ""}
+        assert template == spec.config_schema
 
         # Volume written via backend — uses the real config volume (now namespaced), not synthetic
         assert len(captured) == 1
         assert captured[0][0] == "cfg-svc-cfg-svc-data"
-        assert captured[0][1] == {"host": "localhost", "password": ""}
+        assert captured[0][1] == {"host": "", "password": ""}
 
         # named_volumes includes the config volume (from spec.volume_mounts)
         registry_obj: ComponentRegistry = server_mod.app.state.registry
@@ -1238,7 +1245,10 @@ class TestOnboardConfirmWithConfig:
         self, client: AsyncClient, auth_headers: dict
     ):
         spec = _make_derived_spec("fail-cfg")
-        spec.config_schema = {"host": "localhost"}
+        spec.config_schema = {
+            "type": "object",
+            "properties": {"host": {"type": "string"}},
+        }
 
         with patch.object(
             server_mod.app.state.backend,
@@ -1290,7 +1300,14 @@ class TestOnboardConfirmWithConfig:
     ):
         """config_values from the UI are merged with template and written to volume."""
         spec = _make_derived_spec("cfg-svc")
-        spec.config_schema = {"host": "localhost", "password": "", "port": 8080}
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "password": {"type": "string", "format": "password", "writeOnly": True},
+                "port": {"type": "integer", "default": 8080},
+            },
+        }
         spec.config_volume = "cfg-svc-data"
         spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
 
@@ -1343,7 +1360,13 @@ class TestOnboardConfirmWithConfig:
     ):
         """Without config_values, the template is written as-is (back-compat)."""
         spec = _make_derived_spec("cfg-svc2")
-        spec.config_schema = {"host": "localhost", "password": ""}
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "password": {"type": "string", "format": "password", "writeOnly": True},
+            },
+        }
         spec.config_volume = "cfg-svc2-data"
         spec.volume_mounts.append(VolumeMount(host="cfg-svc2-data", container="/cfg"))
 
@@ -1374,14 +1397,290 @@ class TestOnboardConfirmWithConfig:
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
 
-        # Template written as-is
+        # Template written as-is (empty defaults)
         assert len(captured) == 1
-        assert captured[0][1] == {"host": "localhost", "password": ""}
+        assert captured[0][1] == {"host": "", "password": ""}
 
-        # current still stored (equals template since no user values)
+        # current still stored (equals template defaults since no user values)
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         current = await store.get_current("cfg-svc2")
-        assert current == {"host": "localhost", "password": ""}
+        assert current == {"host": "", "password": ""}
+
+
+# ---------------------------------------------------------------------------
+# New JSON Schema-driven config tests
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardConfigSchemaValidation:
+    """Tests for JSON Schema-driven config validation during preflight and confirm."""
+
+    async def test_preflight_returns_json_schema_in_spec(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """config_schema_json present → spec.config_schema equals the parsed schema dict."""
+        spec = _make_derived_spec("cool-app")
+        spec.config_volume = "cool-app-config"
+        schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=None,
+                    config_schema_json=schema_json_bytes,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["spec"]["config_schema"] == SAMPLE_SCHEMA
+
+    async def test_preflight_invalid_json_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """config_schema_json with invalid JSON → 422."""
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=None,
+                    config_schema_json=b"{invalid",
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 422
+        assert "not valid JSON" in resp.json()["error"]
+
+    async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """config_yaml present but config_schema_json=None → spec.config_schema is None."""
+        spec = _make_derived_spec("cool-app")
+        config_yaml_bytes = b"host: localhost\n"
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=config_yaml_bytes,
+                    config_schema_json=None,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["spec"]["config_schema"] is None
+
+    async def test_confirm_missing_required_field_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Submit invalid type for a field → 422."""
+        spec = _make_derived_spec("cfg-req")
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "port": {"type": "integer", "default": 5432},
+            },
+            "required": ["host"],
+        }
+        spec.config_volume = "cfg-req-data"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"host": "", "port": "not-a-number"},
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 422
+        error_msg = resp.json()["error"]
+        assert "integer" in error_msg.lower() or "port" in error_msg.lower()
+
+    async def test_confirm_wrong_type_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Submit {"port": "not-a-number"} for integer field → 422."""
+        spec = _make_derived_spec("cfg-type")
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "port": {"type": "integer", "default": 5432},
+            },
+        }
+        spec.config_volume = "cfg-type-data"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"host": "example.com", "port": "not-a-number"},
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 422
+        error_msg = resp.json()["error"]
+        assert "integer" in error_msg.lower()
+
+    async def test_confirm_invalid_enum_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Submit {"mode": "invalid"} for enum field → 422."""
+        spec = _make_derived_spec("cfg-enum")
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "mode": {"type": "string", "enum": ["auto", "manual"]},
+            },
+        }
+        spec.config_volume = "cfg-enum-data"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"mode": "invalid"},
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 422
+        error_msg = resp.json()["error"]
+        assert "enum" in error_msg.lower() or "invalid" in error_msg.lower()
+
+    async def test_confirm_secret_preserved_when_sentinel_submitted(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """During confirm with no existing config, "***" for a secret field
+        defaults to empty string since there's no existing value to preserve."""
+        spec = _make_derived_spec("cfg-secret")
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+            },
+        }
+        spec.config_volume = "cfg-secret-data"
+
+        captured: list[dict] = []
+        original_write = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured.append(config_dict)
+            return await original_write(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend,
+            "write_config_to_volume",
+            _fake_write,
+        )
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"host": "10.0.0.1", "api_key": "***"},
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
+
+        # "***" with no existing → empty string
+        assert len(captured) == 1
+        assert captured[0]["api_key"] == ""
+        assert captured[0]["host"] == "10.0.0.1"
+
+    async def test_confirm_secret_detected_by_format_writeonly_not_sentinel(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """A field with format:password+writeOnly:true is treated as secret;
+        a field with value "SECRET" (old sentinel) is NOT treated as secret."""
+        spec = _make_derived_spec("cfg-fmt")
+        spec.config_schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+                "legacy_field": {"type": "string"},
+            },
+        }
+        spec.config_volume = "cfg-fmt-data"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {
+                    "api_key": "***",
+                    "legacy_field": "SECRET",
+                },
+            },
+            headers=auth_headers,
+        )
+
+        # Should NOT treat "SECRET" as a sentinel — should be accepted as literal string
+        assert resp.status_code == 202
 
 
 # ---------------------------------------------------------------------------

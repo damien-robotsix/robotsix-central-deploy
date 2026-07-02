@@ -1258,15 +1258,21 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost", "password": "SECRET"}
-        await store.save_template("chat", template)
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "password": {"type": "string", "format": "password", "writeOnly": True},
+            },
+        }
+        await store.save_template("chat", schema)
         await store.update_current("chat", {"host": "0.0.0.0", "password": "realpass"})
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert "schema" in data
-        assert data["schema"] == template
+        assert data["schema"] == schema
         assert "current" in data
         assert data["current"]["host"] == "0.0.0.0"
         assert data["current"]["password"] == "***"
@@ -1276,14 +1282,22 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost", "port": 8080}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 8080},
+            },
+        }
         await store.save_template("chat", template)
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["schema"] == template
-        assert data["current"] == template  # no current stored → template is current
+        # No current stored — current is masked template (with defaults)
+        assert data["current"]["host"] == "localhost"
+        assert data["current"]["port"] == 8080
 
     async def test_no_config_schema_returns_404(
         self, client: AsyncClient, auth_headers: dict
@@ -1312,8 +1326,23 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"server": {"host": "localhost", "password": "SECRET"}}
-        await store.save_template("chat", template)
+        schema = {
+            "type": "object",
+            "properties": {
+                "server": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string"},
+                        "password": {
+                            "type": "string",
+                            "format": "password",
+                            "writeOnly": True,
+                        },
+                    },
+                },
+            },
+        }
+        await store.save_template("chat", schema)
         await store.update_current(
             "chat", {"server": {"host": "0.0.0.0", "password": "s3cret"}}
         )
@@ -1329,8 +1358,17 @@ class TestGetServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"api_key": "SECRET"}
-        await store.save_template("chat", template)
+        schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+            },
+        }
+        await store.save_template("chat", schema)
         await store.update_current("chat", {"api_key": "real-key"})
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
@@ -1348,7 +1386,13 @@ class TestPutServiceConfig:
     async def test_merge_and_return_204(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost", "port": 8080}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 8080},
+            },
+        }
         await store.save_template("chat", template)
 
         resp = await client.put(
@@ -1366,8 +1410,18 @@ class TestPutServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost", "password": "SECRET"}
-        await store.save_template("chat", template)
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "password": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+            },
+        }
+        await store.save_template("chat", schema)
         await store.update_current(
             "chat", {"host": "localhost", "password": "realpass"}
         )
@@ -1388,8 +1442,13 @@ class TestPutServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"password": ""}
-        await store.save_template("chat", template)
+        schema = {
+            "type": "object",
+            "properties": {
+                "password": {"type": "string"},
+            },
+        }
+        await store.save_template("chat", schema)
         await store.update_current("chat", {"password": "oldpass"})
 
         resp = await client.put(
@@ -1433,8 +1492,24 @@ class TestPutServiceConfig:
     async def test_merge_nested_config(self, client: AsyncClient, auth_headers: dict):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"server": {"host": "localhost", "port": 8080, "password": "SECRET"}}
-        await store.save_template("chat", template)
+        schema = {
+            "type": "object",
+            "properties": {
+                "server": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string"},
+                        "port": {"type": "integer", "default": 8080},
+                        "password": {
+                            "type": "string",
+                            "format": "password",
+                            "writeOnly": True,
+                        },
+                    },
+                },
+            },
+        }
+        await store.save_template("chat", schema)
         await store.update_current(
             "chat",
             {"server": {"host": "0.0.0.0", "port": 3000, "password": "realpass"}},
@@ -1448,7 +1523,7 @@ class TestPutServiceConfig:
         assert resp.status_code == 204
 
         current = await store.get_current("chat")
-        # port not in submitted → falls back to template default (8080), not existing (3000)
+        # port not in submitted → falls back to schema default (8080)
         assert current == {
             "server": {"host": "10.0.0.1", "port": 8080, "password": "realpass"},
         }
@@ -1458,7 +1533,12 @@ class TestPutServiceConfig:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         # Seed a ComponentConfig so put_service_config finds config_volume
@@ -1501,7 +1581,12 @@ class TestPutServiceConfig:
         """PUT /services/{name}/config restarts the primary component when it's RUNNING."""
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         # Seed ComponentConfig with config_volume
@@ -1549,7 +1634,12 @@ class TestPutServiceConfig:
         """A failed restart after a successful config write does NOT fail the PUT request."""
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -1591,7 +1681,12 @@ class TestPutServiceConfig:
         """PUT /services/{name}/config does NOT restart a STOPPED component."""
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -1641,7 +1736,22 @@ class TestGetServiceConfigAssistFields:
     ):
         await _seed_store("auto-mail")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"account": {"email": "", "password": ""}}
+        template = {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "object",
+                    "properties": {
+                        "email": {"type": "string"},
+                        "password": {
+                            "type": "string",
+                            "format": "password",
+                            "writeOnly": True,
+                        },
+                    },
+                },
+            },
+        }
         await store.save_template("auto-mail", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -1701,7 +1811,12 @@ class TestGetServiceConfigAssistFields:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
@@ -1716,7 +1831,12 @@ class TestGetServiceConfigAssistFields:
         """Even without any ComponentConfig registered, the fields default safely."""
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
@@ -1820,7 +1940,12 @@ class TestConfigAssist:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -1847,7 +1972,12 @@ class TestConfigAssist:
     ):
         await _seed_store("chat")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("chat", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -1874,7 +2004,12 @@ class TestConfigAssist:
     ):
         await _seed_store("auto-mail")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("auto-mail", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -1907,7 +2042,12 @@ class TestConfigAssist:
     ):
         await _seed_store("auto-mail")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("auto-mail", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -2082,7 +2222,12 @@ class TestConfigAssist:
         """config_assist_command and config_assist_seeds are refreshed from repo HEAD."""
         await _seed_store("auto-mail")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("auto-mail", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -2150,7 +2295,12 @@ class TestConfigAssist:
         """When _fetch_fresh_config_assist raises, the stored command is used."""
         await _seed_store("auto-mail")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = {"host": "localhost"}
+        template = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+            },
+        }
         await store.save_template("auto-mail", template)
 
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store

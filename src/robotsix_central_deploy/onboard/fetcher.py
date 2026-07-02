@@ -19,6 +19,7 @@ class RepoFiles:
     compose_bytes: bytes
     config_yaml: bytes | None  # None if config/config.yaml absent in repo
     config_yaml_template: bytes | None = None  # fallback template bytes
+    config_schema_json: bytes | None = None  # config/config.schema.json bytes, or None
 
 
 def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
@@ -66,6 +67,9 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
         config_path = Path(tmpdir) / "config" / "config.yaml"
         config_yaml = config_path.read_bytes() if config_path.is_file() else None
 
+        schema_path = Path(tmpdir) / "config" / "config.schema.json"
+        config_schema_json = schema_path.read_bytes() if schema_path.is_file() else None
+
         config_yaml_template: bytes | None = None
         if config_yaml is None:
             # Strategy A — adjacent convention
@@ -98,6 +102,7 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
             compose_bytes=compose_bytes,
             config_yaml=config_yaml,
             config_yaml_template=config_yaml_template,
+            config_schema_json=config_schema_json,
         )
 
 
