@@ -129,6 +129,7 @@ class ServiceRecord:
     component_id: str = (
         ""  # non-empty for sibling records; set to primary component name
     )
+    repo_id: str = ""
 
     def to_status(self) -> "ServiceStatus":
         if not self.deployed_image_digest or not self.latest_registry_digest:

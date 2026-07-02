@@ -87,3 +87,5 @@ class ComponentConfig(BaseModel):
     config_assist_seeds: list[
         ConfigAssistSeed
     ] = []  # seed field keys from robotsix.deploy.config-assist-seeds
+    caretaker_auto_update: bool = True
+    repo_id: str = ""

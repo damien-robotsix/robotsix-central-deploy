@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..auth import verify_auth
 from ..backend import ExecutionBackend
@@ -291,6 +291,8 @@ async def _run_onboard_deploy_job(
     env_store: EnvStore,
     env_was_seeded: bool,
     job_registry: JobRegistry,
+    http_client: Any = None,
+    settings_store: Any = None,
 ) -> None:
     """Background task that runs the primary deploy → siblings sequence.
 
@@ -312,6 +314,23 @@ async def _run_onboard_deploy_job(
         record.deployed_image_digest = outcome.deployed_digest
         record.previous_image_digest = outcome.previous_digest
         await store.put(record)
+
+        # Best-effort mill repo registration
+        if config.repo_id:
+            import os
+
+            from ...caretaker.mill_client import MillClient
+
+            mill_url = MillClient.derive_url_from_registry(
+                registry, component_config_store
+            ) or os.environ.get("MILL_INGEST_URL")
+            if mill_url and http_client is not None:
+                mc = MillClient(mill_url, http_client)
+                ok = await mc.register_repo(config.repo_id, spec.git_url)
+                if not ok:
+                    logger.warning(
+                        "mill repo registration failed for %s", config.repo_id
+                    )
 
         # Deploy siblings
         job_registry.update_phase(job_id, "deploying_siblings")
@@ -374,6 +393,7 @@ async def _run_onboard_deploy_job(
 )
 async def onboard_confirm(
     req: OnboardConfirmRequest,
+    request: Request,
     _: None = Depends(verify_auth),
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
@@ -461,6 +481,20 @@ async def onboard_confirm(
     config.config_assist_command = spec.config_assist_command
     config.config_assist_seeds = spec.config_assist_seeds
 
+    # Derive repo_id from git_url when caretaker is enabled
+    settings = await request.app.state.settings_store.get()
+    if settings.caretaker_enabled and req.register_with_mill:
+        repo_id = spec.git_url.rstrip("/").split("/")[-1].removesuffix(".git")
+    else:
+        repo_id = ""
+
+    # Mill canonical opt-out: the mill component must never auto-update itself
+    caretaker_auto_update = config.id != "mill"
+
+    config = config.model_copy(
+        update={"repo_id": repo_id, "caretaker_auto_update": caretaker_auto_update}
+    )
+
     # Create the job so the caller can start polling immediately.
     job_id = job_registry.create(spec.name)
 
@@ -502,6 +536,7 @@ async def onboard_confirm(
         name=spec.name,
         container_name=spec.container_name or spec.name,
         image=spec.image,
+        repo_id=repo_id,
     )
     await store.put(record)
 
@@ -523,6 +558,10 @@ async def onboard_confirm(
             env_store=env_store,
             env_was_seeded=env_was_seeded,
             job_registry=job_registry,
+            http_client=request.app.state.http_client
+            if hasattr(request.app.state, "http_client")
+            else None,
+            settings_store=request.app.state.settings_store,
         )
     )
 
