@@ -9,10 +9,14 @@ component.
 ## Installation
 
 ```bash
-git clone https://github.com/damien-robotsix/robotsix-mill.git
-cd robotsix-mill
+git clone https://github.com/damien-robotsix/robotsix-central-deploy.git
+cd robotsix-central-deploy
 uv sync --frozen
 ```
+
+> **Note:** [uv](https://docs.astral.sh/uv/) is required — plain `pip install`
+> is not supported because some dependencies are resolved from git sources
+> pinned in `uv.lock`.
 
 ## Usage
 

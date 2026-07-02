@@ -1,7 +1,7 @@
 site_name: "Robotsix Central Deploy"
 site_url: "https://robotsix.net/central-deploy/"
 site_description: "Central deployment & lifecycle server for the robotsix suite"
-repo_url: "https://github.com/damien-robotsix/robotsix-mill"
+repo_url: "https://github.com/damien-robotsix/robotsix-central-deploy"
 
 theme:
   name: material
