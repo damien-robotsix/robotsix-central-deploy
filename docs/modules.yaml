@@ -16,14 +16,31 @@ modules:
       - pyyaml
     config:
       env_prefix: ROBOTSIX_LIFECYCLE_
-      env_example: .env.lifecycle.example
+      env_file: .env.lifecycle
     endpoints:
       - GET /health
+      - GET /disk
+      - POST /disk/reclaim
       - GET /services
       - GET /services/{name}
+      - GET /services/{name}/health
+      - GET /services/{name}/logs
       - POST /services/{name}/start
       - POST /services/{name}/stop
       - POST /services/{name}/restart
+      - POST /services/{name}/deploy
+      - POST /services/{name}/rollback
+      - GET/PUT /services/{name}/env
+      - DELETE /services/{name}/env/{key}
+      - GET/PUT /services/{name}/config
+      - POST /services/{name}/config/assist
+      - DELETE /services/{name}
+      - GET/PUT /settings
+      - GET /volumes/audit
+      - GET /volumes/orphans
+      - POST /volumes/prune
+      - GET /volumes/{name}/ls
+      - GET /volumes/{name}/cat
     docs: /docs
     openapi: /openapi.json
     tests: tests/lifecycle/
@@ -38,16 +55,18 @@ modules:
       - fastapi
       - httpx
     endpoints:
-      - GET /{name}
-      - GET /{name}/{path:path}
+      - ANY /{name}                # all HTTP methods proxied
+      - ANY /{name}/{path:path}    # all HTTP methods proxied
+      - WS /{path:path}            # WebSocket relay
     tests: tests/gateway/
 
   registry:
     name: registry
     description: >
       Component registry — declares each managed Docker component (id, image,
-      container name, ports, mounts, env, health check). Loaded from YAML at
-      startup; consumed by the Docker-API backend.
+      container name, ports, mounts, env, health check). Initialised empty at
+      startup and populated from the dynamic component-config JSON store
+      (onboarding adds entries); consumed by the Docker-API backend.
     package: robotsix_central_deploy.registry
     dependencies:
       - pydantic
@@ -69,6 +88,9 @@ modules:
       - fastapi
     endpoints:
       - GET /ui
+      - GET/POST /login
+      - POST /logout
+      - GET /help/deploy-contract
     tests: tests/ui/
 
   registry_check:
