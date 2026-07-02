@@ -208,6 +208,9 @@ jobs:
       - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4
 
   dependency-review:
+    # dependency-review-action diffs base..head and only supports
+    # pull_request events; on push to main it fails unconditionally.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
