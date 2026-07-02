@@ -559,6 +559,10 @@
       <div id="ob-volumes"></div>
 
       <h3>Environment</h3>
+      <p class="ob-secrets-hint" style="font-size:0.85rem;color:var(--muted);margin:4px 0 8px;">
+        Secret fields may be left empty — the component deploys without them.
+        Fill them in afterwards via <strong>Configure&nbsp;→&nbsp;Save</strong>, which auto-restarts the component.
+      </p>
       <table id="ob-env-table">
         <thead><tr><th>Key</th><th>Value</th></tr></thead>
         <tbody id="ob-env-body"></tbody>
@@ -566,6 +570,10 @@
 
       <div id="ob-config-section" style="display:none">
         <h3>Configuration (config.yaml)</h3>
+        <p class="ob-secrets-hint" style="font-size:0.85rem;color:var(--muted);margin:4px 0 8px;">
+          Secret fields may be left empty — the component deploys without them.
+          Fill them in afterwards via <strong>Configure&nbsp;→&nbsp;Save</strong>, which auto-restarts the component.
+        </p>
         <div id="ob-config-form-body"></div>
       </div>
 
@@ -1793,13 +1801,13 @@ function _reindexArrayItems(container) {
 function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
   const div = document.createElement('div');
   div.className = 'env-row';
+  const alreadySet = isSecret && (currentVal === '***');
 
   let inputHtml;
   if (isSecret) {
-    const alreadySet = (currentVal === '***');
     const placeholder = alreadySet
       ? '(already set — enter new value to change)'
-      : '(not set)';
+      : '(leave empty — fill later via Configure → Save)';
     inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
       value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
   } else {
@@ -1813,6 +1821,7 @@ function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
     <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}</span>
     ${inputHtml}
     ${isSecret ? '<span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>' : ''}
+    ${isSecret && !alreadySet ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">optional at onboard</span>' : ''}
   `;
   return div;
 }
@@ -2365,7 +2374,7 @@ function populateStep2(spec) {
     var tbody = document.getElementById('ob-env-body');
     tbody.innerHTML = Object.entries(spec.env).map(function(entry) {
       var k = entry[0], v = entry[1];
-      return '<tr><td>' + escHtml(k) + '</td><td><input class="ob-env-val" data-key="' + escAttr(k) + '" type="' + (v === '' ? 'password' : 'text') + '" value="' + escAttr(v) + '" placeholder="' + (v === '' ? '(required secret)' : '') + '" /></td></tr>';
+      return '<tr><td>' + escHtml(k) + '</td><td><input class="ob-env-val" data-key="' + escAttr(k) + '" type="' + (v === '' ? 'password' : 'text') + '" value="' + escAttr(v) + '" placeholder="' + (v === '' ? '(secret — can be set later)' : '') + '" /></td></tr>';
     }).join('');
   }
 
