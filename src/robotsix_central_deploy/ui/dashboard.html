@@ -1664,87 +1664,46 @@ function generateConfigForm(schema, current, containerOrId) {
   _renderConfigNode(schema, current, '', container);
 }
 
-function _renderConfigNode(schema, current, prefix, container) {
-  const oauth2Entries = [];
+function _resolveRef(propSchema, defs) {
+  if (!propSchema.$ref || !defs) return propSchema;
+  const refPath = propSchema.$ref;
+  if (refPath.startsWith('#/$defs/')) {
+    const defName = refPath.slice('#/$defs/'.length);
+    if (defs[defName]) return defs[defName];
+  }
+  return propSchema;
+}
 
-  for (const [key, schemaVal] of Object.entries(schema)) {
+function _renderConfigNode(schema, current, prefix, container) {
+  const properties = schema.properties;
+  if (!properties) return;
+
+  const required = schema.required || [];
+  const defs = schema.$defs || {};
+
+  for (const [key, propSchema] of Object.entries(properties)) {
     const fullKey = prefix ? prefix + '.' + key : key;
     const currentVal = (current != null) ? current[key] : undefined;
 
-    // default_account is implicit now (the board shows all mailboxes); hide it
-    // from the form. _merge_config keeps the stored value, so sends still work.
-    if (fullKey === 'default_account') {
-      continue;
-    }
+    const resolvedSchema = _resolveRef(propSchema, defs);
 
-    if (key.startsWith('oauth2_')) {
-      oauth2Entries.push({ key, schemaVal, fullKey, currentVal });
-      continue;
-    }
+    const isRequired = required.includes(key);
+    const defaultVal = resolvedSchema.default ?? currentVal ?? '';
+    const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
 
-    if (Array.isArray(schemaVal)) {
-      const firstItem = schemaVal[0];
-      if (firstItem !== null && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
-        _renderArraySection(key, fullKey, schemaVal, currentVal, container);
-      } else {
-        const displayVal = Array.isArray(currentVal)
-          ? JSON.stringify(currentVal)
-          : JSON.stringify(schemaVal ?? []);
-        container.appendChild(buildConfigRow(fullKey, key, schemaVal, displayVal, false));
-      }
-    } else if (schemaVal !== null && typeof schemaVal === 'object') {
+    if (resolvedSchema.type === 'object') {
       const section = document.createElement('div');
       section.className = 'env-section';
       section.innerHTML = `<h3>${escHtml(key)}</h3>`;
       const currentSub = (currentVal !== null && typeof currentVal === 'object'
                           && !Array.isArray(currentVal)) ? currentVal : {};
-      _renderConfigNode(schemaVal, currentSub, fullKey, section);
+      _renderConfigNode(resolvedSchema, currentSub, fullKey, section);
       container.appendChild(section);
     } else {
-      const isSecret = schemaVal === 'SECRET';
-      container.appendChild(buildConfigRow(fullKey, key, schemaVal, currentVal, isSecret));
+      container.appendChild(buildConfigRow(
+        fullKey, key, resolvedSchema, currentVal, isSecret, isRequired, defaultVal
+      ));
     }
-  }
-
-  if (oauth2Entries.length > 0) {
-    const anySet = oauth2Entries.some(e => {
-      const v = e.currentVal;
-      return v !== undefined && v !== null && v !== '' && v !== '***';
-    });
-    const details = document.createElement('details');
-    details.className = 'oauth2-collapsible';
-    if (anySet) details.open = true;
-    const summary = document.createElement('summary');
-    summary.textContent = 'Advanced / OAuth2';
-    details.appendChild(summary);
-    const body = document.createElement('div');
-    body.className = 'oauth2-body';
-    for (const { key, schemaVal, fullKey, currentVal } of oauth2Entries) {
-      if (Array.isArray(schemaVal)) {
-        const firstItem = schemaVal[0];
-        if (firstItem !== null && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
-          _renderArraySection(key, fullKey, schemaVal, currentVal, body);
-        } else {
-          const displayVal = Array.isArray(currentVal)
-            ? JSON.stringify(currentVal)
-            : JSON.stringify(schemaVal ?? []);
-          body.appendChild(buildConfigRow(fullKey, key, schemaVal, displayVal, false));
-        }
-      } else if (schemaVal !== null && typeof schemaVal === 'object') {
-        const section = document.createElement('div');
-        section.className = 'env-section';
-        section.innerHTML = `<h3>${escHtml(key)}</h3>`;
-        const currentSub = (currentVal !== null && typeof currentVal === 'object'
-                            && !Array.isArray(currentVal)) ? currentVal : {};
-        _renderConfigNode(schemaVal, currentSub, fullKey, section);
-        body.appendChild(section);
-      } else {
-        const isSecret = schemaVal === 'SECRET';
-        body.appendChild(buildConfigRow(fullKey, key, schemaVal, currentVal, isSecret));
-      }
-    }
-    details.appendChild(body);
-    container.appendChild(details);
   }
 }
 
@@ -1833,30 +1792,55 @@ function _reindexArrayItems(container) {
   });
 }
 
-function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
+function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isRequired, defaultVal) {
   const div = document.createElement('div');
   div.className = 'env-row';
-  const alreadySet = isSecret && (currentVal === '***');
+  const displayVal = (currentVal !== undefined && currentVal !== null)
+    ? currentVal
+    : (defaultVal !== undefined && defaultVal !== null ? defaultVal : '');
 
   let inputHtml;
   if (isSecret) {
+    const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
     const placeholder = alreadySet
       ? '(already set — enter new value to change)'
-      : '(leave empty — fill later via Configure → Save)';
+      : '(required — set before deploy)';
     inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
       value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
+    div.innerHTML = `
+      <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
+      ${inputHtml}
+      <span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>
+      ${!alreadySet ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">optional at onboard</span>' : ''}
+    `;
+    return div;
+  }
+
+  if (propSchema.enum && Array.isArray(propSchema.enum)) {
+    const selectedVal = (currentVal !== undefined && currentVal !== null)
+      ? String(currentVal)
+      : (defaultVal !== undefined && defaultVal !== null ? String(defaultVal) : '');
+    const options = propSchema.enum.map(v => {
+      const selected = String(v) === selectedVal;
+      return `<option value="${escAttr(String(v))}"${selected ? ' selected' : ''}>${escHtml(String(v))}</option>`;
+    }).join('');
+    inputHtml = `<select class="env-value" data-key="${escAttr(fullKey)}">${options}</select>`;
+  } else if (propSchema.type === 'integer' || propSchema.type === 'number') {
+    const step = propSchema.type === 'integer' ? ' step="1"' : '';
+    inputHtml = `<input type="number" class="env-value" data-key="${escAttr(fullKey)}"
+      value="${escAttr(String(displayVal))}"${step}>`;
+  } else if (propSchema.type === 'boolean') {
+    const checked = displayVal === true || displayVal === 'true' || displayVal === 1 || displayVal === '1';
+    inputHtml = `<input type="checkbox" class="env-value" data-key="${escAttr(fullKey)}"
+      ${checked ? 'checked' : ''}>`;
   } else {
-    const displayVal = (currentVal !== undefined && currentVal !== null)
-      ? String(currentVal) : String(schemaVal ?? '');
     inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
-      value="${escAttr(displayVal)}">`;
+      value="${escAttr(String(displayVal))}">`;
   }
 
   div.innerHTML = `
-    <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}</span>
+    <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
     ${inputHtml}
-    ${isSecret ? '<span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>' : ''}
-    ${isSecret && !alreadySet ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">optional at onboard</span>' : ''}
   `;
   return div;
 }
@@ -1879,39 +1863,48 @@ function setNestedValue(obj, dotPath, value) {
   obj[last] = value;
 }
 
+function _collectFromProperties(schema, result, container, prefix) {
+  const properties = schema.properties;
+  if (!properties) return;
+
+  const defs = schema.$defs || {};
+
+  for (const [key, propSchema] of Object.entries(properties)) {
+    const fullKey = prefix ? prefix + '.' + key : key;
+
+    const resolvedSchema = _resolveRef(propSchema, defs);
+
+    if (resolvedSchema.type === 'object') {
+      const nestedResult = {};
+      _collectFromProperties(resolvedSchema, nestedResult, container, fullKey);
+      if (Object.keys(nestedResult).length > 0) {
+        result[key] = nestedResult;
+      }
+    } else {
+      const el = container.querySelector(`[data-key="${fullKey}"]`);
+      if (!el) continue;
+
+      const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
+
+      if (el.type === 'checkbox') {
+        result[key] = el.checked;
+      } else if (el.type === 'number') {
+        result[key] = resolvedSchema.type === 'integer'
+          ? parseInt(el.value, 10)
+          : parseFloat(el.value);
+      } else if (el.type === 'password' || isSecret) {
+        result[key] = el.value === '' ? '***' : el.value;
+      } else {
+        result[key] = el.value;
+      }
+    }
+  }
+}
+
 function collectConfigValues(schema, containerEl) {
   const result = {};
   const root = containerEl || document.getElementById('config-form-body');
-  root.querySelectorAll('[data-key]').forEach(input => {
-    const parts = input.dataset.key.split('.');
-    let obj = result;
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      const nextPart = parts[i + 1];
-      const nextIsIndex = /^\d+$/.test(nextPart);
-
-      if (/^\d+$/.test(part)) {
-        // Current part is a numeric array index — navigate into the array slot
-        const idx = parseInt(part, 10);
-        if (obj[idx] === undefined) obj[idx] = nextIsIndex ? [] : {};
-        obj = obj[idx];
-      } else {
-        // Current part is an object key
-        if (obj[part] === undefined) obj[part] = nextIsIndex ? [] : {};
-        obj = obj[part];
-      }
-    }
-
-    const key = parts[parts.length - 1];
-    const isSecret = input.type === 'password';
-    if (/^\d+$/.test(key)) {
-      const idx = parseInt(key, 10);
-      obj[idx] = (isSecret && input.value === '') ? '***' : input.value;
-    } else {
-      obj[key] = (isSecret && input.value === '') ? '***' : input.value;
-    }
-  });
+  _collectFromProperties(schema, result, root, '');
   return result;
 }
 
@@ -2491,7 +2484,9 @@ function populateStep2(spec) {
   }).join('');
 
   // Env — show only for repos WITHOUT config.yaml
-  var hasConfig = spec.config_schema && Object.keys(spec.config_schema).length > 0;
+  var hasConfig = spec.config_schema
+      && spec.config_schema.properties
+      && Object.keys(spec.config_schema.properties).length > 0;
   var envTable = document.getElementById('ob-env-table');
   var configSection = document.getElementById('ob-config-section');
 
@@ -2499,7 +2494,7 @@ function populateStep2(spec) {
     // Hide env table; show the full config.yaml mirror
     envTable.style.display = 'none';
     configSection.style.display = '';
-    generateConfigForm(spec.config_schema, spec.config_schema /* template = current for fresh onboard */, 'ob-config-form-body');
+    generateConfigForm(spec.config_schema, {}, 'ob-config-form-body');
   } else {
     // Show env table; hide config section
     envTable.style.display = '';
@@ -2545,7 +2540,9 @@ async function onboardDeploy() {
   body.register_with_mill = document.getElementById('ob-register-mill').checked;
 
   // When config.yaml schema is present, collect the filled-in values
-  if (finalSpec.config_schema && Object.keys(finalSpec.config_schema).length > 0) {
+  if (finalSpec.config_schema
+      && finalSpec.config_schema.properties
+      && Object.keys(finalSpec.config_schema.properties).length > 0) {
     var configFormContainer = document.getElementById('ob-config-form-body');
     body.config_values = collectConfigValues(finalSpec.config_schema, configFormContainer);
   }
