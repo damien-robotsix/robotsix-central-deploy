@@ -42,6 +42,7 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | Variable | Default | Description |
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL` | `unix:///var/run/docker.sock` | Docker socket URL for connecting to the Docker daemon. Set to `tcp://socket-proxy:2375` in production when running behind a Docker socket proxy. |
+| `ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT` | `120` | Timeout in seconds for all Docker SDK operations (image pull, container create/start/stop/remove, volume create/remove, etc.). Prevents indefinite blocking when the Docker daemon is slow or unresponsive. |
 
 ### Disk
 
