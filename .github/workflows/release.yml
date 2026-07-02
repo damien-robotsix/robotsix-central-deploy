@@ -1,0 +1,24 @@
+name: Release image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write         # provenance / SBOM attestation signing
+  attestations: write
+  security-events: write  # Trivy SARIF upload to Code Scanning
+
+jobs:
+  publish:
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@70e26f3a214a20b601e2b415a41bad743a871e22  # main
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write

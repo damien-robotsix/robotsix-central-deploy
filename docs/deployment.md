@@ -11,15 +11,32 @@ How central-deploy itself is deployed on `server.robotsix.net`.
 
 ## Application (docker compose)
 
-The service runs from the repo's `docker-compose.yml`:
+The service runs from the repo's `docker-compose.yml`, pulling the image
+published to GHCR (`ghcr.io/damien-robotsix/robotsix-central-deploy:main`,
+built by `.github/workflows/release.yml` on every push to main):
 
 ```bash
 git clone https://github.com/damien-robotsix/robotsix-central-deploy.git
 cd robotsix-central-deploy
+docker compose pull
 ROBOTSIX_LIFECYCLE_AUTH_USERNAME=admin \
 ROBOTSIX_LIFECYCLE_AUTH_PASSWORD=... \
-docker compose up -d --build
+docker compose up -d
 ```
+
+To update: `docker compose pull && docker compose up -d` (add `--build` only
+for local development builds from the checkout).
+
+!!! warning "One-time migration: `/data` volume ownership"
+    The container now runs as a non-root user (uid 1000). A
+    `central_deploy_data` volume created by an older root-running deployment
+    holds root-owned files the new image cannot write. Before the first
+    non-root start, run:
+
+    ```bash
+    docker compose down
+    docker run --rm -v central_deploy_data:/data alpine chown -R 1000:1000 /data
+    ```
 
 This starts two containers:
 
