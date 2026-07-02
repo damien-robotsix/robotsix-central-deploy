@@ -40,6 +40,7 @@
   .badge-update-unknown        { background: rgba(148,163,184,0.18); color: var(--grey);  }
   .badge-ok                    { color: #4caf50; font-weight: bold; }
   .badge-warn                  { color: #ff9800; font-weight: bold; }
+  .badge-untracked             { background: rgba(148,163,184,0.18); color: var(--grey); }
   .health-healthy { color: var(--green); font-weight: 600; } /* HealthStatus enum: lifecycle/models.py */
   .health-unhealthy { color: var(--red); font-weight: 600; }
   .health-unknown { color: var(--grey); }
@@ -391,6 +392,11 @@
 
 <div id="error-banner" class="error-banner"></div>
 
+<div id="caretaker-degraded-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
+  &#9888; Caretaker reporting is degraded &mdash; deploy the mill component to enable board issue tracking.
+  <button onclick="document.getElementById('caretaker-degraded-banner').style.display='none'" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
+</div>
+
 <div id="disk-warning" class="banner banner-warn" style="display:none"></div>
 
 <table>
@@ -585,6 +591,13 @@
         Mount ~/.claude as /root/.claude (read-write)
       </label>
 
+      <div id="ob-mill-tracking" style="margin-top:12px;">
+        <label>
+          <input type="checkbox" id="ob-register-mill" checked>
+          Register with mill for issue tracking <em>(recommended)</em>
+        </label>
+      </div>
+
       <div id="ob-deploy-progress" class="ob-progress" style="display:none"></div>
       <div id="ob-step2-error" class="ob-error" style="display:none"></div>
       <div class="ob-actions">
@@ -647,6 +660,22 @@
                  style="background:#0f172a;border:1px solid #475569;border-radius:4px;
                         color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
           <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">requires restart to take effect</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Daily Caretaker Pass</td>
+        <td style="padding:6px 12px;">
+          <input id="s-caretaker-enabled" type="checkbox" onchange="onCaretakerEnabledChange()"
+                 style="accent-color:var(--blue);" />
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">enable periodic auto-update, health, and volume checks</span>
+        </td>
+      </tr>
+      <tr id="s-caretaker-interval-row" style="display:none">
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Caretaker Interval (hours)</td>
+        <td style="padding:6px 12px;">
+          <input id="s-caretaker-interval" type="number" step="1" min="1"
+                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
+                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:120px;" />
         </td>
       </tr>
     </table>
@@ -746,6 +775,9 @@ function renderRow(svc) {
     ? ` <span class="stateful-warn" title="Stateful volumes (${escAttr(svc.stateful_volumes.join(', '))}) start empty — data does not migrate automatically.">&#9888;</span>`
     : '';
 
+  // Untracked badge (no repo_id → no mill issue tracking)
+  const untrackedBadge = (!svc.repo_id) ? ' <span class="badge badge-untracked">untracked</span>' : '';
+
   // Gateway shortcut
   const gatewayHref = gatewayBaseDomain
     ? `https://${escAttr(svc.name)}.${gatewayBaseDomain}/`
@@ -756,7 +788,7 @@ function renderRow(svc) {
     : '<span style="color:#666;">—</span>';
 
   return `<tr id="row-${escAttr(svc.name)}">
-    <td>${escHtml(svc.name)}${statefulWarning}</td>
+    <td>${escHtml(svc.name)}${statefulWarning}${untrackedBadge}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
     <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
     <td><span class="${healthClass}" title="${escAttr(healthTitle)}">${escHtml(healthDisplay)}</span></td>
@@ -2509,6 +2541,9 @@ async function onboardDeploy() {
   // Build the confirm body
   var body = { spec: finalSpec };
 
+  // Mill tracking opt-in
+  body.register_with_mill = document.getElementById('ob-register-mill').checked;
+
   // When config.yaml schema is present, collect the filled-in values
   if (finalSpec.config_schema && Object.keys(finalSpec.config_schema).length > 0) {
     var configFormContainer = document.getElementById('ob-config-form-body');
@@ -2602,6 +2637,9 @@ async function loadSettings() {
     document.getElementById('s-log-level').value = s.log_level;
     document.getElementById('s-gateway-domain').value = s.gateway_base_domain || '';
     document.getElementById('s-claude-mount').value = s.claude_host_mount_path || '';
+    document.getElementById('s-caretaker-enabled').checked = !!s.caretaker_enabled;
+    document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
+    document.getElementById('s-caretaker-interval-row').style.display = s.caretaker_enabled ? '' : 'none';
     // Also update module-level variable used for service shortcut links
     gatewayBaseDomain = s.gateway_base_domain || '';
   } catch (e) {
@@ -2617,6 +2655,8 @@ async function saveSettings(event) {
     log_level: document.getElementById('s-log-level').value,
     gateway_base_domain: document.getElementById('s-gateway-domain').value,
     claude_host_mount_path: document.getElementById('s-claude-mount').value,
+    caretaker_enabled: document.getElementById('s-caretaker-enabled').checked,
+    caretaker_interval_hours: parseInt(document.getElementById('s-caretaker-interval').value),
   };
   try {
     var res = await fetch('/settings', {
@@ -2636,6 +2676,25 @@ async function saveSettings(event) {
   } catch (e) {
     showToast('Error: ' + e.message, 'error');
   }
+}
+
+function onCaretakerEnabledChange() {
+  var enabled = document.getElementById('s-caretaker-enabled').checked;
+  document.getElementById('s-caretaker-interval-row').style.display = enabled ? '' : 'none';
+}
+
+async function checkCaretakerStatus() {
+  try {
+    var res = await fetch('/caretaker/status', { headers: authHeaders(), credentials: 'same-origin' });
+    if (!res.ok) return;
+    var data = await res.json();
+    var banner = document.getElementById('caretaker-degraded-banner');
+    if (data.enabled && !data.mill_reachable) {
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch (_) { /* transient */ }
 }
 
 // ── Volume browser ────────────────────────────────────────────────
@@ -2868,6 +2927,7 @@ async function pollSelfUpdateRecovery(startedAt) {
   loadDashboard();
   startAutoRefresh();
   checkSelfUpdate();
+  checkCaretakerStatus();
   setInterval(checkSelfUpdate, 5 * 60 * 1000);
 })();
 </script>
