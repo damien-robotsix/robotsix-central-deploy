@@ -54,6 +54,8 @@ When a component has siblings, lifecycle actions (start/stop/restart/deploy/roll
 |--------|------|------|-------------|
 | GET | `/health` | **No** | Liveness probe |
 | GET | `/disk` | Yes | Host disk usage + Docker storage breakdown |
+| GET | `/system/update` | Yes | Is a newer server image available on the registry? |
+| POST | `/system/update` | Yes | Self-update: one-shot watchtower container pulls the new image and recreates the server container |
 | GET | `/ui` | Yes | HTML monitoring dashboard |
 | GET | `/help/deploy-contract` | No | Rendered DEPLOY_CONTRACT.md |
 

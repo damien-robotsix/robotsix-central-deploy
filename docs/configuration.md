@@ -58,6 +58,12 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL` | `300` | Cache TTL in seconds for registry availability checks. |
 | `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL` | `300` | Background registry check interval in seconds. Set to `0` to disable periodic checks. |
 
+### Self-update
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE` | `containrrr/watchtower:1.7.1` | One-shot updater image launched by `POST /system/update` to pull the newest server image and recreate the central-deploy container. |
+
 ### Logging
 
 | Variable | Default | Description |

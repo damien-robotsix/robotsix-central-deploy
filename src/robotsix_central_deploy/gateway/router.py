@@ -43,6 +43,7 @@ RESERVED_NAMES: frozenset[str] = frozenset(
         "volumes",  # /volumes/* API routes
         "login",  # GET/POST /login (UI)
         "logout",  # POST /logout (UI)
+        "system",  # /system/update (self-update API)
     }
 )
 

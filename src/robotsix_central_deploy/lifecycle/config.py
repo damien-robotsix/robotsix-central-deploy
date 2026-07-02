@@ -62,6 +62,10 @@ class LifecycleConfig(BaseSettings):
     config_yaml_store_path: str = "data/component_config_yaml.json"
     # env: ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH
 
+    # Self-update (dashboard "Update server" button)
+    # One-shot updater image; pinned tag. env: ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE
+    self_update_watchtower_image: str = "containrrr/watchtower:1.7.1"
+
     # Registry check
     registry_check_ttl: int = (
         300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL  (cache TTL, seconds)

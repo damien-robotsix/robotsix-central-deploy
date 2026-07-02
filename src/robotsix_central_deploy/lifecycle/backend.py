@@ -21,6 +21,7 @@ from .models import (
     DockerDfStats,
     HealthStatus,
     RollbackOutcome,
+    SelfInspect,
     ServiceRecord,
     ServiceState,
     VolumeStat,
@@ -156,6 +157,28 @@ class ExecutionBackend(ABC):
         """
         ...
 
+    @abstractmethod
+    async def inspect_self(self) -> Optional[SelfInspect]:
+        """Identify the container this server runs in.
+
+        Returns ``None`` when the server is not containerised (or the
+        backend cannot tell) — self-update is unsupported in that case.
+        """
+        ...
+
+    @abstractmethod
+    async def trigger_self_update(
+        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+    ) -> str:
+        """Launch a one-shot watchtower container that updates *target*.
+
+        The watchtower container is attached to the same networks as
+        *target* so it reaches the Docker API endpoint at
+        *docker_host_url* (the socket proxy). Returns the watchtower
+        container id. Raises ``RuntimeError`` on failure to launch.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Noop backend (for testing / dry runs)
@@ -246,6 +269,14 @@ class NoopBackend(ExecutionBackend):
 
     async def remove_volume(self, volume_name: str) -> None:
         pass
+
+    async def inspect_self(self) -> Optional[SelfInspect]:
+        return None
+
+    async def trigger_self_update(
+        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+    ) -> str:
+        return "noop-self-update"
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +429,18 @@ class DockerBackend(ExecutionBackend):
     async def remove_volume(self, volume_name: str) -> None:
         raise NotImplementedError(
             "remove_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def inspect_self(self) -> Optional[SelfInspect]:
+        raise NotImplementedError(
+            "inspect_self not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def trigger_self_update(
+        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+    ) -> str:
+        raise NotImplementedError(
+            "trigger_self_update not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
@@ -1278,3 +1321,90 @@ class DockerSdkBackend(ExecutionBackend):
             None, lambda: self._client.api.prune_builds(all=True)
         )
         return int(result.get("SpaceReclaimed", 0))
+
+    async def inspect_self(self) -> Optional[SelfInspect]:
+        """Resolve the server's own container via the container-id hostname.
+
+        Inside a container the default hostname is the short container id;
+        when the lookup fails (custom hostname, not containerised, daemon
+        unreachable) self-update is reported unsupported rather than raising.
+        """
+        import socket
+
+        import docker
+
+        try:
+            container = await self._get_container(socket.gethostname())
+        except docker.errors.APIError as exc:
+            logger.warning("inspect_self: docker daemon unreachable: %s", exc)
+            return None
+        if container is None:
+            return None
+
+        attrs = container.attrs
+        image_ref = (attrs.get("Config") or {}).get("Image", "")
+        digest = ""
+        try:
+            repo_digests = (
+                (container.image.attrs.get("RepoDigests") or [])
+                if container.image
+                else []
+            )
+            if repo_digests:
+                digest = repo_digests[0].rsplit("@", 1)[-1]
+        except docker.errors.APIError:
+            pass
+        networks = list(
+            ((attrs.get("NetworkSettings") or {}).get("Networks") or {}).keys()
+        )
+        return SelfInspect(
+            container_id=attrs.get("Id", ""),
+            container_name=(attrs.get("Name") or "").lstrip("/"),
+            image_ref=image_ref,
+            running_digest=digest,
+            networks=networks,
+        )
+
+    async def trigger_self_update(
+        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+    ) -> str:
+        """Launch a one-shot watchtower container that updates *target*.
+
+        Watchtower pulls the new image, then stops/removes the old container
+        and recreates it with identical config — from outside this process,
+        which is the only safe way for the server to replace itself. The
+        watchtower container joins all of *target*'s networks so it reaches
+        the socket proxy at *docker_host_url*, and auto-removes when done.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        def _run() -> str:
+            api = self._client.api
+            self._client.images.pull(watchtower_image)
+            networking = None
+            if target.networks:
+                # Multi-endpoint create: the socket proxy blocks the
+                # /networks/*/connect API (NETWORKS=0), so every network must
+                # be attached in the create payload itself.
+                networking = api.create_networking_config(
+                    {net: api.create_endpoint_config() for net in target.networks}
+                )
+            created = api.create_container(
+                image=watchtower_image,
+                command=["--run-once", "--cleanup", target.container_name],
+                environment={"DOCKER_HOST": docker_host_url},
+                host_config=api.create_host_config(auto_remove=True),
+                networking_config=networking,
+            )
+            container_id: str = created["Id"]
+            api.start(container_id)
+            return container_id
+
+        try:
+            return await loop.run_in_executor(None, _run)
+        except docker.errors.APIError as exc:
+            raise RuntimeError(
+                f"failed to launch self-update container: {exc}"
+            ) from exc

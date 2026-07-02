@@ -320,3 +320,32 @@ class ReclaimResponse(BaseModel):
     """Result of a build-cache reclaim operation."""
 
     space_reclaimed_bytes: int
+
+
+@dataclass
+class SelfInspect:
+    """What ``ExecutionBackend.inspect_self()`` learns about the server's own container."""
+
+    container_id: str
+    container_name: str
+    image_ref: str  # e.g. ghcr.io/damien-robotsix/robotsix-central-deploy:main
+    running_digest: str = ""  # sha256:... from image RepoDigests; "" when unresolvable
+    networks: list[str] = field(default_factory=list)  # attached network names
+
+
+class SelfUpdateStatus(BaseModel):
+    """Response model for ``GET /system/update``."""
+
+    supported: bool
+    container_name: str = ""
+    image: str = ""
+    running_digest: str = ""
+    latest_digest: str = ""
+    update_available: bool = False
+
+
+class SelfUpdateTriggered(BaseModel):
+    """Response model for ``POST /system/update``."""
+
+    status: str = "update-started"
+    updater_container_id: str
