@@ -238,14 +238,20 @@
 
   .env-row {
     display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
+    /* Long config keys push the input to its own full-width line instead
+       of clipping or overflowing the modal. */
+    flex-wrap: wrap;
   }
   .env-row .env-key {
-    width: 140px; flex-shrink: 0;
+    /* Size to the key, aligned at 140px for typical keys; never clip. */
+    flex: 0 0 auto; min-width: 140px; max-width: 100%;
     background: #243044; color: #94a3b8; border: 1px solid #334155;
     border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
   }
   .env-row .env-value {
-    flex: 1;
+    /* min-width:0 lets the input shrink inside the flex row (the default
+       min-width:auto makes it overflow the modal edge). */
+    flex: 1 1 180px; min-width: 0;
     background: #243044; color: #e2e8f0; border: 1px solid #334155;
     border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
   }
@@ -253,6 +259,12 @@
     width: 140px; flex-shrink: 0;
     background: #243044; color: #e2e8f0; border: 1px solid #334155;
     border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
+  }
+  /* The onboard panel's blanket input rule (display:block; width:100%;
+     margin-top) must not apply inside flex env-rows — the row manages
+     sizing, otherwise values overflow past the modal edge. */
+  .onboard-panel .env-row .env-value {
+    width: auto; margin-top: 0;
   }
   .btn-delete {
     background: none; border: none; color: var(--red); cursor: pointer;
@@ -1798,7 +1810,7 @@ function buildConfigRow(fullKey, labelKey, schemaVal, currentVal, isSecret) {
   }
 
   div.innerHTML = `
-    <span class="env-key">${escHtml(labelKey)}</span>
+    <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}</span>
     ${inputHtml}
     ${isSecret ? '<span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>' : ''}
   `;
