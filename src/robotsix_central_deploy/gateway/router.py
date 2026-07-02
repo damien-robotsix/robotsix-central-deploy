@@ -35,6 +35,9 @@ RESERVED_NAMES: frozenset[str] = frozenset(
         "disk",  # GET /disk
         "settings",  # GET/PUT /settings
         "help",  # GET /help/deploy-contract
+        "volumes",  # /volumes/* API routes
+        "login",  # GET/POST /login (UI)
+        "logout",  # POST /logout (UI)
     }
 )
 
