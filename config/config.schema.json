@@ -195,6 +195,11 @@
       "title": "Caretaker Interval Hours",
       "type": "integer"
     },
+    "mill_component_id": {
+      "default": "mill",
+      "title": "Mill Component Id",
+      "type": "string"
+    },
     "image_auto_prune": {
       "default": false,
       "title": "Image Auto Prune",
