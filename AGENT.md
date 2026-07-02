@@ -142,6 +142,8 @@ src/robotsix_central_deploy/
 └── volume_audit/     # Background named-volume growth scanner
 ```
 
+**Rule:** Test files for module X belong under `tests/X/`, never at the `tests/` root. Every module already follows this convention (lifecycle, gateway, registry, ui, registry_check, volume_audit, onboard). Do not create new test files at the `tests/` root — place them in the corresponding `tests/<module>/` directory.
+
 ## Code Gotchas
 
 1. **Sibling fan-out is best-effort** — failures are logged but don't fail the primary operation.

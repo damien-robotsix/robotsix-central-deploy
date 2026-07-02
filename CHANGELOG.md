@@ -5,6 +5,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Add inverse preflight gate: `/onboard/preflight` now returns 422 when a service declares `robotsix.deploy.config-target` but the repo yields no config schema (no `config/config.yaml`, `config/config.example.yaml`, or valid template). This prevents deploying containers with empty config volumes that would crash-loop.
+- Document test-file organization rule: test files for module X belong under `tests/X/`, never at the `tests/` root
 - Add docstrings to all 16 public route handlers in `lifecycle/routers/services.py`, covering purpose, error responses, and side effects (sibling fan-out, store writes).
 - PR #182 (docs: sync index and configuration pages with current code) — already merged; no further changes needed
 - Add regression test confirming `TypeError` during port parsing is caught as `ParseError`. The existing bare-comma `except ValueError, TypeError:` syntax is correct Python 3.14+ under PEP 758 — it catches both exception types and is the `ruff format`-preferred style.
