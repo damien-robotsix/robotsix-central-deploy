@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `.pre-commit-config.yaml` with hooks for ruff, ruff-format, mypy, and common file checks (end-of-file, trailing-whitespace, merge-conflict, large-files)
 - Add `"volumes"`, `"login"`, and `"logout"` to `RESERVED_NAMES` in the gateway router to prevent onboarding components that would shadow central-deploy routes.
 - Add `docker_sdk_timeout` config (default 120 s) to prevent indefinite blocking on Docker SDK operations like `images.pull()`; wired into `DockerSdkBackend` constructor and `LifecycleConfig` (env: `ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT`)
 - Adopt `robotsix-yaml-config` for shared YAML primitives: replace local `_deep_merge` with `robotsix_yaml_config.deep_merge`, use `read_yaml_file` for file-based YAML reads in `store.py` and `registry/loader.py`, and add typed error handling (`YamlParseError`, `InvalidConfigStructureError`) at remaining `yaml.safe_load` sites in `backend.py` and `onboard/parser.py`.
