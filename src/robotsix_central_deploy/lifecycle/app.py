@@ -17,6 +17,7 @@ from .routers.health import router as health_router
 from .routers.services import router as services_router
 from .routers.system import router as system_router
 from .routers.volumes import router as volumes_router
+from .routers.caretaker import router as caretaker_router
 from .routers.onboard import router as onboard_router
 from .settings_router import settings_router
 from ..ui.router import router as ui_router
@@ -44,6 +45,7 @@ app.include_router(health_router)
 app.include_router(system_router)
 app.include_router(volumes_router)
 app.include_router(services_router)
+app.include_router(caretaker_router)
 app.include_router(onboard_router)
 
 # Gateway router — MUST be registered last so its catch-all routes only

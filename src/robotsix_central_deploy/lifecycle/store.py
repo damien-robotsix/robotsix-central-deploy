@@ -105,6 +105,7 @@ class FileStore(ServiceStore):
                 update_available=d.get("update_available", False),
                 latest_registry_digest=d.get("latest_registry_digest", ""),
                 component_id=d.get("component_id", ""),
+                repo_id=d.get("repo_id", ""),
             )
         return records
 
@@ -124,6 +125,7 @@ class FileStore(ServiceStore):
                 "update_available": r.update_available,
                 "latest_registry_digest": r.latest_registry_digest,
                 "component_id": r.component_id,
+                "repo_id": r.repo_id,
             }
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(

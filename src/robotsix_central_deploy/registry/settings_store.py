@@ -31,6 +31,8 @@ class SystemSettings(BaseModel):
     claude_host_mount_path: str = (
         ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
     )
+    caretaker_enabled: bool = False
+    caretaker_interval_hours: int = 24
 
     @field_validator("log_level")
     @classmethod
@@ -41,6 +43,13 @@ class SystemSettings(BaseModel):
                 f"Unknown log level '{v}'. Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
             )
         return normalised
+
+    @field_validator("caretaker_interval_hours")
+    @classmethod
+    def _validate_caretaker_interval(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("caretaker_interval_hours must be >= 1")
+        return v
 
 
 class SystemSettingsStore:
@@ -117,5 +126,7 @@ class SystemSettingsStore:
                 "log_level": stored.log_level,
                 "gateway_base_domain": stored.gateway_base_domain,
                 "claude_host_mount_path": stored.claude_host_mount_path,
+                "caretaker_enabled": stored.caretaker_enabled,
+                "caretaker_interval_hours": stored.caretaker_interval_hours,
             }
         )

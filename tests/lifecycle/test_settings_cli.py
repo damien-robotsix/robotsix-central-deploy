@@ -59,6 +59,8 @@ class TestSystemSettingsStore:
             log_level="WARNING",
             gateway_base_domain="deploy.example.net",
             claude_host_mount_path="/home/op/.claude",
+            caretaker_enabled=True,
+            caretaker_interval_hours=12,
         )
         await store.put(original)
 
@@ -98,6 +100,8 @@ class TestSystemSettingsStore:
                 log_level="DEBUG",
                 gateway_base_domain="stored.example.net",
                 claude_host_mount_path="/stored/.claude",
+                caretaker_enabled=True,
+                caretaker_interval_hours=12,
             )
         )
 
@@ -116,6 +120,8 @@ class TestSystemSettingsStore:
         assert result.log_level == "DEBUG"
         assert result.gateway_base_domain == "stored.example.net"
         assert result.claude_host_mount_path == "/stored/.claude"
+        assert result.caretaker_enabled is True
+        assert result.caretaker_interval_hours == 12
         # Original untouched.
         assert cfg.log_level == "ERROR"
 
@@ -265,6 +271,48 @@ class TestSettingsRouter:
         )
         assert resp.status_code == 200
 
+    async def test_put_settings_caretaker_fields_persisted(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        resp = await client.put(
+            "/settings",
+            json={
+                "log_level": "INFO",
+                "caretaker_enabled": True,
+                "caretaker_interval_hours": 6,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["caretaker_enabled"] is True
+        assert data["caretaker_interval_hours"] == 6
+
+        stored = await settings_store.get()
+        assert stored.caretaker_enabled is True
+        assert stored.caretaker_interval_hours == 6
+
+    async def test_get_settings_returns_caretaker_defaults(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        resp = await client.get("/settings", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "caretaker_enabled" in data
+        assert "caretaker_interval_hours" in data
+        assert data["caretaker_enabled"] is False
+        assert data["caretaker_interval_hours"] == 24
+
+    async def test_put_settings_invalid_caretaker_interval_returns_422(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        resp = await client.put(
+            "/settings",
+            json={"log_level": "INFO", "caretaker_interval_hours": 0},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
 
 # ---------------------------------------------------------------------------
 # cli.main — argument parsing + uvicorn launch (mocked)
@@ -351,6 +399,51 @@ class TestSettingsFirstBoot:
             stored = await app.state.settings_store.get()
             assert stored.auth_username == "custom-op"  # not overwritten with 'admin'
             assert stored.auth_password == "secret"
+
+    async def test_lifespan_seeds_caretaker_defaults_when_no_env(
+        self, tmp_path, monkeypatch
+    ):
+        """First-boot: caretaker fields seed to defaults when no env vars set."""
+        settings_path = tmp_path / "settings.json"
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        )
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED", raising=False)
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS", raising=False)
+
+        from robotsix_central_deploy.lifecycle.server import app, lifespan
+
+        async with lifespan(app):
+            stored = await app.state.settings_store.get()
+            assert stored.caretaker_enabled is False
+            assert stored.caretaker_interval_hours == 24
+
+    async def test_lifespan_seeds_caretaker_from_env(self, tmp_path, monkeypatch):
+        """First-boot: caretaker fields are seeded from env vars."""
+        settings_path = tmp_path / "settings.json"
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED", "true")
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS", "6")
+
+        from robotsix_central_deploy.lifecycle.server import app, lifespan
+
+        async with lifespan(app):
+            stored = await app.state.settings_store.get()
+            assert stored.caretaker_enabled is True
+            assert stored.caretaker_interval_hours == 6
+            # Effective config also reflects the seeded values.
+            assert app.state.config.caretaker_enabled is True
+            assert app.state.config.caretaker_interval_hours == 6
 
 
 # ---------------------------------------------------------------------------

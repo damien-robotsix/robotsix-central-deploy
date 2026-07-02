@@ -38,6 +38,7 @@ from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig, ServiceConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
+from ..caretaker.scheduler import CaretakerScheduler
 from ..volume_audit.scheduler import VolumeAuditScheduler
 from .store import FileStore, InMemoryStore, ServiceStore
 
@@ -305,6 +306,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 log_level=_config.log_level,
                 gateway_base_domain=_config.gateway_base_domain,
                 claude_host_mount_path=_config.claude_host_mount_path,
+                caretaker_enabled=_config.caretaker_enabled,
+                caretaker_interval_hours=_config.caretaker_interval_hours,
             )
         )
 
@@ -331,6 +334,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.registry_checker = registry_checker
     _registry_checker = registry_checker
     _http_client = http_client
+    app.state.http_client = http_client
 
     bg_task = None
     if _config.registry_check_interval > 0:
@@ -413,8 +417,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _volume_audit_scheduler = None
         app.state.volume_audit_scheduler = None
 
+    # --- Caretaker subsystem ---
+    caretaker_scheduler = CaretakerScheduler(
+        config=_config,
+        backend=_backend,
+        registry=registry,
+        service_store=_store,
+        component_config_store=component_config_store,
+        volume_audit_scheduler=_volume_audit_scheduler,
+        settings_store=settings_store,
+        http_client=http_client,
+    )
+    app.state.caretaker_scheduler = caretaker_scheduler
+
+    initial_settings = await settings_store.get()
+    _caretaker_task = asyncio.create_task(caretaker_scheduler.loop())
+
+    if not initial_settings.caretaker_enabled:
+        # Caretaker disabled at startup: start the standalone volume audit
+        # loop if configured. When caretaker is hot-enabled later the
+        # volume-audit loop continues — double-scan on phase_volumes is
+        # acceptable for this ticket.
+        if _config.volume_audit_enabled and _volume_audit_task is None:
+            assert _volume_audit_scheduler is not None
+            _volume_audit_task = asyncio.create_task(
+                _volume_audit_scheduler.loop(_config.volume_audit_interval_seconds)
+            )
+
     yield
 
+    _caretaker_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await _caretaker_task
     if _volume_audit_task and not _volume_audit_task.done():
         _volume_audit_task.cancel()
         with suppress(asyncio.CancelledError):

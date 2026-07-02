@@ -6,7 +6,7 @@ fetch/compose functions so no real git clone or Docker daemon is needed.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
@@ -33,6 +33,10 @@ from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
+from robotsix_central_deploy.registry.settings_store import (
+    SystemSettings,
+    SystemSettingsStore,
+)
 
 # Import the server module itself so we can set its globals.
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -109,6 +113,12 @@ def _reset_globals(monkeypatch, tmp_path):
         tmp_path / "env_store.json", SecretKeyManager(tmp_path / "secret_key")
     )
     server_mod.app.state.job_registry = JobRegistry()
+
+    # Settings store — needed by onboard_confirm for caretaker checks
+    settings_path = tmp_path / "settings.json"
+    server_mod.app.state.settings_store = SystemSettingsStore(settings_path)
+    # Also set http_client on state for background job mill registration
+    server_mod.app.state.http_client = MagicMock(spec=AsyncClient)
 
 
 @pytest.fixture
@@ -1372,3 +1382,111 @@ class TestOnboardConfirmWithConfig:
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         current = await store.get_current("cfg-svc2")
         assert current == {"host": "localhost", "password": ""}
+
+
+# ---------------------------------------------------------------------------
+# Onboard → Mill integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardMillIntegration:
+    """Tests for mill repo registration during onboard."""
+
+    @pytest.mark.asyncio
+    async def test_confirm_sets_repo_id_when_register_true(
+        self, client: AsyncClient, auth_headers: dict, tmp_path
+    ):
+        """When caretaker is enabled and register_with_mill=True, repo_id is set from git_url."""
+        ss = SystemSettingsStore(tmp_path / "settings2.json")
+        await ss.put(SystemSettings(caretaker_enabled=True))
+        server_mod.app.state.settings_store = ss
+
+        spec = _make_derived_spec(name="zz-test-repo")
+        spec = spec.model_copy(
+            update={"git_url": "https://github.com/org/my-cool-repo.git"}
+        )
+        req = {"spec": spec.model_dump(), "register_with_mill": True}
+
+        with patch(
+            "robotsix_central_deploy.lifecycle.routers.onboard._run_onboard_deploy_job",
+            new=AsyncMock(),
+        ):
+            resp = await client.post("/onboard/confirm", json=req, headers=auth_headers)
+            assert resp.status_code == 202
+
+        cfg = server_mod.app.state.component_config_store.get("zz-test-repo")
+        assert cfg is not None
+        assert cfg.repo_id == "my-cool-repo"
+
+    @pytest.mark.asyncio
+    async def test_confirm_clears_repo_id_when_register_false(
+        self, client: AsyncClient, auth_headers: dict, tmp_path
+    ):
+        """When register_with_mill=False, repo_id is empty."""
+        ss = SystemSettingsStore(tmp_path / "settings3.json")
+        await ss.put(SystemSettings(caretaker_enabled=True))
+        server_mod.app.state.settings_store = ss
+
+        spec = _make_derived_spec(name="zz-no-register")
+        req = {"spec": spec.model_dump(), "register_with_mill": False}
+
+        with patch(
+            "robotsix_central_deploy.lifecycle.routers.onboard._run_onboard_deploy_job",
+            new=AsyncMock(),
+        ):
+            resp = await client.post("/onboard/confirm", json=req, headers=auth_headers)
+            assert resp.status_code == 202
+
+        cfg = server_mod.app.state.component_config_store.get("zz-no-register")
+        assert cfg is not None
+        assert cfg.repo_id == ""
+
+    @pytest.mark.asyncio
+    async def test_mill_component_forced_no_auto_update(
+        self, client: AsyncClient, auth_headers: dict, tmp_path
+    ):
+        """Component with id=='mill' always gets caretaker_auto_update=False."""
+        ss = SystemSettingsStore(tmp_path / "settings4.json")
+        await ss.put(SystemSettings(caretaker_enabled=True))
+        server_mod.app.state.settings_store = ss
+
+        spec = _make_derived_spec(name="mill")
+        req = {"spec": spec.model_dump(), "register_with_mill": True}
+
+        with patch(
+            "robotsix_central_deploy.lifecycle.routers.onboard._run_onboard_deploy_job",
+            new=AsyncMock(),
+        ):
+            resp = await client.post("/onboard/confirm", json=req, headers=auth_headers)
+            assert resp.status_code == 202
+
+        cfg = server_mod.app.state.component_config_store.get("mill")
+        assert cfg is not None
+        assert cfg.caretaker_auto_update is False
+
+    @pytest.mark.asyncio
+    async def test_background_job_skips_when_untracked(
+        self, client: AsyncClient, auth_headers: dict, tmp_path
+    ):
+        """When repo_id is empty, mill is never called in the deploy job."""
+        ss = SystemSettingsStore(tmp_path / "settings5.json")
+        await ss.put(SystemSettings(caretaker_enabled=True))
+        server_mod.app.state.settings_store = ss
+
+        mock_http = MagicMock()
+        mock_http.post = AsyncMock()
+        server_mod.app.state.http_client = mock_http
+
+        spec = _make_derived_spec(name="zz-no-track")
+        req = {"spec": spec.model_dump(), "register_with_mill": False}
+
+        with patch(
+            "robotsix_central_deploy.lifecycle.routers.onboard._run_onboard_deploy_job",
+            new=AsyncMock(),
+        ):
+            resp = await client.post("/onboard/confirm", json=req, headers=auth_headers)
+            assert resp.status_code == 202
+
+        cfg = server_mod.app.state.component_config_store.get("zz-no-track")
+        assert cfg is not None
+        assert cfg.repo_id == ""

@@ -109,6 +109,10 @@ class LifecycleConfig(BaseSettings):
     board_api_token: str = ""  # ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN
     board_repo_id: str = ""  # ROBOTSIX_LIFECYCLE_BOARD_REPO_ID
 
+    # Caretaker
+    caretaker_enabled: bool = False  # ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED
+    caretaker_interval_hours: int = 24  # ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)
