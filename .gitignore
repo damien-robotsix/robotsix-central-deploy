@@ -21,6 +21,12 @@ site/
 .env.*
 !.env.example
 
+# Local lifecycle-server state (default store paths when run from the repo)
+data/
+secrets.key
+lifecycle_state.yaml
+component_env.json
+
 # OS / editor
 .DS_Store
 *.swp
