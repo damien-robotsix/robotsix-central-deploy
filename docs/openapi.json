@@ -6,8 +6,406 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Get Settings",
+        "description": "Return current system settings. Secrets are returned as ``\"***\"``\nwhen set, or ``\"\"`` when empty.\n\nReads from the *effective* config (env-var values overlaid by any\nstored settings) so that env-var credentials are visible in the UI\neven before the operator has saved settings via the UI.",
+        "operationId": "get_settings_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Put Settings",
+        "description": "Update system settings, persist to disk, and hot-apply where possible.\n\n- Secret fields sent as ``\"***\"`` preserve the existing stored value.\n- ``log_level`` is validated via Pydantic; an invalid value returns 422.\n- All settings *except* ``registry_check_interval`` and\n  ``claude_host_mount_path`` take effect immediately without restart.\n\n# NOTE: ``registry_check_interval`` changes are persisted and reflected\n  in ``app.state.config``, but the background ``_registry_check_loop``\n  captures its interval at startup via a positional argument.  Updating\n  the config alone does **not** alter the running task's sleep period.\n  A full service restart is required for an interval change to take\n  effect on the background loop.\n\n# NOTE: ``claude_host_mount_path`` is captured by ``DockerSdkBackend``\n  at construction time.  Updating the config alone does **not** alter\n  the running backend's mount path.  A full service restart is required\n  for a change to take effect.",
+        "operationId": "put_settings_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/disk": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Get Disk Usage",
+        "description": "Host disk usage and Docker storage breakdown.",
+        "operationId": "get_disk_usage_disk_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiskUsageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/disk/reclaim": {
+      "post": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Reclaim Build Cache",
+        "description": "Prune Docker build cache and return bytes freed.",
+        "operationId": "reclaim_build_cache_disk_reclaim_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReclaimResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/volumes/audit": {
+      "get": {
+        "tags": [
+          "volumes"
+        ],
+        "summary": "Get Volume Audit",
+        "description": "Current volume audit state (sizes and growth). Returns enabled=false when subsystem is off.",
+        "operationId": "get_volume_audit_volumes_audit_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolumeAuditResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/volumes/orphans": {
+      "get": {
+        "tags": [
+          "volumes"
+        ],
+        "summary": "List Docker volumes owned by no component and not in use",
+        "description": "Return the prune-safe orphan volumes and their total size.\n\nOrphans are Docker volumes declared by no registered component and not\nattached to any container \u2014 leftovers from removed/re-onboarded components.",
+        "operationId": "list_orphan_volumes_volumes_orphans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrphanVolumesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/volumes/prune": {
+      "post": {
+        "tags": [
+          "volumes"
+        ],
+        "summary": "Remove orphan Docker volumes (owned by no component, not in use)",
+        "description": "Delete orphan volumes (IRREVERSIBLE).\n\nThe eligible set is recomputed server-side on every call \u2014 a component's\nown volumes and in-use volumes are never touched even if their names are\npassed in ``names``.  With no ``names`` (or ``names=null``) every orphan is\npruned; with an explicit list, only names that are still genuine orphans\nare removed and the rest are reported under ``skipped``.",
+        "operationId": "prune_orphan_volumes_volumes_prune_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PruneVolumesRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PruneVolumesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/volumes/{name}/ls": {
+      "get": {
+        "tags": [
+          "volumes"
+        ],
+        "summary": "List files in a data volume",
+        "description": "Return immediate children of a directory within a named volume.\n\nOnly volumes declared in at least one component's ``named_volumes`` are\nbrowsable.  ``path`` defaults to the volume root.",
+        "operationId": "list_volume_files_volumes__name__ls_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolumeListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/volumes/{name}/cat": {
+      "get": {
+        "tags": [
+          "volumes"
+        ],
+        "summary": "Read a text file from a data volume",
+        "description": "Return the text content of a file within a named volume.\n\nFiles larger than ``VOLUME_CAT_MAX_BYTES`` are truncated (``truncated=True``).\nBinary files (NUL byte or non-UTF-8) return ``binary=True`` and ``content=null``.",
+        "operationId": "cat_volume_file_volumes__name__cat_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolumeFileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services": {
       "get": {
+        "tags": [
+          "services"
+        ],
         "summary": "List managed services",
         "operationId": "list_services_services_get",
         "responses": {
@@ -21,8 +419,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden \u2014 invalid or missing API key",
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -36,6 +434,9 @@
     },
     "/services/{name}": {
       "get": {
+        "tags": [
+          "services"
+        ],
         "summary": "Get service status",
         "operationId": "get_service_status_services__name__get",
         "parameters": [
@@ -60,8 +461,137 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden \u2014 invalid or missing API key",
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Remove an onboarded component and optionally its container",
+        "operationId": "delete_service_services__name__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "stop_container",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Stop and remove the managed container (true) or leave it running (false)",
+              "default": true,
+              "title": "Stop Container"
+            },
+            "description": "Stop and remove the managed container (true) or leave it running (false)"
+          },
+          {
+            "name": "remove_volumes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also delete the component's data volumes (IRREVERSIBLE \u2014 destroys stored data)",
+              "default": false,
+              "title": "Remove Volumes"
+            },
+            "description": "Also delete the component's data volumes (IRREVERSIBLE \u2014 destroys stored data)"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/health": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Get service health",
+        "operationId": "get_service_health_services__name__health_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceHealthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -93,8 +623,106 @@
         }
       }
     },
+    "/services/{name}/logs": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Stream container logs (auth-gated)",
+        "operationId": "get_service_logs_services__name__logs_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "tail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Tail"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 or Unix timestamp",
+              "title": "Since"
+            },
+            "description": "ISO 8601 or Unix timestamp"
+          },
+          {
+            "name": "follow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "If true, stream new log lines as they arrive",
+              "default": false,
+              "title": "Follow"
+            },
+            "description": "If true, stream new log lines as they arrive"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error (tail out of range 1-10000)"
+          }
+        }
+      }
+    },
     "/services/{name}/start": {
       "post": {
+        "tags": [
+          "services"
+        ],
         "summary": "Start a service (idempotent)",
         "operationId": "start_service_services__name__start_post",
         "parameters": [
@@ -119,8 +747,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden \u2014 invalid or missing API key",
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -164,6 +792,9 @@
     },
     "/services/{name}/stop": {
       "post": {
+        "tags": [
+          "services"
+        ],
         "summary": "Stop a service (idempotent)",
         "operationId": "stop_service_services__name__stop_post",
         "parameters": [
@@ -188,8 +819,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden \u2014 invalid or missing API key",
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -233,6 +864,9 @@
     },
     "/services/{name}/restart": {
       "post": {
+        "tags": [
+          "services"
+        ],
         "summary": "Restart a service (idempotent)",
         "operationId": "restart_service_services__name__restart_post",
         "parameters": [
@@ -257,8 +891,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden \u2014 invalid or missing API key",
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -286,6 +920,1223 @@
               }
             },
             "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/deploy": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Deploy a new image version for a service",
+        "operationId": "deploy_service_services__name__deploy_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DeployRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeployResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service or component config not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Registry not loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/rollback": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Rollback a service to its prior image digest",
+        "operationId": "rollback_service_services__name__rollback_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollbackResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "No prior digest recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/env": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Get stored environment variables and secret keys for a service",
+        "operationId": "get_service_env_services__name__env_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Upsert environment variables and secrets for a service",
+        "operationId": "put_service_env_services__name__env_put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/env/{key}": {
+      "delete": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Delete an environment variable or secret key for a service",
+        "operationId": "delete_service_env_key_services__name__env__key__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service or key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/config": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Get config.yaml schema and current values for a service",
+        "operationId": "get_service_config_services__name__config_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service has no config schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Merge and save config.yaml values for a service",
+        "operationId": "put_service_config_services__name__config_put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service has no config schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/config/assist": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Run a repo-declared config-assist command in a one-shot container and return auto-filled config",
+        "operationId": "run_config_assist_services__name__config_assist_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigAssistRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigAssistResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No config-assist command or config volume configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Assist command timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/onboard/preflight": {
+      "post": {
+        "tags": [
+          "onboard"
+        ],
+        "summary": "Onboard Preflight",
+        "description": "Fetch and parse a service repo's docker-compose.yml, returning a DerivedSpec.\n\nThe caller reviews the spec before confirming onboarding via `/onboard/confirm`.",
+        "operationId": "onboard_preflight_onboard_preflight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardPreflightRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardPreflightResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/onboard/confirm": {
+      "post": {
+        "tags": [
+          "onboard"
+        ],
+        "summary": "Onboard Confirm",
+        "description": "Persist a reviewed DerivedSpec, deploy the container, and register the component.",
+        "operationId": "onboard_confirm_onboard_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardConfirmResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http Root",
+        "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
+        "operationId": "gateway_http_root__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{path}": {
+      "post": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -335,6 +2186,525 @@
         "title": "ActionResponse",
         "description": "Generic response for start / stop / restart requests."
       },
+      "AuditFinding": {
+        "properties": {
+          "volume_name": {
+            "type": "string",
+            "title": "Volume Name"
+          },
+          "component_id": {
+            "type": "string",
+            "title": "Component Id"
+          },
+          "finding_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Finding At"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "delta_bytes": {
+            "type": "integer",
+            "title": "Delta Bytes"
+          },
+          "growth_pct": {
+            "type": "number",
+            "title": "Growth Pct"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "volume_name",
+          "component_id",
+          "finding_at",
+          "size_bytes",
+          "delta_bytes",
+          "growth_pct",
+          "detail"
+        ],
+        "title": "AuditFinding",
+        "description": "A threshold-breach finding produced by a scan pass."
+      },
+      "ConfigAssistRequest": {
+        "properties": {
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "target_account_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Account Index"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "ConfigAssistRequest"
+      },
+      "ConfigAssistResponse": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          },
+          "output": {
+            "type": "string",
+            "title": "Output"
+          }
+        },
+        "type": "object",
+        "required": [
+          "config",
+          "output"
+        ],
+        "title": "ConfigAssistResponse"
+      },
+      "ConfigAssistSeed": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "ConfigAssistSeed"
+      },
+      "ConfigResponse": {
+        "properties": {
+          "schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Schema"
+          },
+          "current": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current"
+          },
+          "config_assist_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Assist Command"
+          },
+          "config_assist_seeds": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigAssistSeed"
+            },
+            "type": "array",
+            "title": "Config Assist Seeds",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema",
+          "current"
+        ],
+        "title": "ConfigResponse"
+      },
+      "ConfigUpdate": {
+        "properties": {
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "ConfigUpdate"
+      },
+      "ContainerHealthSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "default": ""
+          },
+          "state": {
+            "$ref": "#/components/schemas/ServiceState",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ContainerHealthSummary",
+        "description": "Health snapshot for one sibling container."
+      },
+      "DeployRequest": {
+        "properties": {
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          }
+        },
+        "type": "object",
+        "title": "DeployRequest",
+        "description": "Optional image override for a deploy request."
+      },
+      "DeployResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "deploy"
+          },
+          "deployed_digest": {
+            "type": "string",
+            "title": "Deployed Digest"
+          },
+          "previous_digest": {
+            "type": "string",
+            "title": "Previous Digest"
+          },
+          "current_state": {
+            "$ref": "#/components/schemas/ServiceState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "deployed_digest",
+          "previous_digest",
+          "current_state"
+        ],
+        "title": "DeployResponse",
+        "description": "API response for ``POST /services/{name}/deploy``."
+      },
+      "DerivedSpec": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "git_url": {
+            "type": "string",
+            "title": "Git Url"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortMapping"
+            },
+            "type": "array",
+            "title": "Ports"
+          },
+          "volume_mounts": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "type": "array",
+            "title": "Volume Mounts"
+          },
+          "stateful_volumes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stateful Volumes"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env"
+          },
+          "claude_mount": {
+            "type": "boolean",
+            "title": "Claude Mount"
+          },
+          "host_docker_sock": {
+            "type": "boolean",
+            "title": "Host Docker Sock"
+          },
+          "health_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
+          },
+          "container_name": {
+            "type": "string",
+            "title": "Container Name",
+            "default": ""
+          },
+          "siblings": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingDerivedSpec"
+            },
+            "type": "array",
+            "title": "Siblings",
+            "default": []
+          },
+          "config_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Schema"
+          },
+          "config_volume": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Volume"
+          },
+          "config_assist_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Assist Command"
+          },
+          "config_assist_seeds": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigAssistSeed"
+            },
+            "type": "array",
+            "title": "Config Assist Seeds",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "git_url",
+          "image",
+          "ports",
+          "volume_mounts",
+          "stateful_volumes",
+          "env",
+          "claude_mount",
+          "host_docker_sock"
+        ],
+        "title": "DerivedSpec",
+        "description": "Parsed output from a service repo's docker-compose.yml."
+      },
+      "DiskUsageResponse": {
+        "properties": {
+          "total_bytes": {
+            "type": "integer",
+            "title": "Total Bytes"
+          },
+          "used_bytes": {
+            "type": "integer",
+            "title": "Used Bytes"
+          },
+          "free_bytes": {
+            "type": "integer",
+            "title": "Free Bytes"
+          },
+          "warn_threshold_pct": {
+            "type": "number",
+            "title": "Warn Threshold Pct"
+          },
+          "docker": {
+            "$ref": "#/components/schemas/DockerDfStats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_bytes",
+          "used_bytes",
+          "free_bytes",
+          "warn_threshold_pct",
+          "docker"
+        ],
+        "title": "DiskUsageResponse",
+        "description": "Host disk usage + Docker storage breakdown."
+      },
+      "DockerDfStats": {
+        "properties": {
+          "images_size_bytes": {
+            "type": "integer",
+            "title": "Images Size Bytes",
+            "default": 0
+          },
+          "build_cache_size_bytes": {
+            "type": "integer",
+            "title": "Build Cache Size Bytes",
+            "default": 0
+          },
+          "build_cache_reclaimable_bytes": {
+            "type": "integer",
+            "title": "Build Cache Reclaimable Bytes",
+            "default": 0
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeStat"
+            },
+            "type": "array",
+            "title": "Volumes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "DockerDfStats",
+        "description": "Docker storage breakdown from ``docker system df``."
+      },
+      "EnvResponse": {
+        "properties": {
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env"
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secrets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "env",
+          "secrets"
+        ],
+        "title": "EnvResponse"
+      },
+      "EnvUpdate": {
+        "properties": {
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env",
+            "default": {}
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secrets",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "EnvUpdate"
+      },
       "ErrorDetail": {
         "properties": {
           "error": {
@@ -342,7 +2712,6 @@
             "title": "Error"
           },
           "detail": {
-            "type": "string",
             "title": "Detail",
             "default": ""
           }
@@ -367,6 +2736,297 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HealthCheck": {
+        "properties": {
+          "test": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Test"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "title": "Interval Seconds",
+            "default": 30
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Timeout Seconds",
+            "default": 10
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries",
+            "default": 3
+          },
+          "start_period_seconds": {
+            "type": "integer",
+            "title": "Start Period Seconds",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "test"
+        ],
+        "title": "HealthCheck",
+        "description": "Mirrors the Docker HealthCheck spec."
+      },
+      "OnboardConfirmRequest": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/DerivedSpec"
+          },
+          "config_values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "spec"
+        ],
+        "title": "OnboardConfirmRequest"
+      },
+      "OnboardConfirmResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "image",
+          "state"
+        ],
+        "title": "OnboardConfirmResponse"
+      },
+      "OnboardPreflightRequest": {
+        "properties": {
+          "git_url": {
+            "type": "string",
+            "title": "Git Url"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "git_url",
+          "name"
+        ],
+        "title": "OnboardPreflightRequest"
+      },
+      "OnboardPreflightResponse": {
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/DerivedSpec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "spec"
+        ],
+        "title": "OnboardPreflightResponse"
+      },
+      "OrphanVolume": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "OrphanVolume",
+        "description": "A Docker volume owned by no registered component and not in use."
+      },
+      "OrphanVolumesResponse": {
+        "properties": {
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/OrphanVolume"
+            },
+            "type": "array",
+            "title": "Volumes",
+            "default": []
+          },
+          "total_bytes": {
+            "type": "integer",
+            "title": "Total Bytes",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "OrphanVolumesResponse"
+      },
+      "PortMapping": {
+        "properties": {
+          "host": {
+            "type": "integer",
+            "title": "Host"
+          },
+          "container": {
+            "type": "integer",
+            "title": "Container"
+          },
+          "protocol": {
+            "type": "string",
+            "title": "Protocol",
+            "default": "tcp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host",
+          "container"
+        ],
+        "title": "PortMapping"
+      },
+      "PruneVolumesRequest": {
+        "properties": {
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Names"
+          }
+        },
+        "type": "object",
+        "title": "PruneVolumesRequest"
+      },
+      "PruneVolumesResponse": {
+        "properties": {
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed",
+            "default": []
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped",
+            "default": []
+          },
+          "failed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed",
+            "default": []
+          },
+          "space_reclaimed_bytes": {
+            "type": "integer",
+            "title": "Space Reclaimed Bytes",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "PruneVolumesResponse"
+      },
+      "ReclaimResponse": {
+        "properties": {
+          "space_reclaimed_bytes": {
+            "type": "integer",
+            "title": "Space Reclaimed Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "space_reclaimed_bytes"
+        ],
+        "title": "ReclaimResponse",
+        "description": "Result of a build-cache reclaim operation."
+      },
+      "RollbackResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "rollback"
+          },
+          "rolled_back_to_digest": {
+            "type": "string",
+            "title": "Rolled Back To Digest"
+          },
+          "current_state": {
+            "$ref": "#/components/schemas/ServiceState"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "rolled_back_to_digest",
+          "current_state"
+        ],
+        "title": "RollbackResponse",
+        "description": "API response for ``POST /services/{name}/rollback``."
+      },
+      "ServiceHealthResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "health": {
+            "type": "string",
+            "title": "Health"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "health"
+        ],
+        "title": "ServiceHealthResponse",
+        "description": "Response for ``GET /services/{name}/health``."
+      },
       "ServiceListItem": {
         "properties": {
           "name": {
@@ -375,6 +3035,29 @@
           },
           "state": {
             "$ref": "#/components/schemas/ServiceState"
+          },
+          "update_available": {
+            "type": "boolean",
+            "title": "Update Available",
+            "default": false
+          },
+          "stateful_volumes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stateful Volumes",
+            "default": []
+          },
+          "has_config_yaml": {
+            "type": "boolean",
+            "title": "Has Config Yaml",
+            "default": false
+          },
+          "component_id": {
+            "type": "string",
+            "title": "Component Id",
+            "default": ""
           }
         },
         "type": "object",
@@ -430,6 +3113,16 @@
             "title": "Image",
             "default": ""
           },
+          "image_revision": {
+            "type": "string",
+            "title": "Image Revision",
+            "default": ""
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "default": ""
+          },
           "last_error": {
             "anyOf": [
               {
@@ -444,6 +3137,43 @@
           "updated_at": {
             "type": "number",
             "title": "Updated At"
+          },
+          "update_available": {
+            "type": "boolean",
+            "title": "Update Available",
+            "default": false
+          },
+          "running_digest": {
+            "type": "string",
+            "title": "Running Digest",
+            "default": ""
+          },
+          "latest_digest": {
+            "type": "string",
+            "title": "Latest Digest",
+            "default": ""
+          },
+          "update_state": {
+            "$ref": "#/components/schemas/UpdateState",
+            "default": "unknown"
+          },
+          "has_config_yaml": {
+            "type": "boolean",
+            "title": "Has Config Yaml",
+            "default": false
+          },
+          "sibling_health": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerHealthSummary"
+            },
+            "type": "array",
+            "title": "Sibling Health",
+            "default": []
+          },
+          "overall_health": {
+            "type": "string",
+            "title": "Overall Health",
+            "default": ""
           }
         },
         "type": "object",
@@ -453,6 +3183,194 @@
         ],
         "title": "ServiceStatus",
         "description": "Full status returned by ``GET /services/{name}``."
+      },
+      "SiblingDerivedSpec": {
+        "properties": {
+          "service_key": {
+            "type": "string",
+            "title": "Service Key"
+          },
+          "container_name": {
+            "type": "string",
+            "title": "Container Name"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortMapping"
+            },
+            "type": "array",
+            "title": "Ports",
+            "default": []
+          },
+          "volume_mounts": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "type": "array",
+            "title": "Volume Mounts",
+            "default": []
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env",
+            "default": {}
+          },
+          "claude_mount": {
+            "type": "boolean",
+            "title": "Claude Mount",
+            "default": false
+          },
+          "host_docker_sock": {
+            "type": "boolean",
+            "title": "Host Docker Sock",
+            "default": false
+          },
+          "health_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_key",
+          "container_name",
+          "image"
+        ],
+        "title": "SiblingDerivedSpec",
+        "description": "Parsed config for a non-primary service in a multi-service compose."
+      },
+      "SystemSettingsResponse": {
+        "properties": {
+          "auth_username": {
+            "type": "string",
+            "title": "Auth Username",
+            "default": ""
+          },
+          "auth_password": {
+            "type": "string",
+            "title": "Auth Password",
+            "default": ""
+          },
+          "disk_warn_pct": {
+            "type": "number",
+            "title": "Disk Warn Pct",
+            "default": 10.0
+          },
+          "registry_check_interval": {
+            "type": "integer",
+            "title": "Registry Check Interval",
+            "default": 300
+          },
+          "log_level": {
+            "type": "string",
+            "title": "Log Level",
+            "default": "INFO"
+          },
+          "gateway_base_domain": {
+            "type": "string",
+            "title": "Gateway Base Domain",
+            "default": ""
+          },
+          "claude_host_mount_path": {
+            "type": "string",
+            "title": "Claude Host Mount Path",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "SystemSettingsResponse"
+      },
+      "SystemSettingsUpdate": {
+        "properties": {
+          "auth_username": {
+            "type": "string",
+            "title": "Auth Username",
+            "default": ""
+          },
+          "auth_password": {
+            "type": "string",
+            "title": "Auth Password",
+            "default": ""
+          },
+          "disk_warn_pct": {
+            "type": "number",
+            "title": "Disk Warn Pct",
+            "default": 10.0
+          },
+          "registry_check_interval": {
+            "type": "integer",
+            "title": "Registry Check Interval",
+            "default": 300
+          },
+          "log_level": {
+            "type": "string",
+            "title": "Log Level",
+            "default": "INFO"
+          },
+          "gateway_base_domain": {
+            "type": "string",
+            "title": "Gateway Base Domain",
+            "default": ""
+          },
+          "claude_host_mount_path": {
+            "type": "string",
+            "title": "Claude Host Mount Path",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "SystemSettingsUpdate"
+      },
+      "UpdateState": {
+        "type": "string",
+        "enum": [
+          "unknown",
+          "up-to-date",
+          "update-available"
+        ],
+        "title": "UpdateState",
+        "description": "Image-update availability derived from registry polling."
       },
       "ValidationError": {
         "properties": {
@@ -493,6 +3411,245 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VolumeAuditResponse": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "last_scan_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Scan At"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeGrowthRecord"
+            },
+            "type": "array",
+            "title": "Volumes",
+            "default": []
+          },
+          "recent_findings": {
+            "items": {
+              "$ref": "#/components/schemas/AuditFinding"
+            },
+            "type": "array",
+            "title": "Recent Findings",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "VolumeAuditResponse",
+        "description": "Payload for GET /volumes/audit."
+      },
+      "VolumeEntry": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "$ref": "#/components/schemas/VolumeEntryType"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "size_bytes"
+        ],
+        "title": "VolumeEntry"
+      },
+      "VolumeEntryType": {
+        "type": "string",
+        "enum": [
+          "file",
+          "dir"
+        ],
+        "title": "VolumeEntryType",
+        "description": "Filesystem entry type returned by volume directory listing."
+      },
+      "VolumeFileResponse": {
+        "properties": {
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "binary": {
+            "type": "boolean",
+            "title": "Binary"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "size_bytes",
+          "content",
+          "binary",
+          "truncated"
+        ],
+        "title": "VolumeFileResponse"
+      },
+      "VolumeGrowthRecord": {
+        "properties": {
+          "volume_name": {
+            "type": "string",
+            "title": "Volume Name"
+          },
+          "component_id": {
+            "type": "string",
+            "title": "Component Id"
+          },
+          "measured_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Measured At"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "prev_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Size Bytes"
+          },
+          "delta_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta Bytes"
+          },
+          "growth_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Growth Pct"
+          },
+          "flagged": {
+            "type": "boolean",
+            "title": "Flagged",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "volume_name",
+          "component_id",
+          "measured_at",
+          "size_bytes"
+        ],
+        "title": "VolumeGrowthRecord",
+        "description": "Growth record derived from comparing two consecutive snapshots."
+      },
+      "VolumeListResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "title": "VolumeListResponse"
+      },
+      "VolumeMount": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "container": {
+            "type": "string",
+            "title": "Container"
+          },
+          "read_only": {
+            "type": "boolean",
+            "title": "Read Only",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "host",
+          "container"
+        ],
+        "title": "VolumeMount"
+      },
+      "VolumeStat": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "default": 0
+          },
+          "in_use": {
+            "type": "boolean",
+            "title": "In Use",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "VolumeStat",
+        "description": "Size of a single Docker volume (from ``docker system df``)."
       }
     }
   }
