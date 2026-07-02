@@ -1337,19 +1337,49 @@ class DockerSdkBackend(ExecutionBackend):
         )
         return int(result.get("SpaceReclaimed", 0))
 
+    async def _find_by_config_hostname(self, hostname: str) -> Any:
+        """Find the running container whose ``Config.Hostname`` is *hostname*.
+
+        After a watchtower self-update the recreated container keeps the
+        previous container's hostname (its config is copied verbatim), so the
+        hostname no longer matches the container id and the direct id lookup
+        misses. Returns ``None`` when no running container matches.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        def _scan() -> Any:
+            for summary in self._client.containers.list():
+                try:
+                    full = self._client.containers.get(summary.id)
+                except docker.errors.NotFound:
+                    continue
+                if (full.attrs.get("Config") or {}).get("Hostname") == hostname:
+                    return full
+            return None
+
+        return await loop.run_in_executor(None, _scan)
+
     async def inspect_self(self) -> Optional[SelfInspect]:
         """Resolve the server's own container via the container-id hostname.
 
         Inside a container the default hostname is the short container id;
-        when the lookup fails (custom hostname, not containerised, daemon
-        unreachable) self-update is reported unsupported rather than raising.
+        after a watchtower self-update the hostname is the *previous*
+        container's id, so a fallback scans for the container whose
+        ``Config.Hostname`` matches. When both fail (custom hostname, not
+        containerised, daemon unreachable) self-update is reported
+        unsupported rather than raising.
         """
         import socket
 
         import docker
 
+        hostname = socket.gethostname()
         try:
-            container = await self._get_container(socket.gethostname())
+            container = await self._get_container(hostname)
+            if container is None:
+                container = await self._find_by_config_hostname(hostname)
         except docker.errors.APIError as exc:
             logger.warning("inspect_self: docker daemon unreachable: %s", exc)
             return None
