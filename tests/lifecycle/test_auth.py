@@ -8,7 +8,11 @@ import pytest
 from httpx import AsyncClient
 
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
-from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
+from robotsix_central_deploy.lifecycle.models import (
+    ExecutionBackendType,
+    ServiceRecord,
+    ServiceState,
+)
 from robotsix_central_deploy.lifecycle import server as server_mod
 
 
@@ -41,7 +45,7 @@ class TestApiKeyAuth:
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key="my-secret",
         )
         server_mod._config = cfg
@@ -97,7 +101,7 @@ class TestBasicAuth:
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key=self.API_KEY,
         )
         server_mod._config = cfg
@@ -156,7 +160,7 @@ class TestBothCredentials:
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key=self.API_KEY,
         )
         server_mod._config = cfg
@@ -195,7 +199,7 @@ class TestUsernamePasswordAuth:
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key="",
             auth_username=self.USERNAME,
             auth_password=self.PASSWORD,
@@ -256,7 +260,7 @@ class TestDevMode:
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key="",
             auth_username="",
             auth_password="",
@@ -302,7 +306,7 @@ class TestHealthUnauthenticated:
     async def _setup(self):
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key="my-secret",
             auth_username="myuser",
             auth_password="mypass",

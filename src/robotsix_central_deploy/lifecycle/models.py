@@ -51,6 +51,14 @@ class StoreBackend(str, Enum):
     FILE = "file"
 
 
+class ExecutionBackendType(str, Enum):
+    """Execution backend for container lifecycle operations."""
+
+    DOCKER_SDK = "docker_sdk"
+    DOCKER = "docker"
+    NOOP = "noop"
+
+
 class VolumeEntryType(str, Enum):
     """Filesystem entry type returned by volume directory listing."""
 

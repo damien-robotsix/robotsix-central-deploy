@@ -22,6 +22,7 @@ from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBack
 from .config import LifecycleConfig
 from .models import (
     ContainerHealthSummary,
+    ExecutionBackendType,
     HealthStatus,
     ServiceRecord,
     VolumeStat,
@@ -170,13 +171,13 @@ def _build_store(cfg: LifecycleConfig) -> ServiceStore:
 
 
 def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
-    if cfg.execution_backend == "docker_sdk":
+    if cfg.execution_backend == ExecutionBackendType.DOCKER_SDK:
         return DockerSdkBackend(
             socket_url=cfg.docker_socket_url,
             claude_host_mount_path=cfg.claude_host_mount_path,
             timeout=cfg.docker_sdk_timeout,
         )
-    if cfg.execution_backend == "docker":
+    if cfg.execution_backend == ExecutionBackendType.DOCKER:
         return DockerBackend()
     return NoopBackend()
 

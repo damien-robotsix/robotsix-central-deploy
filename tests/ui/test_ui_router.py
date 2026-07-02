@@ -12,7 +12,11 @@ from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
-from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
+from robotsix_central_deploy.lifecycle.models import (
+    ExecutionBackendType,
+    ServiceRecord,
+    ServiceState,
+)
 from robotsix_central_deploy.lifecycle.session import SessionStore
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -99,7 +103,7 @@ class TestUiRouter:
         monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_REQUIRED", "true")
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key=self.API_KEY,
         )
         _wire(cfg)
@@ -140,7 +144,7 @@ class TestUiRouter:
         monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_REQUIRED", "false")
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
-            execution_backend="noop",
+            execution_backend=ExecutionBackendType.NOOP,
             api_key="",
         )
         _wire(cfg)
