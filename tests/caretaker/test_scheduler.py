@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from robotsix_central_deploy.caretaker.models import CaretakerReport
+
 # Import lifecycle.models first to break the circular import through
 # lifecycle → deps → caretaker.scheduler (deps.CaretakerScheduler at module-level).
 from robotsix_central_deploy.lifecycle.models import (
