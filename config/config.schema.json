@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "ExecutionBackendType": {
+      "description": "Execution backend for container lifecycle operations.",
+      "enum": [
+        "docker_sdk",
+        "docker",
+        "noop"
+      ],
+      "title": "ExecutionBackendType",
+      "type": "string"
+    },
+    "StoreBackend": {
+      "description": "Persistence backend for the lifecycle service store.",
+      "enum": [
+        "memory",
+        "file"
+      ],
+      "title": "StoreBackend",
+      "type": "string"
+    }
+  },
+  "description": "Configuration for the lifecycle server.",
+  "properties": {
+    "host": {
+      "default": "0.0.0.0",
+      "title": "Host",
+      "type": "string"
+    },
+    "port": {
+      "default": 8100,
+      "title": "Port",
+      "type": "integer"
+    },
+    "api_key": {
+      "default": "",
+      "title": "Api Key",
+      "type": "string"
+    },
+    "auth_username": {
+      "default": "",
+      "title": "Auth Username",
+      "type": "string"
+    },
+    "auth_password": {
+      "default": "",
+      "title": "Auth Password",
+      "type": "string"
+    },
+    "store_backend": {
+      "$ref": "#/$defs/StoreBackend",
+      "default": "memory"
+    },
+    "store_path": {
+      "default": "lifecycle_state.yaml",
+      "title": "Store Path",
+      "type": "string"
+    },
+    "execution_backend": {
+      "$ref": "#/$defs/ExecutionBackendType",
+      "default": "docker_sdk"
+    },
+    "component_config_store_path": {
+      "default": "data/component_configs.json",
+      "title": "Component Config Store Path",
+      "type": "string"
+    },
+    "docker_socket_url": {
+      "default": "unix:///var/run/docker.sock",
+      "title": "Docker Socket Url",
+      "type": "string"
+    },
+    "docker_sdk_timeout": {
+      "default": 120,
+      "title": "Docker Sdk Timeout",
+      "type": "integer"
+    },
+    "disk_path": {
+      "default": "/",
+      "title": "Disk Path",
+      "type": "string"
+    },
+    "disk_warn_pct": {
+      "default": 10.0,
+      "title": "Disk Warn Pct",
+      "type": "number"
+    },
+    "env_store_path": {
+      "default": "component_env.json",
+      "title": "Env Store Path",
+      "type": "string"
+    },
+    "secret_key_path": {
+      "default": "secrets.key",
+      "title": "Secret Key Path",
+      "type": "string"
+    },
+    "config_yaml_store_path": {
+      "default": "data/component_config_yaml.json",
+      "title": "Config Yaml Store Path",
+      "type": "string"
+    },
+    "self_update_watchtower_image": {
+      "default": "containrrr/watchtower:1.7.1",
+      "title": "Self Update Watchtower Image",
+      "type": "string"
+    },
+    "self_update_docker_api_version": {
+      "default": "1.44",
+      "title": "Self Update Docker Api Version",
+      "type": "string"
+    },
+    "registry_check_ttl": {
+      "default": 300,
+      "title": "Registry Check Ttl",
+      "type": "integer"
+    },
+    "registry_check_interval": {
+      "default": 300,
+      "title": "Registry Check Interval",
+      "type": "integer"
+    },
+    "system_settings_path": {
+      "default": "data/system_settings.json",
+      "title": "System Settings Path",
+      "type": "string"
+    },
+    "log_level": {
+      "default": "INFO",
+      "title": "Log Level",
+      "type": "string"
+    },
+    "gateway_base_domain": {
+      "default": "",
+      "title": "Gateway Base Domain",
+      "type": "string"
+    },
+    "claude_host_mount_path": {
+      "default": "",
+      "title": "Claude Host Mount Path",
+      "type": "string"
+    },
+    "volume_audit_enabled": {
+      "default": false,
+      "title": "Volume Audit Enabled",
+      "type": "boolean"
+    },
+    "volume_audit_interval_seconds": {
+      "default": 3600,
+      "title": "Volume Audit Interval Seconds",
+      "type": "integer"
+    },
+    "volume_audit_snapshot_path": {
+      "default": "data/volume_audit_snapshots.json",
+      "title": "Volume Audit Snapshot Path",
+      "type": "string"
+    },
+    "volume_audit_findings_path": {
+      "default": "data/volume_audit_findings.json",
+      "title": "Volume Audit Findings Path",
+      "type": "string"
+    },
+    "volume_audit_growth_threshold_pct": {
+      "default": 10.0,
+      "title": "Volume Audit Growth Threshold Pct",
+      "type": "number"
+    },
+    "volume_audit_min_delta_bytes": {
+      "default": 10485760,
+      "title": "Volume Audit Min Delta Bytes",
+      "type": "integer"
+    },
+    "board_api_url": {
+      "default": "",
+      "title": "Board Api Url",
+      "type": "string"
+    },
+    "board_api_token": {
+      "default": "",
+      "title": "Board Api Token",
+      "type": "string"
+    },
+    "board_repo_id": {
+      "default": "",
+      "title": "Board Repo Id",
+      "type": "string"
+    },
+    "caretaker_enabled": {
+      "default": false,
+      "title": "Caretaker Enabled",
+      "type": "boolean"
+    },
+    "caretaker_interval_hours": {
+      "default": 24,
+      "title": "Caretaker Interval Hours",
+      "type": "integer"
+    }
+  },
+  "title": "LifecycleConfig",
+  "type": "object"
+}
+
