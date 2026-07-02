@@ -105,9 +105,7 @@ class CaretakerScheduler:
 
             # Auto-prune dangling images left behind by applied updates
             # (opt-in setting); rollback targets in the store are protected.
-            applied = any(
-                f.kind == FindingKind.UPDATE_APPLIED for f in update_findings
-            )
+            applied = any(f.kind == FindingKind.UPDATE_APPLIED for f in update_findings)
             if applied and settings.image_auto_prune:
                 try:
                     # Imported lazily: the lifecycle package's __init__ chain
