@@ -207,6 +207,32 @@ jobs:
       - uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
       - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4
 
+  config-schema-drift:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Check config/config.schema.json drift
+        run: |
+          uv run python - <<'EOF'
+          from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+          import robotsix_config, pathlib, sys
+          generated = robotsix_config.config_schema_json(LifecycleConfig)
+          committed = pathlib.Path("config/config.schema.json").read_text()
+          if generated.strip() != committed.strip():
+              print("config/config.schema.json is stale. Regenerate with:")
+              print("  uv run python -c \"from robotsix_central_deploy.lifecycle.config import LifecycleConfig; import robotsix_config; print(robotsix_config.config_schema_json(LifecycleConfig))\" > config/config.schema.json")
+              sys.exit(1)
+          EOF
+
   dependency-review:
     # dependency-review-action diffs base..head and only supports
     # pull_request events; on push to main it fails unconditionally.

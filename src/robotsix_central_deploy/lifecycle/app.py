@@ -63,9 +63,11 @@ app.include_router(gateway_router)
 if __name__ == "__main__":
     import uvicorn
 
+    import robotsix_config
+
     from .config import LifecycleConfig
 
-    cfg = LifecycleConfig()
+    cfg = robotsix_config.load_config(LifecycleConfig)
     uvicorn.run(
         "robotsix_central_deploy.lifecycle.app:app",
         host=cfg.host,

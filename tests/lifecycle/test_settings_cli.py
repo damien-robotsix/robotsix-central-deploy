@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +20,64 @@ from robotsix_central_deploy.registry.settings_store import (
     SystemSettings,
     SystemSettingsStore,
 )
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a LifecycleConfig from ROBOTSIX_LIFECYCLE_* env vars
+# ---------------------------------------------------------------------------
+
+
+def _make_lifecycle_config_from_env() -> LifecycleConfig:
+    """Return a ``LifecycleConfig`` populated from current env vars.
+
+    Used by ``TestSettingsFirstBoot`` so the mock ``robotsix_config`` can
+    supply a config that reflects the env vars the test set — the real
+    ``robotsix_config.load_config`` reads only a JSON file and does **not**
+    overlay environment variables.
+    """
+    env_map: dict[str, str] = {
+        "ROBOTSIX_LIFECYCLE_HOST": "host",
+        "ROBOTSIX_LIFECYCLE_PORT": "port",
+        "ROBOTSIX_LIFECYCLE_API_KEY": "api_key",
+        "ROBOTSIX_LIFECYCLE_AUTH_USERNAME": "auth_username",
+        "ROBOTSIX_LIFECYCLE_AUTH_PASSWORD": "auth_password",
+        "ROBOTSIX_LIFECYCLE_STORE_BACKEND": "store_backend",
+        "ROBOTSIX_LIFECYCLE_STORE_PATH": "store_path",
+        "ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND": "execution_backend",
+        "ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH": "component_config_store_path",
+        "ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL": "docker_socket_url",
+        "ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT": "docker_sdk_timeout",
+        "ROBOTSIX_LIFECYCLE_DISK_PATH": "disk_path",
+        "ROBOTSIX_LIFECYCLE_DISK_WARN_PCT": "disk_warn_pct",
+        "ROBOTSIX_LIFECYCLE_ENV_STORE_PATH": "env_store_path",
+        "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH": "secret_key_path",
+        "ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH": "config_yaml_store_path",
+        "ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE": "self_update_watchtower_image",
+        "ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION": "self_update_docker_api_version",
+        "ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL": "registry_check_ttl",
+        "ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL": "registry_check_interval",
+        "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH": "system_settings_path",
+        "ROBOTSIX_LIFECYCLE_LOG_LEVEL": "log_level",
+        "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN": "gateway_base_domain",
+        "ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH": "claude_host_mount_path",
+        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_ENABLED": "volume_audit_enabled",
+        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_INTERVAL_SECONDS": "volume_audit_interval_seconds",
+        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_SNAPSHOT_PATH": "volume_audit_snapshot_path",
+        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_FINDINGS_PATH": "volume_audit_findings_path",
+        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_GROWTH_THRESHOLD_PCT": "volume_audit_growth_threshold_pct",
+        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES": "volume_audit_min_delta_bytes",
+        "ROBOTSIX_LIFECYCLE_BOARD_API_URL": "board_api_url",
+        "ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN": "board_api_token",
+        "ROBOTSIX_LIFECYCLE_BOARD_REPO_ID": "board_repo_id",
+        "ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED": "caretaker_enabled",
+        "ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS": "caretaker_interval_hours",
+    }
+    kwargs: dict[str, object] = {}
+    for env_name, field_name in env_map.items():
+        val = os.environ.get(env_name)
+        if val is not None:
+            kwargs[field_name] = val
+    return LifecycleConfig(**kwargs)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -381,12 +440,15 @@ class TestSettingsFirstBoot:
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
-        async with lifespan(app):
-            stored = await app.state.settings_store.get()
-            assert stored.auth_username == "admin"
-            assert stored.auth_password == ""
-            # Effective config should also reflect the seeded username.
-            assert app.state.config.auth_username == "admin"
+        mock_rc = MagicMock()
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
+            async with lifespan(app):
+                stored = await app.state.settings_store.get()
+                assert stored.auth_username == "admin"
+                assert stored.auth_password == ""
+                # Effective config should also reflect the seeded username.
+                assert app.state.config.auth_username == "admin"
 
     async def test_lifespan_seeds_env_username_when_set(self, tmp_path, monkeypatch):
         """First-boot: lifespan uses env-var username instead of 'admin' fallback."""
@@ -403,9 +465,12 @@ class TestSettingsFirstBoot:
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
-        async with lifespan(app):
-            stored = await app.state.settings_store.get()
-            assert stored.auth_username == "operator"
+        mock_rc = MagicMock()
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
+            async with lifespan(app):
+                stored = await app.state.settings_store.get()
+                assert stored.auth_username == "operator"
 
     async def test_lifespan_does_not_overwrite_existing_settings_file(
         self, tmp_path, monkeypatch
@@ -434,10 +499,15 @@ class TestSettingsFirstBoot:
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
-        async with lifespan(app):
-            stored = await app.state.settings_store.get()
-            assert stored.auth_username == "custom-op"  # not overwritten with 'admin'
-            assert stored.auth_password == "secret"
+        mock_rc = MagicMock()
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
+            async with lifespan(app):
+                stored = await app.state.settings_store.get()
+                assert (
+                    stored.auth_username == "custom-op"
+                )  # not overwritten with 'admin'
+                assert stored.auth_password == "secret"
 
     async def test_lifespan_seeds_caretaker_defaults_when_no_env(
         self, tmp_path, monkeypatch
@@ -456,10 +526,13 @@ class TestSettingsFirstBoot:
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
-        async with lifespan(app):
-            stored = await app.state.settings_store.get()
-            assert stored.caretaker_enabled is False
-            assert stored.caretaker_interval_hours == 24
+        mock_rc = MagicMock()
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
+            async with lifespan(app):
+                stored = await app.state.settings_store.get()
+                assert stored.caretaker_enabled is False
+                assert stored.caretaker_interval_hours == 24
 
     async def test_lifespan_seeds_caretaker_from_env(self, tmp_path, monkeypatch):
         """First-boot: caretaker fields are seeded from env vars."""
@@ -476,13 +549,16 @@ class TestSettingsFirstBoot:
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
 
-        async with lifespan(app):
-            stored = await app.state.settings_store.get()
-            assert stored.caretaker_enabled is True
-            assert stored.caretaker_interval_hours == 6
-            # Effective config also reflects the seeded values.
-            assert app.state.config.caretaker_enabled is True
-            assert app.state.config.caretaker_interval_hours == 6
+        mock_rc = MagicMock()
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
+            async with lifespan(app):
+                stored = await app.state.settings_store.get()
+                assert stored.caretaker_enabled is True
+                assert stored.caretaker_interval_hours == 6
+                # Effective config also reflects the seeded values.
+                assert app.state.config.caretaker_enabled is True
+                assert app.state.config.caretaker_interval_hours == 6
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +569,12 @@ class TestSettingsFirstBoot:
 class TestCli:
     def test_main_defaults_invokes_uvicorn(self):
         fake_uvicorn = MagicMock()
-        with patch.dict("sys.modules", {"uvicorn": fake_uvicorn}):
+        fake_robotsix_config = MagicMock()
+        fake_robotsix_config.load_config = MagicMock(return_value=LifecycleConfig())
+        with patch.dict(
+            "sys.modules",
+            {"uvicorn": fake_uvicorn, "robotsix_config": fake_robotsix_config},
+        ):
             cli.main([])
         fake_uvicorn.run.assert_called_once()
         _, kwargs = fake_uvicorn.run.call_args
@@ -503,7 +584,12 @@ class TestCli:
 
     def test_main_overrides_applied(self):
         fake_uvicorn = MagicMock()
-        with patch.dict("sys.modules", {"uvicorn": fake_uvicorn}):
+        fake_robotsix_config = MagicMock()
+        fake_robotsix_config.load_config = MagicMock(return_value=LifecycleConfig())
+        with patch.dict(
+            "sys.modules",
+            {"uvicorn": fake_uvicorn, "robotsix_config": fake_robotsix_config},
+        ):
             cli.main(
                 [
                     "--host",
@@ -525,7 +611,12 @@ class TestCli:
 
     def test_main_partial_override(self):
         fake_uvicorn = MagicMock()
-        with patch.dict("sys.modules", {"uvicorn": fake_uvicorn}):
+        fake_robotsix_config = MagicMock()
+        fake_robotsix_config.load_config = MagicMock(return_value=LifecycleConfig())
+        with patch.dict(
+            "sys.modules",
+            {"uvicorn": fake_uvicorn, "robotsix_config": fake_robotsix_config},
+        ):
             cli.main(["--port", "9000"])
         _, kwargs = fake_uvicorn.run.call_args
         assert kwargs["port"] == 9000

@@ -1,26 +1,21 @@
-"""Lifecycle configuration loaded from environment variables.
+"""Lifecycle configuration loaded from JSON via robotsix_config.
 
-All settings are prefixed with ``ROBOTSIX_LIFECYCLE_``.
+The committed ``config/config.json`` carries safe default values.
+Operators replace it with a deployment-specific file containing real
+secrets (``api_key``, ``auth_password``, ``board_api_token``, etc.).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel
 
 from .models import ExecutionBackendType, StoreBackend
 
 
-class LifecycleConfig(BaseSettings):
+class LifecycleConfig(BaseModel):
     """Configuration for the lifecycle server."""
-
-    model_config = SettingsConfigDict(
-        env_prefix="ROBOTSIX_LIFECYCLE_",
-        env_file=".env.lifecycle",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
 
     # Server
     host: str = "0.0.0.0"  # nosec B104 — intentional bind for the containerized service

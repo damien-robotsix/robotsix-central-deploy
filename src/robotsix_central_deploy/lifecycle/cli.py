@@ -31,7 +31,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    cfg = LifecycleConfig()
+    import robotsix_config
+
+    cfg = robotsix_config.load_config(LifecycleConfig)
 
     # Override from CLI when provided.
     if args.host is not None:

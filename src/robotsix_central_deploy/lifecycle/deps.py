@@ -274,7 +274,9 @@ class JobRegistry:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _config, _store, _backend, _registry_checker, _http_client
-    _config = LifecycleConfig()
+    import robotsix_config
+
+    _config = robotsix_config.load_config(LifecycleConfig)
     _store = _build_store(_config)
     _backend = _build_backend(_config)
     _key_manager = SecretKeyManager(Path(_config.secret_key_path))

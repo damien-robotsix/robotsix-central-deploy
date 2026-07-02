@@ -12,11 +12,10 @@ modules:
       - fastapi
       - uvicorn
       - pydantic
-      - pydantic-settings
+      - robotsix-config
       - pyyaml
     config:
-      env_prefix: ROBOTSIX_LIFECYCLE_
-      env_file: .env.lifecycle
+      file: config/config.json
     endpoints:
       - GET /health
       - GET /disk
