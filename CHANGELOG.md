@@ -4,7 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
-- Parenthesize exception tuples in `onboard/parser.py` (`except (ValueError, TypeError):`) — unparenthesised `except A, B:` under PEP 758 binds `B` as the target name and catches only `A`, so `TypeError` during port or duration parsing could escape unhandled as a 500 instead of surfacing as a `ParseError`.
+- Add regression test confirming `TypeError` during port parsing is caught as `ParseError`. The existing bare-comma `except ValueError, TypeError:` syntax is correct Python 3.14+ under PEP 758 — it catches both exception types and is the `ruff format`-preferred style.
 - Add `.pre-commit-config.yaml` with hooks for ruff, ruff-format, mypy, and common file checks (end-of-file, trailing-whitespace, merge-conflict, large-files)
 - Add `"volumes"`, `"login"`, and `"logout"` to `RESERVED_NAMES` in the gateway router to prevent onboarding components that would shadow central-deploy routes.
 - Define `ExecutionBackendType(str, Enum)` in `lifecycle/models.py` with members `DOCKER_SDK`, `DOCKER`, `NOOP`, replacing bare `str` typing for the `execution_backend` config field. Update config, deps, cli, and all test fixtures to use the enum. Add grep-lint CI check for raw execution-backend strings outside `models.py`.
