@@ -68,11 +68,81 @@ class TestRegistryChecker:
         await checker.get_latest_digest("ghcr.io/owner/image:main")
         assert mock_client.head.call_count == 2
 
-    async def test_returns_none_for_non_ghcr_registry(self, mock_client):
+    async def test_returns_none_for_unsupported_registry(self, mock_client):
         checker = self._make_checker(mock_client)
-        result = await checker.get_latest_digest("docker.io/library/nginx:latest")
+        result = await checker.get_latest_digest("quay.io/org/image:latest")
         assert result is None
         mock_client.head.assert_not_called()
+
+    async def test_dockerhub_implicit_ref(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "dh-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:abc123"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = self._make_checker(mock_client)
+        result = await checker.get_latest_digest("robotsix/mill:latest")
+        assert result == "sha256:abc123"
+        # check token call
+        get_url = mock_client.get.call_args[0][0]
+        assert "auth.docker.io" in get_url
+        assert "scope=repository:robotsix/mill:pull" in get_url
+        # check manifest call
+        head_url = mock_client.head.call_args[0][0]
+        assert (
+            head_url == "https://registry-1.docker.io/v2/robotsix/mill/manifests/latest"
+        )
+        # no ghcr.io references
+        assert "ghcr.io" not in get_url
+        assert "ghcr.io" not in head_url
+
+    async def test_dockerhub_implicit_ref_no_tag(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "dh-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:abc123"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = self._make_checker(mock_client)
+        result = await checker.get_latest_digest("robotsix/mill")
+        assert result == "sha256:abc123"
+        head_url = mock_client.head.call_args[0][0]
+        assert head_url.endswith("/manifests/latest")
+
+    async def test_dockerhub_explicit_docker_io_ref(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "dh-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:abc123"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = self._make_checker(mock_client)
+        result = await checker.get_latest_digest("docker.io/robotsix/mill:latest")
+        assert result == "sha256:abc123"
+        get_url = mock_client.get.call_args[0][0]
+        assert "scope=repository:robotsix/mill:pull" in get_url
+        head_url = mock_client.head.call_args[0][0]
+        assert (
+            head_url == "https://registry-1.docker.io/v2/robotsix/mill/manifests/latest"
+        )
+
+    async def test_dockerhub_library_shorthand(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "dh-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:abc123"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = self._make_checker(mock_client)
+        result = await checker.get_latest_digest("nginx:latest")
+        assert result == "sha256:abc123"
+        get_url = mock_client.get.call_args[0][0]
+        assert "scope=repository:library/nginx:pull" in get_url
+        head_url = mock_client.head.call_args[0][0]
+        assert (
+            head_url == "https://registry-1.docker.io/v2/library/nginx/manifests/latest"
+        )
 
     async def test_accept_header_contains_oci_manifest_type(self, mock_client):
         token_resp = MagicMock(status_code=200)

@@ -47,13 +47,24 @@ class RegistryChecker:
             ref_no_tag = parts[0]
             tag = parts[1] if len(parts) == 2 else "latest"
             segments = ref_no_tag.split("/")
-            registry_host = segments[0]
-            repo = "/".join(segments[1:])
+            first = segments[0]
 
-            if registry_host != "ghcr.io":
-                return None  # only ghcr.io supported for now
-
-            token = await self._fetch_ghcr_token(repo)
+            # --- classify registry ---
+            if first == "ghcr.io":
+                repo = "/".join(segments[1:])
+                manifest_host = "ghcr.io"
+                token = await self._fetch_ghcr_token(repo)
+            elif first == "docker.io" or ("." not in first and ":" not in first):
+                if first == "docker.io":
+                    repo = "/".join(segments[1:])
+                elif len(segments) >= 2:
+                    repo = first + "/" + "/".join(segments[1:])
+                else:
+                    repo = "library/" + first
+                manifest_host = "registry-1.docker.io"
+                token = await self._fetch_dockerhub_token(repo)
+            else:
+                return None  # unsupported registry
 
             headers = {
                 "Accept": (
@@ -66,12 +77,26 @@ class RegistryChecker:
             if token:
                 headers["Authorization"] = f"Bearer {token}"
 
-            url = f"https://{registry_host}/v2/{repo}/manifests/{tag}"
+            url = f"https://{manifest_host}/v2/{repo}/manifests/{tag}"
             resp = await self._client.head(url, headers=headers, follow_redirects=True)
             if resp.status_code not in (200, 206):
                 return None
             return resp.headers.get("Docker-Content-Digest") or None
         except Exception:  # noqa: BLE001  network errors, parse errors
+            return None
+
+    async def _fetch_dockerhub_token(self, repo: str) -> str | None:
+        """GET anonymous pull token from Docker Hub auth service."""
+        try:
+            url = (
+                f"https://auth.docker.io/token"
+                f"?service=registry.docker.io&scope=repository:{repo}:pull"
+            )
+            resp = await self._client.get(url)
+            if resp.status_code != 200:
+                return None
+            return resp.json().get("token") or None
+        except Exception:  # noqa: BLE001
             return None
 
     async def _fetch_ghcr_token(self, repo: str) -> str | None:
