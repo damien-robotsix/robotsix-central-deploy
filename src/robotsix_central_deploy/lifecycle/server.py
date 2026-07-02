@@ -33,7 +33,7 @@ from .deps import (  # noqa: F401
 )
 
 # Re-exports that tests reference via ``server_mod.<name>``
-from ..volume_audit.models import VolumeAuditResponse as VolumeAuditResponse  # noqa: F401
+from .volume_audit.models import VolumeAuditResponse as VolumeAuditResponse  # noqa: F401
 
 __all__ = [
     "app",

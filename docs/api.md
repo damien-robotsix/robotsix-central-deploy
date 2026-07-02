@@ -30,13 +30,13 @@
 
 ## Volume Audit
 
-::: robotsix_central_deploy.volume_audit.models
+::: robotsix_central_deploy.lifecycle.volume_audit.models
 
-::: robotsix_central_deploy.volume_audit.growth
+::: robotsix_central_deploy.lifecycle.volume_audit.growth
 
-::: robotsix_central_deploy.volume_audit.scheduler
+::: robotsix_central_deploy.lifecycle.volume_audit.scheduler
 
-::: robotsix_central_deploy.volume_audit.reporter
+::: robotsix_central_deploy.lifecycle.volume_audit.reporter
 
 ## Gateway
 

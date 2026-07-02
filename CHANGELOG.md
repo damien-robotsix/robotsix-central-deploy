@@ -62,6 +62,7 @@ All notable changes to robotsix-central-deploy.
   `_gather_sibling_health`, `_fanout_deploy_siblings`, `_fanout_rollback_siblings`,
   `_delete_component_volumes`, `_resolve_account_mode`, `_postprocess_config_assist`
   (services.py); `_deploy_onboard_siblings`, `_rollback_onboard` (onboard.py).
+- Consolidate `volume_audit` as a sub-package of `lifecycle` (`src/robotsix_central_deploy/lifecycle/volume_audit/`) to reflect their strong coupling (shared config prefix, cross-imports).
 - Enable the periodic security posture workflow to inspect CI workflows and pre-commit config against evolving OWASP/OpenSSF/SLSA best practices.
 - Remove dead code: `is_active()` function and `ACTIVE_STATES` constant from `lifecycle.models` (neither had any callers).
 - Remove stale `ROBOTSIX_LIFECYCLE_GHCR_TOKEN` documentation — the env var was never defined as a `LifecycleConfig` field, and `RegistryChecker` uses anonymous GHCR tokens fetched at runtime.
