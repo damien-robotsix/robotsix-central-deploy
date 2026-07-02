@@ -233,6 +233,30 @@ services:
       - mailbot-config:/home/mailbot/config
 ```
 
+### `robotsix.deploy.config-assist` (service-level, optional)
+
+Shell command string that central-deploy runs to assist operators in
+producing configuration values (exposed via
+`POST /services/{name}/config/assist`). The command is executed in a
+one-shot container from the component's image. Empty or whitespace-only
+values are ignored.
+
+### `robotsix.deploy.config-assist-seeds` (service-level, optional)
+
+Comma-separated list of config keys to seed the assist flow, each entry
+either a bare key or `key:label`:
+
+```yaml
+services:
+  mailbot:
+    labels:
+      robotsix.deploy.config-assist: "mailbot --generate-config"
+      robotsix.deploy.config-assist-seeds: "imap.host:IMAP host,imap.port"
+```
+
+Both labels are additive and v1-compatible: composes that omit them behave
+exactly as before (no config assist offered).
+
 ---
 
 ## § 6  Volume declarations and stateful-volume flagging
@@ -283,7 +307,7 @@ volumes:
 | `services.<name>.build`                        | **Parse error.** Only pre-built images are supported (`BUILD=0` on socket-proxy). |
 | `services.<name>.depends_on`                   | Silently ignored. |
 | `services.<name>.networks`                     | Silently ignored.  Central-deploy manages container networking. |
-| `services.<name>.command` / `entrypoint`       | Silently ignored.  Image CMD/entrypoint is used as-is. |
+| `services.<name>.command` / `entrypoint`       | **Honoured.** Parsed (string form is `shlex`-split, list form taken as-is) and applied at container-create time, overriding the image CMD/ENTRYPOINT. Any other type is a **parse error**. When omitted, the image CMD/entrypoint is used as-is. |
 | N>1 services, no service has `robotsix.deploy.primary: "true"` | **Parse error.** |
 | N>1 services, multiple services have `robotsix.deploy.primary: "true"` | **Parse error.** |
 | Host bind-mount in `volumes` (without `claude-mount` label) | **Parse error.** |
