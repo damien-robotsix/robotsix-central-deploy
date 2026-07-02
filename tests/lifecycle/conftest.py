@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
@@ -62,6 +63,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.config_yaml_store = config_yaml_store
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
+    server_mod.app.state.job_registry = JobRegistry()
 
 
 @pytest.fixture

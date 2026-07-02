@@ -14,7 +14,7 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
@@ -186,6 +186,87 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
 
 
 # ---------------------------------------------------------------------------
+# Onboard job registry (in-memory, single-process)
+# ---------------------------------------------------------------------------
+
+OnboardJobPhase = Literal[
+    "writing_config",
+    "deploying_primary",
+    "waiting_health",
+    "deploying_siblings",
+    "done",
+    "failed",
+]
+
+
+class OnboardJob:
+    """In-memory record of one onboard confirm background deploy job."""
+
+    __slots__ = ("job_id", "component", "phase", "error", "name", "image", "state")
+
+    def __init__(self, job_id: str, component: str) -> None:
+        self.job_id: str = job_id
+        self.component: str = component
+        self.phase: OnboardJobPhase = "writing_config"
+        self.error: str | None = None
+        self.name: str | None = None
+        self.image: str | None = None
+        self.state: str | None = None
+
+
+class JobRegistry:
+    """Thread-safe-ish in-memory registry for onboard background deploy jobs.
+
+    The app is single-process asyncio; no lock is needed for simple
+    dict access under the same event loop.
+    """
+
+    def __init__(self) -> None:
+        self._jobs: dict[str, OnboardJob] = {}
+        self._counter: int = 0
+
+    def create(self, component: str) -> str:
+        """Create a new job and return its id."""
+        self._counter += 1
+        job_id = f"{component}-{self._counter}"
+        self._jobs[job_id] = OnboardJob(job_id=job_id, component=component)
+        return job_id
+
+    def get(self, job_id: str) -> OnboardJob | None:
+        """Return a job by id, or None."""
+        return self._jobs.get(job_id)
+
+    def update_phase(self, job_id: str, phase: OnboardJobPhase) -> None:
+        """Update the phase of a job."""
+        job = self._jobs.get(job_id)
+        if job is not None:
+            job.phase = phase
+
+    def mark_failed(self, job_id: str, error: str) -> None:
+        """Mark a job as failed with an error string."""
+        job = self._jobs.get(job_id)
+        if job is not None:
+            job.phase = "failed"
+            job.error = error
+
+    def mark_done(self, job_id: str, name: str, image: str, state: str) -> None:
+        """Mark a job as done with terminal fields."""
+        job = self._jobs.get(job_id)
+        if job is not None:
+            job.phase = "done"
+            job.name = name
+            job.image = image
+            job.state = state
+
+    def has_active_job_for(self, component: str) -> bool:
+        """Return True when a job for *component* is still in flight."""
+        return any(
+            j.component == component and j.phase not in ("done", "failed")
+            for j in self._jobs.values()
+        )
+
+
+# ---------------------------------------------------------------------------
 # Lifespan — wire up store & backend from config
 # ---------------------------------------------------------------------------
 
@@ -236,6 +317,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from .session import SessionStore
 
     app.state.session_store = SessionStore()
+    app.state.job_registry = JobRegistry()
 
     # Apply log_level from (possibly overlaid) config
     logging.getLogger().setLevel(_config.log_level)
@@ -386,6 +468,10 @@ async def _get_env_store(request: Request) -> EnvStore:
 
 async def _get_config_yaml_store(request: Request) -> ConfigYamlStore:
     return request.app.state.config_yaml_store  # type: ignore[no-any-return]
+
+
+async def _get_job_registry(request: Request) -> JobRegistry:
+    return request.app.state.job_registry  # type: ignore[no-any-return]
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:

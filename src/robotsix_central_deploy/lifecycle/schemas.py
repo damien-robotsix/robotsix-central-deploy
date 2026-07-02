@@ -40,6 +40,36 @@ class OnboardConfirmResponse(BaseModel):
     state: str
 
 
+# Phase literal type for onboard background deploy jobs.
+OnboardJobPhase = Literal[
+    "writing_config",
+    "deploying_primary",
+    "waiting_health",
+    "deploying_siblings",
+    "done",
+    "failed",
+]
+
+
+class OnboardConfirmAcceptedResponse(BaseModel):
+    """Returned by POST /onboard/confirm (202) when the job is queued."""
+
+    job_id: str
+    name: str
+
+
+class OnboardJobStatusResponse(BaseModel):
+    """Returned by GET /onboard/jobs/{job_id}."""
+
+    job_id: str
+    component: str
+    phase: OnboardJobPhase
+    error: str | None = None
+    name: str | None = None
+    image: str | None = None
+    state: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Env endpoint models
 # ---------------------------------------------------------------------------
