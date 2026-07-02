@@ -64,8 +64,6 @@ async def http_proxy(
     request: Request,
     target_base_url: str,
     path: str,
-    *,
-    prefix: str = "",
 ) -> Response:
     """Forward an HTTP request to *target_base_url/path* and stream the response.
 
@@ -84,8 +82,6 @@ async def http_proxy(
     headers["x-forwarded-for"] = request.client.host if request.client else "unknown"
     headers["x-forwarded-proto"] = request.url.scheme
     headers["x-forwarded-host"] = request.headers.get("host", "")
-    if prefix:
-        headers["x-forwarded-prefix"] = prefix
 
     # -- Send to upstream ---------------------------------------------------
     client = httpx.AsyncClient(timeout=300.0)
@@ -117,21 +113,6 @@ async def http_proxy(
     for key, value in upstream_resp.headers.items():
         if key.lower() not in _RESPONSE_STRIP:
             resp_headers[key] = value
-
-    # Rewrite absolute-path redirect Locations to keep the gateway prefix.
-    # An app served at /<name>/ that redirects to e.g. "/board" would drop the
-    # prefix and the browser would hit /board -> 404.  Prepend /<name> so
-    # /mail/ -> Location:/board becomes /mail/board.
-    if prefix and 300 <= upstream_resp.status_code < 400:
-        for _hk in list(resp_headers):
-            if _hk.lower() == "location":
-                _loc = resp_headers[_hk]
-                if (
-                    _loc.startswith("/")
-                    and _loc != prefix
-                    and not _loc.startswith(prefix + "/")
-                ):
-                    resp_headers[_hk] = prefix + _loc
 
     content_type: str = upstream_resp.headers.get("content-type", "")
 

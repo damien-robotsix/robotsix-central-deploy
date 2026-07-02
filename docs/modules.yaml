@@ -48,16 +48,18 @@ modules:
   gateway:
     name: gateway
     description: >
-      Reverse-proxy gateway — routes deploy.robotsix.net/<name>/... to
-      managed container services via HTTP and WebSocket proxying.
+      Reverse-proxy gateway — routes <name>.deploy.robotsix.net (Host
+      subdomain) to managed container services via HTTP and WebSocket
+      proxying. Legacy path URLs (deploy.robotsix.net/<name>/...) redirect
+      to the component subdomain.
     package: robotsix_central_deploy.gateway
     dependencies:
       - fastapi
       - httpx
     endpoints:
-      - ANY /{name}                # all HTTP methods proxied
-      - ANY /{name}/{path:path}    # all HTTP methods proxied
-      - WS /{path:path}            # WebSocket relay
+      - ANY /                      # subdomain-routed component root
+      - ANY /{path:path}           # subdomain-routed; legacy /<name>/... -> 307 to subdomain
+      - WS /{path:path}            # WebSocket relay (subdomain only)
     tests: tests/gateway/
 
   registry:

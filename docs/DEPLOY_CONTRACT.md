@@ -157,8 +157,8 @@ header as a line (conventionally the first line):
 ### `robotsix.deploy.primary: "true"` (service-level)
 
 Required when the compose file contains more than one service. Designates
-this service as the primary: its first host port receives path-based gateway
-traffic (`deploy.robotsix.net/<name>/*`), and its Docker health state is the
+this service as the primary: its first host port receives gateway traffic
+(`<name>.deploy.robotsix.net`), and its Docker health state is the
 component health reported in the dashboard. Exactly one service may carry
 this label; presence on multiple services or absence when N>1 are **parse
 errors**. Silently ignored when the compose file has only one service.
