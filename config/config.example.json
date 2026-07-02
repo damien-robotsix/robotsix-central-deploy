@@ -33,5 +33,7 @@
   "board_api_token": "",
   "board_repo_id": "",
   "caretaker_enabled": false,
-  "caretaker_interval_hours": 24
+  "caretaker_interval_hours": 24,
+  "mill_component_id": "mill",
+  "image_auto_prune": false
 }
