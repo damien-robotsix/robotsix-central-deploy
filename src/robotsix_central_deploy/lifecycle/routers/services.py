@@ -17,6 +17,7 @@ from ..backend import ExecutionBackend
 from robotsix_yaml_config import deep_merge
 
 from ..deps import (
+    _canonical_hash,
     _compute_overall_health,
     _derive_account_id,
     _get_backend,
@@ -53,6 +54,8 @@ from ..models import (
 from ..schemas import (
     ConfigAssistRequest,
     ConfigAssistResponse,
+    ConfigDriftConflict,
+    ConfigImportResponse,
     ConfigResponse,
     ConfigUpdate,
     EnvResponse,
@@ -1128,6 +1131,7 @@ async def get_service_config(
     store: ServiceStore = Depends(_get_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ConfigResponse:
     """Return the config.yaml schema and current masked values for a service.
@@ -1144,9 +1148,18 @@ async def get_service_config(
     current_raw = await config_yaml_store.get_current(name) or template
     current_masked = _mask_secrets(template, current_raw)
     comp_cfg = component_config_store.get(name)
+
+    drift = False
+    if comp_cfg and comp_cfg.config_volume:
+        stored_hash = await config_yaml_store.get_volume_hash(name)
+        if stored_hash is not None:
+            live_dict = await backend.read_config_from_volume(comp_cfg.config_volume)
+            drift = _canonical_hash(live_dict) != stored_hash
+
     return ConfigResponse(
         config_schema=template,
         current=current_masked,
+        drift=drift,
         config_assist_command=comp_cfg.config_assist_command if comp_cfg else None,
         config_assist_seeds=comp_cfg.config_assist_seeds if comp_cfg else [],
     )
@@ -1189,16 +1202,38 @@ async def put_service_config(
             detail=f"No config schema for component '{name}'",
         )
     existing = await config_yaml_store.get_current(name) or template
+
+    # --- drift guard ---
+    drifted = False
+    live_dict_for_conflict: dict[str, Any] | None = None
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg and comp_cfg.config_volume:
+        stored_hash = await config_yaml_store.get_volume_hash(name)
+        if stored_hash is not None:
+            live_dict_for_conflict = await backend.read_config_from_volume(
+                comp_cfg.config_volume
+            )
+            drifted = _canonical_hash(live_dict_for_conflict) != stored_hash
+    if drifted and not body.force_overwrite:
+        assert live_dict_for_conflict is not None
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ConfigDriftConflict(
+                live_config=_mask_secrets(template, live_dict_for_conflict),
+                stored_config=_mask_secrets(template, existing),
+            ).model_dump(),
+        )
+    # --- end drift guard ---
+
     merged = _merge_config(template, existing, body.values)
     if "accounts" in merged:
         _validate_account_ids(merged)  # Bug 2: reject invalid id slugs
     merged = _prune_unset(merged, existing)  # Bug 3: prune resurrected empty fields
-    await config_yaml_store.update_current(name, merged)
 
-    # Write to the actual config volume (not synthetic "{name}-config")
-    comp_cfg = component_config_store.get(name)
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, merged)
+        new_hash = _canonical_hash(merged)
+        await config_yaml_store.update_current_and_hash(name, merged, new_hash)
         # Restart primary + siblings sharing the same config volume so the
         # running container(s) pick up the new values immediately.
         registry: ComponentRegistry = request.app.state.registry
@@ -1225,10 +1260,63 @@ async def put_service_config(
                         exc,
                     )
     else:
+        await config_yaml_store.update_current(name, merged)
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only",
             name,
         )
+
+
+# ---------------------------------------------------------------------------
+# POST /services/{name}/config/import
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/services/{name}/config/import",
+    response_model=ConfigImportResponse,
+    summary="Import live volume content into the config store, clearing drift",
+    responses={
+        404: {
+            "model": ErrorDetail,
+            "description": "Service has no config schema or config volume",
+        },
+    },
+)
+async def import_service_config(
+    name: str,
+    store: ServiceStore = Depends(_get_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> ConfigImportResponse:
+    """Read the live volume file and store it as the new *current*, clearing drift.
+
+    The imported dict is stored as-is (real secret values preserved, since the
+    volume holds real values). The volume hash is updated to match, so subsequent
+    drift checks see a clean state.
+    """
+    await _get_or_create_record(name, store)
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for '{name}'",
+        )
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg is None or not comp_cfg.config_volume:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config volume for '{name}'",
+        )
+    live_dict = await backend.read_config_from_volume(comp_cfg.config_volume)
+    new_hash = _canonical_hash(live_dict)
+    await config_yaml_store.update_current_and_hash(name, live_dict, new_hash)
+    return ConfigImportResponse(
+        current=_mask_secrets(template, live_dict),
+        volume_hash=new_hash,
+    )
 
 
 # ---------------------------------------------------------------------------
