@@ -17,7 +17,7 @@ dependencies = [
     "websockets>=12.0",
     "jsonschema>=4.0",
     "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@3b999fc697fd1112024160f6f5ba45bd89e7f5d0",
-    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@d302ee4ada88905efa48333894ed19519f9f7920",
+    "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@424f8ec5140e14e9699b92d5c3755d929625b570",
 ]
 
 # Dev tooling as a PEP 735 dependency-group (the fleet convention), pulled
@@ -109,4 +109,4 @@ fail_under = 80
 
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
-per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff"], "DEP003" = ["starlette", "requests"] }
+per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config"], "DEP003" = ["starlette", "requests"] }

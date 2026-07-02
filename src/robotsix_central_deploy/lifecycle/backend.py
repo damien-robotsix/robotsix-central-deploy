@@ -15,6 +15,10 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..gateway.proxy import PROXY_NETWORK
+from robotsix_central_deploy._yaml_utils import (
+    InvalidConfigStructureError,
+    YamlParseError,
+)
 from .models import (
     ComponentInspect,
     DeployOutcome,
@@ -1013,10 +1017,6 @@ class DockerSdkBackend(ExecutionBackend):
                     remove=True,
                 )
                 text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
-                from robotsix_yaml_config import (
-                    InvalidConfigStructureError,
-                    YamlParseError,
-                )
 
                 data = yaml.safe_load(text)
                 if data is None:
