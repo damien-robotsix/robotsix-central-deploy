@@ -60,3 +60,7 @@ uv run mypy src/        # Type check
 For a detailed walkthrough of the codebase, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Contributions welcome — see the [documentation](https://robotsix.net/central-deploy/).
+
+## Standards
+
+This repo follows the [robotsix stack standards](https://github.com/damien-robotsix/robotsix-standards).

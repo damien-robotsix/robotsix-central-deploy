@@ -5,6 +5,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Dashboard onboard modal now polls `GET /onboard/jobs/{job_id}` after confirm, showing live deploy-phase progress (writing_config, deploying_primary, waiting_health, deploying_siblings, done, failed). The modal no longer waits on a single long request that could be dropped by nginx.
+- Add link to robotsix stack standards in README.md and AGENT.md
 - Onboard form: mark secret fields as optional with clearer placeholder text and informational notes explaining the fill-later flow via Configure → Save.
 - Fix ``AttributeError: 'State' object has no attribute 'job_registry'`` in lifecycle conftest fixture (the ``_reset_globals`` autouse fixture now initializes ``app.state.job_registry`` so validation-error tests on the onboard confirm endpoint don't crash before body validation).
 - `POST /onboard/confirm` now returns `202 Accepted` with a job id instead of blocking for the full deploy. The long-running deploy sequence (primary deploy, health gate, sibling deploys) runs as an asyncio background task. Poll `GET /onboard/jobs/{job_id}` for phase progress (`writing_config` → `deploying_primary` / `waiting_health` → `deploying_siblings` → `done` / `failed`). A second confirm for the same component while a job is active returns `409 Conflict`.
