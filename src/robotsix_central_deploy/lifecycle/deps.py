@@ -174,6 +174,7 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
         return DockerSdkBackend(
             socket_url=cfg.docker_socket_url,
             claude_host_mount_path=cfg.claude_host_mount_path,
+            timeout=cfg.docker_sdk_timeout,
         )
     if cfg.execution_backend == "docker":
         return DockerBackend()

@@ -43,6 +43,11 @@ class LifecycleConfig(BaseSettings):
     # Production value: tcp://socket-proxy:2375
     docker_socket_url: str = "unix:///var/run/docker.sock"
 
+    # Docker SDK timeout (env: ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT)
+    # All Docker SDK operations (pull, create, start, stop, etc.) use this
+    # client-level timeout. Default 120 s accommodates typical image pulls.
+    docker_sdk_timeout: int = 120
+
     # Disk usage monitoring
     disk_path: str = (
         "/"  # env: ROBOTSIX_LIFECYCLE_DISK_PATH — /host_root when containerised

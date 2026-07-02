@@ -470,10 +470,11 @@ class DockerSdkBackend(ExecutionBackend):
         self,
         socket_url: str = "unix:///var/run/docker.sock",
         claude_host_mount_path: str = "",
+        timeout: int = 120,
     ) -> None:
         import docker
 
-        self._client = docker.DockerClient(base_url=socket_url)
+        self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
         self._claude_host_mount_path = claude_host_mount_path
 
     # -- helpers ------------------------------------------------------------
