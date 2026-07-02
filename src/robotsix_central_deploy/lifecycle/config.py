@@ -66,6 +66,11 @@ class LifecycleConfig(BaseSettings):
     # One-shot updater image; pinned tag. env: ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE
     self_update_watchtower_image: str = "containrrr/watchtower:1.7.1"
 
+    # Docker API version exported to the one-shot updater. Watchtower 1.7.1's
+    # client defaults to API 1.25, below modern daemons' minimum, and panics
+    # without this. env: ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION
+    self_update_docker_api_version: str = "1.44"
+
     # Registry check
     registry_check_ttl: int = (
         300  # ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL  (cache TTL, seconds)

@@ -63,6 +63,7 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | Variable | Default | Description |
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE` | `containrrr/watchtower:1.7.1` | One-shot updater image launched by `POST /system/update` to pull the newest server image and recreate the central-deploy container. |
+| `ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION` | `1.44` | `DOCKER_API_VERSION` exported to the one-shot updater. Watchtower 1.7.1's client defaults to API 1.25, below modern daemons' minimum, and crashes without it. Raise if a future daemon drops 1.44. |
 
 ### Logging
 

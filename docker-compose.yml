@@ -11,13 +11,15 @@ services:
       DELETE: "1"   # required for container removal during deploy
       IMAGES: "1"   # required for image pull
       BUILD: "1"    # required for the "Reclaim build cache" button (POST /build/prune)
+      NETWORKS: "1" # required by the self-update watchtower: it recreates the
+                    # central-deploy container and re-attaches its networks via
+                    # POST /networks/{id}/connect (403 without this scope)
       # Everything else OFF:
       AUTH: "0"
       COMMIT: "0"
       CONFIGS: "0"
       DISTRIBUTION: "0"
       EXEC: "0"
-      NETWORKS: "0"
       NODES: "0"
       PLUGINS: "0"
       SECRETS: "0"

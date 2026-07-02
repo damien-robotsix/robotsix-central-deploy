@@ -126,6 +126,7 @@ class TestTriggerSelfUpdate:
         assert args[0] is self_info
         assert args[1] == server_mod.app.state.config.self_update_watchtower_image
         assert args[2] == server_mod.app.state.config.docker_socket_url
+        assert args[3] == server_mod.app.state.config.self_update_docker_api_version
 
     async def test_502_when_launch_fails(self, client, auth_headers, self_info):
         backend = _mock_backend(self_info)
