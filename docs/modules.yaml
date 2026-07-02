@@ -114,7 +114,7 @@ modules:
     dependencies:
       - pydantic
       - pyyaml
-    tests: tests/onboard/ tests/test_onboard_parser.py tests/test_onboard_api.py tests/test_config_yaml_store.py
+    tests: tests/onboard/
 
   volume_audit:
     name: volume_audit
