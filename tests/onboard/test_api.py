@@ -423,6 +423,145 @@ class TestOnboardConfirm:
         assert all_configs[0].id == "broker"
         assert all_configs[0].container_name == "agent-comm"
 
+    # -- new rollback + env tests ------------------------------------------------
+
+    async def test_deploy_failure_removes_container_and_clears_env(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """After a primary deploy failure, the container is removed and the
+        seeded EnvStore entry is deleted."""
+        spec = _make_derived_spec("fail-svc")
+        store: InMemoryStore = server_mod.app.state.store
+        env_store: EnvStore = server_mod.app.state.env_store
+
+        class _SpyBackend(NoopBackend):
+            def __init__(self):
+                super().__init__()
+                self.removed: list[str] = []
+
+            async def remove_container(self, service: ServiceRecord) -> None:
+                self.removed.append(service.name)
+
+        spy = _SpyBackend()
+        server_mod.app.state.backend = spy
+        server_mod._backend = spy
+
+        with patch.object(spy, "deploy", side_effect=RuntimeError("unhealthy")):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 500
+        assert "unhealthy" in resp.json()["error"]
+
+        # Container removed
+        assert spy.removed == [spec.name]
+
+        # ServiceRecord removed
+        record = await store.get("fail-svc")
+        assert record is None
+
+        # EnvStore entry deleted
+        env_config = await env_store.get("fail-svc")
+        assert env_config.env == {}
+        assert env_config.secret_tokens == {}
+
+    async def test_sibling_deploy_failure_removes_containers_and_clears_env(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """When a sibling deploy fails, both primary and sibling containers
+        are removed and the seeded env entry is deleted."""
+        spec = _make_multi_service_derived_spec("fail-multi")
+        store: InMemoryStore = server_mod.app.state.store
+        env_store: EnvStore = server_mod.app.state.env_store
+
+        class _SpyBackend(NoopBackend):
+            def __init__(self):
+                super().__init__()
+                self.removed: list[str] = []
+
+            async def remove_container(self, service: ServiceRecord) -> None:
+                self.removed.append(service.name)
+
+        spy = _SpyBackend()
+        server_mod.app.state.backend = spy
+        server_mod._backend = spy
+
+        call_count = [0]
+
+        async def failing_deploy(service, config, image_ref):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return await NoopBackend.deploy(spy, service, config, image_ref)
+            raise RuntimeError("simulated sibling deploy failure")
+
+        with patch.object(spy, "deploy", side_effect=failing_deploy):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 500
+        assert "simulated sibling deploy failure" in resp.json()["error"]
+
+        # Both containers removed (primary first, then sibling)
+        assert spy.removed == ["fail-multi", "fail-multi-worker"]
+
+        # Both records removed
+        assert await store.get("fail-multi") is None
+        assert await store.get("fail-multi-worker") is None
+
+        # EnvStore entry deleted
+        env_config = await env_store.get("fail-multi")
+        assert env_config.env == {}
+        assert env_config.secret_tokens == {}
+
+    async def test_deploy_failure_preserves_preexisting_env(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """A pre-existing EnvStore entry must survive rollback — only a
+        freshly-seeded entry is deleted."""
+        spec = _make_derived_spec("fail-svc")
+        env_store: EnvStore = server_mod.app.state.env_store
+
+        # Pre-seed the env entry
+        await env_store.upsert(spec.name, {"MY_KEY": "existing"}, {})
+
+        class _SpyBackend(NoopBackend):
+            def __init__(self):
+                super().__init__()
+                self.removed: list[str] = []
+
+            async def remove_container(self, service: ServiceRecord) -> None:
+                self.removed.append(service.name)
+
+        spy = _SpyBackend()
+        server_mod.app.state.backend = spy
+        server_mod._backend = spy
+
+        with patch.object(spy, "deploy", side_effect=RuntimeError("unhealthy")):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 500
+
+        # Preexisting env entry preserved
+        env_config = await env_store.get(spec.name)
+        assert env_config.env == {"MY_KEY": "existing"}
+        assert env_config.secret_tokens == {}
+
 
 # ---------------------------------------------------------------------------
 # Multi-service helpers

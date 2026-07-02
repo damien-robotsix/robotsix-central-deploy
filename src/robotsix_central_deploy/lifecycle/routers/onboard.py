@@ -97,16 +97,32 @@ async def _rollback_onboard(
     config_yaml_store: ConfigYamlStore,
     component_config_store: ComponentConfigStore,
     registry: ComponentRegistry,
-    sibling_names: list[str] | None = None,
+    backend: ExecutionBackend,
+    env_store: EnvStore,
+    primary_record: ServiceRecord,
+    env_was_seeded: bool,
+    sibling_records: list[ServiceRecord] | None = None,
 ) -> None:
-    """Best-effort rollback: clean up config, records, and registry entries."""
-    if sibling_names:
-        for sib_name in sibling_names:
-            await store.delete(sib_name)
+    """Best-effort rollback: remove containers, clean up config, records, and registry entries."""
+    # Remove all deployed containers — primary first, then siblings.
+    for rec in [primary_record] + (sibling_records or []):
+        try:
+            await backend.remove_container(rec)
+        except Exception:
+            logger.warning(
+                "rollback: remove_container %s failed", rec.name, exc_info=True
+            )
+
+    if sibling_records:
+        for sib_rec in sibling_records:
+            await store.delete(sib_rec.name)
     await config_yaml_store.delete(name)
     await component_config_store.delete(config_id)
     registry.unregister(config_id)
     await store.delete(name)
+
+    if env_was_seeded:
+        await env_store.delete(name)
 
 
 # ---------------------------------------------------------------------------
@@ -337,12 +353,14 @@ async def onboard_confirm(
     registry.register(config)
 
     # Seed EnvStore from the repo's env contract — first onboard only
+    env_was_seeded = False
     existing_env = await env_store.get(spec.name)
     if not existing_env.env and not existing_env.secret_tokens:
         seeded_env = {k: v for k, v in spec.env.items() if v}
         seeded_secrets = {k: "" for k, v in spec.env.items() if not v}
         if seeded_env or seeded_secrets:
             await env_store.upsert(spec.name, seeded_env, seeded_secrets)
+            env_was_seeded = True
 
     # If config schema present, save template + user values and write merged
     # config.yaml to the real config volume so the container starts healthy.
@@ -383,6 +401,10 @@ async def onboard_confirm(
             config_yaml_store,
             component_config_store,
             registry,
+            backend=backend,
+            env_store=env_store,
+            primary_record=record,
+            env_was_seeded=env_was_seeded,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -410,7 +432,11 @@ async def onboard_confirm(
             config_yaml_store,
             component_config_store,
             registry,
-            sibling_names=[sr.name for sr in sibling_records_created],
+            backend=backend,
+            env_store=env_store,
+            primary_record=record,
+            env_was_seeded=env_was_seeded,
+            sibling_records=sibling_records_created,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
