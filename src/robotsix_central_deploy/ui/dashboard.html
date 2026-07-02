@@ -1525,6 +1525,13 @@ function openConfigModal(name) {
   document.getElementById('config-modal-component').textContent = name;
   document.getElementById('config-modal-error').style.display = 'none';
   document.getElementById('config-form-body').innerHTML = '';
+  // Remove any stale drift banner / conflict panel
+  const driftBanner = document.getElementById('config-drift-banner');
+  if (driftBanner) driftBanner.remove();
+  const conflictPanel = document.getElementById('config-drift-conflict');
+  if (conflictPanel) conflictPanel.remove();
+  // Re-enable form inputs and Save button in case they were disabled
+  document.querySelector('#config-modal .btn-primary').disabled = false;
   document.getElementById('config-modal').style.display = 'flex';
 
   fetchConfigSchema(name);
@@ -1536,6 +1543,17 @@ function closeConfigModal() {
   _configSchema = null;
   _configAssistCommand = null;
   _configAssistSeeds = [];
+  // Remove any stale drift banner / conflict panel
+  const driftBanner = document.getElementById('config-drift-banner');
+  if (driftBanner) driftBanner.remove();
+  const conflictPanel = document.getElementById('config-drift-conflict');
+  if (conflictPanel) conflictPanel.remove();
+  // Re-enable form inputs for next open
+  document.querySelector('#config-modal .btn-primary').disabled = false;
+  const formBody = document.getElementById('config-form-body');
+  if (formBody) {
+    formBody.querySelectorAll('input, select').forEach(el => { el.disabled = false; });
+  }
 }
 
 async function fetchConfigSchema(name) {
@@ -1558,9 +1576,26 @@ async function fetchConfigSchema(name) {
     _configSchema = data.schema || {};
     _configAssistCommand = data.config_assist_command || null;
     _configAssistSeeds   = data.config_assist_seeds   || [];
-    document.querySelector('#config-modal .btn-primary').disabled = false;
+
+    // Drift detection
+    const hasDrift = data.drift === true;
+    if (hasDrift) {
+      _showDriftBanner(name);
+    } else {
+      const existingBanner = document.getElementById('config-drift-banner');
+      if (existingBanner) existingBanner.remove();
+      document.querySelector('#config-modal .btn-primary').disabled = false;
+    }
+
     generateConfigForm(_configSchema, data.current || {});
     _injectConfigAssistUI();
+
+    // Re-apply drift-disabled state after form regeneration
+    if (hasDrift) {
+      document.querySelector('#config-modal .btn-primary').disabled = true;
+      const fb = document.getElementById('config-form-body');
+      if (fb) fb.querySelectorAll('input, select').forEach(el => { el.disabled = true; });
+    }
   } catch (err) {
     showConfigModalError(err.message);
   }
@@ -1955,8 +1990,14 @@ async function saveConfigValues() {
       body: JSON.stringify({ values }),
     });
     if (resp.status === 204) {
-      // Refresh the form to reflect saved state
       closeConfigModal();
+    } else if (resp.status === 409) {
+      const body = await resp.json().catch(() => ({}));
+      if (body.drift) {
+        showConfigDriftConflict(body);
+        return;
+      }
+      showConfigModalError(body.error || `HTTP 409`);
     } else {
       const body = await resp.json().catch(() => ({}));
       showConfigModalError(body.error || `HTTP ${resp.status}`);
@@ -1974,6 +2015,220 @@ function showConfigModalError(msg) {
 
 function hideConfigModalError() {
   document.getElementById('config-modal-error').style.display = 'none';
+}
+
+// ── Drift detection helpers ──────────────────────────────────
+
+function _showDriftBanner(name) {
+  // Remove any existing banner first
+  const existing = document.getElementById('config-drift-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'config-drift-banner';
+  banner.style.cssText =
+    'background: var(--amber-bg); color: var(--amber); ' +
+    'border: 1px solid var(--amber); padding: 10px 14px; ' +
+    'border-radius: 4px; margin-bottom: 12px; font-size: 0.82rem;';
+
+  banner.innerHTML =
+    '<strong>&#x26A0; Config was edited out-of-band since the last Save. ' +
+    'The form shows the last saved values, not the current volume content.</strong>' +
+    '<div style="margin-top:8px;display:flex;gap:8px;">' +
+    '<button id="drift-import-btn" class="btn-secondary" style="font-size:0.78rem;">' +
+    'Import volume &rarr; store</button>' +
+    '<button id="drift-stale-btn" class="btn-secondary" style="font-size:0.78rem;">' +
+    'Edit with stale values</button>' +
+    '</div>';
+
+  // Insert above the form body
+  const formBody = document.getElementById('config-form-body');
+  formBody.parentNode.insertBefore(banner, formBody);
+
+  // Disable Save + form inputs while banner is visible
+  document.querySelector('#config-modal .btn-primary').disabled = true;
+  formBody.querySelectorAll('input, select').forEach(el => { el.disabled = true; });
+
+  // Wire buttons
+  document.getElementById('drift-import-btn').addEventListener('click', () => {
+    importConfigFromVolume(name);
+  });
+  document.getElementById('drift-stale-btn').addEventListener('click', () => {
+    // Hide banner, enable form
+    const b = document.getElementById('config-drift-banner');
+    if (b) b.remove();
+    document.querySelector('#config-modal .btn-primary').disabled = false;
+    const fb = document.getElementById('config-form-body');
+    if (fb) fb.querySelectorAll('input, select').forEach(el => { el.disabled = false; });
+  });
+}
+
+async function importConfigFromVolume(name) {
+  try {
+    const resp = await fetch(
+      `/services/${encodeURIComponent(name)}/config/import`,
+      { method: 'POST', headers: authHeaders(), credentials: 'same-origin' }
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showConfigModalError(err.detail || `Import failed: HTTP ${resp.status}`);
+      return;
+    }
+    // Remove conflict panel if present
+    const conflictPanel = document.getElementById('config-drift-conflict');
+    if (conflictPanel) conflictPanel.remove();
+    // Restore form body visibility
+    const formBody = document.getElementById('config-form-body');
+    if (formBody) formBody.style.display = '';
+    // Re-fetch config form (clears drift banner, loads imported values)
+    await fetchConfigSchema(name);
+  } catch (e) {
+    showConfigModalError(e.message);
+  }
+}
+
+function showConfigDriftConflict(body) {
+  // Remove any existing conflict panel
+  const existing = document.getElementById('config-drift-conflict');
+  if (existing) existing.remove();
+
+  // Hide regular form body
+  const formBody = document.getElementById('config-form-body');
+  formBody.style.display = 'none';
+
+  // Hide drift banner if present
+  const banner = document.getElementById('config-drift-banner');
+  if (banner) banner.style.display = 'none';
+
+  const panel = document.createElement('div');
+  panel.id = 'config-drift-conflict';
+  panel.innerHTML =
+    '<h3 style="color:var(--amber);margin-bottom:8px;">' +
+    'Save blocked &mdash; config edited out-of-band</h3>' +
+    renderConfigDiff(body.live_config, body.stored_config) +
+    '<div style="margin-top:12px;display:flex;gap:8px;">' +
+    '<button id="drift-conflict-import-btn" class="btn-primary" style="font-size:0.78rem;">' +
+    'Import and re-edit</button>' +
+    '<button id="drift-conflict-overwrite-btn" class="btn-danger" style="font-size:0.78rem;">' +
+    'Overwrite (destructive)</button>' +
+    '<button id="drift-conflict-cancel-btn" class="btn-secondary" style="font-size:0.78rem;">' +
+    'Cancel</button>' +
+    '</div>';
+
+  // Insert after the form body (before the footer)
+  formBody.parentNode.insertBefore(panel, formBody.nextSibling);
+
+  // Wire buttons
+  document.getElementById('drift-conflict-import-btn').addEventListener('click', () => {
+    importConfigFromVolume(_configComponent);
+  });
+  document.getElementById('drift-conflict-overwrite-btn').addEventListener('click', () => {
+    confirmAndOverwrite();
+  });
+  document.getElementById('drift-conflict-cancel-btn').addEventListener('click', () => {
+    closeConfigModal();
+  });
+}
+
+function confirmAndOverwrite() {
+  if (!window.confirm(
+    'This will overwrite the volume with your form values, ' +
+    'discarding the out-of-band changes. Continue?'
+  )) return;
+
+  if (!_configComponent || !_configSchema) return;
+  const values = collectConfigValues(_configSchema);
+
+  fetch(`/services/${encodeURIComponent(_configComponent)}/config`, {
+    method: 'PUT',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+    credentials: 'same-origin',
+    body: JSON.stringify({ values, force_overwrite: true }),
+  }).then(async resp => {
+    if (resp.status === 204) {
+      closeConfigModal();
+    } else {
+      const errBody = await resp.json().catch(() => ({}));
+      showConfigModalError(errBody.error || `HTTP ${resp.status}`);
+    }
+  }).catch(err => {
+    showConfigModalError(err.message);
+  });
+}
+
+function renderConfigDiff(liveConfig, storedConfig) {
+  if (!liveConfig && !storedConfig) {
+    return '<p style="color:#94a3b8;padding:0.5rem 0;">No differing keys found.</p>';
+  }
+
+  // Flatten both objects to dot-joined keys (one level of recursion)
+  const flatten = (obj, prefix) => {
+    const result = {};
+    if (obj == null || typeof obj !== 'object') return result;
+    for (const [k, v] of Object.entries(obj)) {
+      const fullKey = prefix ? prefix + '.' + k : k;
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+        Object.assign(result, flatten(v, fullKey));
+      } else {
+        result[fullKey] = v;
+      }
+    }
+    return result;
+  };
+
+  const flatLive = flatten(liveConfig || {}, '');
+  const flatStored = flatten(storedConfig || {}, '');
+  const allKeys = [...new Set([...Object.keys(flatLive), ...Object.keys(flatStored)])].sort();
+
+  // Collect only differing keys
+  const diffRows = [];
+  for (const key of allKeys) {
+    const lv = flatLive[key];
+    const sv = flatStored[key];
+    if (lv === sv) continue;
+    diffRows.push({ key, live: lv, stored: sv });
+  }
+
+  if (diffRows.length === 0) {
+    return '<p style="color:#94a3b8;padding:0.5rem 0;">No differing keys found.</p>';
+  }
+
+  const truncate = (v) => {
+    if (v === undefined || v === null) return String(v ?? '');
+    const s = String(v);
+    return s.length > 60 ? s.slice(0, 60) + '\u2026' : s;
+  };
+
+  const fmtVal = (v) => {
+    if (v === '***') return '***';
+    return escHtml(truncate(v));
+  };
+
+  let html =
+    '<table style="width:100%;font-size:0.82rem;margin-top:8px;">' +
+    '<thead><tr>' +
+    '<th style="background:#243044;">Field</th>' +
+    '<th style="background:#243044;">In volume (live)</th>' +
+    '<th style="background:#243044;">Your form (stored)</th>' +
+    '</tr></thead><tbody>';
+
+  for (const row of diffRows) {
+    const bothSecret = row.live === '***' || row.stored === '***';
+    const liveDisplay = bothSecret ? '***' : fmtVal(row.live);
+    const storedDisplay = bothSecret ? '***' : fmtVal(row.stored);
+    html +=
+      '<tr style="background:rgba(251,146,60,0.08);">' +
+      '<td style="border-bottom:1px solid #334155;padding:6px 8px;">' +
+      escHtml(row.key) + '</td>' +
+      '<td style="border-bottom:1px solid #334155;padding:6px 8px;">' +
+      liveDisplay + '</td>' +
+      '<td style="border-bottom:1px solid #334155;padding:6px 8px;">' +
+      storedDisplay + '</td>' +
+      '</tr>';
+  }
+
+  html += '</tbody></table>';
+  return html;
 }
 
 function escHtml(s) {
