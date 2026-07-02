@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -16,17 +17,20 @@ from ..deps import (
     _get_component_config_store,
     _get_config_yaml_store,
     _get_env_store,
+    _get_job_registry,
     _namespace_spec_volumes,
     _merge_config,
     _annotate_secret_sentinels,
     _canonical_hash,
+    JobRegistry,
 )
 from ..models import ServiceRecord
 from ..schemas import (
     OnboardPreflightRequest,
     OnboardPreflightResponse,
     OnboardConfirmRequest,
-    OnboardConfirmResponse,
+    OnboardConfirmAcceptedResponse,
+    OnboardJobStatusResponse,
 )
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
@@ -267,11 +271,107 @@ async def onboard_preflight(
 
 
 # ---------------------------------------------------------------------------
+# Background deploy job helper
+# ---------------------------------------------------------------------------
+
+
+async def _run_onboard_deploy_job(
+    job_id: str,
+    spec_name: str,
+    spec_image: str,
+    spec_config_schema: dict[str, Any] | None,
+    spec: DerivedSpec,
+    config: ComponentConfig,
+    record: ServiceRecord,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    config_yaml_store: ConfigYamlStore,
+    component_config_store: ComponentConfigStore,
+    registry: ComponentRegistry,
+    env_store: EnvStore,
+    env_was_seeded: bool,
+    job_registry: JobRegistry,
+) -> None:
+    """Background task that runs the primary deploy → siblings sequence.
+
+    On any failure, calls ``_rollback_onboard`` with the exact same
+    arguments and ordering as the old synchronous handler.
+    """
+    try:
+        # Deploy primary
+        if config.health_check is not None:
+            job_registry.update_phase(job_id, "waiting_health")
+        else:
+            job_registry.update_phase(job_id, "deploying_primary")
+
+        outcome = await backend.deploy(record, config, config.image)
+
+        record.state = outcome.state
+        record.image = config.image
+        record.image_revision = outcome.deployed_digest
+        record.deployed_image_digest = outcome.deployed_digest
+        record.previous_image_digest = outcome.previous_digest
+        await store.put(record)
+
+        # Deploy siblings
+        job_registry.update_phase(job_id, "deploying_siblings")
+        sibling_records_created: list[ServiceRecord] = []
+        try:
+            await _deploy_onboard_siblings(
+                spec, store, backend, sibling_records_created
+            )
+        except Exception as exc:
+            logger.exception("onboard sibling deploy failed for '%s'", spec_name)
+            await _rollback_onboard(
+                spec_name,
+                config.id,
+                store,
+                config_yaml_store,
+                component_config_store,
+                registry,
+                backend=backend,
+                env_store=env_store,
+                primary_record=record,
+                env_was_seeded=env_was_seeded,
+                sibling_records=sibling_records_created,
+            )
+            job_registry.mark_failed(job_id, str(exc))
+            return
+
+        # Success
+        job_registry.mark_done(
+            job_id,
+            name=spec_name,
+            image=spec_image,
+            state=record.state.value,
+        )
+    except Exception as exc:
+        logger.exception("onboard deploy failed for '%s'", spec_name)
+        await _rollback_onboard(
+            spec_name,
+            config.id,
+            store,
+            config_yaml_store,
+            component_config_store,
+            registry,
+            backend=backend,
+            env_store=env_store,
+            primary_record=record,
+            env_was_seeded=env_was_seeded,
+        )
+        job_registry.mark_failed(job_id, str(exc))
+
+
+# ---------------------------------------------------------------------------
 # POST /onboard/confirm
 # ---------------------------------------------------------------------------
 
 
-@router.post("/onboard/confirm", response_model=OnboardConfirmResponse)
+@router.post(
+    "/onboard/confirm",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=OnboardConfirmAcceptedResponse,
+)
 async def onboard_confirm(
     req: OnboardConfirmRequest,
     _: None = Depends(verify_auth),
@@ -281,13 +381,28 @@ async def onboard_confirm(
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     env_store: EnvStore = Depends(_get_env_store),
-) -> OnboardConfirmResponse:
-    """Persist a reviewed DerivedSpec, deploy the container, and register the component."""
+    job_registry: JobRegistry = Depends(_get_job_registry),
+) -> OnboardConfirmAcceptedResponse:
+    """Persist a reviewed DerivedSpec, then schedule the deploy as a background job.
+
+    Returns 202 with a job id so the caller can poll ``GET /onboard/jobs/{job_id}``
+    for progress.
+    """
     spec = req.spec
 
     # Namespace volume names so two components from the same image
     # never share Docker named volumes.
     spec = _namespace_spec_volumes(spec, spec.name)
+
+    # Active-job guard: a second confirm for the same component while a
+    # job is in flight is rejected with 409.
+    if job_registry.has_active_job_for(spec.name):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": f"onboarding already in progress for component '{spec.name}'"
+            },
+        )
 
     # Race-condition guard: re-check name not already in store
     existing = await store.get(spec.name)
@@ -346,6 +461,9 @@ async def onboard_confirm(
     config.config_assist_command = spec.config_assist_command
     config.config_assist_seeds = spec.config_assist_seeds
 
+    # Create the job so the caller can start polling immediately.
+    job_id = job_registry.create(spec.name)
+
     # Persist config
     await component_config_store.put(config)
 
@@ -378,8 +496,6 @@ async def onboard_confirm(
                 raise
         else:
             await config_yaml_store.update_current(spec.name, merged)
-        # Do NOT add a synthetic "{name}-config" volume — the real volume
-        # is already in config.named_volumes (it came from spec.volume_mounts).
 
     # Create and persist ServiceRecord
     record = ServiceRecord(
@@ -389,62 +505,54 @@ async def onboard_confirm(
     )
     await store.put(record)
 
-    # Deploy primary
-    try:
-        outcome = await backend.deploy(record, config, config.image)
-    except Exception as exc:
-        logger.exception("onboard deploy failed for '%s'", spec.name)
-        await _rollback_onboard(
-            spec.name,
-            config.id,
-            store,
-            config_yaml_store,
-            component_config_store,
-            registry,
+    # Schedule the deploy sequence as a background task.
+    asyncio.create_task(
+        _run_onboard_deploy_job(
+            job_id=job_id,
+            spec_name=spec.name,
+            spec_image=spec.image,
+            spec_config_schema=spec.config_schema,
+            spec=spec,
+            config=config,
+            record=record,
+            store=store,
             backend=backend,
+            config_yaml_store=config_yaml_store,
+            component_config_store=component_config_store,
+            registry=registry,
             env_store=env_store,
-            primary_record=record,
             env_was_seeded=env_was_seeded,
+            job_registry=job_registry,
         )
+    )
+
+    return OnboardConfirmAcceptedResponse(job_id=job_id, name=spec.name)
+
+
+# ---------------------------------------------------------------------------
+# GET /onboard/jobs/{job_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get("/onboard/jobs/{job_id}", response_model=OnboardJobStatusResponse)
+async def onboard_job_status(
+    job_id: str,
+    _: None = Depends(verify_auth),
+    job_registry: JobRegistry = Depends(_get_job_registry),
+) -> OnboardJobStatusResponse:
+    """Return the current phase of an onboard background deploy job."""
+    job = job_registry.get(job_id)
+    if job is None:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": str(exc)},
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": f"unknown job '{job_id}'"},
         )
-
-    # Update primary record state from outcome
-    record.state = outcome.state
-    record.image = config.image
-    record.image_revision = outcome.deployed_digest
-    record.deployed_image_digest = outcome.deployed_digest
-    record.previous_image_digest = outcome.previous_digest
-    await store.put(record)
-
-    # Deploy siblings
-    sibling_records_created: list[ServiceRecord] = []
-    try:
-        await _deploy_onboard_siblings(spec, store, backend, sibling_records_created)
-    except Exception as exc:
-        logger.exception("onboard sibling deploy failed for '%s'", spec.name)
-        await _rollback_onboard(
-            spec.name,
-            config.id,
-            store,
-            config_yaml_store,
-            component_config_store,
-            registry,
-            backend=backend,
-            env_store=env_store,
-            primary_record=record,
-            env_was_seeded=env_was_seeded,
-            sibling_records=sibling_records_created,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": str(exc)},
-        )
-
-    return OnboardConfirmResponse(
-        name=spec.name,
-        image=spec.image,
-        state=record.state.value,
+    return OnboardJobStatusResponse(
+        job_id=job.job_id,
+        component=job.component,
+        phase=job.phase,
+        error=job.error,
+        name=job.name,
+        image=job.image,
+        state=job.state,
     )

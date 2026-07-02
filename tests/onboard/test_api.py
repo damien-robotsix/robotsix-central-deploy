@@ -13,6 +13,7 @@ import yaml
 from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import NoopBackend
+from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import (
     ExecutionBackendType,
@@ -107,6 +108,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.env_store = EnvStore(
         tmp_path / "env_store.json", SecretKeyManager(tmp_path / "secret_key")
     )
+    server_mod.app.state.job_registry = JobRegistry()
 
 
 @pytest.fixture
@@ -306,12 +308,40 @@ class TestOnboardPreflight:
 
 
 # ---------------------------------------------------------------------------
+# POST /onboard/confirm — helpers
+# ---------------------------------------------------------------------------
+
+
+async def _poll_job_until_done(
+    client: AsyncClient, job_id: str, headers: dict, timeout: float = 5.0
+) -> dict:
+    """Poll GET /onboard/jobs/{job_id} until phase is 'done' or 'failed'.
+
+    Returns the final job status dict. Raises AssertionError on timeout.
+    """
+    import asyncio
+
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        resp = await client.get(f"/onboard/jobs/{job_id}", headers=headers)
+        assert resp.status_code == 200, f"job poll returned {resp.status_code}"
+        data = resp.json()
+        if data["phase"] in ("done", "failed"):
+            return data
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError(
+                f"job {job_id} did not reach terminal phase within {timeout}s"
+            )
+        await asyncio.sleep(0.05)
+
+
+# ---------------------------------------------------------------------------
 # POST /onboard/confirm
 # ---------------------------------------------------------------------------
 
 
 class TestOnboardConfirm:
-    async def test_confirm_creates_component_and_returns_200(
+    async def test_confirm_creates_component_and_returns_202(
         self,
         client: AsyncClient,
         auth_headers: dict,
@@ -325,11 +355,18 @@ class TestOnboardConfirm:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
         assert data["name"] == "new-svc"
-        assert data["image"] == "ghcr.io/org/test-svc:main"
-        assert data["state"] == ServiceState.RUNNING.value
+        assert "job_id" in data
+        job_id = data["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
+        assert job_status["name"] == "new-svc"
+        assert job_status["image"] == "ghcr.io/org/test-svc:main"
+        assert job_status["state"] == ServiceState.RUNNING.value
 
         # Verify config persisted in ComponentConfigStore
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -359,7 +396,7 @@ class TestOnboardConfirm:
         assert resp.status_code == 409
         assert "already exists" in resp.json()["error"]
 
-    async def test_confirm_deploy_failure_rolls_back_and_returns_500(
+    async def test_confirm_deploy_failure_rolls_back_and_returns_202(
         self,
         client: AsyncClient,
         auth_headers: dict,
@@ -378,8 +415,14 @@ class TestOnboardConfirm:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 500
-        assert "simulated deploy failure" in resp.json()["error"]
+            # Returns 202 immediately (deploy runs in background)
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            # Poll until failed (still inside the with-block so patch is active)
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+            assert "simulated deploy failure" in job_status["error"]
 
         # Config should be removed from store
         config_store: ComponentConfigStore = server_mod.app.state.component_config_store
@@ -408,7 +451,12 @@ class TestOnboardConfirm:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # Verify ServiceRecord uses container_name override
         store: InMemoryStore = server_mod.app.state.store
@@ -455,8 +503,13 @@ class TestOnboardConfirm:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 500
-        assert "unhealthy" in resp.json()["error"]
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            # Poll until failed (still inside the with-block so patch is active)
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+            assert "unhealthy" in job_status["error"]
 
         # Container removed
         assert spy.removed == [spec.name]
@@ -508,8 +561,13 @@ class TestOnboardConfirm:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 500
-        assert "simulated sibling deploy failure" in resp.json()["error"]
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            # Poll until failed (still inside the with-block so patch is active)
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+            assert "simulated sibling deploy failure" in job_status["error"]
 
         # Both containers removed (primary first, then sibling)
         assert spy.removed == ["fail-multi", "fail-multi-worker"]
@@ -555,12 +613,132 @@ class TestOnboardConfirm:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 500
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            # Poll until failed (still inside the with-block so patch is active)
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
 
         # Preexisting env entry preserved
         env_config = await env_store.get(spec.name)
         assert env_config.env == {"MY_KEY": "existing"}
         assert env_config.secret_tokens == {}
+
+    async def test_confirm_double_confirm_while_job_active_returns_409(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """A second confirm for the same component while a job is active returns 409."""
+        spec = _make_derived_spec("blocked-svc")
+
+        # Inject a deploy that hangs so the job stays active
+        import asyncio
+
+        async def slow_deploy(service, config, image_ref):
+            await asyncio.sleep(0.5)
+            return await NoopBackend.deploy(
+                server_mod.app.state.backend, service, config, image_ref
+            )
+
+        with patch.object(
+            server_mod.app.state.backend, "deploy", side_effect=slow_deploy
+        ):
+            # First confirm returns 202
+            resp1 = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+            assert resp1.status_code == 202
+
+            # Second confirm while job is still active returns 409
+            resp2 = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+            assert resp2.status_code == 409
+            assert "already in progress" in resp2.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# GET /onboard/jobs/{job_id}
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardJobStatus:
+    async def test_job_status_happy_path(self, client: AsyncClient, auth_headers: dict):
+        """Poll the job status endpoint and see progress from writing_config to done."""
+        spec = _make_derived_spec("job-svc")
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Immediate poll should show the job exists (phase may be done already
+        # since NoopBackend is fast, but at least it shouldn't be unknown)
+        status_resp = await client.get(f"/onboard/jobs/{job_id}", headers=auth_headers)
+        assert status_resp.status_code == 200
+        data = status_resp.json()
+        assert data["job_id"] == job_id
+        assert data["component"] == "job-svc"
+        assert data["phase"] in (
+            "writing_config",
+            "deploying_primary",
+            "waiting_health",
+            "deploying_siblings",
+            "done",
+        )
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
+        assert job_status["name"] == "job-svc"
+        assert job_status["image"] == "ghcr.io/org/test-svc:main"
+        assert job_status["state"] == ServiceState.RUNNING.value
+        assert job_status["error"] is None
+
+    async def test_job_status_unknown_job_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """GET /onboard/jobs/bogus returns 404."""
+        resp = await client.get("/onboard/jobs/nonexistent-1", headers=auth_headers)
+        assert resp.status_code == 404
+        assert "unknown job" in resp.json()["error"]
+
+    async def test_job_status_failure_path(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """On deploy failure, the job reaches phase 'failed' with error detail."""
+        spec = _make_derived_spec("fail-job")
+
+        with patch.object(
+            server_mod.app.state.backend,
+            "deploy",
+            side_effect=RuntimeError("boom"),
+        ):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+            assert job_status["error"] == "boom"
+            assert job_status["name"] is None
+            assert job_status["image"] is None
+            assert job_status["state"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -614,9 +792,14 @@ class TestMultiServiceOnboardConfirm:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
         assert data["name"] == "multi-svc"
+        job_id = data["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # Primary record
         primary = await store.get("multi-svc")
@@ -671,8 +854,13 @@ class TestMultiServiceOnboardConfirm:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 500
-        assert "simulated sibling deploy failure" in resp.json()["error"]
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            # Poll until failed (still inside the with-block so patch is active)
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+            assert "simulated sibling deploy failure" in job_status["error"]
 
         # Both primary and sibling records should be removed
         assert await store.get("fail-multi") is None
@@ -699,7 +887,12 @@ class TestMultiServiceOnboardConfirm:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # Only primary record exists
         primary = await store.get("plain-svc")
@@ -1008,7 +1201,12 @@ class TestOnboardConfirmWithConfig:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # Template saved in ConfigYamlStore
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
@@ -1043,7 +1241,12 @@ class TestOnboardConfirmWithConfig:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 500
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+
+            # Poll until failed (still inside the with-block so patch is active)
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
 
         # config_yaml_store should be cleaned up
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
@@ -1061,7 +1264,12 @@ class TestOnboardConfirmWithConfig:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # No template saved
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
@@ -1099,7 +1307,12 @@ class TestOnboardConfirmWithConfig:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # Merged config written to volume — user values overlay template defaults
         assert len(captured) == 1
@@ -1144,7 +1357,12 @@ class TestOnboardConfirmWithConfig:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
 
         # Template written as-is
         assert len(captured) == 1
