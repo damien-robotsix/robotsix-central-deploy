@@ -384,6 +384,7 @@
   <h1>Robotsix Deploy — Component Status</h1>
   <button id="add-component-btn" onclick="openOnboardModal()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">+ Add Component</button>
   <button id="settings-btn" onclick="showSettingsSection()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Settings</button>
+  <button id="self-update-btn" onclick="triggerSelfUpdate()" title="A newer server image is available on the registry" style="display:none;padding:6px 14px;font-size:0.85rem;border:1px solid #16a34a;border-radius:4px;background:#14532d;color:#bbf7d0;cursor:pointer;">⬆ Update server</button>
   <button id="logout-btn" onclick="doLogout()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Logout</button>
   <span id="refresh-time">Last refreshed: --:--:--</span>
 </header>
@@ -2797,10 +2798,77 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+// ── Server self-update ───────────────────────────────────────────
+
+let selfUpdateInitialDigest = '';
+
+async function checkSelfUpdate() {
+  try {
+    const resp = await fetch('/system/update', { headers: authHeaders(), credentials: 'same-origin' });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const btn = document.getElementById('self-update-btn');
+    if (data.supported && data.update_available && !btn.disabled) {
+      selfUpdateInitialDigest = data.running_digest;
+      btn.style.display = '';
+    }
+  } catch (_) { /* transient — retried on the next check */ }
+}
+
+async function triggerSelfUpdate() {
+  if (!confirm('Update the central-deploy server to the latest image?\n\nThe dashboard will go down for a few seconds while the server container is recreated.')) return;
+  const btn = document.getElementById('self-update-btn');
+  btn.disabled = true;
+  btn.textContent = 'Updating…';
+  try {
+    const resp = await fetch('/system/update', {
+      method: 'POST',
+      headers: authHeaders(),
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail || ('HTTP ' + resp.status));
+    }
+    // The updater pulls the image, then swaps the container; give it a
+    // head start before polling for the recreated server.
+    setTimeout(() => pollSelfUpdateRecovery(Date.now()), 8000);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '⬆ Update server';
+    alert('Self-update failed to start: ' + e.message);
+  }
+}
+
+async function pollSelfUpdateRecovery(startedAt) {
+  const btn = document.getElementById('self-update-btn');
+  if (Date.now() - startedAt > 5 * 60 * 1000) {
+    btn.disabled = false;
+    btn.textContent = '⬆ Update server';
+    alert('Self-update did not complete within 5 minutes — check the server logs.');
+    return;
+  }
+  try {
+    const resp = await fetch('/system/update', { headers: authHeaders(), credentials: 'same-origin', cache: 'no-store' });
+    if (resp.ok) {
+      const data = await resp.json();
+      // Reload only once the answering server runs a different image than
+      // the one we started from (the old container answers until the swap).
+      if (data.running_digest && data.running_digest !== selfUpdateInitialDigest) {
+        location.reload();
+        return;
+      }
+    }
+  } catch (_) { /* server mid-restart */ }
+  setTimeout(() => pollSelfUpdateRecovery(startedAt), 3000);
+}
+
 (async () => {
   await loadSettings();
   loadDashboard();
   startAutoRefresh();
+  checkSelfUpdate();
+  setInterval(checkSelfUpdate, 5 * 60 * 1000);
 })();
 </script>
 

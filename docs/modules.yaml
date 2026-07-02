@@ -36,6 +36,7 @@ modules:
       - POST /services/{name}/config/assist
       - DELETE /services/{name}
       - GET/PUT /settings
+      - GET/POST /system/update
       - GET /volumes/audit
       - GET /volumes/orphans
       - POST /volumes/prune
