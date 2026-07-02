@@ -2,6 +2,8 @@
 name = "robotsix-central-deploy"
 version = "0.1.0"
 description = "Central deployment & lifecycle server for the robotsix suite"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.115.0",
@@ -43,15 +45,19 @@ default-groups = ["dev"]
 robotsix-lifecycle = "robotsix_central_deploy.lifecycle.cli:main"
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robotsix_central_deploy"]
+
+# The robotsix-* first-party dependencies are git-pinned direct references.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[tool.setuptools.package-data]
-"robotsix_central_deploy" = ["ui/*.html", "ui/*.md"]
 
 [tool.ruff.lint]
 extend-select = ["S"]

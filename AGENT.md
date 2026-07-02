@@ -1,5 +1,8 @@
 # AGENT.md — robotsix-central-deploy Lifecycle Server
 
+> Repo conventions (tooling, CI gates, packaging, deploy contracts) follow the
+> shared [robotsix-standards](https://github.com/damien-robotsix/robotsix-standards).
+
 ## Overview
 
 `robotsix-central-deploy` is a **FastAPI** lifecycle server that manages Docker containers for the robotsix fleet. It acts as a single control plane to start, stop, restart, deploy, rollback, and inspect every managed component. It also provides a **reverse-proxy gateway** so each component is reachable at a well-known URL under the deploy domain, an **onboarding pipeline** for adding new services from docker-compose repos, a **settings API** for operator runtime configuration, and a **registry checker** that monitors GHCR for newer image versions.
