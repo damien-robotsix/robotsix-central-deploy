@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Record volume hash during config assist so drift detection works after auto-detected config changes.
 - Add a `dependency-review` CI job (`actions/dependency-review-action`, `fail-on-severity: high`) that blocks PRs introducing dependencies with known high-severity vulnerabilities. Requires the repository's Dependency graph to be enabled (now on).
 - Config drift UI: when a component's config has been edited out-of-band, the dashboard now shows a warning banner with Import/Edit-stale options, blocks blind Save with a conflict diff panel, and supports import-from-volume and explicit overwrite flows.
 - Add inverse preflight gate: `/onboard/preflight` now returns 422 when a service declares `robotsix.deploy.config-target` but the repo yields no config schema (no `config/config.yaml`, `config/config.example.yaml`, or valid template). This prevents deploying containers with empty config volumes that would crash-loop.
