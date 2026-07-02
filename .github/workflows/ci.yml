@@ -35,24 +35,69 @@ jobs:
           diff docs/DEPLOY_CONTRACT.md src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md
 
   tests:
-    # The reusable python-ci.yml's nested `tests` job uploads SARIF, so it
-    # requests `security-events: write`. A caller job MUST grant at least
-    # that, or GitHub rejects the reusable-workflow call with a
-    # startup_failure ("nested job 'tests' is requesting …").
+    # Inlined from the reusable python-ci.yml to avoid astral-sh/setup-uv
+    # manifest-fetch timeouts (the action fetches raw.githubusercontent.com
+    # and sometimes hits a 5-second Node.js fetch timeout in CI).  Using
+    # `pip install uv` instead — no manifest fetch, no timeout risk.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@5cd8c1facb02299da618979e7a55f1953f9c075a  # main
-    with:
-      python-version: "3.14"
-      # central-deploy declares no `tracing` extra; the reusable defaults
-      # install-extras to "tracing", so pin it empty to avoid a failing
-      # `uv sync --extra tracing`.
-      install-extras: ""
-      cov-package: "robotsix_central_deploy"
-      coverage-threshold: "80"
-      mypy-advisory: false
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dev deps
+        run: uv sync --frozen
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+
+      - name: deptry (dependency hygiene)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run --with deptry deptry .
+
+      - name: Dependency audit (CVE scan)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: |
+          if uv audit --help >/dev/null 2>&1; then
+            uv audit --frozen --preview
+          else
+            uv export --frozen --no-hashes | grep -v '^-e \.' | uv run --with pip-audit pip-audit -r /dev/stdin
+          fi
+
+      - name: Ruff (lint + format check)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: |
+          uv run ruff check --output-format=github .
+          uv run ruff format --check --diff .
+
+      - name: Mypy (static type check)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run mypy src/ --strict
+
+      - name: Bandit (security SAST)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
+
+      - name: Run tests
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+          GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
+        run: |
+          uv run --with pytest-xdist --with pytest-cov pytest tests/ -n auto --dist loadscope -x -m "not docker" --tb=long --cov="robotsix_central_deploy" --cov-fail-under="80" --cov-report=term-missing
 
   audit:
     runs-on: ubuntu-latest
