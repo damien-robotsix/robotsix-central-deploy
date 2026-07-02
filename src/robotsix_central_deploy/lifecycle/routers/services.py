@@ -36,6 +36,7 @@ from ..deps import (
     _resolve_placeholders,
     _seed_for_detect,
     _validate_account_ids,
+    _validate_config_or_422,
 )
 from ..models import (
     ActionResponse,
@@ -1145,7 +1146,9 @@ async def get_service_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No config schema for component '{name}'",
         )
-    current_raw = await config_yaml_store.get_current(name) or template
+    current_raw = await config_yaml_store.get_current(name)
+    if current_raw is None:
+        current_raw = _merge_config(template, {}, {})
     current_masked = _mask_secrets(template, current_raw)
     comp_cfg = component_config_store.get(name)
 
@@ -1225,10 +1228,17 @@ async def put_service_config(
         )
     # --- end drift guard ---
 
-    merged = _merge_config(template, existing, body.values)
+    try:
+        merged = _merge_config(template, existing, body.values)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": str(exc)},
+        )
     if "accounts" in merged:
         _validate_account_ids(merged)  # Bug 2: reject invalid id slugs
     merged = _prune_unset(merged, existing)  # Bug 3: prune resurrected empty fields
+    _validate_config_or_422(template, merged)
 
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, merged)

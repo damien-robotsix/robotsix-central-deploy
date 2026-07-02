@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -390,18 +389,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
 
-    # -- Migrate existing config templates to use the SECRET sentinel ------
-    for _dyn_cfg in component_config_store.all():
-        _tmpl = await _config_yaml_store.get_template(_dyn_cfg.id)
-        if _tmpl:
-            _annotated = _annotate_secret_sentinels(_tmpl)
-            if _annotated != _tmpl:
-                await _config_yaml_store.save_template(
-                    _dyn_cfg.id,
-                    _annotated,  # type: ignore[arg-type]
-                )
-                logger.info("Migrated config template sentinels for %s", _dyn_cfg.id)
-
     # --- Volume audit subsystem ---
     global _volume_audit_scheduler
     _volume_audit_task: asyncio.Task[Any] | None = None
@@ -631,43 +618,84 @@ def _fetch_fresh_config_assist(
 
 
 _CONFIG_SECRET_SENTINEL = "SECRET"
-"""Template authors mark a sensitive leaf by setting its value to
+"""Legacy template authors mark a sensitive leaf by setting its value to
 ``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``) in their
-``config/config.yaml``. Any other value (empty string, default text,
-integer, etc.) is NOT treated as a secret."""
+``config/config.yaml``."""
 
 
-def _annotate_secret_sentinels(template: object) -> object:
-    """Walk *template* (from parse_config_yaml) and normalise secret leaves.
+def _is_json_schema(schema: dict[str, Any]) -> bool:
+    """Return True when *schema* is a JSON Schema dict (has ``"type"`` key).
 
-    Secrets are detected **purely by the explicit ``SECRET`` sentinel** —
-    a template author marks a sensitive leaf by setting its value to
-    ``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``) in the
-    component's ``config/config.yaml``. There is no name-based heuristic:
-    a field named ``api_key`` or ``password`` is a plain editable field
-    unless its template value is ``"SECRET"`` (this is what lets a genuinely
-    non-secret ``langfuse.public_key`` render as an ordinary input).
-
-    Rules:
-    - value already equals ``_CONFIG_SECRET_SENTINEL`` → keep
-    - dict value → recurse
-    - list where first item is a dict → annotate first item, return
-      ``[annotated_item]`` (single-element template list, consistent with
-      the array-of-objects schema convention used by ``_mask_secrets`` and
-      ``_merge_config``)
-    - anything else (scalar, scalar list) → leave unchanged
+    Legacy YAML-style templates are plain dicts without ``"type"``.
     """
-    if not isinstance(template, dict):
-        return template
-    result: dict[str, object] = {}
-    for key, val in template.items():
-        if isinstance(val, dict):
-            result[key] = _annotate_secret_sentinels(val)
-        elif isinstance(val, list) and val and isinstance(val[0], dict):
-            result[key] = [_annotate_secret_sentinels(val[0])]
-        else:
-            result[key] = val
-    return result
+    return "type" in schema
+
+
+def _is_secret_prop(prop_schema: dict[str, Any]) -> bool:
+    """Return True when *prop_schema* marks a secret field.
+
+    Secrets are detected via ``"format": "password"`` and
+    ``"writeOnly": true`` (pydantic ``SecretStr`` convention).
+    """
+    return (
+        prop_schema.get("format") == "password" and prop_schema.get("writeOnly") is True
+    )
+
+
+def _resolve_ref(prop: dict[str, Any], root_schema: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a local ``$ref`` (``#/$defs/<Name>``) against *root_schema*.
+
+    Returns the original dict if no ``$ref`` is present.  External URI
+    references are not supported.
+    """
+    ref = prop.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        defs = root_schema.get("$defs", {})
+        def_name = ref[len("#/$defs/") :]
+        resolved = defs.get(def_name)
+        if isinstance(resolved, dict):
+            return resolved
+    return prop
+
+
+def _coerce_by_schema(prop_schema: dict[str, Any], sval: Any) -> Any:
+    """Coerce *sval* to the type declared in JSON Schema ``type`` keyword.
+
+    Raises ``ValueError`` when coercion fails — callers surface the error
+    as HTTP 422.
+    """
+    schema_type = prop_schema.get("type")
+    if schema_type == "integer":
+        if isinstance(sval, bool) or not isinstance(sval, (int, float)):
+            try:
+                return int(sval)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"expected integer, got {type(sval).__name__}: {sval!r}"
+                ) from exc
+        return int(sval)
+    if schema_type == "number":
+        if isinstance(sval, bool):
+            raise ValueError(f"expected number, got bool: {sval!r}")
+        try:
+            return float(sval)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"expected number, got {type(sval).__name__}: {sval!r}"
+            ) from exc
+    if schema_type == "boolean":
+        if isinstance(sval, bool):
+            return sval
+        if isinstance(sval, str):
+            low = sval.strip().lower()
+            if low in ("true", "1", "yes", "on"):
+                return True
+            if low in ("false", "0", "no", "off", ""):
+                return False
+        raise ValueError(f"expected boolean, got {type(sval).__name__}: {sval!r}")
+    if schema_type == "string":
+        return str(sval)
+    return sval
 
 
 # ---------------------------------------------------------------------------
@@ -694,20 +722,53 @@ def _canonical_hash(d: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+def _mask_secrets(schema: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Return *current* with secret leaf values replaced by ``"***"``.
 
-    A leaf in *template* is treated as a secret when its value is
-    ``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``). Template
-    authors mark sensitive fields explicitly — no name-based heuristic
-    is applied.
+    Supports two formats:
 
-    * If the template value is ``"SECRET"`` and *current* has a
-      non-empty, non-sentinel string value: mask as ``"***"``.
-    * If the template value is ``"SECRET"`` but *current* is missing or
-      also ``"SECRET"``: return ``""`` (unconfigured secret).
-    * Otherwise: pass through from *current* (or fall back to *template*).
+    * **JSON Schema** (detected by presence of ``"type"`` key): secrets are
+      detected via ``"format": "password"`` + ``"writeOnly": true``.
+    * **Legacy YAML template**: secrets are detected via the
+      ``_CONFIG_SECRET_SENTINEL`` value (``"SECRET"``).
     """
+
+    if _is_json_schema(schema):
+        return _mask_secrets_json_schema(schema, current)
+    return _mask_secrets_legacy(schema, current)
+
+
+def _mask_secrets_json_schema(
+    schema: dict[str, Any], current: dict[str, Any]
+) -> dict[str, Any]:
+
+    def _recursive(
+        i_schema: dict[str, Any], i_current: dict[str, Any]
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, prop in i_schema.get("properties", {}).items():
+            resolved = _resolve_ref(prop, i_schema)
+            cval = i_current.get(key)
+            if _is_secret_prop(resolved):
+                if isinstance(cval, str) and cval and cval != "***":
+                    result[key] = "***"
+                else:
+                    result[key] = ""
+            elif resolved.get("type") == "object":
+                result[key] = (
+                    _recursive(resolved, cval) if isinstance(cval, dict) else {}
+                )
+            else:
+                result[key] = cval if key in i_current else ""
+        return result
+
+    return _recursive(schema, current)
+
+
+def _mask_secrets_legacy(
+    template: dict[str, Any], current: dict[str, Any]
+) -> dict[str, Any]:
+    """Legacy secret masking (YAML templates with ``SECRET`` sentinel)."""
 
     def _recursive(
         i_template: dict[str, Any], i_current: dict[str, Any]
@@ -718,7 +779,6 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
             if isinstance(tval, dict) and isinstance(cval, dict):
                 result[key] = _recursive(tval, cval)
             elif isinstance(tval, list) and isinstance(cval, list):
-                # Object-array: mask each item using the first schema item as the template.
                 item_template = tval[0] if tval and isinstance(tval[0], dict) else None
                 if item_template:
                     result[key] = [
@@ -728,23 +788,97 @@ def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str
                         for item in cval
                     ]
                 else:
-                    result[key] = cval  # scalar array — pass through unchanged
+                    result[key] = cval
             elif (
                 tval == _CONFIG_SECRET_SENTINEL
                 and isinstance(cval, str)
                 and cval
                 and cval != _CONFIG_SECRET_SENTINEL
             ):
-                # Configured secret → mask it
                 result[key] = "***"
             elif tval == _CONFIG_SECRET_SENTINEL:
-                # Unconfigured secret (no current value, or current == sentinel) → empty
                 result[key] = ""
             else:
                 result[key] = cval if key in i_current else tval
         return result
 
     return _recursive(template, current)
+
+
+def _merge_config(
+    schema: dict[str, Any],
+    existing: dict[str, Any],
+    submitted: dict[str, Any],
+    *,
+    prefer_existing_for_unset: bool = False,
+) -> dict[str, Any]:
+    """Deep-merge *submitted* over *existing*, respecting secret handling.
+
+    Supports two formats:
+
+    * **JSON Schema** (detected by presence of ``"type"`` key): iterates
+      ``"properties"``, resolves ``$ref``, coerces by ``type``, detects
+      secrets via ``format:password`` + ``writeOnly:true``.
+    * **Legacy YAML template**: iterates dict keys directly, coerces via
+      ``_coerce_to_template``, detects secrets via ``_CONFIG_SECRET_SENTINEL``.
+
+    *prefer_existing_for_unset*: when True, a key absent from *submitted*
+    falls back to ``existing[key]`` (not the template default) whenever the
+    operator already has a value for it.
+    """
+
+    if _is_json_schema(schema):
+        return _merge_config_json_schema(
+            schema,
+            existing,
+            submitted,
+            prefer_existing_for_unset=prefer_existing_for_unset,
+        )
+    return _merge_config_legacy(
+        schema, existing, submitted, prefer_existing_for_unset=prefer_existing_for_unset
+    )
+
+
+def _merge_config_json_schema(
+    schema: dict[str, Any],
+    existing: dict[str, Any],
+    submitted: dict[str, Any],
+    *,
+    prefer_existing_for_unset: bool = False,
+) -> dict[str, Any]:
+
+    def _recursive(
+        i_schema: dict[str, Any],
+        i_existing: dict[str, Any],
+        i_submitted: dict[str, Any],
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, prop in i_schema.get("properties", {}).items():
+            resolved = _resolve_ref(prop, i_schema)
+            if _is_secret_prop(resolved) and i_submitted.get(key) == "***":
+                result[key] = i_existing.get(key, "")
+            elif resolved.get("type") == "object":
+                sub_existing = (
+                    i_existing[key] if isinstance(i_existing.get(key), dict) else {}
+                )
+                sub_submitted = (
+                    i_submitted[key] if isinstance(i_submitted.get(key), dict) else {}
+                )
+                result[key] = _recursive(resolved, sub_existing, sub_submitted)
+            elif key in i_submitted:
+                try:
+                    result[key] = _coerce_by_schema(resolved, i_submitted[key])
+                except ValueError:
+                    raise
+            elif prefer_existing_for_unset and key in i_existing:
+                result[key] = i_existing[key]
+            elif "default" in resolved:
+                result[key] = resolved["default"]
+            else:
+                result[key] = ""
+        return result
+
+    return _recursive(schema, existing, submitted)
 
 
 def _coerce_to_template(tval: object, sval: object) -> object:
@@ -780,43 +914,17 @@ def _coerce_to_template(tval: object, sval: object) -> object:
             return float(sval)
         except ValueError:
             return sval
-    if isinstance(tval, (list, dict)):
-        try:
-            return json.loads(sval)
-        except ValueError, TypeError:
-            return sval
     return sval
 
 
-def _merge_config(
+def _merge_config_legacy(
     template: dict[str, Any],
     existing: dict[str, Any],
     submitted: dict[str, Any],
     *,
     prefer_existing_for_unset: bool = False,
 ) -> dict[str, Any]:
-    """Deep-merge *submitted* over *existing*, respecting secret sentinel.
-
-    For each key in *template*:
-    - If the key is a nested dict in all three, recurse.
-    - If the template leaf is ``_CONFIG_SECRET_SENTINEL`` AND
-      ``submitted[key] == "***"``: keep ``existing[key]`` unchanged (or
-      fall back to ``""`` when there is no existing value).
-    - Else: use the submitted value (coerced back to the template leaf's
-      type, since the UI submits everything as strings) or, when the key
-      was not submitted, fall back to the template default.
-
-    *prefer_existing_for_unset*: when True, a key absent from *submitted*
-    falls back to ``existing[key]`` (not the template default) whenever the
-    operator already has a value for it. This is for callers that pass a
-    SPARSE submission — e.g. config-assist, whose seed values include only
-    the few fields the operator typed. Without it, every field the operator
-    did not re-type (secrets like an LLM api_key, other config sections)
-    would be reset to the template default and silently lost. The Save form,
-    which renders every field, keeps the default (False) so an absent key
-    correctly means "cleared → reset to default". Repo-agnostic: no
-    knowledge of any particular config key.
-    """
+    """Legacy deep-merge (YAML templates with ``SECRET`` sentinel)."""
 
     def _recursive(
         i_template: dict[str, Any],
@@ -836,8 +944,6 @@ def _merge_config(
                 and tval
                 and isinstance(tval[0], dict)
             ):
-                # Array of objects: merge each submitted item against the corresponding existing item,
-                # preserving secret sentinels ("***") per field within each item.
                 item_template = tval[0]
                 submitted_list = i_submitted[key]
                 raw_existing = i_existing.get(key)
@@ -858,36 +964,36 @@ def _merge_config(
             elif key in i_submitted:
                 result[key] = _coerce_to_template(tval, i_submitted[key])
             elif prefer_existing_for_unset and key in i_existing:
-                # Sparse submission (e.g. config-assist): a key the operator
-                # did not re-type keeps their existing value instead of being
-                # reset to the template default and lost.
                 result[key] = i_existing[key]
             else:
                 result[key] = tval
         return result
 
-    merged = _recursive(template, existing, submitted)
-    # Belt-and-suspenders: a secret leaf that was never submitted (or whose
-    # whole parent section was absent from the form) would otherwise reach
-    # storage as the literal "SECRET" sentinel — and be ingested as a real
-    # credential by components that read config.yaml directly (e.g. auto-mail,
-    # which has no split-config sanitiser). Strip every residual sentinel.
-    # ``merged`` is always a dict at the top level, so the recursive strip
-    # returns a dict here; the typed local narrows the ``Any`` for mypy.
-    stripped: dict[str, Any] = _strip_secret_sentinels(merged)
-    return stripped
+    return _recursive(template, existing, submitted)
 
 
-def _strip_secret_sentinels(value: Any) -> Any:
-    """Recursively replace any residual ``_CONFIG_SECRET_SENTINEL`` scalar
-    with ``""`` so the deployed config never contains the literal sentinel."""
-    if value == _CONFIG_SECRET_SENTINEL:
-        return ""
-    if isinstance(value, dict):
-        return {k: _strip_secret_sentinels(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_strip_secret_sentinels(v) for v in value]
-    return value
+def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> None:
+    """Validate *values* against JSON Schema, raising HTTP 422 on failure.
+
+    When *schema* is not a JSON Schema (legacy YAML template), validation
+    is skipped — those templates have no formal schema to validate against.
+    """
+    if not _is_json_schema(schema):
+        return
+
+    import jsonschema
+
+    try:
+        jsonschema.validate(instance=values, schema=schema)
+    except jsonschema.ValidationError as exc:
+        path = ".".join(str(p) for p in exc.absolute_path)
+        loc = f" at '{path}'" if path else ""
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": f"Config validation error{loc}: {exc.message}",
+            },
+        )
 
 
 _ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")

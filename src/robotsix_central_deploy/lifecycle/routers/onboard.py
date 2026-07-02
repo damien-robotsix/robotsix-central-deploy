@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -20,7 +21,7 @@ from ..deps import (
     _get_job_registry,
     _namespace_spec_volumes,
     _merge_config,
-    _annotate_secret_sentinels,
+    _validate_config_or_422,
     _canonical_hash,
     JobRegistry,
 )
@@ -149,10 +150,8 @@ async def onboard_preflight(
 
     from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
     from robotsix_central_deploy.onboard.parser import (
-        ConfigParseError,
         ParseError,
         parse_compose,
-        parse_config_yaml,
     )
 
     # Validate name slug
@@ -201,19 +200,17 @@ async def onboard_preflight(
             detail={"error": "compose validation failed", "violations": e.violations},
         )
 
-    # Parse config/config.yaml if present; fall back to config template
-    _config_bytes = (
-        repo_files.config_yaml
-        if repo_files.config_yaml is not None
-        else repo_files.config_yaml_template
-    )
-    if _config_bytes is not None:
+    # Parse config/config.schema.json if present
+    if repo_files.config_schema_json is not None:
         try:
-            derived_spec.config_schema = _annotate_secret_sentinels(
-                parse_config_yaml(_config_bytes)
-            )  # type: ignore[assignment]
-        except ConfigParseError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            derived_spec.config_schema = json.loads(repo_files.config_schema_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"config/config.schema.json is not valid JSON: {exc}"},
+            )
+    else:
+        derived_spec.config_schema = None
 
     # Preflight gate: config (or template) present but no config-target label
     if derived_spec.config_schema is not None and derived_spec.config_volume is None:
@@ -518,7 +515,15 @@ async def onboard_confirm(
     # config.yaml to the real config volume so the container starts healthy.
     if spec.config_schema is not None:
         await config_yaml_store.save_template(spec.name, spec.config_schema)
-        merged = _merge_config(spec.config_schema, {}, req.config_values or {})
+        try:
+            merged = _merge_config(spec.config_schema, {}, req.config_values or {})
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": str(exc)},
+            )
+        # Validate merged result against schema before writing
+        _validate_config_or_422(spec.config_schema, merged)
         if spec.config_volume is not None:
             try:
                 await backend.write_config_to_volume(spec.config_volume, merged)
