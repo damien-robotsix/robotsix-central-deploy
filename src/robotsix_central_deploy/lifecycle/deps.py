@@ -829,7 +829,10 @@ def _merge_config(
 
     if _is_json_schema(schema):
         return _merge_config_json_schema(
-            schema, existing, submitted, prefer_existing_for_unset=prefer_existing_for_unset
+            schema,
+            existing,
+            submitted,
+            prefer_existing_for_unset=prefer_existing_for_unset,
         )
     return _merge_config_legacy(
         schema, existing, submitted, prefer_existing_for_unset=prefer_existing_for_unset
