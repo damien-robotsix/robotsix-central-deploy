@@ -1351,6 +1351,8 @@ class DockerSdkBackend(ExecutionBackend):
 
         def _scan() -> Any:
             for summary in self._client.containers.list():
+                if not summary.id:
+                    continue
                 try:
                     full = self._client.containers.get(summary.id)
                 except docker.errors.NotFound:
