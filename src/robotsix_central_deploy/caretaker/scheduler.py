@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from .mill_client import MillClient
-from .models import CaretakerFinding, CaretakerReport
+from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import phase_health, phase_update, phase_volumes
 
 if TYPE_CHECKING:
@@ -102,6 +102,29 @@ class CaretakerScheduler:
             )
             findings.extend(update_findings)
             phases_run.append("update")
+
+            # Auto-prune dangling images left behind by applied updates
+            # (opt-in setting); rollback targets in the store are protected.
+            applied = any(
+                f.kind == FindingKind.UPDATE_APPLIED for f in update_findings
+            )
+            if applied and settings.image_auto_prune:
+                try:
+                    # Imported lazily: the lifecycle package's __init__ chain
+                    # imports this module, so a top-level import is circular.
+                    from ..lifecycle.backend import (  # noqa: PLC0415
+                        collect_protected_image_refs,
+                    )
+
+                    protected = await collect_protected_image_refs(self._store)
+                    reclaimed = await self._backend.prune_images(protected)
+                    if reclaimed:
+                        logger.info(
+                            "caretaker: image auto-prune reclaimed %d bytes",
+                            reclaimed,
+                        )
+                except Exception:
+                    logger.warning("caretaker: image auto-prune failed", exc_info=True)
         except Exception as exc:
             logger.exception("phase_update crashed")
             errors.append(f"phase_update: {exc}")

@@ -92,6 +92,14 @@ class ExecutionBackend(ABC):
         ...
 
     @abstractmethod
+    async def prune_images(self, protected_refs: set[str]) -> int:
+        """Remove dangling images, skipping any whose image id or repo digest
+        is in *protected_refs* (rollback targets must stay pullable-free —
+        rollback recreates containers from a local image id, which Docker
+        cannot re-pull). Returns bytes reclaimed."""
+        ...
+
+    @abstractmethod
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
@@ -246,6 +254,9 @@ class NoopBackend(ExecutionBackend):
     async def prune_builds(self) -> int:
         return 0
 
+    async def prune_images(self, protected_refs: set[str]) -> int:
+        return 0
+
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
@@ -397,6 +408,10 @@ class DockerBackend(ExecutionBackend):
 
     async def prune_builds(self) -> int:
         # CLI backend does not support build prune.
+        return 0
+
+    async def prune_images(self, protected_refs: set[str]) -> int:
+        # CLI backend does not support image prune.
         return 0
 
     async def write_config_to_volume(
@@ -1337,6 +1352,43 @@ class DockerSdkBackend(ExecutionBackend):
         )
         return int(result.get("SpaceReclaimed", 0))
 
+    async def prune_images(self, protected_refs: set[str]) -> int:
+        """Remove dangling (untagged) images one by one, skipping protected refs.
+
+        Docker's bulk prune API has no exclusion list, so images are removed
+        individually. An image is protected when its id or any of its repo
+        digests appears in *protected_refs*; images still used by a container
+        fail removal with a 409, which is swallowed.
+        """
+        import docker  # noqa: PLC0415
+
+        loop = asyncio.get_running_loop()
+
+        def _prune() -> int:
+            reclaimed = 0
+            try:
+                dangling = self._client.images.list(filters={"dangling": True})
+            except docker.errors.APIError as exc:
+                logger.warning("image prune: list failed: %s", exc)
+                return 0
+            for img in dangling:
+                digests = {
+                    rd.split("@")[1]
+                    for rd in img.attrs.get("RepoDigests", [])
+                    if "@" in rd
+                }
+                if img.id in protected_refs or digests & protected_refs:
+                    continue
+                size = int(img.attrs.get("Size", 0))
+                try:
+                    self._client.images.remove(img.id)
+                    reclaimed += size
+                except docker.errors.APIError as exc:
+                    logger.debug("image prune: skipped %s: %s", img.id, exc)
+            return reclaimed
+
+        return await loop.run_in_executor(None, _prune)
+
     async def _find_by_config_hostname(self, hostname: str) -> Any:
         """Find the running container whose ``Config.Hostname`` is *hostname*.
 
@@ -1468,3 +1520,22 @@ class DockerSdkBackend(ExecutionBackend):
             raise RuntimeError(
                 f"failed to launch self-update container: {exc}"
             ) from exc
+
+
+async def collect_protected_image_refs(store: Any) -> set[str]:
+    """Image ids/digests that must survive an image prune.
+
+    Every record's deployed and previous digests are rollback targets;
+    ``rollback`` recreates containers from a local image id, which Docker
+    cannot re-pull, so pruning them would break rollback.
+    """
+    protected: set[str] = set()
+    for record in await store.list_all():
+        for ref in (
+            record.deployed_image_digest,
+            record.previous_image_digest,
+            record.image_revision,
+        ):
+            if ref:
+                protected.add(ref)
+    return protected

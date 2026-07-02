@@ -267,6 +267,80 @@ class TestScheduler:
         assert args[0].startswith("http://localhost:9999")
 
     @pytest.mark.asyncio
+    async def test_image_auto_prune_after_update(self, scheduler_fixtures):
+        from robotsix_central_deploy.lifecycle.models import DeployOutcome
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        scheduler, store, backend, ccs, http = scheduler_fixtures
+        await scheduler._settings_store.put(
+            SystemSettings(caretaker_enabled=True, image_auto_prune=True)
+        )
+        _register_mill(ccs)
+        http.post = AsyncMock(return_value=MagicMock(is_success=True))
+
+        record = ServiceRecord(
+            name="svc",
+            image="repo:v1",
+            repo_id="my-repo",
+            update_available=True,
+            latest_registry_digest="sha256:new",
+        )
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:new",
+                previous_digest="sha256:old",
+                state=ServiceState.RUNNING,
+            )
+        )
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.prune_images = AsyncMock(return_value=1234)
+
+        await scheduler.run_once()
+
+        backend.prune_images.assert_awaited_once()
+        protected = backend.prune_images.call_args[0][0]
+        assert "sha256:new" in protected
+        assert "sha256:old" in protected
+
+    @pytest.mark.asyncio
+    async def test_no_image_prune_when_disabled(self, scheduler_fixtures):
+        from robotsix_central_deploy.lifecycle.models import DeployOutcome
+
+        scheduler, store, backend, ccs, http = scheduler_fixtures
+        _register_mill(ccs)
+        http.post = AsyncMock(return_value=MagicMock(is_success=True))
+
+        record = ServiceRecord(
+            name="svc",
+            image="repo:v1",
+            repo_id="my-repo",
+            update_available=True,
+            latest_registry_digest="sha256:new",
+        )
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:new",
+                previous_digest="sha256:old",
+                state=ServiceState.RUNNING,
+            )
+        )
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.prune_images = AsyncMock()
+
+        await scheduler.run_once()
+        backend.prune_images.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_get_status(self, scheduler_fixtures):
         scheduler, store, backend, ccs, http = scheduler_fixtures
         status = await scheduler.get_status()

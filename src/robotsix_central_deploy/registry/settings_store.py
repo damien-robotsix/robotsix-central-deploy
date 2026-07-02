@@ -34,6 +34,7 @@ class SystemSettings(BaseModel):
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
     mill_component_id: str = "mill"  # component id the caretaker reports to
+    image_auto_prune: bool = False  # prune dangling images after updates
 
     @field_validator("log_level")
     @classmethod
@@ -138,5 +139,6 @@ class SystemSettingsStore:
                 "caretaker_enabled": stored.caretaker_enabled,
                 "caretaker_interval_hours": stored.caretaker_interval_hours,
                 "mill_component_id": stored.mill_component_id,
+                "image_auto_prune": stored.image_auto_prune,
             }
         )
