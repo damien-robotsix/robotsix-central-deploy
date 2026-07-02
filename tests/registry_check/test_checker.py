@@ -86,7 +86,7 @@ class TestRegistryChecker:
         assert result == "sha256:abc123"
         # check token call
         get_url = mock_client.get.call_args[0][0]
-        assert "auth.docker.io" in get_url
+        assert get_url.startswith("https://auth.docker.io/token")
         assert "scope=repository:robotsix/mill:pull" in get_url
         # check manifest call
         head_url = mock_client.head.call_args[0][0]
