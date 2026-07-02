@@ -113,6 +113,9 @@ class LifecycleConfig(BaseModel):
     caretaker_enabled: bool = False  # ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED
     caretaker_interval_hours: int = 24  # ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS
 
+    # Image auto-prune (opt-in; prune dangling images after deploy/rollback)
+    image_auto_prune: bool = False
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

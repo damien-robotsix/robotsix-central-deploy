@@ -194,9 +194,13 @@
       "default": 24,
       "title": "Caretaker Interval Hours",
       "type": "integer"
+    },
+    "image_auto_prune": {
+      "default": false,
+      "title": "Image Auto Prune",
+      "type": "boolean"
     }
   },
   "title": "LifecycleConfig",
   "type": "object"
 }
-
