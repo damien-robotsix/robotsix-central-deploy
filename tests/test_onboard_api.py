@@ -14,7 +14,11 @@ from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
-from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
+from robotsix_central_deploy.lifecycle.models import (
+    ExecutionBackendType,
+    ServiceRecord,
+    ServiceState,
+)
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.onboard.models import (
     DerivedSpec,
@@ -75,7 +79,7 @@ def _reset_globals(monkeypatch, tmp_path):
     monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
-        execution_backend="noop",
+        execution_backend=ExecutionBackendType.NOOP,
         api_key="test-key",
     )
     store = InMemoryStore()

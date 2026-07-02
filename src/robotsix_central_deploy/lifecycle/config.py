@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .models import StoreBackend
+from .models import ExecutionBackendType, StoreBackend
 
 
 class LifecycleConfig(BaseSettings):
@@ -33,7 +33,7 @@ class LifecycleConfig(BaseSettings):
     store_path: str = "lifecycle_state.yaml"
 
     # Execution backend
-    execution_backend: str = "docker_sdk"  # "docker_sdk" | "docker" | "noop"
+    execution_backend: ExecutionBackendType = ExecutionBackendType.DOCKER_SDK
 
     # Dynamic component config store
     component_config_store_path: str = "data/component_configs.json"

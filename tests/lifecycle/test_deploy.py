@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend
 from robotsix_central_deploy.lifecycle.models import (
+    ExecutionBackendType,
     ServiceRecord,
     ServiceState,
 )
@@ -75,7 +76,7 @@ def _ensure_registry(monkeypatch, registry):
     monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
-        execution_backend="noop",
+        execution_backend=ExecutionBackendType.NOOP,
         api_key="test-key",
     )
     store = InMemoryStore()

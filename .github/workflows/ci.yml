@@ -151,6 +151,17 @@ jobs:
               violations=$((violations + 1))
             fi
           done
+          # Execution-backend strings (exclude models.py where the enum lives,
+          # and backend.py where "docker" references the CLI binary, not the backend type)
+          for pattern in '"docker_sdk"' '"docker"' '"noop"'; do
+            matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
+              --exclude='models.py' --exclude='backend.py' || true)
+            if [ -n "$matches" ]; then
+              echo "::error file={},line={}::Raw execution-backend string $pattern found outside models.py"
+              echo "$matches"
+              violations=$((violations + 1))
+            fi
+          done
           if [ "$violations" -gt 0 ]; then
             echo "::error::Found $violations violation(s) of enum-only string policy"
             exit 1

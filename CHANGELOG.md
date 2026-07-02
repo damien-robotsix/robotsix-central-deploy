@@ -5,6 +5,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Add `"volumes"`, `"login"`, and `"logout"` to `RESERVED_NAMES` in the gateway router to prevent onboarding components that would shadow central-deploy routes.
+- Define `ExecutionBackendType(str, Enum)` in `lifecycle/models.py` with members `DOCKER_SDK`, `DOCKER`, `NOOP`, replacing bare `str` typing for the `execution_backend` config field. Update config, deps, cli, and all test fixtures to use the enum. Add grep-lint CI check for raw execution-backend strings outside `models.py`.
 - Add `docker_sdk_timeout` config (default 120 s) to prevent indefinite blocking on Docker SDK operations like `images.pull()`; wired into `DockerSdkBackend` constructor and `LifecycleConfig` (env: `ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT`)
 - Adopt `robotsix-yaml-config` for shared YAML primitives: replace local `_deep_merge` with `robotsix_yaml_config.deep_merge`, use `read_yaml_file` for file-based YAML reads in `store.py` and `registry/loader.py`, and add typed error handling (`YamlParseError`, `InvalidConfigStructureError`) at remaining `yaml.safe_load` sites in `backend.py` and `onboard/parser.py`.
 - Add `.trivyignore` to suppress known CVEs in Debian base image system packages (perl, util-linux, tar, zlib1g, passwd, sysvinit-utils) that are not exploitable in the container's attack surface
