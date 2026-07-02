@@ -8,12 +8,15 @@ import httpx
 import pytest
 
 from robotsix_central_deploy.caretaker.models import CaretakerReport
-from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
+
+# Import lifecycle.models first to break the circular import through
+# lifecycle → deps → caretaker.scheduler (deps.CaretakerScheduler at module-level).
 from robotsix_central_deploy.lifecycle.models import (
     ComponentInspect,
     ServiceRecord,
     ServiceState,
 )
+from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 
@@ -93,6 +96,12 @@ class TestScheduler:
         store.list_all = AsyncMock(return_value=[])
         backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
 
+        # Prevent spurious disk-warning findings in the sandbox
+        monkeypatch.setattr(
+            "shutil.disk_usage",
+            lambda path: (10**12, 9 * 10**11, 10**11),
+        )
+
         # Force mill URL via env
         monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
@@ -147,6 +156,12 @@ class TestScheduler:
         monkeypatch.setenv("MILL_INGEST_URL", "http://localhost:9999")
         store.list_all = AsyncMock(return_value=[])
         backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+
+        # Prevent spurious disk-warning findings in the sandbox
+        monkeypatch.setattr(
+            "shutil.disk_usage",
+            lambda path: (10**12, 9 * 10**11, 10**11),
+        )
 
         report = await scheduler.run_once()
         # No findings → mill_reachable=True (no ingest attempted means we don't know
