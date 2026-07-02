@@ -663,6 +663,13 @@
         </td>
       </tr>
       <tr>
+        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Auto-Prune Old Images</td>
+        <td style="padding:6px 12px;">
+          <input id="s-image-prune" type="checkbox" style="accent-color:var(--blue);" />
+          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">remove dangling images after updates (rollback images are kept)</span>
+        </td>
+      </tr>
+      <tr>
         <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Daily Caretaker Pass</td>
         <td style="padding:6px 12px;">
           <input id="s-caretaker-enabled" type="checkbox" onchange="onCaretakerEnabledChange()"
@@ -2647,6 +2654,7 @@ async function loadSettings() {
     document.getElementById('s-caretaker-enabled').checked = !!s.caretaker_enabled;
     document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
     document.getElementById('s-mill-component').value = s.mill_component_id || 'mill';
+    document.getElementById('s-image-prune').checked = !!s.image_auto_prune;
     document.getElementById('s-caretaker-interval-row').style.display = s.caretaker_enabled ? '' : 'none';
     document.getElementById('s-mill-component-row').style.display = s.caretaker_enabled ? '' : 'none';
     // Also update module-level variable used for service shortcut links
@@ -2667,6 +2675,7 @@ async function saveSettings(event) {
     caretaker_enabled: document.getElementById('s-caretaker-enabled').checked,
     caretaker_interval_hours: parseInt(document.getElementById('s-caretaker-interval').value),
     mill_component_id: document.getElementById('s-mill-component').value.trim() || 'mill',
+    image_auto_prune: document.getElementById('s-image-prune').checked,
   };
   try {
     var res = await fetch('/settings', {

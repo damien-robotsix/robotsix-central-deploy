@@ -328,6 +328,20 @@ class TestSettingsRouter:
         )
         assert resp.status_code == 422
 
+    async def test_put_settings_image_auto_prune_persisted(
+        self, client: AsyncClient, auth_headers, settings_store
+    ):
+        resp = await client.put(
+            "/settings",
+            json={"log_level": "INFO", "image_auto_prune": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["image_auto_prune"] is True
+
+        stored = await settings_store.get()
+        assert stored.image_auto_prune is True
+
     async def test_put_settings_invalid_caretaker_interval_returns_422(
         self, client: AsyncClient, auth_headers, settings_store
     ):

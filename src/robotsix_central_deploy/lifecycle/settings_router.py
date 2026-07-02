@@ -40,6 +40,7 @@ class SystemSettingsResponse(BaseModel):
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
     mill_component_id: str = "mill"
+    image_auto_prune: bool = False
 
 
 class SystemSettingsUpdate(BaseModel):
@@ -53,6 +54,7 @@ class SystemSettingsUpdate(BaseModel):
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
     mill_component_id: str = "mill"
+    image_auto_prune: bool = False
 
     @field_validator("log_level")
     @classmethod
@@ -97,6 +99,7 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         caretaker_enabled=settings.caretaker_enabled,
         caretaker_interval_hours=settings.caretaker_interval_hours,
         mill_component_id=settings.mill_component_id,
+        image_auto_prune=settings.image_auto_prune,
     )
 
 
@@ -135,6 +138,7 @@ async def get_settings(
         caretaker_enabled=effective_config.caretaker_enabled,
         caretaker_interval_hours=effective_config.caretaker_interval_hours,
         mill_component_id=effective_config.mill_component_id,
+        image_auto_prune=effective_config.image_auto_prune,
     )
     return _mask_response(effective)
 
@@ -187,6 +191,7 @@ async def put_settings(
         caretaker_enabled=body.caretaker_enabled,
         caretaker_interval_hours=body.caretaker_interval_hours,
         mill_component_id=body.mill_component_id,
+        image_auto_prune=body.image_auto_prune,
     )
 
     await settings_store.put(new)

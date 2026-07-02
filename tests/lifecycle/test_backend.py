@@ -261,6 +261,112 @@ class TestDockerSdkBackend:
 
 
 # ---------------------------------------------------------------------------
+# Docker SDK backend — prune_images
+# ---------------------------------------------------------------------------
+
+
+def _make_image(image_id: str, size: int, repo_digests: list[str] | None = None):
+    img = MagicMock()
+    img.id = image_id
+    img.attrs = {"Size": size, "RepoDigests": repo_digests or []}
+    return img
+
+
+class TestDockerSdkBackendPruneImages:
+    @pytest.fixture
+    def backend(self):
+        client_mock = MagicMock()
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock, docker_mock
+
+    async def test_prune_removes_unprotected_dangling(self, backend):
+        b, client, _ = backend
+        client.images.list.return_value = [
+            _make_image("sha256:old1", 100),
+            _make_image("sha256:old2", 250),
+        ]
+        reclaimed = await b.prune_images(set())
+        assert reclaimed == 350
+        removed = [c.args[0] for c in client.images.remove.call_args_list]
+        assert removed == ["sha256:old1", "sha256:old2"]
+        client.images.list.assert_called_once_with(filters={"dangling": True})
+
+    async def test_prune_skips_protected_by_id_and_digest(self, backend):
+        b, client, _ = backend
+        client.images.list.return_value = [
+            _make_image("sha256:rollback-target", 100),
+            _make_image(
+                "sha256:local-id",
+                200,
+                repo_digests=["robotsix/mill@sha256:manifest-digest"],
+            ),
+            _make_image("sha256:prunable", 50),
+        ]
+        reclaimed = await b.prune_images(
+            {"sha256:rollback-target", "sha256:manifest-digest"}
+        )
+        assert reclaimed == 50
+        removed = [c.args[0] for c in client.images.remove.call_args_list]
+        assert removed == ["sha256:prunable"]
+
+    async def test_prune_swallows_remove_errors(self, backend):
+        b, client, docker_mock = backend
+        client.images.list.return_value = [
+            _make_image("sha256:in-use", 100),
+            _make_image("sha256:prunable", 70),
+        ]
+
+        def _remove(image_id):
+            if image_id == "sha256:in-use":
+                raise docker_mock.errors.APIError("conflict: image is in use")
+
+        client.images.remove.side_effect = _remove
+        reclaimed = await b.prune_images(set())
+        assert reclaimed == 70
+
+    async def test_prune_list_failure_returns_zero(self, backend):
+        b, client, docker_mock = backend
+        client.images.list.side_effect = docker_mock.errors.APIError("boom")
+        assert await b.prune_images(set()) == 0
+
+
+class TestCollectProtectedImageRefs:
+    async def test_collects_all_digest_fields(self):
+        from robotsix_central_deploy.lifecycle.backend import (
+            collect_protected_image_refs,
+        )
+
+        records = [
+            ServiceRecord(
+                name="a",
+                deployed_image_digest="sha256:dep-a",
+                previous_image_digest="sha256:prev-a",
+                image_revision="sha256:rev-a",
+            ),
+            ServiceRecord(name="b", previous_image_digest="sha256:prev-b"),
+            ServiceRecord(name="c"),
+        ]
+        store = MagicMock()
+
+        async def _list_all():
+            return records
+
+        store.list_all = _list_all
+        protected = await collect_protected_image_refs(store)
+        assert protected == {
+            "sha256:dep-a",
+            "sha256:prev-a",
+            "sha256:rev-a",
+            "sha256:prev-b",
+        }
+
+
+# ---------------------------------------------------------------------------
 # Docker SDK backend — running_digest (image RepoDigests)
 # ---------------------------------------------------------------------------
 
