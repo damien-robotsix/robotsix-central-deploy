@@ -110,6 +110,68 @@ class TestDockerSdkBackend:
         result = await b.status(record)
         assert result.health == ""
 
+    @staticmethod
+    def _make_self_container(hostname: str) -> MagicMock:
+        container = MagicMock()
+        container.attrs = {
+            "Id": "newid123",
+            "Name": "/central-deploy",
+            "Config": {
+                "Image": "ghcr.io/damien-robotsix/robotsix-central-deploy:main",
+                "Hostname": hostname,
+            },
+            "NetworkSettings": {"Networks": {"internal": {}, "proxy": {}}},
+        }
+        container.image.attrs = {
+            "RepoDigests": [
+                "ghcr.io/damien-robotsix/robotsix-central-deploy@sha256:abc"
+            ]
+        }
+        return container
+
+    async def test_inspect_self_direct_hostname_hit(self, backend, monkeypatch):
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "selfid")
+        container = self._make_self_container("selfid")
+        client.containers.get.return_value = container
+        info = await b.inspect_self()
+        assert info is not None
+        assert info.container_name == "central-deploy"
+        assert info.running_digest == "sha256:abc"
+        assert info.networks == ["internal", "proxy"]
+
+    async def test_inspect_self_falls_back_to_config_hostname(
+        self, backend, monkeypatch
+    ):
+        # After a watchtower self-update the recreated container keeps the
+        # previous container's hostname, so the id lookup misses and the
+        # Config.Hostname scan must find it.
+        import docker
+
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "stale-old-id")
+        matching = self._make_self_container("stale-old-id")
+        other = self._make_self_container("unrelated")
+        summary_other, summary_match = MagicMock(id="o1"), MagicMock(id="m1")
+        client.containers.list.return_value = [summary_other, summary_match]
+        client.containers.get.side_effect = [
+            docker.errors.NotFound("no container with id stale-old-id"),
+            other,
+            matching,
+        ]
+        info = await b.inspect_self()
+        assert info is not None
+        assert info.running_digest == "sha256:abc"
+
+    async def test_inspect_self_none_when_nothing_matches(self, backend, monkeypatch):
+        import docker
+
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "ghost")
+        client.containers.list.return_value = []
+        client.containers.get.side_effect = docker.errors.NotFound("nope")
+        assert await b.inspect_self() is None
+
     async def test_start_success(self, backend):
         b, client = backend
         container = MagicMock()
