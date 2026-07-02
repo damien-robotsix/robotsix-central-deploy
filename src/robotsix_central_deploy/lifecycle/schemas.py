@@ -6,7 +6,7 @@ import the models it needs without importing the FastAPI app.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -115,12 +115,29 @@ class PruneVolumesResponse(BaseModel):
 class ConfigResponse(BaseModel):
     config_schema: dict[str, Any] = Field(serialization_alias="schema")
     current: dict[str, Any]
+    drift: bool = False
     config_assist_command: str | None = None
     config_assist_seeds: list[ConfigAssistSeed] = []
 
 
 class ConfigUpdate(BaseModel):
     values: dict[str, Any]
+    force_overwrite: bool = False
+
+
+class ConfigDriftConflict(BaseModel):
+    """Body of the 409 Conflict response when drift is detected on Save."""
+
+    drift: Literal[True] = True
+    live_config: dict[str, Any]  # current volume content, secrets masked
+    stored_config: dict[str, Any]  # store's current dict, secrets masked
+
+
+class ConfigImportResponse(BaseModel):
+    """Body of the 200 response from POST /services/{name}/config/import."""
+
+    current: dict[str, Any]  # imported (and secret-masked) current values
+    volume_hash: str  # canonical hash of the imported content
 
 
 class ConfigAssistRequest(BaseModel):

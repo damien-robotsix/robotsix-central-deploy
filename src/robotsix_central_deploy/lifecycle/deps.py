@@ -7,6 +7,7 @@ import shared dependencies without importing the FastAPI app.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -14,6 +15,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import yaml
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
@@ -545,6 +548,30 @@ def _annotate_secret_sentinels(template: object) -> object:
         else:
             result[key] = val
     return result
+
+
+# ---------------------------------------------------------------------------
+# canonical hash (config drift detection)
+# ---------------------------------------------------------------------------
+
+
+def _canonical_hash(d: dict[str, Any]) -> str:
+    """SHA-256 of a canonically serialised YAML dict.
+
+    Serialises via ``yaml.dump`` with ``sort_keys=True`` before hashing so
+    key-insertion-order differences and Python-vs-docker-exec YAML
+    formatting differences do not cause false drift positives.
+    Returns the full 64-char hex digest.
+    """
+    serialised = yaml.dump(
+        d, default_flow_style=False, allow_unicode=True, sort_keys=True
+    )
+    return hashlib.sha256(serialised.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# secret masking
+# ---------------------------------------------------------------------------
 
 
 def _mask_secrets(template: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:

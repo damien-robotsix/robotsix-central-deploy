@@ -74,6 +74,24 @@ class ConfigYamlStore:
             data[name] = entry
             await self._save(data)
 
+    async def get_volume_hash(self, name: str) -> str | None:
+        """Return the stored volume hash for *name*, or None if absent."""
+        data = await self._load()
+        result: str | None = data.get(name, {}).get("volume_hash")
+        return result
+
+    async def update_current_and_hash(
+        self, name: str, current: dict[str, Any], volume_hash: str
+    ) -> None:
+        """Atomically update *current* and *volume_hash* in one JSON write."""
+        async with self._lock:
+            data = await self._load()
+            entry = data.get(name, {})
+            entry["current"] = current
+            entry["volume_hash"] = volume_hash
+            data[name] = entry
+            await self._save(data)
+
     async def delete(self, name: str) -> None:
         """Remove the entire entry for *name*. No-op if absent."""
         async with self._lock:

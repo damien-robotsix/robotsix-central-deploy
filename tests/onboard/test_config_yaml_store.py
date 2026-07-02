@@ -806,3 +806,18 @@ class TestAnnotateSecretSentinels:
         second = _annotate_secret_sentinels(first)
         assert first == second
         assert first == {"password": "SECRET", "host": "localhost"}
+
+
+# ---------------------------------------------------------------------------
+# ConfigYamlStore — update_current_and_hash round-trip
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_current_and_hash_round_trip(tmp_path):
+    """get_volume_hash returns the value passed to update_current_and_hash."""
+    store = ConfigYamlStore(tmp_path / "config_yaml.json")
+    await store.save_template("comp-a", {"host": "localhost"})
+    await store.update_current_and_hash("comp-a", {"host": "prod"}, "abc123hash")
+    h = await store.get_volume_hash("comp-a")
+    assert h == "abc123hash"

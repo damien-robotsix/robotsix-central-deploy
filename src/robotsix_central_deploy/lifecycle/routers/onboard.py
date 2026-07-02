@@ -19,6 +19,7 @@ from ..deps import (
     _namespace_spec_volumes,
     _merge_config,
     _annotate_secret_sentinels,
+    _canonical_hash,
 )
 from ..models import ServiceRecord
 from ..schemas import (
@@ -348,13 +349,17 @@ async def onboard_confirm(
     if spec.config_schema is not None:
         await config_yaml_store.save_template(spec.name, spec.config_schema)
         merged = _merge_config(spec.config_schema, {}, req.config_values or {})
-        await config_yaml_store.update_current(spec.name, merged)
         if spec.config_volume is not None:
             try:
                 await backend.write_config_to_volume(spec.config_volume, merged)
+                await config_yaml_store.update_current_and_hash(
+                    spec.name, merged, _canonical_hash(merged)
+                )
             except Exception:
                 await config_yaml_store.delete(spec.name)
                 raise
+        else:
+            await config_yaml_store.update_current(spec.name, merged)
         # Do NOT add a synthetic "{name}-config" volume — the real volume
         # is already in config.named_volumes (it came from spec.volume_mounts).
 
