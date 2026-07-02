@@ -46,6 +46,7 @@ for full details.
 
 ```bash
 uv sync                 # Install dev dependencies (pytest, ruff, mypy, …)
+pre-commit install      # Install git pre-commit hooks (lint, format, type-check)
 uv run pytest           # Run the test suite
 ruff check .            # Lint
 ruff format . --check   # Check formatting

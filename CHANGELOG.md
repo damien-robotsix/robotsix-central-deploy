@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `.pre-commit-config.yaml` with hooks for ruff, ruff-format, mypy, and common file checks (end-of-file, trailing-whitespace, merge-conflict, large-files)
 - Add `"volumes"`, `"login"`, and `"logout"` to `RESERVED_NAMES` in the gateway router to prevent onboarding components that would shadow central-deploy routes.
 - Define `ExecutionBackendType(str, Enum)` in `lifecycle/models.py` with members `DOCKER_SDK`, `DOCKER`, `NOOP`, replacing bare `str` typing for the `execution_backend` config field. Update config, deps, cli, and all test fixtures to use the enum. Add grep-lint CI check for raw execution-backend strings outside `models.py`.
 - Add `docker_sdk_timeout` config (default 120 s) to prevent indefinite blocking on Docker SDK operations like `images.pull()`; wired into `DockerSdkBackend` constructor and `LifecycleConfig` (env: `ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT`)

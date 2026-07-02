@@ -980,7 +980,7 @@ function renderVolumeAuditPanel(data) {
   if (findings.length > 0) {
     findingsDiv.style.display = '';
     findingsList.innerHTML = findings.map(f =>
-      `<li>${escHtml(f.finding_at ? new Date(f.finding_at).toLocaleString() : '')} \u2014 
+      `<li>${escHtml(f.finding_at ? new Date(f.finding_at).toLocaleString() : '')} \u2014
            ${escHtml(f.detail || f.volume_name)}</li>`
     ).join('');
   } else {
@@ -2426,4 +2426,3 @@ document.addEventListener('keydown', (e) => {
 
 </body>
 </html>
-
