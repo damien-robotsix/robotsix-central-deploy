@@ -6,14 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from robotsix_central_deploy.registry.models import ComponentConfig
-from robotsix_central_deploy.lifecycle.volume_audit.scheduler import (
-    VolumeAuditScheduler,
-)
+import robotsix_central_deploy.lifecycle.volume_audit.scheduler as sched_mod
 
 
 def _make_scheduler(
     tmp_path: Path, enabled: bool = True
-) -> tuple[VolumeAuditScheduler, MagicMock, MagicMock]:
+) -> tuple[sched_mod.VolumeAuditScheduler, MagicMock, MagicMock]:
     """Build a VolumeAuditScheduler with mocked backend and component config store."""
     from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 
@@ -27,7 +25,7 @@ def _make_scheduler(
     backend = MagicMock()
     backend.measure_volume_bytes = AsyncMock(return_value=1_000_000)
     comp_config_store = MagicMock()
-    sched = VolumeAuditScheduler(cfg, backend, comp_config_store)
+    sched = sched_mod.VolumeAuditScheduler(cfg, backend, comp_config_store)
     return sched, backend, comp_config_store
 
 
@@ -60,8 +58,6 @@ class TestVolumeAuditScheduler:
         self, tmp_path, monkeypatch
     ):
         """When a scan pass detects threshold-level growth, report_finding is called."""
-        import robotsix_central_deploy.lifecycle.volume_audit.scheduler as sched_mod
-
         called_with = []
 
         async def _fake_report(finding, path, board_client=None):
@@ -223,8 +219,6 @@ class TestVolumeAuditScheduler:
     ):
         """When multiple volumes breach thresholds, the same board client
         instance is passed to every report_finding call."""
-        import robotsix_central_deploy.lifecycle.volume_audit.scheduler as sched_mod
-
         called_with = []
         mock_client = MagicMock()
 

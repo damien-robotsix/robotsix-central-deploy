@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from ..registry.config_store import ComponentConfigStore
     from ..registry.loader import ComponentRegistry
     from ..registry.settings_store import SystemSettings
-    from ..volume_audit.scheduler import VolumeAuditScheduler
+    from ..lifecycle.volume_audit.scheduler import VolumeAuditScheduler
 
 logger = logging.getLogger(__name__)
 
