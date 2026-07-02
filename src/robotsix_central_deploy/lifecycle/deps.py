@@ -306,6 +306,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 log_level=_config.log_level,
                 gateway_base_domain=_config.gateway_base_domain,
                 claude_host_mount_path=_config.claude_host_mount_path,
+                caretaker_enabled=_config.caretaker_enabled,
+                caretaker_interval_hours=_config.caretaker_interval_hours,
             )
         )
 

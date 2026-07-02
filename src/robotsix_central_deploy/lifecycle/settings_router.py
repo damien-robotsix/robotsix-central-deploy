@@ -37,6 +37,8 @@ class SystemSettingsResponse(BaseModel):
     log_level: str = "INFO"
     gateway_base_domain: str = ""
     claude_host_mount_path: str = ""
+    caretaker_enabled: bool = False
+    caretaker_interval_hours: int = 24
 
 
 class SystemSettingsUpdate(BaseModel):
@@ -47,6 +49,8 @@ class SystemSettingsUpdate(BaseModel):
     log_level: str = "INFO"
     gateway_base_domain: str = ""
     claude_host_mount_path: str = ""
+    caretaker_enabled: bool = False
+    caretaker_interval_hours: int = 24
 
     @field_validator("log_level")
     @classmethod
@@ -57,6 +61,13 @@ class SystemSettingsUpdate(BaseModel):
                 f"Unknown log level '{v}'. Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
             )
         return normalised
+
+    @field_validator("caretaker_interval_hours")
+    @classmethod
+    def _validate_caretaker_interval(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("caretaker_interval_hours must be >= 1")
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +84,8 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         log_level=settings.log_level,
         gateway_base_domain=settings.gateway_base_domain,
         claude_host_mount_path=settings.claude_host_mount_path,
+        caretaker_enabled=settings.caretaker_enabled,
+        caretaker_interval_hours=settings.caretaker_interval_hours,
     )
 
 
@@ -108,6 +121,8 @@ async def get_settings(
         log_level=effective_config.log_level,
         gateway_base_domain=effective_config.gateway_base_domain,
         claude_host_mount_path=effective_config.claude_host_mount_path,
+        caretaker_enabled=effective_config.caretaker_enabled,
+        caretaker_interval_hours=effective_config.caretaker_interval_hours,
     )
     return _mask_response(effective)
 
@@ -157,6 +172,8 @@ async def put_settings(
         log_level=body.log_level,
         gateway_base_domain=body.gateway_base_domain,
         claude_host_mount_path=body.claude_host_mount_path,
+        caretaker_enabled=body.caretaker_enabled,
+        caretaker_interval_hours=body.caretaker_interval_hours,
     )
 
     await settings_store.put(new)
