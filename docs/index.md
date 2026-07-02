@@ -8,19 +8,20 @@ status of each deployed component, perform versioned deploys and rollbacks, and
 register the supervision/monitoring agent with the agent-comm broker and
 Langfuse.
 
-## Status
-
-Initial seed commit. Implementation is tracked on the robotsix-mill board under
-the "Central deployment & lifecycle server" epic. The first feature landing
-here is the **lifecycle API** (start / stop / restart / status).
-
-## Planned scope
+## Features
 
 - **Lifecycle API** — start / stop / restart / status for deployed components.
-- **Versioned deploy & rollback** — promote a build, roll back to a prior one.
-- **Broker + Langfuse registration** — register the supervision agent on the
-  agent-comm broker and wire up tracing.
-- **Supervision / monitoring agent** — watch deployed components and react.
+- **Versioned deploy & rollback** — promote a new image, roll back to the
+  previously deployed digest.
+- **Onboarding pipeline** — add new services from a docker-compose repo
+  (preflight parse + confirm deploy) against the
+  [deploy contract](DEPLOY_CONTRACT.md).
+- **Reverse-proxy gateway** — each component reachable at a well-known URL
+  under the deploy domain (HTTP + WebSocket).
+- **Dashboard UI** — live status, logs, env/secrets and config management at
+  `/ui`.
+- **Registry update checks** — polls GHCR for newer image digests.
+- **Volume audit** — background growth tracking of managed named volumes.
 
 ## Security / Credentials
 
@@ -70,10 +71,12 @@ layer.
 | DELETE      | `DELETE=1`     | Required for container removal during deploy |
 | IMAGES      | `IMAGES=1`     | Required for `docker pull` |
 | VOLUMES     | `VOLUMES=1`    | Create, list, inspect, and remove named volumes for managed services |
+| BUILD       | `BUILD=1`      | Required for the dashboard's "Reclaim build cache" action (`POST /build/prune`) — central-deploy never builds images |
+| SYSTEM      | `SYSTEM=1`     | Required for `/system/df` Docker disk-usage reporting |
 
-All other scopes (`BUILD`, `EXEC`, `NETWORKS`, `SWARM`, …) are explicitly
-disabled (`=0`). `BUILD` and `EXEC` remain off — central-deploy pulls
-pre-built images from GHCR and never builds locally or execs into containers.
+All other scopes (`EXEC`, `NETWORKS`, `SWARM`, …) are explicitly disabled
+(`=0`). `EXEC` remains off — central-deploy pulls pre-built images from GHCR
+and never execs into containers.
 
 ### Configuration
 

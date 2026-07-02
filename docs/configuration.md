@@ -10,7 +10,7 @@ The lifecycle server is configured via environment variables, all prefixed with 
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_HOST` | `0.0.0.0` | IP address the lifecycle server binds to. |
 | `ROBOTSIX_LIFECYCLE_PORT` | `8100` | TCP port the lifecycle server listens on. |
-| `ROBOTSIX_LIFECYCLE_API_KEY` | `""` | Static API key for bearer-token authentication. When empty, authentication is disabled (unless `AUTH_USERNAME`/`AUTH_PASSWORD` are both set). |
+| `ROBOTSIX_LIFECYCLE_API_KEY` | `""` | Static API key accepted via the `X-API-Key` header. When empty, authentication is disabled (unless `AUTH_USERNAME`/`AUTH_PASSWORD` are both set). |
 
 ### Persistence
 
@@ -49,7 +49,7 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | Variable | Default | Description |
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_DISK_PATH` | `/` | Filesystem path to monitor for disk usage. Set to `/host_root` when running containerised with a host-root bind mount. |
-| `ROBOTSIX_LIFECYCLE_DISK_WARN_PERCENT` | `10.0` (10%) | Disk usage warning threshold as a percentage of total disk. A warning is emitted when free space drops below this percentage. Changed from `DISK_WARN_BYTES` (integer bytes) to `DISK_WARN_PERCENT` (float percent). |
+| `ROBOTSIX_LIFECYCLE_DISK_WARN_PCT` | `10.0` (10%) | Disk usage warning threshold as a percentage of total disk. A warning is emitted when free space drops below this percentage. |
 
 ### Registry
 
