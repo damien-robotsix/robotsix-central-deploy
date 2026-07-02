@@ -955,7 +955,24 @@ class DockerSdkBackend(ExecutionBackend):
                     remove=True,
                 )
                 text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
-                return yaml.safe_load(text) or {}
+                from robotsix_yaml_config import (
+                    InvalidConfigStructureError,
+                    YamlParseError,
+                )
+
+                data = yaml.safe_load(text)
+                if data is None:
+                    return {}
+                if not isinstance(data, dict):
+                    raise InvalidConfigStructureError(
+                        f"Expected a mapping in Docker volume {volume_name}, "
+                        f"got {type(data).__name__}"
+                    )
+                return data
+            except yaml.YAMLError as exc:
+                raise YamlParseError(
+                    f"YAML parse error in Docker volume {volume_name}: {exc}"
+                ) from exc
             except docker.errors.APIError as exc:
                 raise RuntimeError(
                     f"read_config_from_volume failed for {volume_name}: {exc}"

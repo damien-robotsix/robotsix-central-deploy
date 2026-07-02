@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from robotsix_yaml_config import read_yaml_file
+
 from .models import ServiceRecord, ServiceState
 
 
@@ -85,7 +87,7 @@ class FileStore(ServiceStore):
     async def _load(self) -> dict[str, ServiceRecord]:
         if not self._path.exists():
             return {}
-        raw = yaml.safe_load(self._path.read_text(encoding="utf-8")) or {}
+        raw = read_yaml_file(self._path)
         records: dict[str, ServiceRecord] = {}
         for name, d in raw.items():
             d = d or {}

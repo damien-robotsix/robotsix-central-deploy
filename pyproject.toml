@@ -14,6 +14,7 @@ dependencies = [
     "cryptography>=41.0",
     "websockets>=12.0",
     "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@3b999fc697fd1112024160f6f5ba45bd89e7f5d0",
+    "robotsix-yaml-config @ git+https://github.com/damien-robotsix/robotsix-yaml-config.git@d302ee4ada88905efa48333894ed19519f9f7920",
 ]
 
 # Dev tooling as a PEP 735 dependency-group (the fleet convention), pulled

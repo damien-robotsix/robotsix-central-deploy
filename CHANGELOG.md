@@ -5,6 +5,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Add `docker_sdk_timeout` config (default 120 s) to prevent indefinite blocking on Docker SDK operations like `images.pull()`; wired into `DockerSdkBackend` constructor and `LifecycleConfig` (env: `ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT`)
+- Adopt `robotsix-yaml-config` for shared YAML primitives: replace local `_deep_merge` with `robotsix_yaml_config.deep_merge`, use `read_yaml_file` for file-based YAML reads in `store.py` and `registry/loader.py`, and add typed error handling (`YamlParseError`, `InvalidConfigStructureError`) at remaining `yaml.safe_load` sites in `backend.py` and `onboard/parser.py`.
 - Add `.trivyignore` to suppress known CVEs in Debian base image system packages (perl, util-linux, tar, zlib1g, passwd, sysvinit-utils) that are not exploitable in the container's attack surface
 - Dashboard Remove is now a modal instead of a chain of native `confirm()`
   dialogs. Data volumes are **preserved by default**; deleting them is an

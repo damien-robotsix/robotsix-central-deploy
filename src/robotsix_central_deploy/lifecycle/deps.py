@@ -1015,18 +1015,3 @@ def _resolve_placeholders(command_str: str, values: dict[str, Any]) -> str:
         return resolved if resolved is not None else m.group(0)
 
     return re.sub(r"\{([^{}]+)\}", _replacer, command_str)
-
-
-def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge *overlay* into *base*, returning a new dict.
-
-    Leaf values from *overlay* overwrite *base*; nested dicts are merged
-    recursively.  Keys only in *base* are preserved.
-    """
-    result = dict(base)
-    for key, val in overlay.items():
-        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(result[key], val)
-        else:
-            result[key] = val
-    return result
