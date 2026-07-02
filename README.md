@@ -53,4 +53,6 @@ ruff format . --check   # Check formatting
 uv run mypy src/        # Type check
 ```
 
+For a detailed walkthrough of the codebase, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 Contributions welcome — see the [documentation](https://robotsix.net/central-deploy/).
