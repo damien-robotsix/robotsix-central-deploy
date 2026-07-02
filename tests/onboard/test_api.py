@@ -757,6 +757,41 @@ class TestOnboardPreflightWithConfig:
         data = resp.json()
         assert "robotsix.deploy.config-target" in data["error"]
 
+    async def test_preflight_gate_config_target_without_schema(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Preflight returns 422 when config-target label is set but no config file or template is found."""
+        spec = _make_derived_spec("cool-app")
+        spec.config_volume = "cool-app-config"
+        # config_schema will be None because fetch_repo_files returns no config_yaml or template
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_yaml=None,
+                    config_yaml_template=None,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 422
+        data = resp.json()
+        assert "no config file or template was found" in data["error"]
+
     async def test_preflight_derives_schema_from_template_fallback(
         self, client: AsyncClient, auth_headers: dict
     ):

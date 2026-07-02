@@ -208,6 +208,19 @@ async def onboard_preflight(
             },
         )
 
+    # Preflight gate: config-target label declared but no config file/template found
+    if derived_spec.config_volume is not None and derived_spec.config_schema is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": (
+                    "config-target label is set but no config file or template was found — "
+                    "commit config/config.example.yaml to the repo or set "
+                    "robotsix.deploy.config-template to a valid in-repo template path"
+                ),
+            },
+        )
+
     # Volume-collision preflight: check that would-be namespaced volume names
     # do not collide with any existing component's named_volumes.
     candidate_volumes: set[str] = {
