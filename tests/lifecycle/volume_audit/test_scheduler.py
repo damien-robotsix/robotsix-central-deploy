@@ -223,7 +223,7 @@ class TestVolumeAuditScheduler:
     ):
         """When multiple volumes breach thresholds, the same board client
         instance is passed to every report_finding call."""
-        import robotsix_central_deploy.volume_audit.scheduler as sched_mod
+        import robotsix_central_deploy.lifecycle.volume_audit.scheduler as sched_mod
 
         called_with = []
         mock_client = MagicMock()
