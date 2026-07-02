@@ -2,7 +2,19 @@
 
 ## Lifecycle Server
 
-::: robotsix_central_deploy.lifecycle.server
+::: robotsix_central_deploy.lifecycle.app
+
+::: robotsix_central_deploy.lifecycle.routers.services
+
+::: robotsix_central_deploy.lifecycle.routers.health
+
+::: robotsix_central_deploy.lifecycle.routers.volumes
+
+::: robotsix_central_deploy.lifecycle.routers.onboard
+
+::: robotsix_central_deploy.lifecycle.settings_router
+
+::: robotsix_central_deploy.lifecycle.backend
 
 ::: robotsix_central_deploy.lifecycle.auth
 
@@ -11,6 +23,20 @@
 ::: robotsix_central_deploy.lifecycle.config
 
 ::: robotsix_central_deploy.lifecycle.store
+
+## Dashboard UI
+
+::: robotsix_central_deploy.ui.router
+
+## Volume Audit
+
+::: robotsix_central_deploy.volume_audit.models
+
+::: robotsix_central_deploy.volume_audit.growth
+
+::: robotsix_central_deploy.volume_audit.scheduler
+
+::: robotsix_central_deploy.volume_audit.reporter
 
 ## Gateway
 
