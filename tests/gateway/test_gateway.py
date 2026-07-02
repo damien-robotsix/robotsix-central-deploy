@@ -529,9 +529,7 @@ class TestGatewayHttpUnit:
         request = MagicMock()
         request.headers = {"host": "svc.deploy.example"}
         request.app = _app_with_registry(ComponentRegistry([cfg]))
-        request.app.state.config = SimpleNamespace(
-            gateway_base_domain="deploy.example"
-        )
+        request.app.state.config = SimpleNamespace(gateway_base_domain="deploy.example")
 
         sentinel = StreamingResponse(iter([b""]))
         with patch.object(
