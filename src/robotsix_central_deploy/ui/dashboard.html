@@ -99,6 +99,7 @@
   .onboard-panel table th,
   .onboard-panel table td { padding: 5px 8px; font-size: 0.85rem; border-color: #334155; }
   .ob-error { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 0.85rem; }
+  .ob-progress { background: rgba(56,189,248,0.08); color: var(--blue); border: 1px solid var(--blue); padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 0.85rem; }
   .ob-actions { display: flex; gap: 8px; margin-top: 16px; }
   .ob-actions button { padding: 6px 14px; font-size: 0.85rem; border: 1px solid #475569; border-radius: 4px; background: #1e293b; color: #cbd5e1; cursor: pointer; }
   .ob-actions button:hover:not(:disabled) { background: #334155; border-color: var(--blue); }
@@ -524,7 +525,7 @@
   <div class="onboard-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h2 id="onboard-modal-title" style="margin:0;">Add Component</h2>
-      <button class="onboard-close" onclick="closeOnboardModal()" title="Close">&times;</button>
+      <button id="ob-close-x" class="onboard-close" onclick="closeOnboardModal()" title="Close">&times;</button>
     </div>
 
     <!-- Step 1 -->
@@ -583,11 +584,12 @@
         Mount ~/.claude as /root/.claude (read-write)
       </label>
 
+      <div id="ob-deploy-progress" class="ob-progress" style="display:none"></div>
       <div id="ob-step2-error" class="ob-error" style="display:none"></div>
       <div class="ob-actions">
         <button id="ob-deploy-btn" onclick="onboardDeploy()">Deploy</button>
-        <button onclick="showStep1()">Back</button>
-        <button onclick="closeOnboardModal()">Cancel</button>
+        <button id="ob-back-btn" onclick="showStep1()">Back</button>
+        <button id="ob-cancel-btn" onclick="closeOnboardModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -2264,6 +2266,7 @@ function escAttr(s) {
 // ── Onboard modal ──────────────────────────────────────────────
 
 let _obSpec = null;
+let _obJobPollTimer = null;
 
 function openOnboardModal() {
   resetOnboardModal();
@@ -2271,6 +2274,7 @@ function openOnboardModal() {
 }
 
 function closeOnboardModal() {
+  stopOnboardJobPoll();
   document.getElementById('onboard-modal').classList.remove('open');
   resetOnboardModal();
 }
@@ -2279,6 +2283,9 @@ function resetOnboardModal() {
   _obSpec = null;
   document.getElementById('ob-git-url').value = '';
   document.getElementById('ob-name').value = '';
+  var progEl = document.getElementById('ob-deploy-progress');
+  progEl.style.display = 'none';
+  progEl.innerHTML = '';
   showStep1();
 }
 
@@ -2301,6 +2308,99 @@ function showOnboardError(el, status, data) {
   }
   el.innerHTML = html;
   el.style.display = '';
+}
+
+var ONBOARD_PHASE_LABELS = {
+  writing_config: 'Writing config\u2026',
+  deploying_primary: 'Deploying primary\u2026',
+  waiting_health: 'Waiting for health check\u2026',
+  deploying_siblings: 'Deploying siblings\u2026',
+  done: 'Done',
+  failed: 'Failed',
+};
+
+function setOnboardInputsDisabled(disabled) {
+  document.getElementById('ob-deploy-btn').disabled = disabled;
+  document.getElementById('ob-back-btn').disabled = disabled;
+  document.getElementById('ob-cancel-btn').disabled = disabled;
+  document.getElementById('ob-close-x').disabled = disabled;
+  document.querySelectorAll('.ob-env-val,.ob-port-host,#ob-claude-mount').forEach(function(el) {
+    el.disabled = disabled;
+  });
+  var cfgBody = document.getElementById('ob-config-form-body');
+  if (cfgBody) {
+    cfgBody.querySelectorAll('input,select,textarea,button').forEach(function(el) {
+      el.disabled = disabled;
+    });
+  }
+}
+
+function stopOnboardJobPoll() {
+  if (_obJobPollTimer !== null) {
+    clearTimeout(_obJobPollTimer);
+    _obJobPollTimer = null;
+  }
+}
+
+function pollOnboardJob(jobId, errEl) {
+  stopOnboardJobPoll();
+
+  var progEl = document.getElementById('ob-deploy-progress');
+
+  function poll() {
+    _obJobPollTimer = setTimeout(async function() {
+      try {
+        var res = await fetch('/onboard/jobs/' + encodeURIComponent(jobId), {
+          headers: authHeaders(),
+          credentials: 'same-origin',
+        });
+        if (res.status === 404) {
+          stopOnboardJobPoll();
+          showOnboardError(errEl, 404, { error: 'Job not found \u2014 server may have restarted.' });
+          setOnboardInputsDisabled(false);
+          document.getElementById('ob-deploy-btn').textContent = 'Deploy';
+          progEl.style.display = 'none';
+          return;
+        }
+        if (!res.ok) {
+          stopOnboardJobPoll();
+          var errData = await res.json().catch(function() { return {}; });
+          showOnboardError(errEl, res.status, errData);
+          setOnboardInputsDisabled(false);
+          document.getElementById('ob-deploy-btn').textContent = 'Deploy';
+          progEl.style.display = 'none';
+          return;
+        }
+        var job = await res.json();
+        var label = ONBOARD_PHASE_LABELS[job.phase] || job.phase;
+        progEl.innerHTML = escHtml(label);
+        progEl.style.display = '';
+
+        if (job.phase === 'done') {
+          stopOnboardJobPoll();
+          closeOnboardModal();
+          loadDashboard();
+        } else if (job.phase === 'failed') {
+          stopOnboardJobPoll();
+          showOnboardError(errEl, 0, { error: job.error || 'Deploy failed.' });
+          setOnboardInputsDisabled(false);
+          document.getElementById('ob-deploy-btn').textContent = 'Deploy';
+          progEl.style.display = 'none';
+        } else {
+          // still in progress — keep polling
+          poll();
+        }
+      } catch (e) {
+        stopOnboardJobPoll();
+        showOnboardError(errEl, 0, { error: 'Network error \u2014 check server logs.' });
+        setOnboardInputsDisabled(false);
+        document.getElementById('ob-deploy-btn').textContent = 'Deploy';
+        progEl.style.display = 'none';
+      }
+    }, 1500);
+  }
+
+  poll();
 }
 
 async function onboardFetch() {
@@ -2385,6 +2485,9 @@ function populateStep2(spec) {
 async function onboardDeploy() {
   var errEl = document.getElementById('ob-step2-error');
   errEl.style.display = 'none';
+  var progEl = document.getElementById('ob-deploy-progress');
+  progEl.style.display = 'none';
+  progEl.innerHTML = '';
 
   // Deep clone the spec
   var finalSpec = JSON.parse(JSON.stringify(_obSpec));
@@ -2412,7 +2515,7 @@ async function onboardDeploy() {
   }
 
   var btn = document.getElementById('ob-deploy-btn');
-  btn.disabled = true;
+  setOnboardInputsDisabled(true);
   btn.textContent = 'Deploying…';
 
   try {
@@ -2425,14 +2528,15 @@ async function onboardDeploy() {
     var data = await res.json();
     if (!res.ok) {
       showOnboardError(errEl, res.status, data);
+      setOnboardInputsDisabled(false);
+      btn.textContent = 'Deploy';
       return;
     }
-    closeOnboardModal();
-    loadDashboard();
+    // 202 Accepted — start polling the job
+    pollOnboardJob(data.job_id, errEl);
   } catch (e) {
     showOnboardError(errEl, 0, { error: 'Network error — check server logs.' });
-  } finally {
-    btn.disabled = false;
+    setOnboardInputsDisabled(false);
     btn.textContent = 'Deploy';
   }
 }

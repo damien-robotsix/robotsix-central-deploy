@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Dashboard onboard modal now polls `GET /onboard/jobs/{job_id}` after confirm, showing live deploy-phase progress (writing_config, deploying_primary, waiting_health, deploying_siblings, done, failed). The modal no longer waits on a single long request that could be dropped by nginx.
 - Onboard form: mark secret fields as optional with clearer placeholder text and informational notes explaining the fill-later flow via Configure → Save.
 - **Remove path-prefix gateway routing.** `deploy.robotsix.net/<name>/...` URLs are no longer proxied — path-prefix proxying broke any component app serving absolute asset URLs (e.g. `/static/…`). Components are now reached exclusively via their subdomain (`<name>.deploy.robotsix.net`, requires `gateway_base_domain`); legacy path URLs 307-redirect to the subdomain. WebSocket gateway connections are subdomain-only (non-subdomain hosts close with 4004). `http_proxy` loses its `prefix` param and the `x-forwarded-prefix` header / Location-rewrite logic.
 - Record volume hash during config assist so drift detection works after auto-detected config changes.
