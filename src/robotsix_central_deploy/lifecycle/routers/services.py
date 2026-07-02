@@ -1512,7 +1512,9 @@ async def run_config_assist(
     # the empty template slot and/or default_account='main').
     await backend.write_config_to_volume(comp_cfg.config_volume, merged)
     # Persist detected config so GET /config shows it and Save is idempotent
-    await config_yaml_store.update_current(name, merged)
+    await config_yaml_store.update_current_and_hash(
+        name, merged, _canonical_hash(merged)
+    )
 
     return ConfigAssistResponse(config=merged, output=output)
 
