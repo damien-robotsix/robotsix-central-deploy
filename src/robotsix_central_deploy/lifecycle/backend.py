@@ -168,14 +168,21 @@ class ExecutionBackend(ABC):
 
     @abstractmethod
     async def trigger_self_update(
-        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+        self,
+        target: SelfInspect,
+        watchtower_image: str,
+        docker_host_url: str,
+        docker_api_version: str,
     ) -> str:
         """Launch a one-shot watchtower container that updates *target*.
 
         The watchtower container is attached to the same networks as
         *target* so it reaches the Docker API endpoint at
-        *docker_host_url* (the socket proxy). Returns the watchtower
-        container id. Raises ``RuntimeError`` on failure to launch.
+        *docker_host_url* (the socket proxy). *docker_api_version* is
+        exported as ``DOCKER_API_VERSION`` — watchtower 1.7.1's client
+        defaults to API 1.25, below modern daemons' minimum, and crashes
+        without it. Returns the watchtower container id. Raises
+        ``RuntimeError`` on failure to launch.
         """
         ...
 
@@ -274,7 +281,11 @@ class NoopBackend(ExecutionBackend):
         return None
 
     async def trigger_self_update(
-        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+        self,
+        target: SelfInspect,
+        watchtower_image: str,
+        docker_host_url: str,
+        docker_api_version: str,
     ) -> str:
         return "noop-self-update"
 
@@ -437,7 +448,11 @@ class DockerBackend(ExecutionBackend):
         )
 
     async def trigger_self_update(
-        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+        self,
+        target: SelfInspect,
+        watchtower_image: str,
+        docker_host_url: str,
+        docker_api_version: str,
     ) -> str:
         raise NotImplementedError(
             "trigger_self_update not supported for DockerBackend — use DockerSdkBackend"
@@ -1366,7 +1381,11 @@ class DockerSdkBackend(ExecutionBackend):
         )
 
     async def trigger_self_update(
-        self, target: SelfInspect, watchtower_image: str, docker_host_url: str
+        self,
+        target: SelfInspect,
+        watchtower_image: str,
+        docker_host_url: str,
+        docker_api_version: str,
     ) -> str:
         """Launch a one-shot watchtower container that updates *target*.
 
@@ -1375,6 +1394,13 @@ class DockerSdkBackend(ExecutionBackend):
         which is the only safe way for the server to replace itself. The
         watchtower container joins all of *target*'s networks so it reaches
         the socket proxy at *docker_host_url*, and auto-removes when done.
+
+        ``DOCKER_API_VERSION`` must be exported: watchtower 1.7.1's client
+        defaults to API 1.25, below modern daemons' minimum (1.44), and
+        panics on the first API call without it. Recreating *target* also
+        requires the socket proxy to allow the networks API (NETWORKS=1) —
+        watchtower re-attaches the container's networks via
+        ``/networks/{id}/connect``.
         """
         import docker
 
@@ -1385,16 +1411,18 @@ class DockerSdkBackend(ExecutionBackend):
             self._client.images.pull(watchtower_image)
             networking = None
             if target.networks:
-                # Multi-endpoint create: the socket proxy blocks the
-                # /networks/*/connect API (NETWORKS=0), so every network must
-                # be attached in the create payload itself.
+                # Multi-endpoint create keeps the watchtower container itself
+                # off the /networks/*/connect API path.
                 networking = api.create_networking_config(
                     {net: api.create_endpoint_config() for net in target.networks}
                 )
             created = api.create_container(
                 image=watchtower_image,
                 command=["--run-once", "--cleanup", target.container_name],
-                environment={"DOCKER_HOST": docker_host_url},
+                environment={
+                    "DOCKER_HOST": docker_host_url,
+                    "DOCKER_API_VERSION": docker_api_version,
+                },
                 host_config=api.create_host_config(auto_remove=True),
                 networking_config=networking,
             )

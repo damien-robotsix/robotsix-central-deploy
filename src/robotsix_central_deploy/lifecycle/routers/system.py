@@ -83,6 +83,7 @@ async def trigger_self_update(
             self_info,
             config.self_update_watchtower_image,
             config.docker_socket_url,
+            config.self_update_docker_api_version,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
