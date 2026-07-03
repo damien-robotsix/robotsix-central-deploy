@@ -68,9 +68,6 @@ class ComponentConfig(BaseModel):
     claude_mount: bool = False
     host_docker_sock: bool = False
     named_volumes: list[str] = []  # volume names to pre-create at deploy time
-    stateful_volumes: list[
-        str
-    ] = []  # subset with robotsix.deploy.stateful label (informational)
     siblings: list[ServiceConfig] = []  # empty = single-service (backward compat)
     command: Optional[list[str]] = None  # container command (from compose 'command:')
     entrypoint: Optional[list[str]] = (

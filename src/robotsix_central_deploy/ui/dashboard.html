@@ -312,7 +312,6 @@
     padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; display: none;
     font-size: 0.82rem;
   }
-  .stateful-warn { color: #f59e0b; cursor: help; font-size: 1rem; }
   tr.sibling-row { background: rgba(0,0,0,0.02); }
   tr.sibling-row td:first-child { padding-left: 1.75rem; color: var(--text-muted, #888); font-size: 0.9em; }
   .seed-required { border-left: 3px solid #f90 !important; }
@@ -837,11 +836,6 @@ function renderRow(svc) {
     updateBadge = '<span class="badge badge-update-unknown">unknown</span>';
   }
 
-  // Stateful volumes warning
-  const statefulWarning = (svc.stateful_volumes && svc.stateful_volumes.length > 0)
-    ? ` <span class="stateful-warn" title="Stateful volumes (${escAttr(svc.stateful_volumes.join(', '))}) start empty — data does not migrate automatically.">&#9888;</span>`
-    : '';
-
   // Untracked badge (no repo_id → no mill issue tracking)
   const untrackedBadge = (!svc.repo_id) ? ' <span class="badge badge-untracked">untracked</span>' : '';
 
@@ -855,7 +849,7 @@ function renderRow(svc) {
     : '<span style="color:#666;">—</span>';
 
   return `<tr id="row-${escAttr(svc.name)}">
-    <td>${escHtml(svc.name)}${statefulWarning}${untrackedBadge}</td>
+    <td>${escHtml(svc.name)}${untrackedBadge}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
     <td><span class="revision" title="${escAttr(svc.running_digest || rev)}">${escHtml(revShort)}</span></td>
     <td><span class="${healthClass}" title="${escAttr(healthTitle)}">${escHtml(healthDisplay)}</span></td>
@@ -2731,11 +2725,9 @@ function populateStep2(spec, portShifts) {
 
   // Volumes
   var volsEl = document.getElementById('ob-volumes');
-  // No "starts EMPTY — migrate data before use" badge here: onboarding
-  // creates a brand-new component, so every volume legitimately starts
-  // empty and there is no prior data to migrate. The migrate caveat is
-  // only meaningful for an already-deployed service (see the dashboard
-  // service card's stateful-volume ⚠ tooltip).
+  // No "starts EMPTY" badge here: onboarding creates a brand-new
+  // component, so every volume legitimately starts empty. Backups are
+  // the operator's responsibility.
   volsEl.innerHTML = spec.volume_mounts.map(function(m) {
     return '<div>📦 <strong>' + escHtml(m.host) + '</strong> → ' + escHtml(m.container) + '</div>';
   }).join('');

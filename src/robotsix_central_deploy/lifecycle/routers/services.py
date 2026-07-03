@@ -445,7 +445,6 @@ async def list_services(
         item = r.to_list_item()
         config = component_config_store.get(r.name)
         if config is not None:
-            item.stateful_volumes = config.stateful_volumes
             item.has_config_yaml = config.has_config_yaml
         items.append(item)
     return ServiceListResponse(services=items)

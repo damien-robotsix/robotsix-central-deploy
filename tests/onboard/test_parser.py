@@ -41,9 +41,7 @@ services:
       retries: 3
       start_period: 15s
 volumes:
-  cost-data:
-    labels:
-      robotsix.deploy.stateful: "true"
+  cost-data: {}
 """
 
 
@@ -91,7 +89,6 @@ class TestParseComposeValid:
         assert spec.git_url == "https://github.com/example/repo.git"
         assert spec.image == "ghcr.io/damien-robotsix/cost-monitor:main"
         assert spec.claude_mount is True
-        assert spec.stateful_volumes == ["cost-data"]
         assert spec.env == {"OPENAI_API_KEY": "", "DATABASE_URL": "", "DEBUG": "false"}
         assert spec.ports == [PortMapping(host=8200, container=8200, protocol="tcp")]
         assert spec.volume_mounts == [
@@ -140,9 +137,7 @@ services:
     volumes:
       - mail-spool:/data
 volumes:
-  mail-spool:
-    labels:
-      robotsix.deploy.stateful: "true"
+  mail-spool: {}
 """
 
 # ---------------------------------------------------------------------------
@@ -372,36 +367,6 @@ services:
         assert "robotsix.deploy.host-docker-sock" in str(exc.value)
         assert "primary" in str(exc.value).lower()
 
-    def test_stateful_volume_label(self):
-        y = """\
-# central-deploy-contract-version: 1
-services:
-  foo:
-    image: ghcr.io/damien-robotsix/foo:main
-    volumes:
-      - mydata:/data
-volumes:
-  mydata:
-    labels:
-      robotsix.deploy.stateful: "true"
-"""
-        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
-        assert spec.stateful_volumes == ["mydata"]
-
-    def test_stateful_volume_not_flagged(self):
-        y = """\
-# central-deploy-contract-version: 1
-services:
-  foo:
-    image: ghcr.io/damien-robotsix/foo:main
-    volumes:
-      - mydata:/data
-volumes:
-  mydata: {}
-"""
-        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
-        assert spec.stateful_volumes == []
-
     def test_config_target_resolves_volume_name(self):
         """robotsix.deploy.config-target resolves to the matching named-volume host name."""
         y = """\
@@ -601,7 +566,6 @@ class TestMultiServiceParse:
         assert sib.volume_mounts == [
             VolumeMount(host="mail-spool", container="/data", read_only=False)
         ]
-        assert spec.stateful_volumes == ["mail-spool"]
         # Primary still has its own ports
         assert spec.ports == [PortMapping(host=8202, container=8080, protocol="tcp")]
         assert spec.health_check is not None

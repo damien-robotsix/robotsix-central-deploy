@@ -32,7 +32,6 @@ _GO_DURATION_RE = re.compile(
 HEADER = b"# central-deploy-contract-version: 1"
 CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
 HOST_DOCKER_SOCK_LABEL = "robotsix.deploy.host-docker-sock"
-STATEFUL_LABEL = "robotsix.deploy.stateful"
 PRIMARY_LABEL = "robotsix.deploy.primary"
 LABEL_CONFIG_TARGET = "robotsix.deploy.config-target"
 LABEL_CONFIG_ASSIST = "robotsix.deploy.config-assist"  # shell command string
@@ -520,8 +519,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                     f"referenced in service but not declared in top-level volumes:"
                 )
 
-    # 12. Top-level volume labels — stateful, and driver validation
-    stateful_volumes: list[str] = []
+    # 12. Top-level volume driver validation
     for vname, vdef in top_volumes.items():
         if isinstance(vdef, dict):
             # Validate driver: must be absent or "local"
@@ -530,11 +528,6 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 violations.append(
                     f"volume {vname!r}: driver must be 'local', got {driver!r}"
                 )
-            vlabels = vdef.get("labels")
-            if isinstance(vlabels, dict):
-                val = vlabels.get(STATEFUL_LABEL)
-                if isinstance(val, str) and val.strip().lower() == "true":
-                    stateful_volumes.append(vname)
 
     # 13. Raise if any violations
     if violations:
@@ -546,7 +539,6 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         image=primary_parsed["image"],
         ports=primary_parsed["ports"],
         volume_mounts=primary_parsed["volume_mounts"],
-        stateful_volumes=stateful_volumes,
         env=primary_parsed["env"],
         claude_mount=primary_parsed["claude_mount"],
         host_docker_sock=primary_parsed["host_docker_sock"],
