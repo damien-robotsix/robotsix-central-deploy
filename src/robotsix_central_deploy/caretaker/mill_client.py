@@ -91,13 +91,16 @@ class MillClient:
 
         The component id to look up comes from the ``mill_component_id``
         system setting (default ``"mill"``).  Returns
-        ``http://localhost:{host_port}`` for the mill's first port
-        mapping, or None when no such component is registered.
+        ``http://{container_name}:{container_port}`` for the mill's first
+        port mapping — managed components publish no host ports (the
+        gateway reaches them over the shared proxy network by container
+        name, and so must the caretaker) — or None when no such component
+        is registered.
         """
         mill_cfg = component_config_store.get(mill_component_id)
         if mill_cfg is None:
             return None
         if not mill_cfg.ports:
             return None
-        host_port = mill_cfg.ports[0].host
-        return f"http://localhost:{host_port}"
+        container_port = mill_cfg.ports[0].container
+        return f"http://{mill_cfg.container_name}:{container_port}"
