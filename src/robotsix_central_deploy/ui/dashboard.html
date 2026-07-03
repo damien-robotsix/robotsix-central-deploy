@@ -405,6 +405,11 @@
 
 <div id="error-banner" class="error-banner"></div>
 
+<div id="warning-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
+  <button onclick="hideWarning()" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
+  <span id="warning-banner-text"></span>
+</div>
+
 <div id="caretaker-degraded-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
   &#9888; Caretaker reporting is degraded &mdash; deploy the mill component to enable board issue tracking.
   <button onclick="document.getElementById('caretaker-degraded-banner').style.display='none'" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
@@ -774,6 +779,17 @@ function showError(msg) {
 
 function hideError() {
   const el = document.getElementById('error-banner');
+  el.style.display = 'none';
+}
+
+function showWarning(msg) {
+  const el = document.getElementById('warning-banner');
+  document.getElementById('warning-banner-text').textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideWarning() {
+  const el = document.getElementById('warning-banner');
   el.style.display = 'none';
 }
 
@@ -1229,6 +1245,7 @@ async function loadDashboard() {
 async function updateService(name) {
   if (!window.confirm(`Force-update "${name}" to the latest image?\n\nThis pulls the latest image from the registry and recreates the container (brief restart).`)) return;
   hideRowError(name);
+  hideWarning();
   const btn = document.getElementById(`btn-update-${name}`);
   const orig = btn ? btn.textContent : 'Update';
   if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
@@ -1243,10 +1260,14 @@ async function updateService(name) {
       const body = await resp.json().catch(() => ({}));
       throw new Error(body.error || `HTTP ${resp.status}`);
     }
+    const body = await resp.json().catch(() => ({}));
     const svc = await fetchOneStatus(name);
     const rowEl = document.getElementById(`row-${name}`);
     if (rowEl) rowEl.outerHTML = renderRow(svc);
     updateRefreshTime();
+    if (body.warnings && body.warnings.length > 0) {
+      showWarning('\u26a0\ufe0f ' + body.warnings.join(' '));
+    }
   } catch (err) {
     showRowError(name, 'Update failed: ' + err.message);
     const b = document.getElementById(`btn-update-${name}`);
@@ -1256,6 +1277,7 @@ async function updateService(name) {
 
 async function doAction(name, action) {
   hideRowError(name);
+  hideWarning();
   setButtonsDisabled(name, true);
   try {
     const resp = await fetch(`/services/${encodeURIComponent(name)}/${action}`, {
@@ -1266,6 +1288,7 @@ async function doAction(name, action) {
       const body = await resp.json().catch(() => ({}));
       throw new Error(body.error || `HTTP ${resp.status}`);
     }
+    const body = await resp.json().catch(() => ({}));
     // Refresh just this row
     const svc = await fetchOneStatus(name);
     const rowEl = document.getElementById(`row-${name}`);
@@ -1273,6 +1296,9 @@ async function doAction(name, action) {
       rowEl.outerHTML = renderRow(svc);
     }
     updateRefreshTime();
+    if (body.warnings && body.warnings.length > 0) {
+      showWarning('\u26a0\ufe0f ' + body.warnings.join(' '));
+    }
   } catch (err) {
     showRowError(name, err.message);
     // Try to refresh the row anyway to get current state

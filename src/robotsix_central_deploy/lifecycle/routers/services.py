@@ -1141,6 +1141,7 @@ async def rollback_service(
             name=name,
             rolled_back_to_digest=deploy_outcome.deployed_digest,
             current_state=record.state,
+            warnings=deploy_outcome.warnings,
         )
 
     # -- Original one-step rollback -----------------------------------------
@@ -1181,6 +1182,7 @@ async def rollback_service(
         name=name,
         rolled_back_to_digest=old_previous,
         current_state=record.state,
+        warnings=outcome.warnings,
     )
 
 

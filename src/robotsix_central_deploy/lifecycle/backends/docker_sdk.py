@@ -605,6 +605,8 @@ class DockerSdkBackend(ExecutionBackend):
         )  # guaranteed non-empty by server layer
         loop = asyncio.get_running_loop()
 
+        rollback_warnings: list[str] = []
+
         # Stop + remove current container
         existing = await self._get_container(name)
         if existing is not None:
@@ -619,6 +621,39 @@ class DockerSdkBackend(ExecutionBackend):
 
         # Create + start from prior digest
         try:
+            # Claude auth: ensure named volume, seed from host if needed, validate
+            if config.claude_mount:
+                try:
+                    await loop.run_in_executor(None, self._ensure_claude_auth_volume)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Failed to ensure claude-auth volume during rollback: {exc}"
+                    ) from exc
+
+                # Seed on first use (migration from host path)
+                try:
+                    await loop.run_in_executor(None, self._seed_claude_auth_from_host)
+                except Exception as exc:
+                    logger.warning(
+                        "claude-auth seed migration failed during rollback (non-fatal): %s",
+                        exc,
+                    )
+
+                # Validate credentials
+                try:
+                    cred_warnings = await loop.run_in_executor(
+                        None, self._check_claude_credentials
+                    )
+                    if cred_warnings:
+                        rollback_warnings.extend(cred_warnings)
+                        for w in cred_warnings:
+                            logger.warning(w)
+                except Exception as exc:
+                    logger.warning(
+                        "claude-auth credential check failed during rollback (non-fatal): %s",
+                        exc,
+                    )
+
             rollback_container = await loop.run_in_executor(
                 None, lambda: self._create_container(config, target_digest)
             )
@@ -632,7 +667,9 @@ class DockerSdkBackend(ExecutionBackend):
             await self._wait_healthy(name, timeout=60.0)
 
         return RollbackOutcome(
-            deployed_digest=target_digest, state=ServiceState.RUNNING
+            deployed_digest=target_digest,
+            state=ServiceState.RUNNING,
+            warnings=rollback_warnings,
         )
 
     # -- config volume helpers ----------------------------------------------
