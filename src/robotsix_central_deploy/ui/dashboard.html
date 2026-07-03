@@ -642,8 +642,14 @@
       <div id="ob-mill-tracking" style="margin-top:12px;">
         <label>
           <input type="checkbox" id="ob-register-mill" checked>
-          Register with mill for issue tracking <em>(recommended)</em>
+          Report problems to mill <em>(recommended)</em>
         </label>
+        <div style="font-size:0.78rem;color:#94a3b8;margin:2px 0 0 24px;">
+          Caretaker findings for this component (failed health checks, update
+          problems) are filed as issues on the component's repo board, where
+          mill picks them up. Has no effect unless the caretaker is enabled
+          in Settings.
+        </div>
       </div>
 
       <div id="ob-deploy-progress" class="ob-progress" style="display:none"></div>
