@@ -643,18 +643,12 @@ def _fetch_fresh_config_assist(
 # ---------------------------------------------------------------------------
 
 
-_CONFIG_SECRET_SENTINEL = "SECRET"
-"""Legacy template authors mark a sensitive leaf by setting its value to
-``_CONFIG_SECRET_SENTINEL`` (the string ``"SECRET"``) in their
-``config/config.yaml``."""
-
-
 def _is_json_schema(schema: dict[str, Any]) -> bool:
-    """Return True when *schema* is a JSON Schema dict (has ``"type"`` key).
+    """Return True when *schema* is a JSON Schema dict (has ``"properties"`` key).
 
-    Legacy YAML-style templates are plain dicts without ``"type"``.
+    Legacy flat-dict templates are plain dicts without ``"properties"``.
     """
-    return "type" in schema
+    return "properties" in schema
 
 
 def _is_secret_prop(prop_schema: dict[str, Any]) -> bool:
@@ -751,17 +745,14 @@ def _canonical_hash(d: dict[str, Any]) -> str:
 def _mask_secrets(schema: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Return *current* with secret leaf values replaced by ``"***"``.
 
-    Supports two formats:
-
-    * **JSON Schema** (detected by presence of ``"type"`` key): secrets are
-      detected via ``"format": "password"`` + ``"writeOnly": true``.
-    * **Legacy YAML template**: secrets are detected via the
-      ``_CONFIG_SECRET_SENTINEL`` value (``"SECRET"``).
+    Secrets are detected via ``"format": "password"`` + ``"writeOnly": true``
+    in the JSON Schema properties.  When *schema* is a legacy flat-dict
+    template (no ``"properties"`` key) there are no secret annotations, so
+    *current* is returned unchanged.
     """
-
     if _is_json_schema(schema):
         return _mask_secrets_json_schema(schema, current)
-    return _mask_secrets_legacy(schema, current)
+    return current
 
 
 def _mask_secrets_json_schema(
@@ -791,46 +782,6 @@ def _mask_secrets_json_schema(
     return _recursive(schema, current)
 
 
-def _mask_secrets_legacy(
-    template: dict[str, Any], current: dict[str, Any]
-) -> dict[str, Any]:
-    """Legacy secret masking (YAML templates with ``SECRET`` sentinel)."""
-
-    def _recursive(
-        i_template: dict[str, Any], i_current: dict[str, Any]
-    ) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, tval in i_template.items():
-            cval = i_current.get(key)
-            if isinstance(tval, dict) and isinstance(cval, dict):
-                result[key] = _recursive(tval, cval)
-            elif isinstance(tval, list) and isinstance(cval, list):
-                item_template = tval[0] if tval and isinstance(tval[0], dict) else None
-                if item_template:
-                    result[key] = [
-                        _recursive(item_template, item)
-                        if isinstance(item, dict)
-                        else item
-                        for item in cval
-                    ]
-                else:
-                    result[key] = cval
-            elif (
-                tval == _CONFIG_SECRET_SENTINEL
-                and isinstance(cval, str)
-                and cval
-                and cval != _CONFIG_SECRET_SENTINEL
-            ):
-                result[key] = "***"
-            elif tval == _CONFIG_SECRET_SENTINEL:
-                result[key] = ""
-            else:
-                result[key] = cval if key in i_current else tval
-        return result
-
-    return _recursive(template, current)
-
-
 def _merge_config(
     schema: dict[str, Any],
     existing: dict[str, Any],
@@ -840,19 +791,16 @@ def _merge_config(
 ) -> dict[str, Any]:
     """Deep-merge *submitted* over *existing*, respecting secret handling.
 
-    Supports two formats:
-
-    * **JSON Schema** (detected by presence of ``"type"`` key): iterates
-      ``"properties"``, resolves ``$ref``, coerces by ``type``, detects
-      secrets via ``format:password`` + ``writeOnly:true``.
-    * **Legacy YAML template**: iterates dict keys directly, coerces via
-      ``_coerce_to_template``, detects secrets via ``_CONFIG_SECRET_SENTINEL``.
+    * **JSON Schema** (has ``"properties"`` key): iterates properties,
+      resolves ``$ref``, coerces by ``type``, detects secrets via
+      ``format:password`` + ``writeOnly:true``.
+    * **Legacy flat-dict template** (no ``"properties"`` key): iterates
+      dict keys directly, recurses into nested dicts.
 
     *prefer_existing_for_unset*: when True, a key absent from *submitted*
     falls back to ``existing[key]`` (not the template default) whenever the
     operator already has a value for it.
     """
-
     if _is_json_schema(schema):
         return _merge_config_json_schema(
             schema,
@@ -860,7 +808,7 @@ def _merge_config(
             submitted,
             prefer_existing_for_unset=prefer_existing_for_unset,
         )
-    return _merge_config_legacy(
+    return _merge_config_flat(
         schema, existing, submitted, prefer_existing_for_unset=prefer_existing_for_unset
     )
 
@@ -907,50 +855,19 @@ def _merge_config_json_schema(
     return _recursive(schema, existing, submitted)
 
 
-def _coerce_to_template(tval: object, sval: object) -> object:
-    """Coerce a submitted form value back to the template leaf's type.
-
-    The config UI renders every leaf as a text/password ``<input>`` and
-    therefore submits all values as strings.  Without coercion, typed
-    scalars in ``config.yaml`` (``port: 8080``, ``enabled: true``) would
-    be silently rewritten as strings on the next Save.  This re-derives
-    the intended type from the template leaf.
-
-    Best-effort: a value that cannot be parsed into the template type is
-    returned unchanged (the submitted string) rather than raising, so a
-    Save never fails on an unexpected value.
-    """
-    if not isinstance(sval, str):
-        return sval
-    # bool is a subclass of int — must be checked before int.
-    if isinstance(tval, bool):
-        low = sval.strip().lower()
-        if low in ("true", "1", "yes", "on"):
-            return True
-        if low in ("false", "0", "no", "off", ""):
-            return False
-        return sval
-    if isinstance(tval, int):
-        try:
-            return int(sval)
-        except ValueError:
-            return sval
-    if isinstance(tval, float):
-        try:
-            return float(sval)
-        except ValueError:
-            return sval
-    return sval
-
-
-def _merge_config_legacy(
+def _merge_config_flat(
     template: dict[str, Any],
     existing: dict[str, Any],
     submitted: dict[str, Any],
     *,
     prefer_existing_for_unset: bool = False,
 ) -> dict[str, Any]:
-    """Legacy deep-merge (YAML templates with ``SECRET`` sentinel)."""
+    """Deep-merge for legacy flat-dict templates (no ``"properties"`` key).
+
+    Iterates *template* keys directly, recurses into nested dicts, and
+    merges array-of-objects lists when the template leaf is a list of dicts.
+    No secret-sentinel handling — that heuristic has been deleted.
+    """
 
     def _recursive(
         i_template: dict[str, Any],
@@ -959,36 +876,34 @@ def _merge_config_legacy(
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, tval in i_template.items():
-            if isinstance(tval, dict) and isinstance(i_submitted.get(key), dict):
-                existing_sub = (
-                    i_existing[key] if isinstance(i_existing.get(key), dict) else {}
-                )
-                result[key] = _recursive(tval, existing_sub, i_submitted[key])
-            elif (
-                isinstance(tval, list)
-                and isinstance(i_submitted.get(key), list)
-                and tval
-                and isinstance(tval[0], dict)
+            if (
+                isinstance(tval, dict)
+                and isinstance(i_existing.get(key), dict)
+                and isinstance(i_submitted.get(key), dict)
             ):
+                result[key] = _recursive(tval, i_existing[key], i_submitted[key])
+            elif isinstance(tval, list) and tval and isinstance(tval[0], dict):
                 item_template = tval[0]
                 submitted_list = i_submitted[key]
                 raw_existing = i_existing.get(key)
-                existing_list = raw_existing if isinstance(raw_existing, list) else []
-                result[key] = [
-                    _recursive(
-                        item_template,
-                        existing_list[idx]
-                        if idx < len(existing_list)
-                        and isinstance(existing_list[idx], dict)
-                        else {},
-                        sitem if isinstance(sitem, dict) else {},
-                    )
-                    for idx, sitem in enumerate(submitted_list)
-                ]
-            elif tval == _CONFIG_SECRET_SENTINEL and i_submitted.get(key) == "***":
-                result[key] = i_existing.get(key, "")
+                existing_list: list[dict[str, Any]] = (
+                    raw_existing if isinstance(raw_existing, list) else []
+                )
+                merged_items: list[dict[str, Any]] = []
+                for i, sitem in enumerate(submitted_list):
+                    if isinstance(sitem, dict):
+                        eitem = (
+                            existing_list[i]
+                            if i < len(existing_list)
+                            and isinstance(existing_list[i], dict)
+                            else {}
+                        )
+                        merged_items.append(_recursive(item_template, eitem, sitem))
+                    else:
+                        merged_items.append(sitem)
+                result[key] = merged_items
             elif key in i_submitted:
-                result[key] = _coerce_to_template(tval, i_submitted[key])
+                result[key] = i_submitted[key]
             elif prefer_existing_for_unset and key in i_existing:
                 result[key] = i_existing[key]
             else:
@@ -999,14 +914,7 @@ def _merge_config_legacy(
 
 
 def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> None:
-    """Validate *values* against JSON Schema, raising HTTP 422 on failure.
-
-    When *schema* is not a JSON Schema (legacy YAML template), validation
-    is skipped — those templates have no formal schema to validate against.
-    """
-    if not _is_json_schema(schema):
-        return
-
+    """Validate *values* against JSON Schema, raising HTTP 422 on failure."""
     import jsonschema
 
     try:

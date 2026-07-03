@@ -22,7 +22,7 @@ central-deploy expects the following files in a conforming service repo:
 | Path | Role |
 |------|------|
 | `deploy/docker-compose.yml` | **Deploy compose** (this contract). Required. |
-| `config/config.yaml` | Runtime config schema (§ 8). Optional. |
+| `config/config.schema.json` | Runtime config schema (§ 8). Optional. |
 | `docker-compose.yml` (repo root) | Dev compose — **ignored by central-deploy**. |
 
 The root `docker-compose.yml` is every repo's local-dev compose (may contain
@@ -226,8 +226,8 @@ exactly as before (no socket mount).
 ### `robotsix.deploy.config-target` (service-level)
 
 Full in-container path to the config file the app reads (e.g.
-`/home/mailbot/config/config.yaml`). **Required** when the repo contains
-`config/config.yaml`. The dirname must match the `container:` path of a
+`/home/mailbot/config/config.json`). **Required** when the repo contains
+`config/config.schema.json`. The dirname must match the `container:` path of a
 named-volume mount in the same service — central-deploy resolves the volume
 name from that mount and writes the merged config into it before starting the
 container. Preflight returns an error if this label is missing.
@@ -237,7 +237,7 @@ Example:
 services:
   mailbot:
     labels:
-      robotsix.deploy.config-target: "/home/mailbot/config/config.yaml"
+      robotsix.deploy.config-target: "/home/mailbot/config/config.json"
     volumes:
       - mailbot-config:/home/mailbot/config
 ```
@@ -315,44 +315,87 @@ volumes:
 
 ---
 
-## § 8  config/config.yaml — unified configuration schema
+## § 8  config/config.json + config/config.schema.json — typed configuration
 
 ### Presence
-Optional. If `config/config.yaml` exists at the repo root, central-deploy fetches it at
-`POST /onboard/preflight` (alongside `deploy/docker-compose.yml`) and returns the parsed schema
-in the preflight response.
+Optional. If `config/config.schema.json` exists at the repo root, central-deploy fetches it
+at `POST /onboard/preflight` (alongside `deploy/docker-compose.yml`) and returns the parsed
+schema in the preflight response. The matching runtime config file `config/config.json`
+provides default values for the schema's properties.
 
-### Structure
-Must be a YAML mapping (dict) at the top level. Nested mappings become UI sections.
-Scalar leaf values are runtime defaults.
+### Schema format
+`config/config.schema.json` must be a valid JSON Schema document (draft-07 or later) with a
+top-level `"type": "object"` and a `"properties"` block. Nested objects become UI sections.
+Each property declares a `"type"` (`"string"`, `"integer"`, `"number"`, `"boolean"`,
+`"object"`, `"array"`). Values are coerced according to the declared type when the operator
+submits the config form via the dashboard.
 
 ### Secret-field convention
-A leaf with value `""` (empty string) or `null`/`~` is a **secret field**:
+A property with `"format": "password"` and `"writeOnly": true` is a **secret field**,
+mirroring pydantic's `SecretStr` convention:
 - Rendered as a masked password input in the configuration UI
 - Stored in central-deploy's data volume; never echoed back in GET responses
   (masked as `"***"` in the `current` dict)
 - Preserved on save if the submitted value is the sentinel `"***"` (unchanged)
 
-### Example `config/config.yaml`
+### Example `config/config.schema.json`
 
-```yaml
-server:
-  host: localhost
-  port: 8080
-smtp:
-  host: smtp.example.com
-  user: ""      # secret — blank → masked input
-  password: "" # secret — blank → masked input
-log_level: info
+```json
+{
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string", "default": "localhost" },
+        "port": { "type": "integer", "default": 8080 }
+      }
+    },
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string", "default": "smtp.example.com" },
+        "user": {
+          "type": "string",
+          "format": "password",
+          "writeOnly": true
+        },
+        "password": {
+          "type": "string",
+          "format": "password",
+          "writeOnly": true
+        }
+      }
+    },
+    "log_level": { "type": "string", "default": "info" }
+  }
+}
+```
+
+### Example `config/config.json` (default values)
+
+```json
+{
+  "server": {
+    "host": "localhost",
+    "port": 8080
+  },
+  "smtp": {
+    "host": "smtp.example.com",
+    "user": "",
+    "password": ""
+  },
+  "log_level": "info"
+}
 ```
 
 ### Deploy compose requirement
 The deploy compose MUST include the `robotsix.deploy.config-target` label (see §5) on the
-primary service when `config/config.yaml` is present. The label value is the full
-in-container path of the config file (e.g. `/home/mailbot/config/config.yaml`). The
+primary service when `config/config.schema.json` is present. The label value is the full
+in-container path of the config file (e.g. `/home/mailbot/config/config.json`). The
 dirname must match the container-side path of exactly one named-volume mount in that
 service. Central-deploy resolves the volume name from this mount and writes
-`config.yaml` into it before starting the container. Preflight returns an error if
+`config.json` into it before starting the container. Preflight returns an error if
 the label is missing or mismatched.
 
 ### Example deploy compose snippet
@@ -362,7 +405,7 @@ services:
   myapp:
     image: ghcr.io/org/myapp:latest
     labels:
-      robotsix.deploy.config-target: "/app/config/config.yaml"
+      robotsix.deploy.config-target: "/app/config/config.json"
     volumes:
       - myapp-config:/app/config
 volumes:
@@ -373,6 +416,7 @@ volumes:
 At onboard: template defaults written to volume.
 On each config save: merged values (defaults + user edits) re-written to volume.
 Service reads only from the mounted volume; central-deploy never uses host bind-mounts.
+
 
 ---
 
@@ -392,7 +436,7 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/home/app/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
 | `labels.robotsix.deploy.host-docker-sock: "true"` | `host_docker_sock: bool` *(+ runtime injection)* | Non-primary only (parse error on primary). At deploy time binds `/var/run/docker.sock` → `/var/run/docker.sock` **read-only**.  **Not** stored in `ComponentConfig.mounts`.  ⚠ Grants root-equivalent host Docker control — hardened socket-proxy siblings only. |
 | `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
-| `labels.robotsix.deploy.config-target` | `ComponentConfig.config_volume` | Full in-container path to config.yaml. Resolved to the named-volume name from the matching volume mount. Required when `config/config.yaml` is present. |
+| `labels.robotsix.deploy.config-target` | `ComponentConfig.config_volume` | Full in-container path to config.json. Resolved to the named-volume name from the matching volume mount. Required when `config/config.schema.json` is present. |
 | Non-primary service entire block | `ComponentConfig.siblings[*]` (`ServiceConfig`) | One `ServiceConfig` per sibling. |
 
 ---
