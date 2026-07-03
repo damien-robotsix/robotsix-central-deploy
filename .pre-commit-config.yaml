@@ -3,7 +3,11 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
+      - id: check-json
       - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
       - id: end-of-file-fixer
       - id: trailing-whitespace
 
@@ -13,11 +17,34 @@ repos:
       - id: ruff
       - id: ruff-format
 
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint
+
   - repo: local
     hooks:
       - id: mypy
         name: mypy
         entry: uv run mypy src/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: vulture
+        name: vulture
+        entry: uv run --with vulture vulture src/ tests/
         language: system
         types: [python]
         pass_filenames: false

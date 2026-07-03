@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Host port auto-assignment at onboarding: when a new component's default host port collides with an existing component or central-deploy's own port, `onboard_preflight` auto-assigns a free port (10000-20000 range) and returns the shifts in `port_shifts`. Port collision tickets are filed on affected components' mill boards when reachable; unreachable-mill warnings are surfaced in the job status response and dashboard.
+- Align `.pre-commit-config.yaml` with standard hook set: add `check-yaml`, `check-toml`, `check-json`, `detect-private-key` (pre-commit-hooks v6.0.0); add `detect-secrets` (v1.5.0), `actionlint` (v1.7.12), `hadolint` (v2.14.0); add `vulture` to local hooks
 - Eliminate triple field duplication by deriving `SystemSettingsResponse` and `SystemSettingsUpdate` from `SystemSettings` instead of `BaseModel`.
 - Migrate component-config onboarding to the JSON config-standard: fetch `config/config.json` + `config/config.example.json`, parse/write JSON (`config.json`) instead of YAML. Compose parsing stays YAML. (Pairs with each component's config-standard migration.)
 
