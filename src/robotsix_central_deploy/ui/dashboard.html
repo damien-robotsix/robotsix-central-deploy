@@ -461,49 +461,6 @@
   <div id="orphan-volumes-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
 </section>
 
-<!-- ═══ Claude auth panel ════════════════════════════════════════ -->
-<section class="disk-panel" id="claude-auth-panel">
-  <div class="disk-header">
-    <span class="disk-title">Claude Auth</span>
-    <span id="claude-auth-status-badge" style="font-size:0.85rem;"></span>
-  </div>
-  <div id="claude-auth-detail" style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"></div>
-
-  <!-- Login flow -->
-  <div id="claude-auth-login-section" style="display:none;">
-    <div id="claude-auth-oauth-url-box" style="margin-bottom:8px;padding:8px 12px;background:#1e1e1e;border-radius:4px;word-break:break-all;">
-      <strong style="color:#e2e8f0;">1.</strong> Visit this URL to authorize:<br>
-      <a id="claude-auth-oauth-url" href="#" target="_blank" rel="noopener" style="color:var(--blue);font-size:0.82rem;"></a>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-      <label style="font-size:0.85rem;color:#94a3b8;flex-shrink:0;">
-        <strong style="color:#e2e8f0;">2.</strong> Paste authorization code:
-      </label>
-      <input id="claude-auth-code-input" type="text" placeholder="Auth code from browser…" style="flex:1;padding:6px 10px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.85rem;">
-      <button id="claude-auth-submit-btn" class="btn-primary" style="font-size:0.82rem;">Complete Login</button>
-      <button id="claude-auth-cancel-btn" class="btn-secondary" style="font-size:0.82rem;">Cancel</button>
-    </div>
-    <div id="claude-auth-login-error" style="display:none;padding:8px 12px;background:var(--red-bg);color:var(--red);border-radius:4px;font-size:0.82rem;margin-bottom:8px;"></div>
-  </div>
-
-  <!-- Fallback: paste credentials JSON -->
-  <details id="claude-auth-paste-section" style="margin-top:8px;">
-    <summary style="cursor:pointer;font-size:0.82rem;color:#64748b;">Paste credentials JSON (fallback)</summary>
-    <div style="margin-top:8px;">
-      <textarea id="claude-auth-paste-textarea" rows="6" placeholder='Paste .credentials.json content…' style="width:100%;padding:8px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.8rem;font-family:monospace;resize:vertical;"></textarea>
-      <button id="claude-auth-paste-btn" class="btn-secondary" style="margin-top:4px;font-size:0.82rem;">Save Credentials</button>
-      <span id="claude-auth-paste-msg" style="margin-left:8px;font-size:0.82rem;"></span>
-    </div>
-  </details>
-
-  <!-- Actions -->
-  <div style="margin-top:10px;display:flex;gap:8px;">
-    <button id="claude-auth-login-btn" class="btn-primary" style="font-size:0.82rem;">Log in with Claude</button>
-    <button id="claude-auth-refresh-btn" class="btn-secondary" style="font-size:0.82rem;">Refresh Status</button>
-  </div>
-  <div id="claude-auth-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
-</section>
-
 <div id="remove-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
   <div class="env-panel" style="max-width:460px;">
     <div class="env-header">
@@ -685,8 +642,14 @@
       <div id="ob-mill-tracking" style="margin-top:12px;">
         <label>
           <input type="checkbox" id="ob-register-mill" checked>
-          Register with mill for issue tracking <em>(recommended)</em>
+          Report problems to mill <em>(recommended)</em>
         </label>
+        <div style="font-size:0.78rem;color:#94a3b8;margin:2px 0 0 24px;">
+          Caretaker findings for this component (failed health checks, update
+          problems) are filed as issues on the component's repo board, where
+          mill picks them up. Has no effect unless the caretaker is enabled
+          in Settings.
+        </div>
       </div>
 
       <div id="ob-deploy-progress" class="ob-progress" style="display:none"></div>
@@ -783,6 +746,49 @@
     </div>
   </form>
   <div id="settings-toast" style="margin-top:12px;font-size:0.85rem;"></div>
+
+  <!-- ═══ Claude auth panel ════════════════════════════════════════ -->
+  <section class="disk-panel" id="claude-auth-panel" style="margin-top:24px;">
+    <div class="disk-header">
+      <span class="disk-title">Claude Auth</span>
+      <span id="claude-auth-status-badge" style="font-size:0.85rem;"></span>
+    </div>
+    <div id="claude-auth-detail" style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"></div>
+
+    <!-- Login flow -->
+    <div id="claude-auth-login-section" style="display:none;">
+      <div id="claude-auth-oauth-url-box" style="margin-bottom:8px;padding:8px 12px;background:#1e1e1e;border-radius:4px;word-break:break-all;">
+        <strong style="color:#e2e8f0;">1.</strong> Visit this URL to authorize:<br>
+        <a id="claude-auth-oauth-url" href="#" target="_blank" rel="noopener" style="color:var(--blue);font-size:0.82rem;"></a>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <label style="font-size:0.85rem;color:#94a3b8;flex-shrink:0;">
+          <strong style="color:#e2e8f0;">2.</strong> Paste authorization code:
+        </label>
+        <input id="claude-auth-code-input" type="text" placeholder="Auth code from browser…" style="flex:1;padding:6px 10px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.85rem;">
+        <button id="claude-auth-submit-btn" class="btn-primary" style="font-size:0.82rem;">Complete Login</button>
+        <button id="claude-auth-cancel-btn" class="btn-secondary" style="font-size:0.82rem;">Cancel</button>
+      </div>
+      <div id="claude-auth-login-error" style="display:none;padding:8px 12px;background:var(--red-bg);color:var(--red);border-radius:4px;font-size:0.82rem;margin-bottom:8px;"></div>
+    </div>
+
+    <!-- Fallback: paste credentials JSON -->
+    <details id="claude-auth-paste-section" style="margin-top:8px;">
+      <summary style="cursor:pointer;font-size:0.82rem;color:#64748b;">Paste credentials JSON (fallback)</summary>
+      <div style="margin-top:8px;">
+        <textarea id="claude-auth-paste-textarea" rows="6" placeholder='Paste .credentials.json content…' style="width:100%;padding:8px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.8rem;font-family:monospace;resize:vertical;"></textarea>
+        <button id="claude-auth-paste-btn" class="btn-secondary" style="margin-top:4px;font-size:0.82rem;">Save Credentials</button>
+        <span id="claude-auth-paste-msg" style="margin-left:8px;font-size:0.82rem;"></span>
+      </div>
+    </details>
+
+    <!-- Actions -->
+    <div style="margin-top:10px;display:flex;gap:8px;">
+      <button id="claude-auth-login-btn" class="btn-primary" style="font-size:0.82rem;">Log in with Claude</button>
+      <button id="claude-auth-refresh-btn" class="btn-secondary" style="font-size:0.82rem;">Refresh Status</button>
+    </div>
+    <div id="claude-auth-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
+  </section>
 </div>
 
 <!-- Volume browser modal -->
@@ -2918,16 +2924,17 @@ async function doLogout() {
 
 function showSettingsSection() {
   document.querySelector('header').style.display = 'none';
-  document.querySelectorAll('.disk-panel').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = 'none');
   document.querySelector('table').style.display = 'none';
   document.getElementById('settings-section').style.display = '';
   loadSettings();
+  fetchClaudeAuthStatus();
 }
 
 function hideSettingsSection() {
   document.getElementById('settings-section').style.display = 'none';
   document.querySelector('header').style.display = '';
-  document.querySelectorAll('.disk-panel').forEach(el => el.style.display = '');
+  document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = '');
   document.querySelector('table').style.display = '';
 }
 
