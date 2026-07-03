@@ -10,9 +10,6 @@ from __future__ import annotations
 
 import shutil  # noqa: F401 — tests monkeypatch server_mod.shutil
 
-# App and lifespan
-from .app import app  # noqa: F401
-
 # Lifespan (tests import it directly)
 from .deps import lifespan as lifespan  # noqa: F401
 
@@ -35,8 +32,19 @@ from .deps import (  # noqa: F401
 # Re-exports that tests reference via ``server_mod.<name>``
 from .volume_audit.models import VolumeAuditResponse as VolumeAuditResponse  # noqa: F401
 
+
+# App — lazy-loaded to avoid a circular import between
+#   server.py -> app.py -> routers/service_config.py -> server.py
+def __getattr__(name: str):
+    if name == "app":
+        from .app import app as _app
+
+        return _app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    "app",
+    "app",  # noqa: F822 — lazy via __getattr__
     "lifespan",
     "_mask_secrets",
     "_merge_config",

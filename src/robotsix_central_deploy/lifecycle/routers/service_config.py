@@ -344,7 +344,9 @@ async def put_service_config(
             try:
                 await backend.restart(record)
             except Exception as exc:
-                logger.warning("config saved for %s but restart failed: %s", name, exc)
+                logger.warning(
+                    "config saved for %s but restart failed: %s", repr(name), exc
+                )
         # Fan out to siblings that share the same config volume
         config = registry.get(name) if registry else None
         if config and config.siblings:
@@ -356,15 +358,15 @@ async def put_service_config(
                 except Exception as exc:
                     logger.warning(
                         "config saved for %s but sibling '%s' restart failed: %s",
-                        name,
-                        sib_record.name,
+                        repr(name),
+                        repr(sib_record.name),
                         exc,
                     )
     else:
         await config_yaml_store.update_current(name, merged)
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only",
-            name,
+            repr(name),
         )
 
 
@@ -498,7 +500,7 @@ async def refresh_config_schema(
         ) from exc
 
     await config_yaml_store.save_template(name, schema)
-    logger.info("Refreshed config schema for %s from repo", name)
+    logger.info("Refreshed config schema for %s from repo", repr(name))
     return ConfigSchemaRefreshResponse(config_schema=schema)
 
 
@@ -564,12 +566,12 @@ async def run_config_assist(
                 }
             )
             await component_config_store.put(comp_cfg)
-            logger.info("Refreshed config-assist fields for %s from repo", name)
+            logger.info("Refreshed config-assist fields for %s from repo", repr(name))
     except Exception as exc:
         logger.warning(
             "Could not refresh config-assist fields for %s from repo (%s); "
             "using stored values",
-            name,
+            repr(name),
             exc,
         )
 
