@@ -167,6 +167,19 @@
     color: var(--blue); border-bottom: 1px solid #334155;
     padding-bottom: 4px; margin-bottom: 8px; font-size: 0.9rem;
   }
+  .history-table {
+    width: 100%; border-collapse: collapse; font-size: 0.82rem;
+  }
+  .history-table th {
+    text-align: left; padding: 6px 8px; background: #243044;
+    color: #94a3b8; font-weight: 600; position: sticky; top: 0; z-index: 1;
+  }
+  .history-table td {
+    padding: 6px 8px; border-bottom: 1px solid #334155;
+    vertical-align: middle;
+  }
+  .history-table .current-row { background: rgba(56,189,248,0.06); }
+  .history-table .current-row td { color: var(--blue); }
   /* Array-of-objects rendering */
   .array-item {
     border: 1px solid #334155;
@@ -532,6 +545,33 @@
   </div>
 </div>
 
+<div id="history-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+  <div class="env-panel" style="max-width:780px;">
+    <div class="env-header">
+      <h2 id="history-modal-title">Deploy History — <span id="history-modal-component"></span></h2>
+      <button class="env-close" onclick="closeHistoryModal()" title="Close">&times;</button>
+    </div>
+    <div id="history-modal-error" class="env-modal-error"></div>
+    <div style="max-height:60vh;overflow-y:auto;">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Digest</th>
+            <th>Timestamp</th>
+            <th>Source</th>
+            <th>Image</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+    <div class="env-footer">
+      <button class="btn-secondary" onclick="closeHistoryModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="onboard-modal" class="onboard-overlay" role="dialog" aria-modal="true" aria-labelledby="onboard-modal-title">
   <div class="onboard-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -811,7 +851,7 @@ function renderRow(svc) {
   return `<tr id="row-${escAttr(svc.name)}">
     <td>${escHtml(svc.name)}${statefulWarning}${untrackedBadge}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span>${errorHtml}</td>
-    <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
+    <td><span class="revision" title="${escAttr(svc.running_digest || rev)}">${escHtml(revShort)}</span></td>
     <td><span class="${healthClass}" title="${escAttr(healthTitle)}">${escHtml(healthDisplay)}</span></td>
     <td>${updateBadge}</td>
     <td class="actions">
@@ -819,6 +859,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
       <button onclick="updateService('${escAttr(svc.name)}')" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container">Update</button>
+      <button onclick="openHistoryModal('${escAttr(svc.name)}')" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
       ${svc.has_config_yaml
         ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>`
         : `<button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>`
@@ -866,7 +907,7 @@ function renderSiblingRow(svc) {
   return `<tr class="sibling-row" id="row-${escAttr(svc.name)}">
     <td>↳ ${escHtml(svc.name)}</td>
     <td><span class="badge ${badgeClass}">${escHtml(state)}</span></td>
-    <td><span class="revision" title="${escAttr(rev)}">${escHtml(revShort)}</span></td>
+    <td><span class="revision" title="${escAttr(svc.running_digest || rev)}">${escHtml(revShort)}</span></td>
     <td><span class="${healthClass}">${escHtml(healthDisplay)}</span></td>
     <td>${updateBadge}</td>
     <td class="actions"></td>
@@ -2333,6 +2374,114 @@ function renderConfigDiff(liveConfig, storedConfig) {
 
   html += '</tbody></table>';
   return html;
+}
+
+// ── History modal ──────────────────────────────────────────────
+
+let _historyModalName = null;
+
+function openHistoryModal(name) {
+  _historyModalName = name;
+  document.getElementById('history-modal-component').textContent = name;
+  document.getElementById('history-modal-error').style.display = 'none';
+  document.getElementById('history-tbody').innerHTML =
+    '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8;">Loading…</td></tr>';
+  document.getElementById('history-modal').classList.add('open');
+  fetchHistory(name);
+}
+
+function closeHistoryModal() {
+  document.getElementById('history-modal').classList.remove('open');
+  _historyModalName = null;
+}
+
+function showHistoryError(msg) {
+  const el = document.getElementById('history-modal-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function fetchHistory(name) {
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/history`, {
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || body.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    renderHistoryRows(data.entries || [], data.running_digest || '');
+  } catch (err) {
+    showHistoryError('Failed to load history: ' + err.message);
+    document.getElementById('history-tbody').innerHTML =
+      '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#f87171;">Failed to load history.</td></tr>';
+  }
+}
+
+function renderHistoryRows(entries, runningDigest) {
+  const tbody = document.getElementById('history-tbody');
+  if (!entries || entries.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8;">No deploy history recorded yet.</td></tr>';
+    return;
+  }
+
+  let html = '';
+  for (const entry of entries) {
+    const digest = entry.digest || '';
+    const shortDigest = digest.replace(/^sha256:/, '').slice(0, 12) || '\u2014';
+    const isCurrent = runningDigest && digest === runningDigest;
+    const rowClass = isCurrent ? 'current-row' : '';
+    const ts = entry.recorded_at
+      ? new Date(entry.recorded_at * 1000).toLocaleString()
+      : '\u2014';
+    const source = entry.source || '';
+    const sourceBadge = source
+      ? `<span class="badge badge-${source === 'deploy' ? 'update-ok' : source === 'rollback' ? 'update-avail' : 'update-unknown'}">${escHtml(source)}</span>`
+      : '\u2014';
+    const imageRef = entry.image_ref || '\u2014';
+    const rollbackBtn = isCurrent
+      ? '<span style="font-size:0.78rem;color:var(--blue);">current</span>'
+      : `<button style="font-size:0.75rem;padding:3px 8px;" onclick="rollbackTo('${escAttr(_historyModalName)}', '${escAttr(digest)}')">Rollback</button>`;
+
+    html += `<tr class="${rowClass}">
+      <td><span title="${escAttr(digest)}">${escHtml(shortDigest)}</span></td>
+      <td>${escHtml(ts)}</td>
+      <td>${sourceBadge}</td>
+      <td>${escHtml(imageRef)}</td>
+      <td>${rollbackBtn}</td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+async function rollbackTo(name, digest) {
+  if (!window.confirm(`Roll back "${name}" to digest ${digest.replace(/^sha256:/, '').slice(0, 12)}?\n\nThis will recreate the container using the previously-recorded image.`)) return;
+  const tbody = document.getElementById('history-tbody');
+  tbody.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ digest }),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || body.detail || `HTTP ${resp.status}`);
+    }
+    // Refresh the service row
+    const svc = await fetchOneStatus(name);
+    const rowEl = document.getElementById(`row-${name}`);
+    if (rowEl) rowEl.outerHTML = renderRow(svc);
+    updateRefreshTime();
+    // Refresh the history modal
+    await fetchHistory(name);
+  } catch (err) {
+    showHistoryError('Rollback failed: ' + err.message);
+    tbody.querySelectorAll('button').forEach(b => b.disabled = false);
+  }
 }
 
 function escHtml(s) {
