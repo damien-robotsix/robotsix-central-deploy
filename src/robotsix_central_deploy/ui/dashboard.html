@@ -1884,16 +1884,17 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   let inputHtml;
   if (isSecret) {
     const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
+    // One state, one message: an unset secret can be skipped now (onboard)
+    // but the component needs it to run; a set secret is only replaced.
     const placeholder = alreadySet
       ? '(already set — enter new value to change)'
-      : '(required — set before deploy)';
+      : '(not set — can be saved later, needed to run)';
     inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
       value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
     div.innerHTML = `
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
       <span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>
-      ${!alreadySet ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">optional at onboard</span>' : ''}
     `;
     return div;
   }

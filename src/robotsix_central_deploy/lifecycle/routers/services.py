@@ -951,19 +951,21 @@ async def deploy_service(
     await _fanout_deploy_siblings(name, store, backend, registry, env_store)
 
     # Auto-prune dangling images left behind by the update (opt-in setting);
-    # rollback targets recorded in the store are protected.
-    settings_store = getattr(request.app.state, "settings_store", None)
-    settings = await settings_store.get() if settings_store is not None else None
-    if settings is not None and settings.image_auto_prune:
-        try:
+    # rollback targets recorded in the store are protected. Entirely
+    # best-effort: a settings-store or prune failure must never fail the
+    # deploy that already succeeded.
+    try:
+        settings_store = getattr(request.app.state, "settings_store", None)
+        settings = await settings_store.get() if settings_store is not None else None
+        if settings is not None and settings.image_auto_prune:
             protected = await collect_protected_image_refs(store)
             reclaimed = await backend.prune_images(protected)
             if reclaimed:
                 logger.info(
                     "deploy %s: image auto-prune reclaimed %d bytes", name, reclaimed
                 )
-        except Exception:
-            logger.warning("deploy %s: image auto-prune failed", name, exc_info=True)
+    except Exception:
+        logger.warning("deploy %s: image auto-prune failed", name, exc_info=True)
 
     return DeployResponse(
         name=name,
