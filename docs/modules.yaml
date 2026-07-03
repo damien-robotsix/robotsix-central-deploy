@@ -1,7 +1,7 @@
 # robotsix-central-deploy modules
 
 modules:
-  lifecycle:
+  - id: lifecycle
     name: lifecycle
     description: >
       Lifecycle control API for the robotsix suite — start, stop, restart,
@@ -48,9 +48,12 @@ modules:
       - POST /claude-auth/credentials
     docs: /docs
     openapi: /openapi.json
+    paths:
+      - src/robotsix_central_deploy/lifecycle/**/*
+      - src/robotsix_central_deploy/_yaml_utils.py
     tests: tests/lifecycle/
 
-  gateway:
+  - id: gateway
     name: gateway
     description: >
       Reverse-proxy gateway — routes <name>.deploy.robotsix.net (Host
@@ -65,9 +68,11 @@ modules:
       - ANY /                      # subdomain-routed component root
       - ANY /{path:path}           # subdomain-routed; legacy /<name>/... -> 307 to subdomain
       - WS /{path:path}            # WebSocket relay (subdomain only)
+    paths:
+      - src/robotsix_central_deploy/gateway/**/*
     tests: tests/gateway/
 
-  registry:
+  - id: registry
     name: registry
     description: >
       Component registry — declares each managed Docker component (id, image,
@@ -78,9 +83,11 @@ modules:
     dependencies:
       - pydantic
       - pyyaml
+    paths:
+      - src/robotsix_central_deploy/registry/**/*
     tests: tests/registry/
 
-  ui:
+  - id: ui
     name: ui
     description: >
       Monitoring dashboard UI — serves a self-contained HTML page at /ui
@@ -98,9 +105,11 @@ modules:
       - GET/POST /login
       - POST /logout
       - GET /help/deploy-contract
+    paths:
+      - src/robotsix_central_deploy/ui/**/*
     tests: tests/ui/
 
-  registry_check:
+  - id: registry_check
     name: registry_check
     description: >
       Registry image-update detection — polls the GHCR registry for the
@@ -110,9 +119,11 @@ modules:
     dependencies:
       - pydantic
       - httpx
+    paths:
+      - src/robotsix_central_deploy/registry_check/**/*
     tests: tests/registry_check/
 
-  caretaker:
+  - id: caretaker
     name: caretaker
     description: >
       Background maintenance agent — runs daily passes over managed components
@@ -123,9 +134,11 @@ modules:
     dependencies:
       - httpx
       - pydantic
+    paths:
+      - src/robotsix_central_deploy/caretaker/**/*
     tests: tests/caretaker/
 
-  onboard:
+  - id: onboard
     name: onboard
     description: >
       Onboard-from-git — fetches a service repo's docker-compose.yml via
@@ -135,9 +148,11 @@ modules:
     dependencies:
       - pydantic
       - pyyaml
+    paths:
+      - src/robotsix_central_deploy/onboard/**/*
     tests: tests/onboard/
 
-  volume_audit:
+  - id: volume_audit
     name: volume_audit
     description: >
       Docker volume audit subsystem — periodic scanning of managed named
@@ -150,4 +165,6 @@ modules:
       env_prefix: ROBOTSIX_LIFECYCLE_
     endpoints:
       - GET /volumes/audit
+    paths:
+      - src/robotsix_central_deploy/lifecycle/volume_audit/**/*
     tests: tests/lifecycle/volume_audit/ tests/lifecycle/test_volume_audit_endpoint.py
