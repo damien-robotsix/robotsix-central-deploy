@@ -912,7 +912,7 @@ async def deploy_service(
     """Pull and deploy a new image version for a service.
 
     Optionally accepts a specific image reference; defaults to the component's
-    configured image. Writes merged config.yaml to the config volume before
+    configured image. Writes merged config.json to the config volume before
     starting when a config schema is present. Raises 404 if the service or
     component config is not found, 503 if the registry checker is not loaded,
     and 500 on backend failure. Sibling services are deployed on a best-effort
@@ -936,7 +936,7 @@ async def deploy_service(
 
     image_ref = body.image or config.image
 
-    # Write merged config.yaml into the config volume before starting the container.
+    # Write merged config.json into the config volume before starting the container.
     if config.has_config_yaml and config.config_volume:
         merged_cfg = await config_yaml_store.get_current(
             name
@@ -946,7 +946,7 @@ async def deploy_service(
                 await backend.write_config_to_volume(config.config_volume, merged_cfg)
             except Exception as exc:
                 logger.warning(
-                    "deploy %s: could not write config.yaml to volume %s: %s",
+                    "deploy %s: could not write config.json to volume %s: %s",
                     name,
                     config.config_volume,
                     exc,
@@ -1392,7 +1392,7 @@ async def delete_service_env_key(
 @router.get(
     "/services/{name}/config",
     response_model=ConfigResponse,
-    summary="Get config.yaml schema and current values for a service",
+    summary="Get config.json schema and current values for a service",
     responses={
         404: {"model": ErrorDetail, "description": "Service has no config schema"}
     },
@@ -1405,7 +1405,7 @@ async def get_service_config(
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ConfigResponse:
-    """Return the config.yaml schema and current masked values for a service.
+    """Return the config.json schema and current masked values for a service.
 
     Raises 404 if the service has no config schema.
     """
@@ -1446,7 +1446,7 @@ async def get_service_config(
 @router.put(
     "/services/{name}/config",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Merge and save config.yaml values for a service",
+    summary="Merge and save config.json values for a service",
     responses={
         404: {"model": ErrorDetail, "description": "Service has no config schema"}
     },
@@ -1461,7 +1461,7 @@ async def put_service_config(
     backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
-    """Merge and save config.yaml values for a service, then write to the config volume.
+    """Merge and save config.json values for a service, then write to the config volume.
 
     Restarts the running container (and any siblings sharing the config
     volume) so new values take effect immediately. Returns 204 No Content.
@@ -1911,7 +1911,7 @@ async def delete_service(
 ) -> None:
     """Remove an onboarded component and optionally its container and volumes.
 
-    Deletes the service record, env/secrets, config.yaml, and component config.
+    Deletes the service record, env/secrets, config.json, and component config.
     Optionally stops and removes the Docker container (``stop_container``) and
     deletes data volumes (``remove_volumes``, irreversible). Raises 404 if the
     component is not found.
@@ -1979,7 +1979,7 @@ async def delete_service(
     # 7. Delete primary env/secrets
     await env_store.delete(name)
 
-    # 8. Delete primary config.yaml
+    # 8. Delete primary config.json
     await config_yaml_store.delete(name)
 
     # 9. Delete from config store

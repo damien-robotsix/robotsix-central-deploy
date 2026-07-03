@@ -22,7 +22,7 @@ from robotsix_central_deploy.registry.models import (
     VolumeMount,
 )
 
-__all__ = ["ConfigParseError", "ParseError", "parse_compose", "parse_config_yaml"]
+__all__ = ["ConfigParseError", "ParseError", "parse_compose", "parse_config_json"]
 
 # Regex for Go-style duration strings: optional h, m, s, ms components.
 _GO_DURATION_RE = re.compile(
@@ -553,7 +553,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     )
 
 
-def parse_config_yaml(config_bytes: bytes) -> dict[str, Any]:
+def parse_config_json(config_bytes: bytes) -> dict[str, Any]:
     """Parse config/config.json from raw bytes; return parsed mapping.
 
     Returns the raw parsed JSON as a Python dict.

@@ -1,6 +1,6 @@
-"""JSON-backed persistence for per-component config.yaml schema and values.
+"""JSON-backed persistence for per-component config.json schema and values.
 
-Stores a ``template`` (parsed from the repo's ``config/config.yaml``, immutable
+Stores a ``template`` (parsed from the repo's ``config/config.json``, immutable
 after onboard) and ``current`` (user-saved merged dict) for each component.
 """
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigYamlStore:
-    """Persist per-component config.yaml template and current values to a JSON file.
+    """Persist per-component config.json template and current values to a JSON file.
 
     Uses a read-modify-write pattern with an ``asyncio.Lock`` for writes,
     matching the pattern of ``EnvStore`` in ``registry/env_store.py``.

@@ -609,7 +609,7 @@ async def onboard_confirm(
             env_was_seeded = True
 
     # If config schema present, save template + user values and write merged
-    # config.yaml to the real config volume so the container starts healthy.
+    # config.json to the real config volume so the container starts healthy.
     if spec.config_schema is not None:
         await config_yaml_store.save_template(spec.name, spec.config_schema)
         try:

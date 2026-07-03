@@ -43,8 +43,8 @@ async def client_with_env_component() -> AsyncClient:
 def _patched_contract(env: dict[str, str]):
     repo_files = RepoFiles(
         compose_bytes=b"services: {}",
-        config_yaml=None,
-        config_yaml_template=None,
+        config_json=None,
+        config_json_template=None,
         config_schema_json=None,
     )
     spec = MagicMock()

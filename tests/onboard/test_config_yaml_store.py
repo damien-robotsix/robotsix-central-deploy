@@ -10,47 +10,47 @@ import pytest
 from fastapi import HTTPException
 
 from robotsix_central_deploy.onboard.models import ConfigParseError
-from robotsix_central_deploy.onboard.parser import parse_config_yaml
+from robotsix_central_deploy.onboard.parser import parse_config_json
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 
 # ---------------------------------------------------------------------------
-# parse_config_yaml
+# parse_config_json
 # ---------------------------------------------------------------------------
 
 
-class TestParseConfigYaml:
-    def test_parse_config_yaml_flat(self):
+class TestParseConfigJson:
+    def test_parse_config_json_flat(self):
         json_bytes = json.dumps({"host": "localhost", "port": 8080}).encode()
-        result = parse_config_yaml(json_bytes)
+        result = parse_config_json(json_bytes)
         assert result == {"host": "localhost", "port": 8080}
 
-    def test_parse_config_yaml_nested(self):
+    def test_parse_config_json_nested(self):
         json_bytes = json.dumps(
             {"server": {"host": "localhost", "port": 8080}, "log_level": "info"}
         ).encode()
-        result = parse_config_yaml(json_bytes)
+        result = parse_config_json(json_bytes)
         assert result == {
             "server": {"host": "localhost", "port": 8080},
             "log_level": "info",
         }
 
-    def test_parse_config_yaml_empty_secret(self):
+    def test_parse_config_json_empty_secret(self):
         json_bytes = json.dumps({"api_key": ""}).encode()
-        result = parse_config_yaml(json_bytes)
+        result = parse_config_json(json_bytes)
         assert result == {"api_key": ""}
 
-    def test_parse_config_yaml_null_secret(self):
+    def test_parse_config_json_null_secret(self):
         json_bytes = b'{"api_key": null}'
-        result = parse_config_yaml(json_bytes)
+        result = parse_config_json(json_bytes)
         assert result == {"api_key": None}
 
-    def test_parse_config_yaml_invalid_yaml(self):
+    def test_parse_config_json_invalid_yaml(self):
         with pytest.raises(ConfigParseError, match="parse error"):
-            parse_config_yaml(b'{"invalid": ')
+            parse_config_json(b'{"invalid": ')
 
-    def test_parse_config_yaml_invalid_non_mapping(self):
+    def test_parse_config_json_invalid_non_mapping(self):
         with pytest.raises(ConfigParseError, match="top-level JSON object"):
-            parse_config_yaml(b'["item"]')
+            parse_config_json(b'["item"]')
 
 
 # ---------------------------------------------------------------------------

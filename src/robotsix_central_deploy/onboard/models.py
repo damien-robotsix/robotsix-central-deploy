@@ -47,10 +47,10 @@ class DerivedSpec(BaseModel):
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
     config_schema: dict[str, Any] | None = (
-        None  # parsed config/config.yaml, null when absent
+        None  # parsed config/config.json, null when absent
     )
     config_volume: Optional[str] = (
-        None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)
+        None  # named volume that holds config.json (resolved from robotsix.deploy.config-target label)
     )
     config_assist_command: Optional[str] = (
         None  # shell command from robotsix.deploy.config-assist
@@ -73,4 +73,4 @@ class FetchError(Exception):
 
 
 class ConfigParseError(Exception):
-    """Raised when config/config.yaml cannot be parsed."""
+    """Raised when config/config.json cannot be parsed."""

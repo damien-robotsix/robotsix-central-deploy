@@ -60,8 +60,8 @@ async def test_refresh_replaces_template_with_repo_schema(
 ) -> None:
     repo_files = RepoFiles(
         compose_bytes=b"services: {}",
-        config_yaml=None,
-        config_yaml_template=None,
+        config_json=None,
+        config_json_template=None,
         config_schema_json=json.dumps(FRESH_SCHEMA).encode(),
     )
     with patch(
@@ -84,8 +84,8 @@ async def test_refresh_404_when_repo_has_no_schema(
 ) -> None:
     repo_files = RepoFiles(
         compose_bytes=b"services: {}",
-        config_yaml=b'{"host": "x"}',
-        config_yaml_template=None,
+        config_json=b'{"host": "x"}',
+        config_json_template=None,
         config_schema_json=None,
     )
     with patch(
@@ -121,8 +121,8 @@ async def test_refresh_422_on_invalid_schema_json(
 ) -> None:
     repo_files = RepoFiles(
         compose_bytes=b"services: {}",
-        config_yaml=None,
-        config_yaml_template=None,
+        config_json=None,
+        config_json_template=None,
         config_schema_json=b"{not json",
     )
     with patch(
