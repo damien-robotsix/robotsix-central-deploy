@@ -24,184 +24,221 @@
   "properties": {
     "host": {
       "default": "0.0.0.0",
+      "description": "Interface the HTTP server binds to.",
       "title": "Host",
       "type": "string"
     },
     "port": {
       "default": 8100,
+      "description": "Port the HTTP server listens on.",
       "title": "Port",
       "type": "integer"
     },
     "api_key": {
       "default": "",
+      "description": "Legacy API credential accepted via the X-API-Key header or as a Basic-auth password. Empty disables api-key auth.",
       "title": "Api Key",
       "type": "string"
     },
     "auth_username": {
       "default": "",
+      "description": "Basic-auth username for the dashboard and API. Auth is enforced only when both username and password are set (or api_key is).",
       "title": "Auth Username",
       "type": "string"
     },
     "auth_password": {
       "default": "",
+      "description": "Basic-auth password paired with auth_username.",
       "title": "Auth Password",
       "type": "string"
     },
     "store_backend": {
       "$ref": "#/$defs/StoreBackend",
-      "default": "memory"
+      "default": "memory",
+      "description": "Persistence backend for service records: 'memory' is ephemeral (dev), 'file' persists to store_path."
     },
     "store_path": {
       "default": "lifecycle_state.yaml",
+      "description": "Path of the service-record store (file backend only).",
       "title": "Store Path",
       "type": "string"
     },
     "execution_backend": {
       "$ref": "#/$defs/ExecutionBackendType",
-      "default": "docker_sdk"
+      "default": "docker_sdk",
+      "description": "How containers are managed: 'docker_sdk' (full support), 'docker' CLI (status/logs only), or 'noop' (dry runs)."
     },
     "component_config_store_path": {
       "default": "data/component_configs.json",
+      "description": "Path of the persisted per-component deployment configs.",
       "title": "Component Config Store Path",
       "type": "string"
     },
     "docker_socket_url": {
       "default": "unix:///var/run/docker.sock",
+      "description": "Docker API endpoint. Production runs behind a socket proxy: tcp://socket-proxy:2375.",
       "title": "Docker Socket Url",
       "type": "string"
     },
     "docker_sdk_timeout": {
       "default": 120,
+      "description": "Client-level timeout (seconds) for every Docker SDK operation (pull, create, start, stop, \u2026). The default accommodates typical image pulls.",
       "title": "Docker Sdk Timeout",
       "type": "integer"
     },
     "disk_path": {
       "default": "/",
+      "description": "Filesystem path whose free space is reported on the dashboard; /host_root when containerised (host filesystem mount).",
       "title": "Disk Path",
       "type": "string"
     },
     "disk_warn_pct": {
       "default": 10.0,
+      "description": "Warn on the dashboard when free disk space drops below this percentage.",
       "title": "Disk Warn Pct",
       "type": "number"
     },
     "env_store_path": {
       "default": "component_env.json",
+      "description": "Path of the per-component env/secret store.",
       "title": "Env Store Path",
       "type": "string"
     },
     "secret_key_path": {
       "default": "secrets.key",
+      "description": "Path of the Fernet key encrypting stored secrets.",
       "title": "Secret Key Path",
       "type": "string"
     },
     "config_yaml_store_path": {
       "default": "data/component_config_yaml.json",
+      "description": "Path of the per-component config template/values store.",
       "title": "Config Yaml Store Path",
       "type": "string"
     },
     "self_update_watchtower_image": {
       "default": "containrrr/watchtower:1.7.1",
+      "description": "One-shot updater image launched by the dashboard's 'Update server' button; keep the tag pinned.",
       "title": "Self Update Watchtower Image",
       "type": "string"
     },
     "self_update_docker_api_version": {
       "default": "1.44",
+      "description": "DOCKER_API_VERSION exported to the one-shot updater. Watchtower 1.7.1's client defaults to API 1.25, below modern daemons' minimum, and panics without this.",
       "title": "Self Update Docker Api Version",
       "type": "string"
     },
     "registry_check_ttl": {
       "default": 300,
+      "description": "Cache TTL (seconds) for registry manifest-digest lookups.",
       "title": "Registry Check Ttl",
       "type": "integer"
     },
     "registry_check_interval": {
       "default": 300,
+      "description": "Interval (seconds) of the background update-available check; 0 disables it.",
       "title": "Registry Check Interval",
       "type": "integer"
     },
     "system_settings_path": {
       "default": "data/system_settings.json",
+      "description": "Path of the operator-editable System Settings store.",
       "title": "System Settings Path",
       "type": "string"
     },
     "log_level": {
       "default": "INFO",
+      "description": "Root log level: DEBUG, INFO, WARNING, ERROR, or CRITICAL.",
       "title": "Log Level",
       "type": "string"
     },
     "gateway_base_domain": {
       "default": "",
+      "description": "Base domain for the subdomain gateway (e.g. deploy.robotsix.net routes <component>.deploy.robotsix.net). Empty disables subdomain routing.",
       "title": "Gateway Base Domain",
       "type": "string"
     },
     "claude_host_mount_path": {
       "default": "",
+      "description": "Host path mounted at /home/app/.claude in components that request a Claude mount; empty means ~/.claude of the server user.",
       "title": "Claude Host Mount Path",
       "type": "string"
     },
     "volume_audit_enabled": {
       "default": false,
+      "description": "Master switch for the periodic volume-growth audit.",
       "title": "Volume Audit Enabled",
       "type": "boolean"
     },
     "volume_audit_interval_seconds": {
       "default": 3600,
+      "description": "Interval (seconds) between volume-audit scans.",
       "title": "Volume Audit Interval Seconds",
       "type": "integer"
     },
     "volume_audit_snapshot_path": {
       "default": "data/volume_audit_snapshots.json",
+      "description": "Path of persisted volume-size snapshots.",
       "title": "Volume Audit Snapshot Path",
       "type": "string"
     },
     "volume_audit_findings_path": {
       "default": "data/volume_audit_findings.json",
+      "description": "Path of persisted volume-audit findings.",
       "title": "Volume Audit Findings Path",
       "type": "string"
     },
     "volume_audit_growth_threshold_pct": {
       "default": 10.0,
+      "description": "Volume growth (percent between scans) above which a finding is raised.",
       "title": "Volume Audit Growth Threshold Pct",
       "type": "number"
     },
     "volume_audit_min_delta_bytes": {
       "default": 10485760,
+      "description": "Minimum absolute growth (bytes) before a finding is raised \u2014 filters noise on small volumes. Default 10 MiB.",
       "title": "Volume Audit Min Delta Bytes",
       "type": "integer"
     },
     "board_api_url": {
       "default": "",
+      "description": "Board API base URL for filing audit-finding tickets; empty disables.",
       "title": "Board Api Url",
       "type": "string"
     },
     "board_api_token": {
       "default": "",
+      "description": "Bearer token for the board API.",
       "title": "Board Api Token",
       "type": "string"
     },
     "board_repo_id": {
       "default": "",
+      "description": "Board repo id under which audit tickets are filed.",
       "title": "Board Repo Id",
       "type": "string"
     },
     "caretaker_enabled": {
       "default": false,
+      "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",
       "title": "Caretaker Enabled",
       "type": "boolean"
     },
     "caretaker_interval_hours": {
       "default": 24,
+      "description": "Hours between caretaker passes.",
       "title": "Caretaker Interval Hours",
       "type": "integer"
     },
     "mill_component_id": {
       "default": "mill",
+      "description": "Component id of the mill instance the caretaker reports findings to.",
       "title": "Mill Component Id",
       "type": "string"
     },
     "image_auto_prune": {
       "default": false,
+      "description": "After updates, remove dangling images not needed for rollback.",
       "title": "Image Auto Prune",
       "type": "boolean"
     }

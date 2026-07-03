@@ -766,7 +766,7 @@ class DockerSdkBackend(ExecutionBackend):
             claude_host = self._claude_host_mount_path or os.path.expanduser(
                 "~/.claude"
             )
-            volumes[claude_host] = {"bind": "/root/.claude", "mode": "rw"}
+            volumes[claude_host] = {"bind": "/home/app/.claude", "mode": "rw"}
         if config.host_docker_sock:
             volumes["/var/run/docker.sock"] = {
                 "bind": "/var/run/docker.sock",

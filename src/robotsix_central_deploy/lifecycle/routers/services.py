@@ -55,6 +55,7 @@ from ..schemas import (
     ConfigAssistResponse,
     ConfigDriftConflict,
     ConfigImportResponse,
+    ConfigSchemaRefreshResponse,
     ConfigResponse,
     ConfigUpdate,
     EnvResponse,
@@ -1357,6 +1358,88 @@ async def import_service_config(
         current=_mask_secrets(template, live_dict),
         volume_hash=new_hash,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /services/{name}/config/refresh-schema
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/services/{name}/config/refresh-schema",
+    response_model=ConfigSchemaRefreshResponse,
+    summary="Refetch config/config.schema.json from the repo and replace the stored template",
+    responses={
+        400: {"model": ErrorDetail, "description": "Component has no git_url"},
+        404: {
+            "model": ErrorDetail,
+            "description": "Component not found or repo has no config/config.schema.json",
+        },
+        422: {
+            "model": ErrorDetail,
+            "description": "Repo fetch failed or schema is invalid JSON",
+        },
+    },
+)
+async def refresh_config_schema(
+    name: str,
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    _auth: None = Depends(verify_auth),
+) -> ConfigSchemaRefreshResponse:
+    """Replace the stored config template with the repo's committed schema.
+
+    Components onboarded before the schema-driven config keep the legacy raw
+    template captured at onboard time; this refetches ``config/config.schema.json``
+    from the repo HEAD so the typed schema (field types, enums, descriptions)
+    reaches the dashboard without re-onboarding. Stored *values* are untouched.
+    """
+    import json as _json  # noqa: PLC0415
+
+    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
+        FetchError,
+        fetch_repo_files,
+    )
+
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Component '{name}' not found",
+        )
+    if not comp_cfg.git_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Component '{name}' has no git_url — cannot fetch its repo",
+        )
+
+    loop = asyncio.get_running_loop()
+    try:
+        repo_files = await loop.run_in_executor(
+            None, fetch_repo_files, comp_cfg.git_url
+        )
+    except FetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if repo_files.config_schema_json is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Repo of '{name}' has no config/config.schema.json — the "
+                "component must commit a typed schema first"
+            ),
+        )
+    try:
+        schema = _json.loads(repo_files.config_schema_json)
+    except _json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"config/config.schema.json is not valid JSON: {exc}",
+        ) from exc
+
+    await config_yaml_store.save_template(name, schema)
+    logger.info("Refreshed config schema for %s from repo", name)
+    return ConfigSchemaRefreshResponse(config_schema=schema)
 
 
 # ---------------------------------------------------------------------------

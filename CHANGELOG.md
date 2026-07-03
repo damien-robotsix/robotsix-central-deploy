@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Config help bubbles now show the schema's field `description` (falling back to the dotted key path), and section headers render their description. Added descriptions to every `LifecycleConfig` field (regenerated `config/config.schema.json`). New `POST /services/{name}/config/refresh-schema` endpoint + "↻ Refresh schema" button in the Configure modal: refetches the repo's committed `config/config.schema.json` and replaces the stored template (values untouched), so components onboarded pre-schema pick up typed fields and descriptions without re-onboarding.
 - Fix empty Configure modal for components onboarded before the schema-driven config UI (e.g. mill, mail): the typed renderer only understood JSON Schema and silently rendered nothing for stored legacy YAML templates. Legacy templates are now converted to a pseudo-schema client-side (SECRET sentinel → masked input, typed number/bool inputs), arrays render as editable JSON instead of `[object Object]`, and the onboard config step recognises legacy-template repos again.
 - Fix deployment breakage from the robotsix_config migration: `docker-compose.yml` still set the now-ignored `ROBOTSIX_LIFECYCLE_*` env vars, so a pulled post-migration image started with baked-in defaults (unix docker socket, memory store) and crash-looped. Compose now sets `ROBOTSIX_CONFIG_FILE=/data/config.json`; docs/deployment.md documents seeding the file.
 - Add Dependabot auto-merge caller workflow (`.github/workflows/dependabot-auto-merge.yml`)
