@@ -1099,8 +1099,8 @@
         "tags": [
           "services"
         ],
-        "summary": "Rollback a service to its prior image digest",
-        "description": "Roll back a service to its previously recorded image digest.\n\nSwaps the deployed and previous digests in the store. Raises 404 if the\nservice or component config is not found, 409 if no prior digest is\nrecorded (run a deploy first), 503 if the registry checker is not loaded,\nand 500 on backend failure. Sibling services are rolled back on a\nbest-effort basis.",
+        "summary": "Rollback a service to a prior image digest",
+        "description": "Roll back a service to a previously recorded image digest.\n\nWhen *digest* is absent/None: swaps the deployed and previous digests\n(the original one-step rollback). When *digest* is present: validates it\nappears in the component's deploy history, deploys that digest via the\nbackend, and records the rollback.\n\nRaises 404 if the service or component config is not found, 409 if no\nprior digest or the target digest is not in history, and 500 on backend\nfailure. Sibling services are rolled back on a best-effort basis\n(one-step behaviour only).
         "operationId": "rollback_service_services__name__rollback_post",
         "parameters": [
           {
@@ -1113,6 +1113,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RollbackRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1163,6 +1180,69 @@
               }
             },
             "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/history": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Get deploy history for a service",
+        "description": "Return the deploy history for a service, most-recent-first.\n\nReturns 200 with an empty ``entries`` list when no history is recorded.\nRaises 404 if the service is not found.",
+        "operationId": "get_service_history_services__name__history_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeployHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2332,6 +2412,54 @@
           }
         }
       },
+      "patch": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "head": {
         "tags": [
           "gateway"
@@ -2482,6 +2610,54 @@
         ],
         "summary": "Gateway Http",
         "operationId": "gateway_http__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__post",
         "parameters": [
           {
             "name": "path",
@@ -2804,6 +2980,62 @@
         ],
         "title": "ContainerHealthSummary",
         "description": "Health snapshot for one sibling container."
+      },
+      "DeployHistoryEntry": {
+        "properties": {
+          "digest": {
+            "type": "string",
+            "title": "Digest"
+          },
+          "image_ref": {
+            "type": "string",
+            "title": "Image Ref"
+          },
+          "timestamp": {
+            "type": "number",
+            "title": "Timestamp"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "previous_digest": {
+            "type": "string",
+            "title": "Previous Digest",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "digest",
+          "image_ref",
+          "timestamp",
+          "source"
+        ],
+        "title": "DeployHistoryEntry",
+        "description": "One entry in a component's deploy-history ledger.\n\nRecorded on every successful deploy (manual, caretaker, or rollback)."
+      },
+      "DeployHistoryResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/DeployHistoryEntry"
+            },
+            "type": "array",
+            "title": "Entries",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "DeployHistoryResponse",
+        "description": "Response for ``GET /services/{name}/history`` \u2014 most-recent-first."
       },
       "DeployRequest": {
         "properties": {
@@ -3508,6 +3740,24 @@
         ],
         "title": "ReclaimResponse",
         "description": "Result of a build-cache reclaim operation."
+      },
+      "RollbackRequest": {
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          }
+        },
+        "type": "object",
+        "title": "RollbackRequest",
+        "description": "Optional body for ``POST /services/{name}/rollback``.\n\nWhen *digest* is absent/None the current one-step rollback behaviour\n(swap deployed \u2194 previous) is preserved."
       },
       "RollbackResponse": {
         "properties": {

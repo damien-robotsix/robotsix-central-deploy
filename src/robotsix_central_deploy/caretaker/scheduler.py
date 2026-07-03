@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ..lifecycle.config import LifecycleConfig
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
+    from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.loader import ComponentRegistry
     from ..registry.settings_store import SystemSettingsStore
     from ..lifecycle.volume_audit.scheduler import VolumeAuditScheduler
@@ -45,6 +46,7 @@ class CaretakerScheduler:
         volume_audit_scheduler: VolumeAuditScheduler | None,
         settings_store: SystemSettingsStore,
         http_client: httpx.AsyncClient,
+        deploy_history_store: DeployHistoryStore,
     ) -> None:
         self._config = config
         self._backend = backend
@@ -54,6 +56,7 @@ class CaretakerScheduler:
         self._volume_audit_scheduler = volume_audit_scheduler
         self._settings_store = settings_store
         self._http_client = http_client
+        self._deploy_history_store = deploy_history_store
 
         self._findings_path = self._resolve_findings_path(config)
 
@@ -99,6 +102,7 @@ class CaretakerScheduler:
                 self._store,
                 self._backend,
                 self._component_config_store,
+                self._deploy_history_store,
             )
             findings.extend(update_findings)
             phases_run.append("update")

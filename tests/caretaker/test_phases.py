@@ -18,6 +18,7 @@ from robotsix_central_deploy.lifecycle.models import (
     ServiceState,
 )
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
 from robotsix_central_deploy.lifecycle.volume_audit.models import (
@@ -76,8 +77,10 @@ class TestPhaseUpdate:
         ccs = MagicMock(spec=ComponentConfigStore)
         cfg = _make_config()
         ccs.get = MagicMock(return_value=cfg)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
 
-        findings = await phase_update(registry, store, backend, ccs)
+        findings = await phase_update(registry, store, backend, ccs, dhs)
         assert len(findings) == 1
         assert findings[0].kind == FindingKind.UPDATE_APPLIED
         assert findings[0].repo_id == "test-repo"
@@ -87,6 +90,12 @@ class TestPhaseUpdate:
         image_ref = backend.deploy.call_args[0][2]
         assert image_ref == "repo@sha256:def"
         assert record.update_available is False
+        # History was appended
+        dhs.append.assert_called_once()
+        args, _ = dhs.append.call_args
+        assert args[0] == "svc"
+        assert args[1].source == "caretaker"
+        assert args[1].digest == "sha256:def"
 
     @pytest.mark.asyncio
     async def test_deploy_falls_back_to_tag_without_digest(self):
@@ -106,8 +115,10 @@ class TestPhaseUpdate:
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
         ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
 
-        await phase_update(registry, store, backend, ccs)
+        await phase_update(registry, store, backend, ccs, dhs)
         assert backend.deploy.call_args[0][2] == "repo:v1"
 
     @pytest.mark.asyncio
@@ -120,8 +131,9 @@ class TestPhaseUpdate:
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
         ccs.get = MagicMock(return_value=_make_config(caretaker_auto_update=False))
+        dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs)
+        findings = await phase_update(registry, store, backend, ccs, dhs)
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
@@ -135,8 +147,9 @@ class TestPhaseUpdate:
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
         ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs)
+        findings = await phase_update(registry, store, backend, ccs, dhs)
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
@@ -150,8 +163,9 @@ class TestPhaseUpdate:
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
         ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs)
+        findings = await phase_update(registry, store, backend, ccs, dhs)
         assert len(findings) == 1
         assert findings[0].kind == FindingKind.UPDATE_FAILED
         assert findings[0].severity == "error"
@@ -167,8 +181,9 @@ class TestPhaseUpdate:
         backend.deploy = AsyncMock()
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
+        dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs)
+        findings = await phase_update(registry, store, backend, ccs, dhs)
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 

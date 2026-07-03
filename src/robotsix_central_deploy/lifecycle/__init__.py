@@ -6,6 +6,9 @@ from .models import (
     ServiceStatus,
     ServiceListItem,
     ErrorDetail,
+    DeployHistoryEntry,
+    DeployHistoryResponse,
+    RollbackRequest,
 )
 from .backend import ExecutionBackend, DockerBackend
 from .store import ServiceStore, InMemoryStore, FileStore
@@ -18,6 +21,9 @@ __all__ = [
     "ServiceStatus",
     "ServiceListItem",
     "ErrorDetail",
+    "DeployHistoryEntry",
+    "DeployHistoryResponse",
+    "RollbackRequest",
     "ExecutionBackend",
     "DockerBackend",
     "ServiceStore",

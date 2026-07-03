@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import shutil
+import time
 from typing import TYPE_CHECKING
 
-from ..lifecycle.models import ServiceState
+from ..lifecycle.models import DeployHistoryEntry, ServiceState
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from ..lifecycle.config import LifecycleConfig
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
+    from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.loader import ComponentRegistry
     from ..registry.settings_store import SystemSettings
     from ..lifecycle.volume_audit.scheduler import VolumeAuditScheduler
@@ -30,6 +32,7 @@ async def phase_update(
     store: ServiceStore,
     backend: ExecutionBackend,
     component_config_store: ComponentConfigStore,
+    deploy_history_store: DeployHistoryStore,
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -80,6 +83,24 @@ async def phase_update(
             record.previous_image_digest = outcome.previous_digest
             record.update_available = False
             await store.put(record)
+
+            try:
+                await deploy_history_store.append(
+                    record.name,
+                    DeployHistoryEntry(
+                        digest=outcome.deployed_digest,
+                        image_ref=record.latest_registry_digest,
+                        timestamp=time.time(),
+                        source="caretaker",
+                        previous_digest=outcome.previous_digest,
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "phase_update: failed to record history for %s",
+                    record.name,
+                    exc_info=True,
+                )
 
             findings.append(
                 CaretakerFinding(

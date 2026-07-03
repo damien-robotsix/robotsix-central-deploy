@@ -117,6 +117,11 @@ class LifecycleConfig(BaseModel):
         description="Path of the per-component config template/values store.",
     )
 
+    deploy_history_store_path: str = Field(
+        "data/deploy_history.json",
+        description="Path of the per-component deploy-history JSON store.",
+    )
+
     self_update_watchtower_image: str = Field(
         "containrrr/watchtower:1.7.1",
         description=(
@@ -253,6 +258,10 @@ class LifecycleConfig(BaseModel):
     @property
     def effective_system_settings_path(self) -> Path:
         return Path(self.system_settings_path)
+
+    @property
+    def effective_deploy_history_store_path(self) -> Path:
+        return Path(self.deploy_history_store_path)
 
     @property
     def auth_required(self) -> bool:
