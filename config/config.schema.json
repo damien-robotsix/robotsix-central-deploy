@@ -116,6 +116,12 @@
       "title": "Config Yaml Store Path",
       "type": "string"
     },
+    "deploy_history_store_path": {
+      "default": "data/deploy_history.json",
+      "description": "Path of the per-component deploy-history JSON store.",
+      "title": "Deploy History Store Path",
+      "type": "string"
+    },
     "self_update_watchtower_image": {
       "default": "containrrr/watchtower:1.7.1",
       "description": "One-shot updater image launched by the dashboard's 'Update server' button; keep the tag pinned.",
@@ -246,3 +252,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+

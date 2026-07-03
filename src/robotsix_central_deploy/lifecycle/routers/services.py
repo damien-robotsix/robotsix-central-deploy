@@ -197,7 +197,7 @@ async def _fanout_deploy_siblings(
                     exc_info=True,
                 )
         except Exception:
-            logger.warning("deploy sibling '%s' failed", sib_name)
+            logger.warning("deploy sibling '%s' failed", repr(sib_name))
 
 
 async def _fanout_rollback_siblings(
@@ -987,7 +987,9 @@ async def deploy_service(
             ),
         )
     except Exception:
-        logger.warning("deploy %s: failed to record history entry", name, exc_info=True)
+        logger.warning(
+            "deploy %s: failed to record history entry", repr(name), exc_info=True
+        )
 
     # Deploy siblings
     await _fanout_deploy_siblings(
@@ -1099,7 +1101,7 @@ async def rollback_service(
         try:
             deploy_outcome = await backend.deploy(record, config, image_ref)
         except Exception as exc:
-            logger.exception("rollback %s failed", name)
+            logger.exception("rollback %s failed", repr(name))
             record.state = ServiceState.FAILED
             record.last_error = str(exc)
             await store.put(record)
