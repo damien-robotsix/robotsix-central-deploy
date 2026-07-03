@@ -108,6 +108,9 @@ class NoopBackend(ExecutionBackend):
     async def remove_volume(self, volume_name: str) -> None:
         pass
 
+    async def get_daemon_log_config(self) -> Optional[dict[str, Any]]:
+        return None
+
     async def inspect_self(self) -> Optional[SelfInspect]:
         return None
 

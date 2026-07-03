@@ -163,6 +163,15 @@ class ExecutionBackend(ABC):
         pass
 
     @abstractmethod
+    async def get_daemon_log_config(self) -> Optional[dict[str, Any]]:
+        """Return the Docker daemon's LogConfig as seen by this server's own container.
+
+        Returns ``None`` when the server is not containerised (or the
+        backend cannot tell).
+        """
+        pass
+
+    @abstractmethod
     async def inspect_self(self) -> Optional[SelfInspect]:
         """Identify the container this server runs in.
 
