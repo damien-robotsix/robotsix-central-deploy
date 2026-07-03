@@ -23,6 +23,7 @@ import json
 import logging
 import secrets
 import time
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -48,7 +49,7 @@ CLAUDE_AUTH_VOLUME = "claude-auth"
 # uses for its device authorization flow.
 OAUTH_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize"
 OAUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL, not a password
-OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # gitleaks:allow — public OAuth client id, not a secret
 OAUTH_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
 OAUTH_SCOPE = "user:inference"
 
@@ -141,9 +142,7 @@ async def start_claude_login(
 # ---------------------------------------------------------------------------
 
 
-async def _exchange_code(
-    auth_code: str, state: str, verifier: str
-) -> dict[str, object]:
+async def _exchange_code(auth_code: str, state: str, verifier: str) -> dict[str, Any]:
     """Exchange *auth_code* for OAuth tokens at the token endpoint.
 
     Returns the token payload dict.  Raises ``HTTPException`` on failure.
@@ -170,7 +169,8 @@ async def _exchange_code(
             status_code=400,
             detail=f"Token exchange failed ({resp.status_code}): {detail}",
         )
-    return resp.json()
+    payload: dict[str, Any] = resp.json()
+    return payload
 
 
 @router.post("/claude-auth/login/complete", response_model=ClaudeAuthCompleteResponse)
