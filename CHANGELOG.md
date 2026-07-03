@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `claude-auth` named volume seed migration tests covering idempotent re-run, absent host source, and rmtree failure; clean `claude_host_mount_path` from OpenAPI spec and configuration docs.
 - Replace host bind mount for `robotsix.deploy.claude-mount` with a central-deploy-managed named volume `claude-auth`. The `claude_host_mount_path` setting is removed; claude credentials now live in a Docker named volume mounted at `/home/app/.claude`. A one-time migration seeds the volume from `/home/debian/.claude` if present. Deploying a claude-mount component without valid credentials surfaces a dashboard warning.
 - Host port auto-assignment at onboarding: when a new component's default host port collides with an existing component or central-deploy's own port, `onboard_preflight` auto-assigns a free port (10000-20000 range) and returns the shifts in `port_shifts`. Port collision tickets are filed on affected components' mill boards when reachable; unreachable-mill warnings are surfaced in the job status response and dashboard.
 - Eliminate triple field duplication by deriving `SystemSettingsResponse` and `SystemSettingsUpdate` from `SystemSettings` instead of `BaseModel`.
