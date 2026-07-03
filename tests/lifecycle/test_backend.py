@@ -8,8 +8,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend, NoopBackend
-from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
+from robotsix_central_deploy.lifecycle.backend import (
+    DockerBackend,
+    DockerSdkBackend,
+    NoopBackend,
+)
+from robotsix_central_deploy.lifecycle.models import (
+    SelfInspect,
+    ServiceRecord,
+    ServiceState,
+)
 from robotsix_central_deploy.registry.models import (
     ComponentConfig,
     PortMapping,
@@ -44,6 +52,55 @@ class TestNoopBackend:
         rec.state = ServiceState.RUNNING
         result = await backend.status(rec)
         assert result.state == ServiceState.RUNNING
+
+    async def test_prune_images_returns_zero(self, backend: NoopBackend):
+        assert await backend.prune_images(set()) == 0
+
+    async def test_measure_volume_bytes_returns_zero(self, backend: NoopBackend):
+        assert await backend.measure_volume_bytes("v") == 0
+
+    async def test_remove_volume_noop(self, backend: NoopBackend):
+        # Must not raise
+        await backend.remove_volume("v")
+
+    async def test_write_config_to_volume_noop(self, backend: NoopBackend):
+        # Must not raise
+        await backend.write_config_to_volume("v", {})
+
+    async def test_run_config_assist_returns_stub(self, backend: NoopBackend):
+        result = await backend.run_config_assist(
+            image="img",
+            command_str="cmd",
+            volume_name="v",
+            volume_mount_path="/mnt",
+            env_dict={},
+        )
+        assert result == "[noop backend]"
+
+    async def test_inspect_self_returns_none(self, backend: NoopBackend):
+        assert await backend.inspect_self() is None
+
+    async def test_get_daemon_log_config_returns_none(self, backend: NoopBackend):
+        assert await backend.get_daemon_log_config() is None
+
+    async def test_read_config_from_volume_returns_empty(self, backend: NoopBackend):
+        assert await backend.read_config_from_volume("v") == {}
+
+    async def test_trigger_self_update_returns_stub(self, backend: NoopBackend):
+        target = SelfInspect(
+            container_id="abc",
+            container_name="test",
+            image_ref="img:latest",
+            running_digest="sha256:abc",
+            networks=[],
+        )
+        result = await backend.trigger_self_update(
+            target=target,
+            watchtower_image="wt:latest",
+            docker_host_url="unix:///var/run/docker.sock",
+            docker_api_version="1.44",
+        )
+        assert result == "noop-self-update"
 
 
 # ---------------------------------------------------------------------------
@@ -942,3 +999,188 @@ class TestDockerSdkBackendVolumeBrowser:
         b = NoopBackend()
         with pytest.raises(NotImplementedError):
             await b.read_volume_file("v", "f", 100)
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — get_daemon_log_config
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendGetDaemonLogConfig:
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    async def test_returns_log_config_when_container_found(self, backend, monkeypatch):
+        """get_daemon_log_config returns the LogConfig from HostConfig."""
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "selfid")
+        container = MagicMock()
+        container.attrs = {
+            "HostConfig": {
+                "LogConfig": {
+                    "Type": "json-file",
+                    "Config": {"max-size": "10m", "max-file": "3"},
+                }
+            }
+        }
+        client.containers.get.return_value = container
+
+        result = await b.get_daemon_log_config()
+        assert result == {
+            "log_driver": "json-file",
+            "log_opts": {"max-size": "10m", "max-file": "3"},
+        }
+
+    async def test_returns_defaults_when_no_log_config(self, backend, monkeypatch):
+        """get_daemon_log_config returns empty defaults when HostConfig has no
+        LogConfig."""
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "selfid")
+        container = MagicMock()
+        container.attrs = {"HostConfig": {}}
+        client.containers.get.return_value = container
+
+        result = await b.get_daemon_log_config()
+        assert result == {"log_driver": "", "log_opts": {}}
+
+    async def test_returns_none_when_container_not_found(self, backend, monkeypatch):
+        """get_daemon_log_config returns None when self container cannot be
+        resolved."""
+        import docker
+
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "ghost")
+        client.containers.list.return_value = []
+        client.containers.get.side_effect = docker.errors.NotFound("nope")
+
+        result = await b.get_daemon_log_config()
+        assert result is None
+
+    async def test_returns_none_on_api_error(self, backend, monkeypatch):
+        """get_daemon_log_config returns None when the Docker daemon is
+        unreachable."""
+        import docker
+
+        b, client = backend
+        monkeypatch.setattr("socket.gethostname", lambda: "selfid")
+        client.containers.get.side_effect = docker.errors.APIError("unreachable")
+
+        result = await b.get_daemon_log_config()
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Docker CLI backend — get_daemon_log_config
+# ---------------------------------------------------------------------------
+
+
+class TestDockerBackendGetDaemonLogConfig:
+    async def test_raises_not_implemented(self):
+        b = DockerBackend()
+        with pytest.raises(NotImplementedError, match="get_daemon_log_config"):
+            await b.get_daemon_log_config()
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — prune_builds
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendPruneBuilds:
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    async def test_prune_builds_returns_reclaimed_bytes(self, backend):
+        b, client = backend
+        client.api.prune_builds.return_value = {"SpaceReclaimed": 1048576}
+        result = await b.prune_builds()
+        assert result == 1048576
+        client.api.prune_builds.assert_called_once_with(all=True)
+
+    async def test_prune_builds_defaults_to_zero(self, backend):
+        b, client = backend
+        client.api.prune_builds.return_value = {}
+        result = await b.prune_builds()
+        assert result == 0
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — disk_df
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendDiskDf:
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    async def test_disk_df_returns_stats(self, backend):
+        b, client = backend
+        client.api.df.return_value = {
+            "LayersSize": 500000000,
+            "Images": [{"Size": 100000000}],
+            "BuildCache": [
+                {"Size": 50000000, "InUse": True},
+                {"Size": 20000000, "InUse": False},
+            ],
+            "Volumes": [
+                {
+                    "Name": "vol1",
+                    "UsageData": {"Size": 1000000, "RefCount": 1},
+                },
+                {
+                    "Name": "vol2",
+                    "UsageData": {"Size": 2000000, "RefCount": 0},
+                },
+            ],
+        }
+        result = await b.disk_df()
+        assert result.images_size_bytes == 500000000
+        assert result.build_cache_size_bytes == 70000000
+        assert result.build_cache_reclaimable_bytes == 20000000
+        assert len(result.volumes) == 2
+        assert result.volumes[0].name == "vol1"
+        assert result.volumes[0].size_bytes == 1000000
+        assert result.volumes[0].in_use is True
+        assert result.volumes[1].name == "vol2"
+        assert result.volumes[1].in_use is False
+
+    async def test_disk_df_handles_api_error(self, backend):
+        import docker
+
+        b, client = backend
+        client.api.df.side_effect = docker.errors.APIError("unreachable")
+        result = await b.disk_df()
+        assert result.images_size_bytes == 0
