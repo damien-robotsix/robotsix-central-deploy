@@ -581,9 +581,7 @@ class TestSettingsFirstBoot:
 
         # Pre-write a settings file that overrides the env-var default.
         store = SystemSettingsStore(settings_path)
-        await store.put(
-            SystemSettings(gateway_base_domain="overlaid.example.com")
-        )
+        await store.put(SystemSettings(gateway_base_domain="overlaid.example.com"))
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
         from robotsix_central_deploy.lifecycle import deps
@@ -602,9 +600,7 @@ class TestSettingsFirstBoot:
                     # overlaid gateway_base_domain, not the raw env-var
                     # default.
                     called_cfg = mock_build.call_args[0][0]
-                    assert (
-                        called_cfg.gateway_base_domain == "overlaid.example.com"
-                    )
+                    assert called_cfg.gateway_base_domain == "overlaid.example.com"
 
 
 # ---------------------------------------------------------------------------
