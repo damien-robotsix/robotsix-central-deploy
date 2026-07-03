@@ -107,6 +107,12 @@ branch = true
 [tool.coverage.report]
 fail_under = 80
 
+[tool.towncrier]
+package = "robotsix_central_deploy"
+package_dir = "src"
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
 per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config"], "DEP003" = ["starlette", "requests"] }
