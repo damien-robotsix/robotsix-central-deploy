@@ -8,8 +8,38 @@ from __future__ import annotations
 
 from fastapi import FastAPI, APIRouter
 from fastapi.testclient import TestClient
+from starlette.routing import Match
 
 from robotsix_central_deploy.lifecycle.app import app
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _first_gateway_idx(app: FastAPI) -> int | None:
+    """Return the index of the first gateway-tagged route, or None."""
+    for i, route in enumerate(app.router.routes):
+        if hasattr(route, "tags") and "gateway" in (route.tags or []):
+            return i
+    return None
+
+
+def _first_matching_route(app: FastAPI, method: str, path: str) -> object | None:
+    """Return the first route that matches *method* *path*, or None."""
+    scope: dict = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "headers": [],
+        "query_string": b"",
+    }
+    for route in app.router.routes:
+        match, _ = route.matches(scope)
+        if match != Match.NONE:
+            return route
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -19,52 +49,39 @@ from robotsix_central_deploy.lifecycle.app import app
 
 def test_gateway_router_registered_last():
     """Gateway catch-all routes appear after every non-gateway route."""
+    first = _first_gateway_idx(app)
+    assert first is not None, "gateway router not found in app routes"
+
     routes = list(app.router.routes)
-
-    # Find the index of the first gateway route.
-    first_gateway_idx = None
-    for i, route in enumerate(routes):
-        if hasattr(route, "tags") and "gateway" in route.tags:
-            first_gateway_idx = i
-            break
-
-    assert first_gateway_idx is not None, "gateway router not found in app routes"
 
     # Every route after the first gateway route must also be a gateway route
     # (i.e., no non-gateway route is registered after the gateway).
-    for i in range(first_gateway_idx + 1, len(routes)):
+    for i in range(first + 1, len(routes)):
         route = routes[i]
         tags = getattr(route, "tags", []) or []
-        assert (
-            "gateway" in tags
-            or "gateway" not in tags
-            and route.path
-            in (
-                "/{path:path}",
-                "/",
-            )
-        ), (
-            f"Non-gateway route at position {i} (path={route.path!r}) "
-            f"appears after the first gateway route at position {first_gateway_idx}"
+        path = route.path
+
+        # A route is considered "gateway" if it has the gateway tag, OR if
+        # it's a known gateway catch-all path (e.g. the WebSocket route,
+        # which as APIWebSocketRoute does not inherit the router's tags).
+        is_gateway = ("gateway" in tags) or (path in ("/{path:path}", "/"))
+
+        assert is_gateway, (
+            f"Non-gateway route at position {i} (path={path!r}) "
+            f"appears after the first gateway route at position {first}"
         )
 
 
 def test_specific_api_routes_before_gateway():
     """Every well-known API route is registered before the first gateway route."""
+    first = _first_gateway_idx(app)
+    assert first is not None, "gateway router not found in app routes"
+
     routes = list(app.router.routes)
-
-    # Find the index of the first gateway route.
-    first_gateway_idx = None
-    for i, route in enumerate(routes):
-        if hasattr(route, "tags") and "gateway" in route.tags:
-            first_gateway_idx = i
-            break
-
-    assert first_gateway_idx is not None, "gateway router not found in app routes"
 
     # Collect the paths of all routes before the gateway.
     api_paths: set[str] = set()
-    for route in routes[:first_gateway_idx]:
+    for route in routes[:first]:
         api_paths.add(route.path)
 
     # Verify that key API endpoints are present before the gateway.
@@ -99,34 +116,34 @@ def test_health_endpoint_reachable():
 
 
 def test_services_endpoint_reachable():
-    """GET /services returns a non-gateway response (not a gateway 404/redirect).
+    """The first route matching GET /services is NOT a gateway route.
 
-    We accept any non-gateway response (200, 401, 422) as evidence that
-    the correct router handled the request.  A gateway catch-all would
-    return 404 (no matching component) or 503 (no registry).
+    Uses Starlette route matching rather than TestClient because the
+    services router and the gateway catch-all both require app state
+    (lifespan) to function — a bare TestClient cannot distinguish them
+    via HTTP responses alone.
     """
-    client = TestClient(app)
-    response = client.get("/services")
-    # Without proper state wired, the handler may raise internally,
-    # but the key invariant is that the response is NOT a gateway 404
-    # (which is "component not found" from the gateway proxy).
-    assert response.status_code != 404 or "application/json" in str(
-        response.headers.get("content-type", "")
-    ), (
-        "GET /services returned 404 with unexpected content type. "
-        "Gateway may be shadowing API routes."
+    route = _first_matching_route(app, "GET", "/services")
+    assert route is not None, "No route matches GET /services"
+    tags = getattr(route, "tags", []) or []
+    assert "gateway" not in tags, (
+        "GET /services matched a gateway route — gateway is shadowing API routes"
     )
 
 
 def test_onboard_preflight_reachable():
-    """POST /onboard/preflight reaches the onboard router, not the gateway."""
-    client = TestClient(app)
-    response = client.post("/onboard/preflight")
-    # Without auth/config the endpoint returns 401 or 422 — not a gateway 404.
-    # The gateway catch-all returns 307 redirect or 404/503.
-    assert response.status_code not in (307,), (
-        "POST /onboard/preflight returned 307 redirect — "
-        "gateway path-prefix redirect intercepted the request"
+    """The first route matching POST /onboard/preflight is NOT a gateway route.
+
+    Same rationale as test_services_endpoint_reachable: both the onboard
+    router and the gateway require app state, so we verify routing
+    structurally rather than via HTTP.
+    """
+    route = _first_matching_route(app, "POST", "/onboard/preflight")
+    assert route is not None, "No route matches POST /onboard/preflight"
+    tags = getattr(route, "tags", []) or []
+    assert "gateway" not in tags, (
+        "POST /onboard/preflight matched a gateway route — "
+        "gateway is shadowing API routes"
     )
 
 
