@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Scope host uid:gid injection to claude-mount components only: forcing user=1000 on every container broke root-requiring images — the haproxy socket proxy crash-looped (`Cannot create pidfile /run/haproxy.pid`) after any redeploy. Other services keep the image's own USER.
 - Fix caretaker auto-update pulling a bare digest: `phase_update` passed `latest_registry_digest` (`sha256:…`) as the image reference, which docker resolves as repository "sha256" and 404s — every auto-update failed on the live server. It now deploys `repo@sha256:…` (tag fallback when no digest), and `deploy()` digest derivation handles pinned refs so `update_available` clears correctly.
 - Adopt towncrier newsfragments (`changelog.d/`) as the changelog mechanism; CHANGELOG.md becomes release-workflow-written only. Added `towncrier>=24.0` dev dependency and `[tool.towncrier]` config.
 - Env/secrets modal: the key set is the repo's compose contract, not operator-editable — removed "+ Add variable"/"+ Add secret" and per-row delete. New "↻ Sync keys from repo" button (POST /services/{name}/env/sync-keys) seeds keys the contract added since onboarding (values never modified; undeclared stored keys reported, not deleted).

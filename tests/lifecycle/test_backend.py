@@ -601,8 +601,10 @@ class TestDockerSdkBackendCommandAndEntrypoint:
 
 
 class TestDockerSdkBackendUserInjection:
-    """_create_container must pass user=<uid>:<gid> for every service,
-    derived at runtime from the host process."""
+    """user=<uid>:<gid> is injected ONLY for claude-mount services — the
+    bind-mounted operator-owned ~/.claude must be readable inside; all
+    other services keep the image's own USER (forcing a uid globally
+    breaks root-requiring images like the haproxy socket proxy)."""
 
     @pytest.fixture
     def client_mock(self) -> MagicMock:
@@ -618,8 +620,8 @@ class TestDockerSdkBackendUserInjection:
             b = DockerSdkBackend()
             yield b, client_mock
 
-    def test_create_container_injects_host_uid_gid(self, backend):
-        """A plain service (no claude_mount) gets user=<uid>:<gid>."""
+    def test_plain_service_keeps_image_user(self, backend):
+        """A plain service (no claude_mount) keeps the image's own USER."""
         b, client = backend
         config = ComponentConfig(
             id="test-svc",
@@ -628,11 +630,11 @@ class TestDockerSdkBackendUserInjection:
         )
         b._create_container(config, "test:latest")
         _, kwargs = client.containers.create.call_args
-        assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
+        assert kwargs["user"] is None
 
-    def test_create_container_with_claude_mount_also_injects_uid_gid(self, backend):
-        """A service with claude_mount=True also gets user=<uid>:<gid> —
-        both features compose correctly."""
+    def test_claude_mount_service_injects_host_uid_gid(self, backend):
+        """A service with claude_mount=True runs as the host operator so the
+        bind-mounted ~/.claude (0600) is readable inside."""
         b, client = backend
         config = ComponentConfig(
             id="test-svc",
