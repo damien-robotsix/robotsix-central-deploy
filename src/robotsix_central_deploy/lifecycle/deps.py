@@ -178,7 +178,6 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
     if cfg.execution_backend == ExecutionBackendType.DOCKER_SDK:
         return DockerSdkBackend(
             socket_url=cfg.docker_socket_url,
-            claude_host_mount_path=cfg.claude_host_mount_path,
             timeout=cfg.docker_sdk_timeout,
         )
     if cfg.execution_backend == ExecutionBackendType.DOCKER:
@@ -329,7 +328,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 registry_check_interval=_config.registry_check_interval,
                 log_level=_config.log_level,
                 gateway_base_domain=_config.gateway_base_domain,
-                claude_host_mount_path=_config.claude_host_mount_path,
                 caretaker_enabled=_config.caretaker_enabled,
                 caretaker_interval_hours=_config.caretaker_interval_hours,
             )

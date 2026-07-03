@@ -22,7 +22,6 @@
   "system_settings_path": "data/system_settings.json",
   "log_level": "INFO",
   "gateway_base_domain": "",
-  "claude_host_mount_path": "",
   "volume_audit_enabled": false,
   "volume_audit_interval_seconds": 3600,
   "volume_audit_snapshot_path": "data/volume_audit_snapshots.json",

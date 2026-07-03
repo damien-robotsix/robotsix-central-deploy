@@ -77,12 +77,6 @@ The lifecycle server is configured via environment variables, all prefixed with 
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN` | `""` | Base domain for gateway integration. |
 
-### Claude Integration
-
-| Variable | Default | Description |
-|---|---|---|
-| `ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH` | `""` | Host mount path for Claude Desktop integration. |
-
 ### Volume Audit
 
 | Variable | Default | Description |

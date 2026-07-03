@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import shlex
+import shutil
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+CLAUDE_AUTH_VOLUME = "claude-auth"
+CLAUDE_AUTH_HOST_SEED = "/home/debian/.claude"
+
 
 class DockerSdkBackend(ExecutionBackend):
     """Executes lifecycle actions via the Docker Python SDK against the local socket."""
@@ -39,13 +43,11 @@ class DockerSdkBackend(ExecutionBackend):
     def __init__(
         self,
         socket_url: str = "unix:///var/run/docker.sock",
-        claude_host_mount_path: str = "",
         timeout: int = 120,
     ) -> None:
         import docker
 
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
-        self._claude_host_mount_path = claude_host_mount_path
 
     # -- helpers ------------------------------------------------------------
 
@@ -254,10 +256,10 @@ class DockerSdkBackend(ExecutionBackend):
             for m in config.mounts
         }
         if config.claude_mount:
-            claude_host = self._claude_host_mount_path or os.path.expanduser(
-                "~/.claude"
-            )
-            volumes[claude_host] = {"bind": "/home/app/.claude", "mode": "rw"}
+            volumes[CLAUDE_AUTH_VOLUME] = {
+                "bind": "/home/app/.claude",
+                "mode": "rw",
+            }
         if config.host_docker_sock:
             volumes["/var/run/docker.sock"] = {
                 "bind": "/var/run/docker.sock",
@@ -322,6 +324,133 @@ class DockerSdkBackend(ExecutionBackend):
             pass
         container.remove(force=True)
 
+    # -- claude-auth volume helpers -----------------------------------------
+
+    def _ensure_claude_auth_volume(self) -> None:
+        """Create the ``claude-auth`` named volume if it does not exist.
+
+        Labels it with ``robotsix.deploy.stateful=true`` for consistency
+        with other managed stateful volumes.
+        """
+        import docker
+
+        try:
+            self._client.volumes.get(CLAUDE_AUTH_VOLUME)
+        except docker.errors.NotFound:
+            self._client.volumes.create(
+                CLAUDE_AUTH_VOLUME,
+                labels={"robotsix.deploy.stateful": "true"},
+            )
+
+    def _seed_claude_auth_from_host(self) -> bool:
+        """Seed the ``claude-auth`` volume from ``/home/debian/.claude``.
+
+        Copies contents with uid:gid 1000:1000 and perms 0700/0600, then
+        removes the host source directory.  Idempotent: returns ``True``
+        only the first time it actually copies data; returns ``False`` if
+        the volume is already seeded or the host source is absent.
+        """
+        import docker
+
+        host_src = CLAUDE_AUTH_HOST_SEED
+        if not os.path.isdir(host_src):
+            return False
+
+        # Check whether the volume already has credentials.
+        try:
+            self._client.containers.run(
+                "busybox",
+                command=[
+                    "sh",
+                    "-c",
+                    "test -f /mnt/.credentials.json",
+                ],
+                volumes={CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "ro"}},
+                remove=True,
+            )
+            # Exit 0 → .credentials.json exists → already seeded.
+            return False
+        except docker.errors.ContainerError:
+            # Exit non-zero → .credentials.json missing → seed.
+            pass
+
+        logger.info(
+            "Seeding %s volume from %s (chown 1000:1000) ...",
+            CLAUDE_AUTH_VOLUME,
+            host_src,
+        )
+
+        # Copy host source into the volume using a privileged helper.
+        # busybox cp -a copies recursively; we then chown everything.
+        script = (
+            "cp -a /host/. /mnt/ && "
+            "chown -R 1000:1000 /mnt && "
+            "find /mnt -type d -exec chmod 700 {} + && "
+            "find /mnt -type f -exec chmod 600 {} +"
+        )
+        try:
+            self._client.containers.run(
+                "busybox",
+                command=["sh", "-c", script],
+                volumes={
+                    host_src: {"bind": "/host", "mode": "ro"},
+                    CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "rw"},
+                },
+                remove=True,
+            )
+        except docker.errors.ContainerError as exc:
+            logger.error("Failed to seed %s volume: %s", CLAUDE_AUTH_VOLUME, exc)
+            return False
+
+        # Remove the host source directory.
+        try:
+            shutil.rmtree(host_src)
+        except OSError as exc:
+            logger.warning("Could not remove host seed dir %s: %s", host_src, exc)
+
+        logger.info("Successfully seeded %s volume.", CLAUDE_AUTH_VOLUME)
+        return True
+
+    def _check_claude_credentials(self) -> list[str]:
+        """Validate that the ``claude-auth`` volume contains a readable
+        ``.credentials.json``. Returns a list of warning strings (empty
+        if credentials are valid).
+        """
+        import docker
+
+        warnings: list[str] = []
+        try:
+            self._client.volumes.get(CLAUDE_AUTH_VOLUME)
+        except docker.errors.NotFound:
+            return [
+                f"Claude auth volume '{CLAUDE_AUTH_VOLUME}' does not exist. "
+                f"Your component requests a Claude mount but no credentials "
+                f"are available. Use the dashboard 'Claude auth' panel to "
+                f"provision credentials, then redeploy."
+            ]
+
+        # Check if .credentials.json exists and is a regular file.
+        try:
+            self._client.containers.run(
+                "busybox",
+                command=[
+                    "sh",
+                    "-c",
+                    "test -f /mnt/.credentials.json && test -r /mnt/.credentials.json",
+                ],
+                volumes={CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "ro"}},
+                remove=True,
+            )
+        except docker.errors.ContainerError:
+            warnings.append(
+                f"Claude auth volume '{CLAUDE_AUTH_VOLUME}' exists but does not "
+                f"contain a readable .credentials.json. Your component requests "
+                f"a Claude mount but has no valid credentials. Use the dashboard "
+                f"'Claude auth' panel to provision credentials, then redeploy."
+            )
+
+        return warnings
+
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
     ) -> DeployOutcome:
@@ -376,6 +505,7 @@ class DockerSdkBackend(ExecutionBackend):
                 ) from exc
 
         # Step 4 — create + start new container
+        deploy_warnings: list[str] = []
         try:
             # Pre-create named volumes
             for vol_name in config.named_volumes:
@@ -396,6 +526,37 @@ class DockerSdkBackend(ExecutionBackend):
                     raise RuntimeError(
                         f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
                     ) from exc
+
+            # Claude auth: ensure named volume, seed from host if needed, validate
+            if config.claude_mount:
+                try:
+                    await loop.run_in_executor(None, self._ensure_claude_auth_volume)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Failed to ensure claude-auth volume: {exc}"
+                    ) from exc
+
+                # Seed on first use (migration from host path)
+                try:
+                    await loop.run_in_executor(None, self._seed_claude_auth_from_host)
+                except Exception as exc:
+                    logger.warning(
+                        "claude-auth seed migration failed (non-fatal): %s", exc
+                    )
+
+                # Validate credentials
+                try:
+                    cred_warnings = await loop.run_in_executor(
+                        None, self._check_claude_credentials
+                    )
+                    if cred_warnings:
+                        deploy_warnings.extend(cred_warnings)
+                        for w in cred_warnings:
+                            logger.warning(w)
+                except Exception as exc:
+                    logger.warning(
+                        "claude-auth credential check failed (non-fatal): %s", exc
+                    )
 
             new_container = await loop.run_in_executor(
                 None, lambda: self._create_container(config, image_ref)
@@ -429,6 +590,7 @@ class DockerSdkBackend(ExecutionBackend):
             deployed_digest=new_digest,
             previous_digest=prior_digest,
             state=ServiceState.RUNNING,
+            warnings=deploy_warnings,
         )
 
     async def rollback(
@@ -442,6 +604,8 @@ class DockerSdkBackend(ExecutionBackend):
             service.previous_image_digest
         )  # guaranteed non-empty by server layer
         loop = asyncio.get_running_loop()
+
+        rollback_warnings: list[str] = []
 
         # Stop + remove current container
         existing = await self._get_container(name)
@@ -457,6 +621,39 @@ class DockerSdkBackend(ExecutionBackend):
 
         # Create + start from prior digest
         try:
+            # Claude auth: ensure named volume, seed from host if needed, validate
+            if config.claude_mount:
+                try:
+                    await loop.run_in_executor(None, self._ensure_claude_auth_volume)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Failed to ensure claude-auth volume during rollback: {exc}"
+                    ) from exc
+
+                # Seed on first use (migration from host path)
+                try:
+                    await loop.run_in_executor(None, self._seed_claude_auth_from_host)
+                except Exception as exc:
+                    logger.warning(
+                        "claude-auth seed migration failed during rollback (non-fatal): %s",
+                        exc,
+                    )
+
+                # Validate credentials
+                try:
+                    cred_warnings = await loop.run_in_executor(
+                        None, self._check_claude_credentials
+                    )
+                    if cred_warnings:
+                        rollback_warnings.extend(cred_warnings)
+                        for w in cred_warnings:
+                            logger.warning(w)
+                except Exception as exc:
+                    logger.warning(
+                        "claude-auth credential check failed during rollback (non-fatal): %s",
+                        exc,
+                    )
+
             rollback_container = await loop.run_in_executor(
                 None, lambda: self._create_container(config, target_digest)
             )
@@ -470,7 +667,9 @@ class DockerSdkBackend(ExecutionBackend):
             await self._wait_healthy(name, timeout=60.0)
 
         return RollbackOutcome(
-            deployed_digest=target_digest, state=ServiceState.RUNNING
+            deployed_digest=target_digest,
+            state=ServiceState.RUNNING,
+            warnings=rollback_warnings,
         )
 
     # -- config volume helpers ----------------------------------------------

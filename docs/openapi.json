@@ -42,7 +42,7 @@
           "settings"
         ],
         "summary": "Put Settings",
-        "description": "Update system settings, persist to disk, and hot-apply where possible.\n\n- Secret fields sent as ``\"***\"`` preserve the existing stored value.\n- ``log_level`` is validated via Pydantic; an invalid value returns 422.\n- All settings *except* ``registry_check_interval`` and\n  ``claude_host_mount_path`` take effect immediately without restart.\n\n# NOTE: ``registry_check_interval`` changes are persisted and reflected\n  in ``app.state.config``, but the background ``_registry_check_loop``\n  captures its interval at startup via a positional argument.  Updating\n  the config alone does **not** alter the running task's sleep period.\n  A full service restart is required for an interval change to take\n  effect on the background loop.\n\n# NOTE: ``claude_host_mount_path`` is captured by ``DockerSdkBackend``\n  at construction time.  Updating the config alone does **not** alter\n  the running backend's mount path.  A full service restart is required\n  for a change to take effect.",
+        "description": "Update system settings, persist to disk, and hot-apply where possible.\n\n- Secret fields sent as ``\"***\"`` preserve the existing stored value.\n- ``log_level`` is validated via Pydantic; an invalid value returns 422.\n- All settings *except* ``registry_check_interval`` take effect\n  immediately without restart.\n\n# NOTE: ``registry_check_interval`` changes are persisted and reflected\n  in ``app.state.config``, but the background ``_registry_check_loop``\n  captures its interval at startup via a positional argument.  Updating\n  the config alone does **not** alter the running task's sleep period.\n  A full service restart is required for an interval change to take\n  effect.",
         "operationId": "put_settings_settings_put",
         "requestBody": {
           "content": {
@@ -3076,6 +3076,14 @@
           },
           "current_state": {
             "$ref": "#/components/schemas/ServiceState"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "default": []
           }
         },
         "type": "object",
@@ -3776,6 +3784,14 @@
           },
           "current_state": {
             "$ref": "#/components/schemas/ServiceState"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "default": []
           }
         },
         "type": "object",
@@ -4149,11 +4165,6 @@
             "title": "Gateway Base Domain",
             "default": ""
           },
-          "claude_host_mount_path": {
-            "type": "string",
-            "title": "Claude Host Mount Path",
-            "default": ""
-          },
           "caretaker_enabled": {
             "type": "boolean",
             "title": "Caretaker Enabled",
@@ -4208,11 +4219,6 @@
           "gateway_base_domain": {
             "type": "string",
             "title": "Gateway Base Domain",
-            "default": ""
-          },
-          "claude_host_mount_path": {
-            "type": "string",
-            "title": "Claude Host Mount Path",
             "default": ""
           },
           "caretaker_enabled": {

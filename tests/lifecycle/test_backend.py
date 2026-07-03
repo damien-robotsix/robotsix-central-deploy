@@ -633,8 +633,8 @@ class TestDockerSdkBackendUserInjection:
         assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
 
     def test_create_container_with_claude_mount_also_injects_uid_gid(self, backend):
-        """A service with claude_mount=True also gets user=<uid>:<gid> —
-        both features compose correctly."""
+        """A service with claude_mount=True gets the claude-auth named volume
+        mounted at /home/app/.claude and user=<uid>:<gid>."""
         b, client = backend
         config = ComponentConfig(
             id="test-svc",
@@ -645,6 +645,159 @@ class TestDockerSdkBackendUserInjection:
         b._create_container(config, "test:latest")
         _, kwargs = client.containers.create.call_args
         assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
+        # Verify named volume mount (not a host bind mount)
+        volumes = kwargs["volumes"]
+        assert "claude-auth" in volumes
+        assert volumes["claude-auth"] == {"bind": "/home/app/.claude", "mode": "rw"}
+
+
+# ---------------------------------------------------------------------------
+# Claude auth credential validation
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeAuthCredentialCheck:
+    """_check_claude_credentials must warn when the claude-auth volume
+    is missing or lacks a readable .credentials.json."""
+
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        docker_mock.errors.ContainerError = type("ContainerError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def test_warns_when_volume_missing(self, backend):
+        """Returns a warning when claude-auth volume does not exist."""
+        b, client = backend
+        import docker
+
+        client.volumes.get.side_effect = docker.errors.NotFound("no such volume")
+        warnings = b._check_claude_credentials()
+        assert len(warnings) == 1
+        assert "does not exist" in warnings[0]
+        assert "claude-auth" in warnings[0]
+        assert "Claude auth" in warnings[0]
+
+    def test_warns_when_credentials_missing(self, backend):
+        """Returns a warning when volume exists but .credentials.json
+        is not readable."""
+        b, client = backend
+        import docker
+
+        # volumes.get succeeds (volume exists)
+        # containers.run raises ContainerError (test -f fails)
+        client.containers.run.side_effect = docker.errors.ContainerError()
+        warnings = b._check_claude_credentials()
+        assert len(warnings) == 1
+        assert "does not contain a readable .credentials.json" in warnings[0]
+        assert "claude-auth" in warnings[0]
+        assert "Claude auth" in warnings[0]
+
+    def test_no_warning_when_credentials_present(self, backend):
+        """Returns empty list when .credentials.json is readable."""
+        b, client = backend
+        # containers.run succeeds (test -f exits 0)
+        warnings = b._check_claude_credentials()
+        assert warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Claude auth seed migration (host → named volume)
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeAuthSeedMigration:
+    """_seed_claude_auth_from_host copies /home/debian/.claude into the
+    claude-auth volume on first run, chowns to 1000:1000, removes the
+    host copy, and is idempotent on subsequent runs."""
+
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        docker_mock.errors.ContainerError = type("ContainerError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def test_seed_skips_when_host_source_absent(self, backend):
+        """Returns False when /home/debian/.claude does not exist."""
+        b, _client = backend
+        with patch.object(os.path, "isdir", return_value=False):
+            result = b._seed_claude_auth_from_host()
+        assert result is False
+
+    def test_seed_skips_when_volume_already_seeded(self, backend):
+        """Returns False when .credentials.json already exists in volume."""
+        b, client = backend
+
+        with patch.object(os.path, "isdir", return_value=True):
+            # containers.run succeeds → .credentials.json already present
+            result = b._seed_claude_auth_from_host()
+        assert result is False
+        # Verify the check command was run
+        client.containers.run.assert_called_once()
+        call_args = client.containers.run.call_args
+        assert call_args[0][0] == "busybox"
+        assert "test -f /mnt/.credentials.json" in str(call_args[1]["command"])
+
+    def test_seed_copies_and_removes_on_first_run(self, backend):
+        """Copies from host, chowns, removes host dir, returns True."""
+        b, client = backend
+        import docker
+
+        with (
+            patch.object(os.path, "isdir", return_value=True),
+            patch("shutil.rmtree") as mock_rmtree,
+        ):
+            # First containers.run raises ContainerError (volume not seeded)
+            # Second containers.run succeeds (the copy + chown)
+            client.containers.run.side_effect = [
+                docker.errors.ContainerError(),  # check → missing
+                None,  # copy + chown → success
+            ]
+            result = b._seed_claude_auth_from_host()
+        assert result is True
+        assert mock_rmtree.called
+        # Verify the seed command includes chown and perms
+        calls = client.containers.run.call_args_list
+        assert len(calls) == 2
+        # Second call is the copy+chown
+        seed_cmd = str(calls[1][1]["command"])
+        assert "chown -R 1000:1000" in seed_cmd
+        assert "chmod 700" in seed_cmd
+        assert "chmod 600" in seed_cmd
+
+    def test_seed_survives_rmtree_failure(self, backend):
+        """Returns True even if shutil.rmtree raises OSError."""
+        b, client = backend
+        import docker
+
+        with (
+            patch.object(os.path, "isdir", return_value=True),
+            patch("shutil.rmtree", side_effect=OSError("permission denied")),
+        ):
+            client.containers.run.side_effect = [
+                docker.errors.ContainerError(),
+                None,
+            ]
+            result = b._seed_claude_auth_from_host()
+        assert result is True  # seed succeeded; rmtree failure is non-fatal
 
 
 # ---------------------------------------------------------------------------

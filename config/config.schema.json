@@ -164,12 +164,6 @@
       "title": "Gateway Base Domain",
       "type": "string"
     },
-    "claude_host_mount_path": {
-      "default": "",
-      "description": "Host path mounted at /home/app/.claude in components that request a Claude mount; empty means ~/.claude of the server user.",
-      "title": "Claude Host Mount Path",
-      "type": "string"
-    },
     "volume_audit_enabled": {
       "default": false,
       "description": "Master switch for the periodic volume-growth audit.",

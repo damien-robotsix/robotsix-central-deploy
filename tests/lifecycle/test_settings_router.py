@@ -24,7 +24,6 @@ class TestGetSettings:
             registry_check_interval=60,
             log_level="DEBUG",
             gateway_base_domain="example.com",
-            claude_host_mount_path="/home/op/.claude",
         )
         server_mod.app.state.__setattr__("settings_store", mock_store)
 
@@ -38,7 +37,7 @@ class TestGetSettings:
         assert data["registry_check_interval"] == 60
         assert data["log_level"] == "DEBUG"
         assert data["gateway_base_domain"] == "example.com"
-        assert data["claude_host_mount_path"] == "/home/op/.claude"
+        assert data["caretaker_enabled"] is False
 
     @pytest.mark.asyncio
     async def test_empty_password_returns_empty_string(self, client, monkeypatch):
@@ -87,7 +86,6 @@ class TestPutSettings:
                 "registry_check_interval": 120,
                 "log_level": "WARNING",
                 "gateway_base_domain": "new.example.com",
-                "claude_host_mount_path": "/tmp/.claude",
             }
         )
         server_mod.app.state.__setattr__("settings_store", mock_store)
@@ -101,7 +99,6 @@ class TestPutSettings:
                 "registry_check_interval": 120,
                 "log_level": "WARNING",
                 "gateway_base_domain": "new.example.com",
-                "claude_host_mount_path": "/tmp/.claude",
             },
             headers={"X-API-Key": "test-key"},
         )
@@ -114,7 +111,6 @@ class TestPutSettings:
         assert data["registry_check_interval"] == 120
         assert data["log_level"] == "WARNING"
         assert data["gateway_base_domain"] == "new.example.com"
-        assert data["claude_host_mount_path"] == "/tmp/.claude"
 
         # Verify persistence
         mock_store.put.assert_awaited_once()
