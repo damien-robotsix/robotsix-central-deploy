@@ -32,6 +32,7 @@ dev = [
     "ruff>=0.1",
     "types-PyYAML>=6.0",
     "types-docker>=7.1",
+    "towncrier>=24.0",
 ]
 docs = [
     "mkdocs-material>=9.5",
@@ -109,3 +110,37 @@ fail_under = 80
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
 per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config"], "DEP003" = ["starlette", "requests"] }
+
+[tool.towncrier]
+package = "robotsix_central_deploy"
+package_dir = "src"
+filename = "CHANGELOG.md"
+directory = "changelog.d"
+start_string = "<!-- towncrier release notes start -->\n"
+underlines = ["", "", ""]
+title_format = "## {version} ({project_date})"
+
+[[tool.towncrier.type]]
+directory = "feature"
+name = "Features"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "bugfix"
+name = "Bug Fixes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removal"
+name = "Removals / Breaking Changes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "doc"
+name = "Documentation"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "misc"
+name = "Miscellaneous"
+showcontent = false
