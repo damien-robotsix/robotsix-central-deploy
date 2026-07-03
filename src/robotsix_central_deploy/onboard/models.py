@@ -38,7 +38,6 @@ class DerivedSpec(BaseModel):
     image: str  # e.g. "ghcr.io/your-org/your-service:main"
     ports: list[PortMapping]
     volume_mounts: list[VolumeMount]  # host=volume_name (named volumes only)
-    stateful_volumes: list[str]  # volume names flagged robotsix.deploy.stateful=true
     env: dict[str, str]  # keys from compose; "" for secrets, preset string for defaults
     claude_mount: bool
     host_docker_sock: bool

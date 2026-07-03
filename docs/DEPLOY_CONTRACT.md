@@ -268,7 +268,7 @@ exactly as before (no config assist offered).
 
 ---
 
-## § 6  Volume declarations and stateful-volume flagging
+## § 6  Volume declarations
 
 Top-level `volumes:` section (**required** when any named volume is
 referenced by the service):
@@ -277,8 +277,6 @@ referenced by the service):
 volumes:
   my-data:                     # volume name referenced in services.<name>.volumes
     driver: local              # optional; only "local" is supported; default if omitted
-    labels:
-      robotsix.deploy.stateful: "true"   # marks this volume as containing persistent state
 ```
 
 - Each named volume referenced by the contract service MUST be declared here;
@@ -287,24 +285,9 @@ volumes:
   error**.  Omitting `driver` defaults to `local`.
 - `driver_opts` and `external` are silently ignored.
 
-### Stateful-volume flag
-
-- The optional label `robotsix.deploy.stateful: "true"` on a **volume
-  definition** (not the service) tells central-deploy that this volume
-  contains persistent data that cannot be recreated from the image (e.g. a
-  database, Radicale calendar data, uploaded files).
-- At onboarding, for **every** volume carrying this label, the UI MUST show a
-  **blocking confirmation** before proceeding:
-
-  > ⚠ Volume `<name>` is marked stateful. It will start **EMPTY** on first
-  > deploy. Migrate existing data before proceeding, or confirm you accept
-  > starting fresh.
-
-  The operator must explicitly acknowledge each such warning; the "Deploy"
-  button remains **disabled** until all stateful-volume warnings are
-  dismissed.
-- Volumes **without** the stateful label are treated as ephemeral caches —
-  safe to create empty with no warning.
+> **Note:** Named volumes start empty on first deploy. Backups are the
+> operator's responsibility — the deployment system does not manage data
+> migration or persistence guarantees.
 
 ---
 
@@ -383,9 +366,7 @@ services:
     volumes:
       - myapp-config:/app/config
 volumes:
-  myapp-config:
-    labels:
-      robotsix.deploy.stateful: "true"
+  myapp-config: {}
 ```
 
 ### Round-trip guarantee
@@ -413,7 +394,6 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
 | `labels.robotsix.deploy.config-target` | `ComponentConfig.config_volume` | Full in-container path to config.yaml. Resolved to the named-volume name from the matching volume mount. Required when `config/config.yaml` is present. |
 | Non-primary service entire block | `ComponentConfig.siblings[*]` (`ServiceConfig`) | One `ServiceConfig` per sibling. |
-| `volumes.<name>.labels.robotsix.deploy.stateful: "true"` | *(onboarding gate)* | Triggers blocking UI warning per volume.  Stored on the component spec as a per-volume flag. |
 
 ---
 
@@ -443,9 +423,7 @@ services:
       retries: 3
       start_period: 15s
 volumes:
-  cost-data:
-    labels:
-      robotsix.deploy.stateful: "true"
+  cost-data: {}
 ```
 
 ### Example B — Stateful service with Claude host mount (chat)
@@ -477,11 +455,6 @@ services:
 volumes:
   chat-data:
     driver: local   # only supported driver
-    labels:
-      # Marks this volume as containing persistent state.
-      # central-deploy will show a blocking warning at onboarding:
-      # "Volume chat-data will start EMPTY — migrate existing data."
-      robotsix.deploy.stateful: "true"
 ```
 
 ### Example C — Two-service compose with primary label (auto-mail)
@@ -514,9 +487,7 @@ services:
       - mail-spool:/data
 
 volumes:
-  mail-spool:
-    labels:
-      robotsix.deploy.stateful: "true"
+  mail-spool: {}
 ```
 
 In this example:
@@ -524,7 +495,7 @@ In this example:
 - Primary container: `auto-mail` (or overridden by `container_name:` on `board`).
 - Sibling container: `auto-mail-ingester` (derived from `<name>-ingester`).
 - Gateway route: `deploy.robotsix.net/auto-mail/*` → primary's port 8202.
-- `mail-spool` volume declared at top level and flagged stateful → UI warning at onboard.
+- `mail-spool` volume declared at top level.
 
 ---
 
@@ -564,8 +535,6 @@ services:
 volumes:                                # required iff any service has named volumes
   <volume-name>:
     driver: local
-    labels:
-      robotsix.deploy.stateful: "true"  # optional
 ```
 
 ### Error classification

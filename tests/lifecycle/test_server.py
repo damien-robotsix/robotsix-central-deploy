@@ -3832,7 +3832,6 @@ class TestNamespaceSpecVolumes:
                 VolumeMount(host="auto-mail-config", container="/config"),
                 VolumeMount(host="auto-mail-data", container="/data"),
             ],
-            stateful_volumes=["auto-mail-data"],
             env={},
             claude_mount=False,
             config_volume="auto-mail-config",
@@ -3844,7 +3843,6 @@ class TestNamespaceSpecVolumes:
         assert result.volume_mounts[0].container == "/config"
         assert result.volume_mounts[1].host == "mail-auto-mail-data"
         assert result.volume_mounts[1].container == "/data"
-        assert result.stateful_volumes == ["mail-auto-mail-data"]
         assert result.config_volume == "mail-auto-mail-config"
 
     def test_config_volume_none_is_preserved(self):
@@ -3854,7 +3852,6 @@ class TestNamespaceSpecVolumes:
             image="ghcr.io/org/test:main",
             ports=[],
             volume_mounts=[VolumeMount(host="vol1", container="/vol1")],
-            stateful_volumes=[],
             env={},
             claude_mount=False,
             config_volume=None,
@@ -3870,7 +3867,6 @@ class TestNamespaceSpecVolumes:
             image="ghcr.io/org/test:main",
             ports=[],
             volume_mounts=[VolumeMount(host="shared-vol", container="/shared")],
-            stateful_volumes=[],
             env={},
             claude_mount=False,
             siblings=[
@@ -3910,7 +3906,6 @@ class TestNamespaceSpecVolumes:
                 VolumeMount(host="auto-mail-data", container="/data"),
                 VolumeMount(host="auto-mail-logs", container="/logs"),
             ],
-            stateful_volumes=["auto-mail-data"],
             env={},
             claude_mount=False,
             config_volume="auto-mail-config",

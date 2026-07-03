@@ -211,8 +211,6 @@ async def phase_volumes(
     for comp_cfg in component_config_store.all():
         for vol_name in comp_cfg.named_volumes:
             vol_to_component[vol_name] = comp_cfg.id
-        for vol_name in comp_cfg.stateful_volumes:
-            vol_to_component[vol_name] = comp_cfg.id
 
     for af in audit_resp.recent_findings:
         comp_id = vol_to_component.get(af.volume_name, "")
@@ -237,7 +235,6 @@ async def phase_volumes(
         declared: set[str] = set()
         for comp_cfg in component_config_store.all():
             declared.update(comp_cfg.named_volumes)
-            declared.update(comp_cfg.stateful_volumes)
 
         df = await backend.disk_df()
         for vol in df.volumes:

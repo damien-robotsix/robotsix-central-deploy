@@ -303,7 +303,6 @@ class TestPhaseVolumes:
             image="x",
             container_name="x",
             named_volumes=["vol1"],
-            stateful_volumes=["vol1"],
             repo_id="test-repo",
         )
         ccs.all = MagicMock(return_value=[comp])

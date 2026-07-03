@@ -199,7 +199,6 @@ class ServiceListItem(BaseModel):
     name: str
     state: ServiceState
     update_available: bool = False
-    stateful_volumes: list[str] = []
     has_config_yaml: bool = False
     component_id: str = (
         ""  # non-empty for sibling records; equals the primary service name

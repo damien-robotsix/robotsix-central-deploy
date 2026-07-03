@@ -3124,13 +3124,6 @@
             "type": "array",
             "title": "Volume Mounts"
           },
-          "stateful_volumes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Stateful Volumes"
-          },
           "env": {
             "additionalProperties": {
               "type": "string"
@@ -3247,7 +3240,6 @@
           "image",
           "ports",
           "volume_mounts",
-          "stateful_volumes",
           "env",
           "claude_mount",
           "host_docker_sock"
@@ -3893,14 +3885,6 @@
             "type": "boolean",
             "title": "Update Available",
             "default": false
-          },
-          "stateful_volumes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Stateful Volumes",
-            "default": []
           },
           "has_config_yaml": {
             "type": "boolean",

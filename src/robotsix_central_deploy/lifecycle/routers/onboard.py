@@ -537,7 +537,6 @@ async def onboard_confirm(
         host_docker_sock=spec.host_docker_sock,
         named_volumes=[m.host for m in spec.volume_mounts]
         + [m.host for sib in spec.siblings for m in sib.volume_mounts],
-        stateful_volumes=spec.stateful_volumes,
         siblings=[
             ServiceConfig(
                 service_key=sib.service_key,

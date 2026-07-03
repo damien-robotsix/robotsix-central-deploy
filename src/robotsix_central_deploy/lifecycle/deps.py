@@ -607,7 +607,6 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
         for sib in spec.siblings
     ]
 
-    new_stateful = [old_to_new.get(v, v) for v in spec.stateful_volumes]
     new_config_vol = (
         old_to_new.get(spec.config_volume, spec.config_volume)
         if spec.config_volume is not None
@@ -618,7 +617,6 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
         update={
             "volume_mounts": new_primary_mounts,
             "siblings": new_siblings,
-            "stateful_volumes": new_stateful,
             "config_volume": new_config_vol,
         }
     )
