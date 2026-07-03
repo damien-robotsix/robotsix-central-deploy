@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Complete §8 transition: config is now JSON-Schema-driven (``config/config.schema.json`` + ``config/config.json``), secret detection via ``format: password`` + ``writeOnly: true``. Removed legacy YAML empty-leaf secret heuristic and ``_CONFIG_SECRET_SENTINEL`` support.
 - Add `claude-auth` named volume seed migration tests covering idempotent re-run, absent host source, and rmtree failure; clean `claude_host_mount_path` from OpenAPI spec and configuration docs.
 - Replace host bind mount for `robotsix.deploy.claude-mount` with a central-deploy-managed named volume `claude-auth`. The `claude_host_mount_path` setting is removed; claude credentials now live in a Docker named volume mounted at `/home/app/.claude`. A one-time migration seeds the volume from `/home/debian/.claude` if present. Deploying a claude-mount component without valid credentials surfaces a dashboard warning.
 - Remove the `robotsix.deploy.stateful` volume label and its associated onboarding gate. Named volumes start empty on first deploy; backups are the operator's responsibility. The label is now silently ignored (existing composes keep parsing).

@@ -353,10 +353,6 @@ class TestPruneUnset:
 # TestConfigRoundTrip removed — old sentinel-based templates no longer supported
 
 # ---------------------------------------------------------------------------
-# _annotate_secret_sentinels
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # ConfigYamlStore — update_current_and_hash round-trip
 # ---------------------------------------------------------------------------
 
