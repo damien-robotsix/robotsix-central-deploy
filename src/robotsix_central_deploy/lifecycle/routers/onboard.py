@@ -110,8 +110,9 @@ async def _rollback_onboard(
     primary_record: ServiceRecord,
     env_was_seeded: bool,
     sibling_records: list[ServiceRecord] | None = None,
+    named_volumes: list[str] | None = None,
 ) -> None:
-    """Best-effort rollback: remove containers, clean up config, records, and registry entries."""
+    """Best-effort rollback: remove containers, volumes, config, records, and registry entries."""
     # Remove all deployed containers — primary first, then siblings.
     for rec in [primary_record] + (sibling_records or []):
         try:
@@ -120,6 +121,17 @@ async def _rollback_onboard(
             logger.warning(
                 "rollback: remove_container %s failed", rec.name, exc_info=True
             )
+
+    # Remove created named volumes so a failed onboard does not leave them behind
+    # (which would trip the volume-collision preflight on the next attempt).
+    # remove_volume may raise NotImplementedError on DockerBackend (docker_cli) or
+    # be absent for already-missing volumes — tolerate everything so rollback
+    # never crashes.
+    for vol in named_volumes or []:
+        try:
+            await backend.remove_volume(vol)
+        except Exception:
+            logger.warning("rollback: remove_volume %s failed", vol, exc_info=True)
 
     if sibling_records:
         for sib_rec in sibling_records:
@@ -433,6 +445,7 @@ async def _run_onboard_deploy_job(
                 primary_record=record,
                 env_was_seeded=env_was_seeded,
                 sibling_records=sibling_records_created,
+                named_volumes=config.named_volumes,
             )
             job_registry.mark_failed(job_id, str(exc))
             return
@@ -458,6 +471,7 @@ async def _run_onboard_deploy_job(
             env_store=env_store,
             primary_record=record,
             env_was_seeded=env_was_seeded,
+            named_volumes=config.named_volumes,
         )
         job_registry.mark_failed(job_id, str(exc))
 

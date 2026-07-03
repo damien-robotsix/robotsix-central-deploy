@@ -1785,6 +1785,28 @@ function _legacyValueToProp(val) {
 }
 
 function _resolveRef(propSchema, defs) {
+  if (!propSchema) return propSchema;
+  // Unwrap a nullable union: anyOf/oneOf with exactly one non-null branch
+  // (e.g. Optional[RepoConfig] → {anyOf: [{$ref}, {type: 'null'}]}). Without
+  // this the field falls through to a text leaf and emits an invalid "" that
+  // fails the schema's anyOf[object, null] on deploy. Recurse so a $ref branch
+  // still resolves; preserve the wrapper's description/default if the inner
+  // branch lacks them. Non-nullable or multi-branch unions are left unchanged.
+  const union = propSchema.anyOf || propSchema.oneOf;
+  if (Array.isArray(union)) {
+    const nonNull = union.filter((b) => b && b.type !== 'null');
+    if (nonNull.length === 1) {
+      const inner = { ..._resolveRef(nonNull[0], defs) };
+      if (inner.description === undefined && propSchema.description !== undefined) {
+        inner.description = propSchema.description;
+      }
+      if (inner.default === undefined && propSchema.default !== undefined) {
+        inner.default = propSchema.default;
+      }
+      return inner;
+    }
+    return propSchema;
+  }
   if (!propSchema.$ref || !defs) return propSchema;
   const refPath = propSchema.$ref;
   if (refPath.startsWith('#/$defs/')) {
@@ -2043,6 +2065,12 @@ function _collectFromProperties(schema, result, container, prefix) {
           : parseFloat(el.value);
       } else if (el.type === 'password' || isSecret) {
         result[key] = el.value === '' ? '***' : el.value;
+      } else if (el.value === '') {
+        // Omit an empty optional text leaf rather than storing "" — mirrors the
+        // empty-nested-object omission above. Lets a nullable-object field whose
+        // sub-fields are all blank collapse to an empty (→ omitted) object so the
+        // assembled config validates (the field defaults to null).
+        continue;
       } else {
         result[key] = el.value;
       }

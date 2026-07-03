@@ -645,6 +645,78 @@ class TestOnboardConfirm:
         assert env_config.env == {"MY_KEY": "existing"}
         assert env_config.secret_tokens == {}
 
+    async def test_deploy_failure_removes_named_volumes(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """After a deploy failure, rollback tears down the component's namespaced
+        named volumes so a retry does not hit the volume-collision preflight."""
+        spec = _make_derived_spec("fail-svc")
+
+        class _SpyBackend(NoopBackend):
+            def __init__(self):
+                super().__init__()
+                self.removed_volumes: list[str] = []
+
+            async def remove_volume(self, volume_name: str) -> None:
+                self.removed_volumes.append(volume_name)
+
+        spy = _SpyBackend()
+        server_mod.app.state.backend = spy
+        server_mod._backend = spy
+
+        with patch.object(spy, "deploy", side_effect=RuntimeError("unhealthy")):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+
+        # The volume host "test_data" is namespaced as "<name>-test_data" on confirm.
+        assert spy.removed_volumes == ["fail-svc-test_data"]
+
+    async def test_deploy_failure_tolerates_remove_volume_raising(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Rollback must not crash when remove_volume raises (e.g.
+        NotImplementedError on DockerBackend or an already-missing volume) —
+        the job still finishes as 'failed'."""
+        spec = _make_derived_spec("fail-svc")
+
+        class _SpyBackend(NoopBackend):
+            def __init__(self):
+                super().__init__()
+                self.attempted_volumes: list[str] = []
+
+            async def remove_volume(self, volume_name: str) -> None:
+                self.attempted_volumes.append(volume_name)
+                raise NotImplementedError("remove_volume not supported")
+
+        spy = _SpyBackend()
+        server_mod.app.state.backend = spy
+        server_mod._backend = spy
+
+        with patch.object(spy, "deploy", side_effect=RuntimeError("unhealthy")):
+            resp = await client.post(
+                "/onboard/confirm",
+                json={"spec": spec.model_dump()},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 202
+            job_id = resp.json()["job_id"]
+            job_status = await _poll_job_until_done(client, job_id, auth_headers)
+            assert job_status["phase"] == "failed"
+
+        # remove_volume was attempted despite raising; rollback swallowed the error.
+        assert spy.attempted_volumes == ["fail-svc-test_data"]
+
     async def test_confirm_double_confirm_while_job_active_returns_409(
         self,
         client: AsyncClient,
@@ -1593,6 +1665,86 @@ class TestOnboardConfigSchemaValidation:
         assert resp.status_code == 422
         error_msg = resp.json()["error"]
         assert "enum" in error_msg.lower() or "invalid" in error_msg.lower()
+
+    async def test_confirm_omitted_nullable_object_field_validates(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """A nullable-object field (anyOf[object, null]) that is omitted from
+        config_values validates and onboards (202). Mirrors the mill's
+        ``repos.meta`` schema and the JS form fix that omits empty optionals
+        rather than emitting an invalid "".
+        """
+        spec = _make_derived_spec("cfg-nullable")
+        spec.config_schema = {
+            "type": "object",
+            "$defs": {
+                "RepoConfig": {
+                    "type": "object",
+                    "properties": {"track": {"type": "string"}},
+                }
+            },
+            "properties": {
+                "host": {"type": "string"},
+                "meta": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/RepoConfig"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                },
+            },
+        }
+        spec.config_volume = "cfg-nullable-data"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"host": "example.com"},  # meta omitted
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 202
+
+    async def test_confirm_empty_string_for_nullable_object_field_returns_422(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """The pre-fix failure mode: submitting "" for a nullable-object field
+        fails validation (anyOf[object, null]) → 422. This is exactly what the
+        JS form used to emit; the client-side fix omits the field instead.
+        """
+        spec = _make_derived_spec("cfg-nullable-bad")
+        spec.config_schema = {
+            "type": "object",
+            "$defs": {
+                "RepoConfig": {
+                    "type": "object",
+                    "properties": {"track": {"type": "string"}},
+                }
+            },
+            "properties": {
+                "meta": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/RepoConfig"},
+                        {"type": "null"},
+                    ],
+                    "default": None,
+                },
+            },
+        }
+        spec.config_volume = "cfg-nullable-bad-data"
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"meta": ""},
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 422
 
     async def test_confirm_secret_preserved_when_sentinel_submitted(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
