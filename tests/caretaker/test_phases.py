@@ -115,8 +115,10 @@ class TestPhaseUpdate:
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
         ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
 
-        await phase_update(registry, store, backend, ccs)
+        await phase_update(registry, store, backend, ccs, dhs)
         assert backend.deploy.call_args[0][2] == "repo:v1"
 
     @pytest.mark.asyncio
