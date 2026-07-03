@@ -7,7 +7,6 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Document Docker daemon log rotation in deployment docs and add a dashboard warning when the daemon has no log-opts configured.
-- Document Docker daemon log rotation in deployment docs and add a dashboard warning when the daemon has no log-opts configured.
 - Classify `_yaml_utils.py` under the lifecycle module in `docs/modules.yaml`; restructure manifest from dict to list format with `id` + `paths` entries so the `robotsix-modules check-registration` tool can parse it correctly.
 - Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import
 - Complete §8 transition: config is now JSON-Schema-driven (``config/config.schema.json`` + ``config/config.json``), secret detection via ``format: password`` + ``writeOnly: true``. Removed legacy YAML empty-leaf secret heuristic and ``_CONFIG_SECRET_SENTINEL`` support.
