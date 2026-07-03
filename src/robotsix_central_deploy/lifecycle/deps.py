@@ -289,9 +289,14 @@ class JobRegistry:
 # ---------------------------------------------------------------------------
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    global _config, _store, _backend, _registry_checker, _http_client
+async def _init_config(app: FastAPI) -> None:
+    """Load config from environment and construct core stores.
+
+    Attaches ``config``, ``store``, ``key_manager``, ``env_store``,
+    ``config_yaml_store``, and ``deploy_history_store`` to ``app.state``.
+    Sets the module-level ``_config`` and ``_store`` globals.
+    """
+    global _config, _store
     import robotsix_config
 
     _config = robotsix_config.load_config(LifecycleConfig)
@@ -309,7 +314,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.config_yaml_store = _config_yaml_store
     app.state.deploy_history_store = _deploy_history_store
 
-    # -- System settings store (overlay persisted settings onto _config) ---
+
+async def _init_settings(app: FastAPI) -> None:
+    """Seed system settings on first boot, overlay persisted settings onto
+    config, and construct the execution backend.
+
+    Attaches ``settings_store``, ``backend``, ``session_store``, and
+    ``job_registry`` to ``app.state``.  Applies the (possibly overlaid)
+    log level to the root logger.  Updates the module-level ``_config``
+    and ``_backend`` globals.
+    """
+    global _config, _backend
+    assert _config is not None
     from ..registry.settings_store import SystemSettings, SystemSettingsStore
 
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
@@ -349,6 +365,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Apply log_level from (possibly overlaid) config
     logging.getLogger().setLevel(_config.log_level)
 
+
+async def _init_background_tasks(app: FastAPI) -> None:
+    """Create shared HTTP client and registry checker; start the registry-
+    check background loop when configured.
+
+    Attaches ``registry_checker``, ``http_client``, and ``_bg_task`` to
+    ``app.state``.  Sets the module-level ``_registry_checker`` and
+    ``_http_client`` globals.
+    """
+    global _registry_checker, _http_client
+    assert _config is not None
+    assert _store is not None
+    assert _backend is not None
+
     # -- Registry checker ------------------------------------------------
     http_client = httpx.AsyncClient(timeout=10.0)
     registry_checker = RegistryChecker(
@@ -370,6 +400,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 _config.registry_check_interval,
             )
         )
+    app.state._bg_task = bg_task
 
     logger.info(
         "lifecycle server starting — store=%s backend=%s auth=%s",
@@ -377,6 +408,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         type(_backend).__name__,
         "on" if _config.auth_required else "off",
     )
+
+
+async def _init_component_registry(app: FastAPI) -> None:
+    """Load persisted component configs into the in-memory registry, seed
+    sibling service records, and start the volume-audit and caretaker
+    subsystems.
+
+    Attaches ``registry``, ``component_config_store``,
+    ``volume_audit_scheduler``, ``caretaker_scheduler``, and the
+    background-task handles (``_caretaker_task``, ``_volume_audit_task``)
+    to ``app.state``.  Sets the module-level ``_volume_audit_scheduler``
+    global.
+    """
+    global _volume_audit_scheduler
+    assert _config is not None
+    assert _store is not None
+    assert _backend is not None
+    assert _http_client is not None
 
     # -- Component registry (in-memory, populated from persisted store) ------
     registry = ComponentRegistry([])
@@ -415,7 +464,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
 
     # --- Volume audit subsystem ---
-    global _volume_audit_scheduler
     _volume_audit_task: asyncio.Task[Any] | None = None
     if _config.volume_audit_enabled:
         _volume_audit_scheduler = VolumeAuditScheduler(
@@ -428,6 +476,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         _volume_audit_scheduler = None
         app.state.volume_audit_scheduler = None
+    app.state._volume_audit_task = _volume_audit_task
 
     # --- Caretaker subsystem ---
     caretaker_scheduler = CaretakerScheduler(
@@ -437,14 +486,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         service_store=_store,
         component_config_store=component_config_store,
         volume_audit_scheduler=_volume_audit_scheduler,
-        settings_store=settings_store,
-        http_client=http_client,
-        deploy_history_store=_deploy_history_store,
+        settings_store=app.state.settings_store,
+        http_client=_http_client,
+        deploy_history_store=app.state.deploy_history_store,
     )
     app.state.caretaker_scheduler = caretaker_scheduler
 
-    initial_settings = await settings_store.get()
+    initial_settings = await app.state.settings_store.get()
     _caretaker_task = asyncio.create_task(caretaker_scheduler.loop())
+    app.state._caretaker_task = _caretaker_task
 
     if not initial_settings.caretaker_enabled:
         # Caretaker disabled at startup: start the standalone volume audit
@@ -456,21 +506,49 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             _volume_audit_task = asyncio.create_task(
                 _volume_audit_scheduler.loop(_config.volume_audit_interval_seconds)
             )
+            app.state._volume_audit_task = _volume_audit_task
 
-    yield
 
+async def _teardown(app: FastAPI) -> None:
+    """Cancel background tasks and close the shared HTTP client.
+
+    Reads task references from ``app.state`` (``_caretaker_task``,
+    ``_volume_audit_task``, ``_bg_task``) that were stored during
+    initialisation.
+    """
+    assert _http_client is not None
+    _caretaker_task: asyncio.Task[Any] = app.state._caretaker_task
     _caretaker_task.cancel()
     with suppress(asyncio.CancelledError):
         await _caretaker_task
+
+    _volume_audit_task: asyncio.Task[Any] | None = app.state._volume_audit_task
     if _volume_audit_task and not _volume_audit_task.done():
         _volume_audit_task.cancel()
         with suppress(asyncio.CancelledError):
             await _volume_audit_task
+
+    bg_task: asyncio.Task[Any] | None = app.state._bg_task
     if bg_task:
         bg_task.cancel()
         await asyncio.gather(bg_task, return_exceptions=True)
-    await http_client.aclose()
+
+    await _http_client.aclose()
     logger.info("lifecycle server shutting down")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan — initialise stores, backends, background tasks,
+    and component registry; tear down on shutdown."""
+    await _init_config(app)
+    await _init_settings(app)
+    await _init_background_tasks(app)
+    await _init_component_registry(app)
+
+    yield
+
+    await _teardown(app)
 
 
 # ---------------------------------------------------------------------------
