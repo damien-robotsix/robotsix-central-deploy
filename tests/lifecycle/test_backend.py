@@ -1,5 +1,6 @@
 """Tests for the execution backends."""
 
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -592,6 +593,56 @@ class TestDockerSdkBackendCommandAndEntrypoint:
         b._create_container(config, "test:latest")
         _, kwargs = client.containers.create.call_args
         assert kwargs["entrypoint"] is None
+
+
+# ---------------------------------------------------------------------------
+# Docker SDK backend — user= injection (host UID/GID)
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendUserInjection:
+    """_create_container must pass user=<uid>:<gid> for every service,
+    derived at runtime from the host process."""
+
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def test_create_container_injects_host_uid_gid(self, backend):
+        """A plain service (no claude_mount) gets user=<uid>:<gid>."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
+
+    def test_create_container_with_claude_mount_also_injects_uid_gid(self, backend):
+        """A service with claude_mount=True also gets user=<uid>:<gid> —
+        both features compose correctly."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            claude_mount=True,
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ drives ``docker`` / ``docker-compose`` via subprocess.
 
 from __future__ import annotations
 
+import os
 import shlex
 
 import asyncio
@@ -761,8 +762,6 @@ class DockerSdkBackend(ExecutionBackend):
             for m in config.mounts
         }
         if config.claude_mount:
-            import os
-
             claude_host = self._claude_host_mount_path or os.path.expanduser(
                 "~/.claude"
             )
@@ -792,6 +791,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             detach=True,
+            user=f"{os.getuid()}:{os.getgid()}",
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
             network=PROXY_NETWORK,
         )
