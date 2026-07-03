@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -41,3 +41,19 @@ def read_yaml_file(path: Path | str) -> dict[str, Any]:
             f"Expected a mapping at top level of {path}, got {type(data).__name__}"
         )
     return data
+
+
+def deep_merge(
+    base: dict[str, object], override: dict[str, object]
+) -> dict[str, object]:
+    """Recursively merge *override* into *base*; override values win on conflict."""
+    result: dict[str, object] = dict(base)
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = deep_merge(
+                cast("dict[str, object]", result[key]),
+                cast("dict[str, object]", val),
+            )
+        else:
+            result[key] = val
+    return result
