@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 import shlex
-import shutil
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -34,7 +33,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CLAUDE_AUTH_VOLUME = "claude-auth"
-CLAUDE_AUTH_HOST_SEED = "/home/debian/.claude"
 
 
 class DockerSdkBackend(ExecutionBackend):
@@ -330,7 +328,9 @@ class DockerSdkBackend(ExecutionBackend):
         """Create the ``claude-auth`` named volume if it does not exist.
 
         Labels it with ``robotsix.deploy.stateful=true`` for consistency
-        with other managed stateful volumes.
+        with other managed stateful volumes.  The volume root is owned by
+        ``1000:1000`` — components run as uid 1000 and Claude Code must be
+        able to rewrite ``.credentials.json`` on token refresh.
         """
         import docker
 
@@ -341,75 +341,12 @@ class DockerSdkBackend(ExecutionBackend):
                 CLAUDE_AUTH_VOLUME,
                 labels={"robotsix.deploy.stateful": "true"},
             )
-
-    def _seed_claude_auth_from_host(self) -> bool:
-        """Seed the ``claude-auth`` volume from ``/home/debian/.claude``.
-
-        Copies contents with uid:gid 1000:1000 and perms 0700/0600, then
-        removes the host source directory.  Idempotent: returns ``True``
-        only the first time it actually copies data; returns ``False`` if
-        the volume is already seeded or the host source is absent.
-        """
-        import docker
-
-        host_src = CLAUDE_AUTH_HOST_SEED
-        if not os.path.isdir(host_src):
-            return False
-
-        # Check whether the volume already has credentials.
-        try:
             self._client.containers.run(
                 "busybox",
-                command=[
-                    "sh",
-                    "-c",
-                    "test -f /mnt/.credentials.json",
-                ],
-                volumes={CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "ro"}},
+                command=["sh", "-c", "chown 1000:1000 /mnt && chmod 700 /mnt"],
+                volumes={CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "rw"}},
                 remove=True,
             )
-            # Exit 0 → .credentials.json exists → already seeded.
-            return False
-        except docker.errors.ContainerError:
-            # Exit non-zero → .credentials.json missing → seed.
-            pass
-
-        logger.info(
-            "Seeding %s volume from %s (chown 1000:1000) ...",
-            CLAUDE_AUTH_VOLUME,
-            host_src,
-        )
-
-        # Copy host source into the volume using a privileged helper.
-        # busybox cp -a copies recursively; we then chown everything.
-        script = (
-            "cp -a /host/. /mnt/ && "
-            "chown -R 1000:1000 /mnt && "
-            "find /mnt -type d -exec chmod 700 {} + && "
-            "find /mnt -type f -exec chmod 600 {} +"
-        )
-        try:
-            self._client.containers.run(
-                "busybox",
-                command=["sh", "-c", script],
-                volumes={
-                    host_src: {"bind": "/host", "mode": "ro"},
-                    CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "rw"},
-                },
-                remove=True,
-            )
-        except docker.errors.ContainerError as exc:
-            logger.error("Failed to seed %s volume: %s", CLAUDE_AUTH_VOLUME, exc)
-            return False
-
-        # Remove the host source directory.
-        try:
-            shutil.rmtree(host_src)
-        except OSError as exc:
-            logger.warning("Could not remove host seed dir %s: %s", host_src, exc)
-
-        logger.info("Successfully seeded %s volume.", CLAUDE_AUTH_VOLUME)
-        return True
 
     def _check_claude_credentials(self) -> list[str]:
         """Validate that the ``claude-auth`` volume contains a readable
@@ -503,345 +440,51 @@ class DockerSdkBackend(ExecutionBackend):
                     "detail": "Credentials file exists but is not valid JSON.",
                 }
 
-            # Check for expiry information (typical in OAuth credentials).
-            # Anthropic stores expiration as an ISO timestamp in the credentials.
-            expires_at = creds.get("expires_at") or creds.get("expiresAt")
+            # Check for expiry information. Claude Code stores OAuth tokens
+            # under "claudeAiOauth" with "expiresAt" as a ms epoch; older
+            # formats used a top-level ISO "expires_at".
+            oauth = creds.get("claudeAiOauth") or {}
+            has_refresh = bool(oauth.get("refreshToken"))
+            expires_at = (
+                oauth.get("expiresAt")
+                or creds.get("expires_at")
+                or creds.get("expiresAt")
+            )
             if expires_at:
                 try:
                     from datetime import datetime, timezone
 
-                    if isinstance(expires_at, str):
-                        expire_dt = datetime.fromisoformat(
-                            expires_at.replace("Z", "+00:00")
+                    if isinstance(expires_at, (int, float)):
+                        expire_dt = datetime.fromtimestamp(
+                            expires_at / 1000.0, tz=timezone.utc
                         )
-                        now = datetime.now(timezone.utc)
-                        if expire_dt < now:
+                    else:
+                        expire_dt = datetime.fromisoformat(
+                            str(expires_at).replace("Z", "+00:00")
+                        )
+                    now = datetime.now(timezone.utc)
+                    if expire_dt < now:
+                        if has_refresh:
                             return {
-                                "status": "not-authenticated",
-                                "detail": "Credentials have expired.",
+                                "status": "authenticated",
+                                "detail": "Access token expired; refreshes on next use.",
                             }
-                        remaining = (expire_dt - now).total_seconds()
-                        if remaining < 86400:  # less than 1 day
-                            return {
-                                "status": "expiring",
-                                "detail": f"Credentials expire in {remaining / 3600:.1f} hours.",
-                            }
-                except ValueError, TypeError:
+                        return {
+                            "status": "not-authenticated",
+                            "detail": "Credentials have expired.",
+                        }
+                    remaining = (expire_dt - now).total_seconds()
+                    if remaining < 86400 and not has_refresh:  # less than 1 day
+                        return {
+                            "status": "expiring",
+                            "detail": f"Credentials expire in {remaining / 3600:.1f} hours.",
+                        }
+                except ValueError, TypeError, OSError, OverflowError:
                     pass  # unparseable expiry → treat as valid
 
             return {"status": "authenticated"}
 
         return await loop.run_in_executor(None, _check)
-
-    async def start_claude_login(
-        self, volume_name: str, helper_image: str
-    ) -> dict[str, Any]:
-        """Spawn a helper container that runs ``claude login``, returning the
-        OAuth URL for the operator to visit.
-
-        The volume is mounted at ``/home/app/.claude`` (uid 1000's home) so
-        ``claude login`` writes ``.credentials.json`` onto the persistent
-        volume rather than the ephemeral container overlayfs.
-
-        The helper script:
-        1. Runs ``claude login``, capturing stdout/stderr to the volume.
-        2. Writes the OAuth URL to ``.login-url`` on the volume.
-        3. Waits for ``claude login`` to exit on its own (device-flow OAuth
-           callback — the operator authorises in the browser, not via a
-           pasted code).
-        4. On completion writes the exit code to ``.login-result``.
-        """
-        import docker
-
-        loop = asyncio.get_running_loop()
-
-        # The helper runs ``claude login`` which writes credentials into
-        # ``~/.claude/.credentials.json``.  The volume is mounted at
-        # ``/home/app/.claude`` (uid 1000's home) so credentials land on
-        # the persistent volume.  The script captures the OAuth URL for the
-        # operator, then waits for the device-flow callback to complete
-        # (``claude login`` exits by itself once the browser authorisation
-        # finishes).  There is no paste-a-code path here — the operator
-        # pastes a code *in the browser*, not back into the CLI.
-        script = (
-            "claude login > /home/app/.claude/.login-output 2>&1 & "
-            "CLAUDE_PID=$!; "
-            # Poll for the OAuth URL to appear in the output.
-            "for i in $(seq 1 60); do "
-            "  if grep -qE 'https?://' /home/app/.claude/.login-output 2>/dev/null; then "
-            "    grep -oE 'https?://[^[:space:]]+' /home/app/.claude/.login-output | head -1 > /home/app/.claude/.login-url; "
-            "    touch /home/app/.claude/.login-ready; "
-            "    break; "
-            "  fi; "
-            "  sleep 1; "
-            "done; "
-            # Wait for claude login to finish on its own (device-flow OAuth
-            # callback).  $! captures the right PID because we launched
-            # ``claude login`` directly (no pipe/tee).
-            "for i in $(seq 1 300); do "
-            "  if ! kill -0 $CLAUDE_PID 2>/dev/null; then "
-            "    wait $CLAUDE_PID 2>/dev/null; "
-            '    echo "EXIT:$?" > /home/app/.claude/.login-result; '
-            "    break; "
-            "  fi; "
-            "  sleep 1; "
-            "done; "
-            # Timeout guard.
-            "if ! [ -f /home/app/.claude/.login-result ]; then "
-            "  kill $CLAUDE_PID 2>/dev/null; wait $CLAUDE_PID 2>/dev/null; "
-            "  echo 'EXIT:124' > /home/app/.claude/.login-result; "
-            "fi; "
-            "rm -f /home/app/.claude/.login-ready /home/app/.claude/.login-url"
-        )
-
-        container_name = f"claude-login-{os.urandom(4).hex()}"
-
-        def _start() -> dict[str, Any]:
-            container = self._client.containers.create(
-                helper_image,
-                command=["sh", "-c", script],
-                volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
-                name=container_name,
-                user="1000:1000",
-                detach=True,
-            )
-            container.start()
-
-            # Poll for the OAuth URL to appear in the volume.
-            import time
-
-            deadline = time.monotonic() + 120
-            oauth_url = ""
-            while time.monotonic() < deadline:
-                try:
-                    result = self._client.containers.run(
-                        "busybox",
-                        command=[
-                            "sh",
-                            "-c",
-                            "cat /home/app/.claude/.login-ready 2>/dev/null || true",
-                        ],
-                        volumes={
-                            volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
-                        },
-                        remove=True,
-                    )
-                    if result.strip():
-                        url_result = self._client.containers.run(
-                            "busybox",
-                            command=[
-                                "sh",
-                                "-c",
-                                "cat /home/app/.claude/.login-url 2>/dev/null || true",
-                            ],
-                            volumes={
-                                volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
-                            },
-                            remove=True,
-                        )
-                        oauth_url = url_result.decode("utf-8", errors="replace").strip()
-                        break
-                except docker.errors.ContainerError:
-                    pass  # file not ready yet; retry next iteration
-                time.sleep(1)
-
-            if not oauth_url:
-                # Check if the container exited already (error).
-                try:
-                    container.reload()
-                    if container.status in ("exited", "dead"):
-                        logs = container.logs(stdout=True, stderr=True).decode(
-                            errors="replace"
-                        )
-                        if not logs.strip():
-                            try:
-                                file_result = self._client.containers.run(
-                                    "busybox",
-                                    command=[
-                                        "sh",
-                                        "-c",
-                                        "cat /home/app/.claude/.login-output 2>/dev/null || true",
-                                    ],
-                                    volumes={
-                                        volume_name: {
-                                            "bind": "/home/app/.claude",
-                                            "mode": "ro",
-                                        }
-                                    },
-                                    remove=True,
-                                )
-                                logs = file_result.decode("utf-8", errors="replace")
-                            except Exception:
-                                pass  # best-effort log collection; ignore read failures
-                        try:
-                            container.remove(force=True)
-                        except Exception:
-                            pass  # best-effort cleanup; container may already be gone
-                        raise RuntimeError(
-                            f"Claude login helper exited prematurely:\n{logs}"
-                        )
-                except docker.errors.NotFound:
-                    pass  # container already gone; nothing to inspect
-                try:
-                    container.kill()
-                    container.remove(force=True)
-                except Exception:
-                    pass  # best-effort cleanup; ignore if container already gone
-                raise RuntimeError(
-                    "Claude login: could not obtain OAuth URL within 120s."
-                )
-
-            return {"container_id": container.id, "oauth_url": oauth_url}
-
-        try:
-            return await loop.run_in_executor(None, _start)
-        except Exception:
-            # Best-effort cleanup on failure.
-            try:
-                c = self._client.containers.get(container_name)
-                c.kill()
-                c.remove(force=True)
-            except Exception:
-                pass  # best-effort cleanup; container may not exist
-            raise
-
-    async def complete_claude_login(
-        self, volume_name: str, container_id: str, auth_code: str
-    ) -> dict[str, Any]:
-        """Wait for the helper container to finish and return the result.
-
-        The helper runs the device-flow OAuth callback on its own — no
-        auth code is fed back to the CLI.  *auth_code* is accepted for
-        API compatibility but is unused by this backend.
-        """
-        import docker
-
-        loop = asyncio.get_running_loop()
-
-        def _complete() -> dict[str, Any]:
-            # Wait for the helper container to finish.  The device-flow
-            # OAuth callback completes automatically in the browser — no
-            # code is fed back to the CLI.  ``auth_code`` is accepted for
-            # API compatibility but is unused in this backend.
-            import time
-
-            try:
-                container = self._client.containers.get(container_id)
-            except docker.errors.NotFound:
-                return {"status": "error", "error": "Helper container not found."}
-
-            deadline = time.monotonic() + 300
-            while time.monotonic() < deadline:
-                container.reload()
-                if container.status in ("exited", "dead"):
-                    break
-                time.sleep(1)
-            else:
-                try:
-                    container.kill()
-                    container.remove(force=True)
-                except Exception:
-                    pass  # best-effort cleanup on timeout; ignore failures
-                return {"status": "error", "error": "Login timed out after 300s."}
-
-            # Read the result.
-            try:
-                result = self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cat /home/app/.claude/.login-result 2>/dev/null || echo 'EXIT:1'",
-                    ],
-                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
-                    remove=True,
-                )
-                result_str = result.decode("utf-8", errors="replace").strip()
-            except docker.errors.ContainerError:
-                result_str = "EXIT:1"
-
-            logs = ""
-            try:
-                logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
-            except Exception:
-                pass  # best-effort log read; logs stay empty on failure
-            if not logs.strip():
-                try:
-                    file_result = self._client.containers.run(
-                        "busybox",
-                        command=[
-                            "sh",
-                            "-c",
-                            "cat /home/app/.claude/.login-output 2>/dev/null || true",
-                        ],
-                        volumes={
-                            volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
-                        },
-                        remove=True,
-                    )
-                    logs = file_result.decode("utf-8", errors="replace")
-                except Exception:
-                    pass  # best-effort log collection; ignore read failures
-            try:
-                container.remove(force=True)
-            except Exception:
-                pass  # best-effort cleanup; container may already be gone
-
-            # Cleanup temp files.
-            try:
-                self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "rm -f /home/app/.claude/.login-result /home/app/.claude/.login-ready /home/app/.claude/.login-url /home/app/.claude/.login-code /home/app/.claude/.login-output",
-                    ],
-                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
-                    remove=True,
-                )
-            except Exception:
-                pass  # best-effort temp file cleanup; ignore failures
-
-            if result_str.startswith("EXIT:0"):
-                return {"status": "authenticated"}
-            else:
-                return {
-                    "status": "error",
-                    "error": f"Claude login failed: {result_str}",
-                    "logs": logs[-2000:],
-                }
-
-        return await loop.run_in_executor(None, _complete)
-
-    async def cancel_claude_login(self, volume_name: str, container_id: str) -> None:
-        """Kill and remove a running claude-login helper container."""
-        import docker
-
-        loop = asyncio.get_running_loop()
-
-        def _cancel() -> None:
-            try:
-                container = self._client.containers.get(container_id)
-                container.kill()
-                container.remove(force=True)
-            except docker.errors.NotFound:
-                pass  # container already gone; nothing to cancel
-            # Clean up temp files
-            try:
-                self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "rm -f /home/app/.claude/.login-ready /home/app/.claude/.login-url /home/app/.claude/.login-code /home/app/.claude/.login-result /home/app/.claude/.login-output",
-                    ],
-                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
-                    remove=True,
-                )
-            except Exception:
-                pass  # best-effort temp file cleanup; ignore failures
-
-        await loop.run_in_executor(None, _cancel)
 
     async def write_claude_credentials(
         self, volume_name: str, credentials_json: str
@@ -859,14 +502,11 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         def _write() -> dict[str, Any]:
-            # Ensure the volume exists.
+            # Ensure the volume exists (create + chown on first use).
             try:
                 self._client.volumes.get(volume_name)
             except docker.errors.NotFound:
-                return {
-                    "status": "error",
-                    "error": f"Volume '{volume_name}' does not exist.",
-                }
+                self._ensure_claude_auth_volume()
 
             encoded = credentials_json.encode("utf-8")
             import base64
@@ -964,7 +604,7 @@ class DockerSdkBackend(ExecutionBackend):
                         f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
                     ) from exc
 
-            # Claude auth: ensure named volume, seed from host if needed, validate
+            # Claude auth: ensure named volume, validate credentials
             if config.claude_mount:
                 try:
                     await loop.run_in_executor(None, self._ensure_claude_auth_volume)
@@ -972,14 +612,6 @@ class DockerSdkBackend(ExecutionBackend):
                     raise RuntimeError(
                         f"Failed to ensure claude-auth volume: {exc}"
                     ) from exc
-
-                # Seed on first use (migration from host path)
-                try:
-                    await loop.run_in_executor(None, self._seed_claude_auth_from_host)
-                except Exception as exc:
-                    logger.warning(
-                        "claude-auth seed migration failed (non-fatal): %s", exc
-                    )
 
                 # Validate credentials
                 try:
@@ -1058,7 +690,7 @@ class DockerSdkBackend(ExecutionBackend):
 
         # Create + start from prior digest
         try:
-            # Claude auth: ensure named volume, seed from host if needed, validate
+            # Claude auth: ensure named volume, validate credentials
             if config.claude_mount:
                 try:
                     await loop.run_in_executor(None, self._ensure_claude_auth_volume)
@@ -1066,15 +698,6 @@ class DockerSdkBackend(ExecutionBackend):
                     raise RuntimeError(
                         f"Failed to ensure claude-auth volume during rollback: {exc}"
                     ) from exc
-
-                # Seed on first use (migration from host path)
-                try:
-                    await loop.run_in_executor(None, self._seed_claude_auth_from_host)
-                except Exception as exc:
-                    logger.warning(
-                        "claude-auth seed migration failed during rollback (non-fatal): %s",
-                        exc,
-                    )
 
                 # Validate credentials
                 try:

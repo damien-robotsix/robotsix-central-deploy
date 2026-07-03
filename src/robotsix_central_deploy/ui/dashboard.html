@@ -679,7 +679,7 @@
       <h3>Options</h3>
       <label>
         <input type="checkbox" id="ob-claude-mount" />
-        Mount ~/.claude as /home/app/.claude (read-write)
+        Mount Claude credentials
       </label>
 
       <div id="ob-mill-tracking" style="margin-top:12px;">
@@ -3182,7 +3182,7 @@ document.addEventListener('keydown', (e) => {
 });
 // ── Claude auth panel ────────────────────────────────────────────
 
-let claudeLoginContainerId = '';
+let claudeLoginId = '';
 
 async function fetchClaudeAuthStatus() {
   try {
@@ -3251,7 +3251,7 @@ async function startClaudeLogin() {
       throw new Error(body.detail || `HTTP ${resp.status}`);
     }
     const data = await resp.json();
-    claudeLoginContainerId = data.container_id;
+    claudeLoginId = data.login_id;
     urlLink.href = data.oauth_url;
     urlLink.textContent = data.oauth_url;
     codeInput.value = '';
@@ -3293,7 +3293,7 @@ async function completeClaudeLogin() {
       method: 'POST',
       headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
       credentials: 'same-origin',
-      body: JSON.stringify({ container_id: claudeLoginContainerId, auth_code: authCode }),
+      body: JSON.stringify({ login_id: claudeLoginId, auth_code: authCode }),
     });
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
@@ -3304,17 +3304,11 @@ async function completeClaudeLogin() {
       toast.textContent = '✓ Login successful!';
       toast.style.color = 'var(--green)';
       loginSection.style.display = 'none';
-      claudeLoginContainerId = '';
+      claudeLoginId = '';
       await fetchClaudeAuthStatus();
     } else {
       errorDiv.textContent = data.error || 'Login failed.';
       errorDiv.style.display = '';
-      if (data.logs) {
-        const pre = document.createElement('pre');
-        pre.style.cssText = 'font-size:0.75rem;max-height:200px;overflow-y:auto;background:#1e1e1e;padding:8px;margin-top:4px;border-radius:4px;white-space:pre-wrap;';
-        pre.textContent = data.logs;
-        errorDiv.appendChild(pre);
-      }
       toast.textContent = '';
     }
   } catch (e) {
@@ -3336,17 +3330,17 @@ async function cancelClaudeLogin() {
   submitBtn.disabled = true;
   cancelBtn.disabled = true;
 
-  if (claudeLoginContainerId) {
+  if (claudeLoginId) {
     try {
       await fetch('/claude-auth/login/cancel', {
         method: 'POST',
         headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
         credentials: 'same-origin',
-        body: JSON.stringify({ container_id: claudeLoginContainerId, auth_code: '' }),
+        body: JSON.stringify({ login_id: claudeLoginId }),
       });
     } catch (_) { /* best-effort */ }
   }
-  claudeLoginContainerId = '';
+  claudeLoginId = '';
   loginSection.style.display = 'none';
   toast.textContent = '';
 }

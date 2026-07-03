@@ -204,35 +204,6 @@ class ExecutionBackend(ABC):
         pass
 
     @abstractmethod
-    async def start_claude_login(
-        self, volume_name: str, helper_image: str
-    ) -> dict[str, Any]:
-        """Spawn an ephemeral helper container that runs ``claude login``.
-
-        Mounts *volume_name* at ``/home/app/.claude`` so credentials are
-        persisted into the named volume on success.
-
-        Returns a dict with ``container_id`` (the running helper) and
-        ``oauth_url`` (the URL the operator must visit to authorize).
-        """
-        pass
-
-    @abstractmethod
-    async def complete_claude_login(
-        self, volume_name: str, container_id: str, auth_code: str
-    ) -> dict[str, Any]:
-        """Feed *auth_code* to the running helper container's stdin and wait
-        for it to complete.  The helper writes credentials into *volume_name*.
-        Returns a dict with ``status`` and optional ``error``.
-        """
-        pass
-
-    @abstractmethod
-    async def cancel_claude_login(self, volume_name: str, container_id: str) -> None:
-        """Kill and remove a running claude-login helper container (best-effort)."""
-        pass
-
-    @abstractmethod
     async def write_claude_credentials(
         self, volume_name: str, credentials_json: str
     ) -> dict[str, Any]:

@@ -169,28 +169,22 @@ component to make authenticated Claude API calls.
 Credentials are managed from the **Claude auth** panel on the central-deploy
 dashboard (`/ui` → "Claude Auth" section).  Two methods are available:
 
-1. **Interactive OAuth login** (recommended).  Click "Log in with Claude" to
-   spawn a temporary helper container that runs `claude login`.  The panel
-   displays an OAuth authorization URL — visit it in a browser, authorize the
-   device, and the CLI completes automatically.  If a code is prompted,
-   paste it back into the dashboard.
+1. **Interactive OAuth login** (recommended).  Click "Log in with Claude".
+   The server generates a PKCE challenge and the panel shows an OAuth
+   authorization URL — open it, authorize, and Anthropic's callback page
+   displays an authorization code.  Paste that code back into the panel;
+   central-deploy exchanges it for OAuth tokens and writes
+   `.credentials.json` into the `claude-auth` volume (ownership
+   `1000:1000`, mode `0600`).  The whole flow runs inside central-deploy —
+   no helper container is involved.  A redirect straight back to the
+   dashboard is not possible: the OAuth client only whitelists Anthropic's
+   own callback page.
 
 2. **Paste credentials JSON** (fallback).  Expand "Paste credentials JSON"
    and paste the contents of a `.credentials.json` file obtained elsewhere
-   (e.g. from a prior `claude login` on a developer machine).  The file is
-   written into the volume with ownership `1000:1000` and permissions `0600`.
-
-The helper container runs as uid:gid `1000:1000` and mounts the `claude-auth`
-volume at `/home/app/.claude`.  It is removed automatically when the login
-completes or is cancelled.
-
-### Helper image
-
-The OAuth login flow requires a container image that ships the `claude` CLI.
-By default central-deploy uses `ghcr.io/damien-robotsix/robotsix-chat:main`
-(any fleet image whose runtime stage includes the Claude CLI works).  The
-image can be overridden via the `claude_auth_helper_image` setting in the
-dashboard Settings panel.
+   (e.g. from `claude setup-token` or a login on a developer machine).  The
+   file is written into the volume with ownership `1000:1000` and
+   permissions `0600`.
 
 ### OAuth refresh-token rotation caveat
 

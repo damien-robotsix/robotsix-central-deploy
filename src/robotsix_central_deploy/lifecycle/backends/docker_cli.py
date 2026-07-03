@@ -231,25 +231,6 @@ class DockerBackend(ExecutionBackend):
             "check_claude_auth not supported for DockerBackend — use DockerSdkBackend"
         )
 
-    async def start_claude_login(
-        self, volume_name: str, helper_image: str
-    ) -> dict[str, Any]:
-        raise NotImplementedError(
-            "start_claude_login not supported for DockerBackend — use DockerSdkBackend"
-        )
-
-    async def complete_claude_login(
-        self, volume_name: str, container_id: str, auth_code: str
-    ) -> dict[str, Any]:
-        raise NotImplementedError(
-            "complete_claude_login not supported for DockerBackend — use DockerSdkBackend"
-        )
-
-    async def cancel_claude_login(self, volume_name: str, container_id: str) -> None:
-        raise NotImplementedError(
-            "cancel_claude_login not supported for DockerBackend — use DockerSdkBackend"
-        )
-
     async def write_claude_credentials(
         self, volume_name: str, credentials_json: str
     ) -> dict[str, Any]:

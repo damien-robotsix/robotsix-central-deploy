@@ -221,19 +221,22 @@ class ClaudeAuthStatusResponse(BaseModel):
 
 
 class ClaudeAuthLoginResponse(BaseModel):
-    container_id: str
+    login_id: str
     oauth_url: str
 
 
 class ClaudeAuthCompleteRequest(BaseModel):
-    container_id: str
+    login_id: str
     auth_code: str
+
+
+class ClaudeAuthCancelRequest(BaseModel):
+    login_id: str
 
 
 class ClaudeAuthCompleteResponse(BaseModel):
     status: str  # "authenticated" | "error"
     error: str = ""
-    logs: str = ""
 
 
 class ClaudeAuthCredentialsRequest(BaseModel):
