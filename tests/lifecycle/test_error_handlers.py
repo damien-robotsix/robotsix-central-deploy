@@ -8,16 +8,10 @@ and unhandled exceptions return a safe generic 500.
 
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
 
 from robotsix_central_deploy.lifecycle import server as server_mod
 from robotsix_central_deploy.lifecycle.models import ErrorDetail
-
-
-@pytest.fixture
-def auth_headers() -> dict[str, str]:
-    return {"X-API-Key": "test-key"}
 
 
 class TestErrorHandlerRegistration:

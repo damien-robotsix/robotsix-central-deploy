@@ -6,7 +6,6 @@ full request/response pipeline including middleware, auth, and error handlers.
 
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
 
 from unittest.mock import AsyncMock, MagicMock
@@ -42,11 +41,6 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
         if deployed_digest:
             rec.deployed_image_digest = deployed_digest
         await s.put(rec)
-
-
-@pytest.fixture
-def auth_headers() -> dict[str, str]:
-    return {"X-API-Key": "test-key"}
 
 
 # ---------------------------------------------------------------------------
