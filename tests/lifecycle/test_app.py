@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, APIRouter
 from fastapi.testclient import TestClient
-from starlette.routing import Match
+from starlette.routing import Match, Mount
 
 from robotsix_central_deploy.lifecycle.app import app
 
@@ -16,6 +16,34 @@ from robotsix_central_deploy.lifecycle.app import app
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _flatten_routes(app: FastAPI) -> list:
+    """Return all leaf routes in registration order.
+
+    Recurses into ``_IncludedRouter`` (FastAPI ≥ 0.139) and ``Mount``
+    containers so that ordering tests work regardless of the FastAPI
+    version.
+    """
+
+    def _collect(route: object, dest: list) -> None:
+        # FastAPI ≥ 0.139: _IncludedRouter wraps an APIRouter
+        original = getattr(route, "original_router", None)
+        if original is not None:
+            for sub in getattr(original, "routes", []):
+                _collect(sub, dest)
+            return
+        # Starlette Mount / Host
+        if isinstance(route, Mount):
+            for sub in route.routes:
+                _collect(sub, dest)
+            return
+        dest.append(route)
+
+    flat: list = []
+    for route in app.router.routes:
+        _collect(route, flat)
+    return flat
 
 
 def _is_gateway_route(route: object) -> bool:
@@ -33,7 +61,7 @@ def _is_gateway_route(route: object) -> bool:
 
 def _first_gateway_idx(app: FastAPI) -> int | None:
     """Return the index of the first gateway route, or None."""
-    for i, route in enumerate(app.router.routes):
+    for i, route in enumerate(_flatten_routes(app)):
         if _is_gateway_route(route):
             return i
     return None
@@ -65,7 +93,7 @@ def test_gateway_router_registered_last():
     first = _first_gateway_idx(app)
     assert first is not None, "gateway router not found in app routes"
 
-    routes = list(app.router.routes)
+    routes = _flatten_routes(app)
 
     # Every route after the first gateway route must also be a gateway route
     # (i.e., no non-gateway route is registered after the gateway).
@@ -82,7 +110,7 @@ def test_specific_api_routes_before_gateway():
     first = _first_gateway_idx(app)
     assert first is not None, "gateway router not found in app routes"
 
-    routes = list(app.router.routes)
+    routes = _flatten_routes(app)
 
     # Collect the paths of all routes before the gateway.
     api_paths: set[str] = set()
