@@ -791,7 +791,12 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             detach=True,
-            user=f"{os.getuid()}:{os.getgid()}",
+            # Run as the host operator ONLY for claude-mount components: the
+            # bind-mounted ~/.claude (0600, operator-owned) must be readable
+            # inside. Everything else keeps the image's own USER — forcing a
+            # uid globally breaks images that need root (e.g. the haproxy
+            # socket proxy, which cannot write /run as uid 1000).
+            user=f"{os.getuid()}:{os.getgid()}" if config.claude_mount else None,
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
             network=PROXY_NETWORK,
         )
