@@ -29,12 +29,14 @@ async def get_disk_usage(
     """Host disk usage and Docker storage breakdown."""
     usage = shutil.disk_usage(config.disk_path)
     docker_df = await backend.disk_df()
+    daemon_log_config = await backend.get_daemon_log_config()
     return DiskUsageResponse(
         total_bytes=usage.total,
         used_bytes=usage.used,
         free_bytes=usage.free,
         warn_threshold_pct=config.disk_warn_pct,
         docker=docker_df,
+        daemon_log_config=daemon_log_config,
     )
 
 

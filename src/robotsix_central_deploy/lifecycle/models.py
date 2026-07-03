@@ -348,6 +348,7 @@ class DiskUsageResponse(BaseModel):
     free_bytes: int
     warn_threshold_pct: float
     docker: DockerDfStats
+    daemon_log_config: dict[str, Any] | None = None
 
 
 class ReclaimResponse(BaseModel):

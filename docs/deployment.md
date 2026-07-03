@@ -76,6 +76,37 @@ This starts two containers:
 State (component configs, env/secrets, Fernet key, settings) persists in the
 `central_deploy_data` named volume.
 
+## Docker daemon log rotation
+
+The Docker daemon's default logging driver stores container output as
+unbounded JSON files in `/var/lib/docker/containers/<id>/<id>-json.log`.
+Without rotation, every container log grows indefinitely until the host disk
+fills.
+
+Add log rotation to `/etc/docker/daemon.json` (merge with any existing keys,
+such as the nvidia runtime):
+
+```json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+```
+
+!!! warning "Operational caveats"
+    - **Daemon restart required.** After editing `daemon.json`, run
+      `systemctl restart docker` (or the equivalent for your init system).
+      This briefly interrupts all running containers.
+    - **Existing containers keep their current log config.** The new defaults
+      only apply to containers **created** after the daemon restart. Existing
+      containers must be recreated (e.g. via `docker compose up -d` or a
+      deploy through central-deploy) to pick up the rotation settings.
+    - **Schedule accordingly.** Plan the daemon restart during a maintenance
+      window, then recreate critical containers afterward.
+
 ## DNS
 
 Two records in the `robotsix.net` zone (OVH), both pointing at the server:

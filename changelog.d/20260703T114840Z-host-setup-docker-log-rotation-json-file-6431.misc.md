@@ -1,0 +1,1 @@
+Host setup: docker log rotation (json-file max-size/max-file)

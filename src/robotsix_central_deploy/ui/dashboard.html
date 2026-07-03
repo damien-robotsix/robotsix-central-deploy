@@ -999,7 +999,9 @@ async function fetchDiskUsage() {
     try {
         const resp = await fetch('/disk', { headers: authHeaders(), credentials: 'same-origin' });
         if (!resp.ok) { document.getElementById('disk-content').textContent = 'Error loading disk info.'; return; }
-        renderDiskPanel(await resp.json());
+        const data = await resp.json();
+        renderDiskPanel(data);
+        checkDaemonLogConfig(data);
     } catch (e) {
         document.getElementById('disk-content').textContent = 'Error: ' + e.message;
     }
@@ -1072,6 +1074,16 @@ function renderDiskPanel(data) {
 }
 
 function fmt_mb(bytes) { return (bytes / 1048576).toFixed(1) + ' MiB'; }
+
+function checkDaemonLogConfig(data) {
+    if (!data.daemon_log_config) return;
+    var cfg = data.daemon_log_config;
+    var opts = cfg.log_opts || {};
+    // Warn if the daemon has no log rotation options configured
+    if (!opts['max-size'] && !opts['max-file']) {
+        showWarning('\u26a0\ufe0f Docker daemon has no log rotation configured. Container logs will grow unbounded. See deployment docs for remediation.');
+    }
+}
 
 async function fetchVolumeAudit() {
   try {

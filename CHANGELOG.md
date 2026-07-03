@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Document Docker daemon log rotation in deployment docs and add a dashboard warning when the daemon has no log-opts configured.
 - Classify `_yaml_utils.py` under the lifecycle module in `docs/modules.yaml`; restructure manifest from dict to list format with `id` + `paths` entries so the `robotsix-modules check-registration` tool can parse it correctly.
 - Move `tests/lifecycle/test_volume_audit_endpoint.py` into the `tests/lifecycle/volume_audit/` directory as `test_endpoint.py`, consolidating all volume_audit tests under one module-aligned test directory.
 - Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import

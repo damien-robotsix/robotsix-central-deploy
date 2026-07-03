@@ -208,6 +208,11 @@ class DockerBackend(ExecutionBackend):
             "remove_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def get_daemon_log_config(self) -> Optional[dict[str, Any]]:
+        raise NotImplementedError(
+            "get_daemon_log_config not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def inspect_self(self) -> Optional[SelfInspect]:
         raise NotImplementedError(
             "inspect_self not supported for DockerBackend — use DockerSdkBackend"

@@ -1548,6 +1548,36 @@ class DockerSdkBackend(ExecutionBackend):
 
         return await loop.run_in_executor(None, _scan)
 
+    async def _resolve_self_container(self) -> Any:
+        """Resolve the server's own container. Returns ``None`` on failure."""
+        import socket
+
+        import docker
+
+        hostname = socket.gethostname()
+        try:
+            container = await self._get_container(hostname)
+            if container is None:
+                container = await self._find_by_config_hostname(hostname)
+            return container
+        except docker.errors.APIError as exc:
+            logger.warning(
+                "_resolve_self_container: docker daemon unreachable: %s", exc
+            )
+            return None
+
+    async def get_daemon_log_config(self) -> Optional[dict[str, Any]]:
+        """Return the Docker daemon's LogConfig as seen by this container."""
+        container = await self._resolve_self_container()
+        if container is None:
+            return None
+        host_config = container.attrs.get("HostConfig") or {}
+        log_config = host_config.get("LogConfig") or {}
+        return {
+            "log_driver": log_config.get("Type", ""),
+            "log_opts": log_config.get("Config") or {},
+        }
+
     async def inspect_self(self) -> Optional[SelfInspect]:
         """Resolve the server's own container via the container-id hostname.
 
@@ -1558,18 +1588,9 @@ class DockerSdkBackend(ExecutionBackend):
         containerised, daemon unreachable) self-update is reported
         unsupported rather than raising.
         """
-        import socket
-
         import docker
 
-        hostname = socket.gethostname()
-        try:
-            container = await self._get_container(hostname)
-            if container is None:
-                container = await self._find_by_config_hostname(hostname)
-        except docker.errors.APIError as exc:
-            logger.warning("inspect_self: docker daemon unreachable: %s", exc)
-            return None
+        container = await self._resolve_self_container()
         if container is None:
             return None
 
