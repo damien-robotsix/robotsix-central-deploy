@@ -19,13 +19,41 @@ built by `.github/workflows/release.yml` on every push to main):
 git clone https://github.com/damien-robotsix/robotsix-central-deploy.git
 cd robotsix-central-deploy
 docker compose pull
-ROBOTSIX_LIFECYCLE_AUTH_USERNAME=admin \
-ROBOTSIX_LIFECYCLE_AUTH_PASSWORD=... \
 docker compose up -d
 ```
 
 To update: `docker compose pull && docker compose up -d` (add `--build` only
 for local development builds from the checkout).
+
+!!! warning "One-time migration: seed `/data/config.json`"
+    Since the robotsix_config migration the server reads **all** of its own
+    configuration from one JSON file — `ROBOTSIX_LIFECYCLE_*` environment
+    variables are ignored. The compose file points `ROBOTSIX_CONFIG_FILE` at
+    `/data/config.json`; seed it on the data volume before the first start of
+    a post-migration image (values mirror the old env vars — full field list
+    in the committed `config/config.json`):
+
+    ```bash
+    docker run --rm -i -v central_deploy_data:/data alpine sh -c \
+      'cat > /data/config.json && chmod 600 /data/config.json && chown 1000:1000 /data/config.json' << 'EOF'
+    {
+      "auth_username": "admin",
+      "auth_password": "...",
+      "store_backend": "file",
+      "store_path": "/data/lifecycle_state.yaml",
+      "component_config_store_path": "/data/component_configs.json",
+      "docker_socket_url": "tcp://socket-proxy:2375",
+      "env_store_path": "/data/component_env.json",
+      "secret_key_path": "/data/secrets.key",
+      "config_yaml_store_path": "/data/component_config_yaml.json",
+      "system_settings_path": "/data/system_settings.json",
+      "disk_path": "/host_root"
+    }
+    EOF
+    ```
+
+    Without this file the baked-in defaults apply (unix docker socket,
+    in-memory store) and startup fails against the socket proxy.
 
 !!! warning "One-time migration: `/data` volume ownership"
     The container now runs as a non-root user (uid 1000). A
@@ -60,8 +88,8 @@ Two records in the `robotsix.net` zone (OVH), both pointing at the server:
 Because of the wildcard record and the wildcard vhost below, **onboarding a
 new component requires no DNS or nginx change**: the gateway resolves
 `<name>.deploy.robotsix.net` from the `Host` header at runtime
-(`ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN=deploy.robotsix.net`, also settable
-from the dashboard settings).
+(`gateway_base_domain` in `/data/config.json`, also settable from the
+dashboard settings).
 
 ## nginx
 

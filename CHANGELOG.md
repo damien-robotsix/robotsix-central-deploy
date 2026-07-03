@@ -4,6 +4,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix deployment breakage from the robotsix_config migration: `docker-compose.yml` still set the now-ignored `ROBOTSIX_LIFECYCLE_*` env vars, so a pulled post-migration image started with baked-in defaults (unix docker socket, memory store) and crash-looped. Compose now sets `ROBOTSIX_CONFIG_FILE=/data/config.json`; docs/deployment.md documents seeding the file.
 - Add Dependabot auto-merge caller workflow (`.github/workflows/dependabot-auto-merge.yml`)
 - Regenerate `config/config.json` and `config/config.example.json` to include `mill_component_id` and `image_auto_prune` defaults.
 - **Breaking:** `LifecycleConfig` migrated from `pydantic-settings` env-var loading to `robotsix_config.load_config` (JSON file). Operators must replace `config/config.json` with a deployment-specific file containing real secrets — the committed version carries safe empty-string defaults. Added `config/config.json`, `config/config.example.json`, and `config/config.schema.json` with a CI drift check.
