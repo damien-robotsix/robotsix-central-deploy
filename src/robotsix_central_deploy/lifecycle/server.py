@@ -9,6 +9,7 @@ continue to work without changes.
 from __future__ import annotations
 
 import shutil  # noqa: F401 — tests monkeypatch server_mod.shutil
+from typing import Any
 
 # Lifespan (tests import it directly)
 from .deps import lifespan as lifespan  # noqa: F401
@@ -35,7 +36,7 @@ from .volume_audit.models import VolumeAuditResponse as VolumeAuditResponse  # n
 
 # App — lazy-loaded to avoid a circular import between
 #   server.py -> app.py -> routers/service_config.py -> server.py
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "app":
         from .app import app as _app
 
@@ -44,7 +45,6 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    "app",  # noqa: F822 — lazy via __getattr__
     "lifespan",
     "_mask_secrets",
     "_merge_config",
