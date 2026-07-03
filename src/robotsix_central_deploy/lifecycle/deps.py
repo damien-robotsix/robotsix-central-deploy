@@ -23,7 +23,6 @@ from fastapi import FastAPI, HTTPException, Request, status
 from .backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from .config import LifecycleConfig
 from .models import (
-    ContainerHealthSummary,
     ExecutionBackendType,
     HealthStatus,
     ServiceRecord,
@@ -43,6 +42,7 @@ from .volume_audit.scheduler import VolumeAuditScheduler
 from .store import FileStore, InMemoryStore, ServiceStore
 
 if TYPE_CHECKING:
+    from .models import ContainerHealthSummary
     from ..registry.models import ConfigAssistSeed
     from robotsix_central_deploy.onboard.models import DerivedSpec
 

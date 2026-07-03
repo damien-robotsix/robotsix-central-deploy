@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import
 - Complete §8 transition: config is now JSON-Schema-driven (``config/config.schema.json`` + ``config/config.json``), secret detection via ``format: password`` + ``writeOnly: true``. Removed legacy YAML empty-leaf secret heuristic and ``_CONFIG_SECRET_SENTINEL`` support.
 - Refactor 180-line lifespan function in ``lifecycle/deps.py`` into five private async helpers (``_init_config``, ``_init_settings``, ``_init_background_tasks``, ``_init_component_registry``, ``_teardown``) with individual docstrings, reducing the lifespan body to ~15 lines of orchestration.
 - Add `claude-auth` named volume seed migration tests covering idempotent re-run, absent host source, and rmtree failure; clean `claude_host_mount_path` from OpenAPI spec and configuration docs.
