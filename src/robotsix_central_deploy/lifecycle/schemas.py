@@ -35,12 +35,6 @@ class OnboardConfirmRequest(BaseModel):
     register_with_mill: bool = True
 
 
-class OnboardConfirmResponse(BaseModel):
-    name: str
-    image: str
-    state: str
-
-
 # Phase literal type for onboard background deploy jobs.
 OnboardJobPhase = Literal[
     "writing_config",

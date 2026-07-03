@@ -152,6 +152,68 @@
         }
       }
     },
+    "/system/update": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Self Update Status",
+        "description": "Compare the running server image digest against the registry.\n\n``supported`` is false when the server is not containerised (or the\nexecution backend cannot tell); ``update_available`` is only true when\nboth the running and the latest digest resolved and differ.",
+        "operationId": "get_self_update_status_system_update_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfUpdateStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Trigger Self Update",
+        "description": "Launch the one-shot updater; the server restarts shortly after.\n\nReturns 202 immediately \u2014 the dashboard polls ``/health`` /\n``GET /system/update`` until the recreated server answers with the new\ndigest. 503 when self-update is unsupported, 502 when the updater\ncontainer fails to launch.",
+        "operationId": "trigger_self_update_system_update_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfUpdateTriggered"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/volumes/audit": {
       "get": {
         "tags": [
@@ -407,6 +469,7 @@
           "services"
         ],
         "summary": "List managed services",
+        "description": "Return all managed services with their current state and optional config metadata.",
         "operationId": "list_services_services_get",
         "responses": {
           "200": {
@@ -438,6 +501,7 @@
           "services"
         ],
         "summary": "Get service status",
+        "description": "Return full status for a service: live state, health, image digests,\nupdate availability, and sibling health.\n\nRaises 404 if the service is not found. Persists refreshed state and\ndigest data to the store.",
         "operationId": "get_service_status_services__name__get",
         "parameters": [
           {
@@ -498,6 +562,7 @@
           "services"
         ],
         "summary": "Remove an onboarded component and optionally its container",
+        "description": "Remove an onboarded component and optionally its container and volumes.\n\nDeletes the service record, env/secrets, config.yaml, and component config.\nOptionally stops and removes the Docker container (``stop_container``) and\ndeletes data volumes (``remove_volumes``, irreversible). Raises 404 if the\ncomponent is not found.",
         "operationId": "delete_service_services__name__delete",
         "parameters": [
           {
@@ -567,6 +632,7 @@
           "services"
         ],
         "summary": "Get service health",
+        "description": "Return the current health status string for a service.\n\nRaises 404 if the service is not found.",
         "operationId": "get_service_health_services__name__health_get",
         "parameters": [
           {
@@ -629,6 +695,7 @@
           "services"
         ],
         "summary": "Stream container logs (auth-gated)",
+        "description": "Stream container log output as a plain-text response.\n\nSupports optional tail, since, and follow query parameters.\nRaises 404 if the service is not found.\nRaises 422 if tail is out of range (1-10000).",
         "operationId": "get_service_logs_services__name__logs_get",
         "parameters": [
           {
@@ -724,6 +791,7 @@
           "services"
         ],
         "summary": "Start a service (idempotent)",
+        "description": "Start a service. Idempotent \u2014 returns success if already running or starting.\n\nTransitions the service through STARTING to RUNNING (or FAILED on error).\nRaises 404 on missing service, 409 if the current state does not allow a\nstart, and 500 on backend failure. Sibling services are started on a\nbest-effort basis.",
         "operationId": "start_service_services__name__start_post",
         "parameters": [
           {
@@ -796,6 +864,7 @@
           "services"
         ],
         "summary": "Stop a service (idempotent)",
+        "description": "Stop a service. Idempotent \u2014 returns success if already stopped or stopping.\n\nTransitions the service through STOPPING to STOPPED (or FAILED on error).\nRaises 404 on missing service, 409 if the current state does not allow a\nstop, and 500 on backend failure. Sibling services are stopped on a\nbest-effort basis.",
         "operationId": "stop_service_services__name__stop_post",
         "parameters": [
           {
@@ -868,6 +937,7 @@
           "services"
         ],
         "summary": "Restart a service (idempotent)",
+        "description": "Restart a service. Idempotent \u2014 returns success if a restart is already in progress.\n\nTransitions the service through RESTARTING to RUNNING (or FAILED on error).\nRaises 404 on missing service, 409 if the current state does not allow a\nrestart, and 500 on backend failure. Sibling services are restarted on a\nbest-effort basis.",
         "operationId": "restart_service_services__name__restart_post",
         "parameters": [
           {
@@ -940,6 +1010,7 @@
           "services"
         ],
         "summary": "Deploy a new image version for a service",
+        "description": "Pull and deploy a new image version for a service.\n\nOptionally accepts a specific image reference; defaults to the component's\nconfigured image. Writes merged config.yaml to the config volume before\nstarting when a config schema is present. Raises 404 if the service or\ncomponent config is not found, 503 if the registry checker is not loaded,\nand 500 on backend failure. Sibling services are deployed on a best-effort\nbasis. Persists the new and previous image digests to the store.",
         "operationId": "deploy_service_services__name__deploy_post",
         "parameters": [
           {
@@ -1029,6 +1100,7 @@
           "services"
         ],
         "summary": "Rollback a service to its prior image digest",
+        "description": "Roll back a service to its previously recorded image digest.\n\nSwaps the deployed and previous digests in the store. Raises 404 if the\nservice or component config is not found, 409 if no prior digest is\nrecorded (run a deploy first), 503 if the registry checker is not loaded,\nand 500 on backend failure. Sibling services are rolled back on a\nbest-effort basis.",
         "operationId": "rollback_service_services__name__rollback_post",
         "parameters": [
           {
@@ -1111,6 +1183,7 @@
           "services"
         ],
         "summary": "Get stored environment variables and secret keys for a service",
+        "description": "Return stored environment variables and masked secret keys for a service.\n\nSecret values are never exposed \u2014 only the key names are returned, each\nmasked as ``\"***\"``. Raises 404 if the service is not found.",
         "operationId": "get_service_env_services__name__env_get",
         "parameters": [
           {
@@ -1171,6 +1244,7 @@
           "services"
         ],
         "summary": "Upsert environment variables and secrets for a service",
+        "description": "Create or update environment variables and secrets for a service.\n\nReturns 204 No Content on success. Raises 404 if the service is not found.",
         "operationId": "put_service_env_services__name__env_put",
         "parameters": [
           {
@@ -1230,12 +1304,86 @@
         }
       }
     },
+    "/services/{name}/env/sync-keys": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Add env keys newly declared by the repo's compose contract",
+        "description": "Re-read the repo's compose env contract and seed newly declared keys.\n\nThe env key set belongs to the repo's contract, not the operator: keys\nwith a default value are added as plain env entries, keys declared empty\nare added as secret slots \u2014 mirroring onboard seeding. Existing values\nare never modified, and keys the contract no longer declares are only\nreported, not deleted.",
+        "operationId": "sync_env_keys_services__name__env_sync_keys_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvSyncResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Component has no git_url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Repo fetch or compose parse failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services/{name}/env/{key}": {
       "delete": {
         "tags": [
           "services"
         ],
         "summary": "Delete an environment variable or secret key for a service",
+        "description": "Delete a single environment-variable or secret key for a service.\n\nReturns 204 No Content on success. Raises 404 if the service or key\nis not found.",
         "operationId": "delete_service_env_key_services__name__env__key__delete",
         "parameters": [
           {
@@ -1300,6 +1448,7 @@
           "services"
         ],
         "summary": "Get config.yaml schema and current values for a service",
+        "description": "Return the config.yaml schema and current masked values for a service.\n\nRaises 404 if the service has no config schema.",
         "operationId": "get_service_config_services__name__config_get",
         "parameters": [
           {
@@ -1360,6 +1509,7 @@
           "services"
         ],
         "summary": "Merge and save config.yaml values for a service",
+        "description": "Merge and save config.yaml values for a service, then write to the config volume.\n\nRestarts the running container (and any siblings sharing the config\nvolume) so new values take effect immediately. Returns 204 No Content.\nRaises 404 if the service has no config schema.",
         "operationId": "put_service_config_services__name__config_put",
         "parameters": [
           {
@@ -1419,12 +1569,149 @@
         }
       }
     },
+    "/services/{name}/config/import": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Import live volume content into the config store, clearing drift",
+        "description": "Read the live volume file and store it as the new *current*, clearing drift.\n\nThe imported dict is stored as-is (real secret values preserved, since the\nvolume holds real values). The volume hash is updated to match, so subsequent\ndrift checks see a clean state.",
+        "operationId": "import_service_config_services__name__config_import_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigImportResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service has no config schema or config volume",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/config/refresh-schema": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Refetch config/config.schema.json from the repo and replace the stored template",
+        "description": "Replace the stored config template with the repo's committed schema.\n\nComponents onboarded before the schema-driven config keep the legacy raw\ntemplate captured at onboard time; this refetches ``config/config.schema.json``\nfrom the repo HEAD so the typed schema (field types, enums, descriptions)\nreaches the dashboard without re-onboarding. Stored *values* are untouched.",
+        "operationId": "refresh_config_schema_services__name__config_refresh_schema_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigSchemaRefreshResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Component has no git_url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found or repo has no config/config.schema.json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Repo fetch failed or schema is invalid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services/{name}/config/assist": {
       "post": {
         "tags": [
           "services"
         ],
         "summary": "Run a repo-declared config-assist command in a one-shot container and return auto-filled config",
+        "description": "Run a repo-declared config-assist command in a one-shot container.\n\nFetches fresh config-assist metadata from the component's git repo, runs\nthe detect/assist command inside a temporary container with the config\nvolume mounted, and merges detected fields into the user-submitted values.\nRaises 400 if no config-assist command or config volume is configured,\n404 if the component is not found, and 504 if the assist command times out.",
         "operationId": "run_config_assist_services__name__config_assist_post",
         "parameters": [
           {
@@ -1511,6 +1798,40 @@
         }
       }
     },
+    "/caretaker/status": {
+      "get": {
+        "tags": [
+          "caretaker"
+        ],
+        "summary": "Get Caretaker Status",
+        "description": "Return the current caretaker status.",
+        "operationId": "get_caretaker_status_caretaker_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Caretaker Status Caretaker Status Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/onboard/preflight": {
       "post": {
         "tags": [
@@ -1569,7 +1890,7 @@
           "onboard"
         ],
         "summary": "Onboard Confirm",
-        "description": "Persist a reviewed DerivedSpec, deploy the container, and register the component.",
+        "description": "Persist a reviewed DerivedSpec, then schedule the deploy as a background job.\n\nReturns 202 with a job id so the caller can poll ``GET /onboard/jobs/{job_id}``\nfor progress.",
         "operationId": "onboard_confirm_onboard_confirm_post",
         "requestBody": {
           "content": {
@@ -1582,12 +1903,65 @@
           "required": true
         },
         "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardConfirmAcceptedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/onboard/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "onboard"
+        ],
+        "summary": "Onboard Job Status",
+        "description": "Return the current phase of an onboard background deploy job.",
+        "operationId": "onboard_job_status_onboard_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OnboardConfirmResponse"
+                  "$ref": "#/components/schemas/OnboardJobStatusResponse"
                 }
               }
             }
@@ -1622,7 +1996,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1650,7 +2024,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1678,7 +2052,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1706,7 +2080,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1734,7 +2108,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1762,7 +2136,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1790,7 +2164,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__post",
+        "operationId": "gateway_http_root__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1814,108 +2188,12 @@
       }
     },
     "/{path}": {
-      "post": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "tags": [
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
+        "operationId": "gateway_http__path__get",
         "parameters": [
           {
             "name": "path",
@@ -1963,7 +2241,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
+        "operationId": "gateway_http__path__get",
         "parameters": [
           {
             "name": "path",
@@ -2006,12 +2284,12 @@
           }
         }
       },
-      "delete": {
+      "patch": {
         "tags": [
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
+        "operationId": "gateway_http__path__get",
         "parameters": [
           {
             "name": "path",
@@ -2059,7 +2337,103 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
+        "operationId": "gateway_http__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__get",
         "parameters": [
           {
             "name": "path",
@@ -2107,7 +2481,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
+        "operationId": "gateway_http__path__get",
         "parameters": [
           {
             "name": "path",
@@ -2310,6 +2684,26 @@
         ],
         "title": "ConfigAssistSeed"
       },
+      "ConfigImportResponse": {
+        "properties": {
+          "current": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current"
+          },
+          "volume_hash": {
+            "type": "string",
+            "title": "Volume Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current",
+          "volume_hash"
+        ],
+        "title": "ConfigImportResponse",
+        "description": "Body of the 200 response from POST /services/{name}/config/import."
+      },
       "ConfigResponse": {
         "properties": {
           "schema": {
@@ -2321,6 +2715,11 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Current"
+          },
+          "drift": {
+            "type": "boolean",
+            "title": "Drift",
+            "default": false
           },
           "config_assist_command": {
             "anyOf": [
@@ -2349,12 +2748,32 @@
         ],
         "title": "ConfigResponse"
       },
+      "ConfigSchemaRefreshResponse": {
+        "properties": {
+          "schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Schema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema"
+        ],
+        "title": "ConfigSchemaRefreshResponse",
+        "description": "Body of the 200 response from POST /services/{name}/config/refresh-schema."
+      },
       "ConfigUpdate": {
         "properties": {
           "values": {
             "additionalProperties": true,
             "type": "object",
             "title": "Values"
+          },
+          "force_overwrite": {
+            "type": "boolean",
+            "title": "Force Overwrite",
+            "default": false
           }
         },
         "type": "object",
@@ -2683,6 +3102,39 @@
         ],
         "title": "EnvResponse"
       },
+      "EnvSyncResponse": {
+        "properties": {
+          "added_env": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Added Env"
+          },
+          "added_secrets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Added Secrets"
+          },
+          "undeclared": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Undeclared"
+          }
+        },
+        "type": "object",
+        "required": [
+          "added_env",
+          "added_secrets",
+          "undeclared"
+        ],
+        "title": "EnvSyncResponse",
+        "description": "Body of the 200 response from POST /services/{name}/env/sync-keys."
+      },
       "EnvUpdate": {
         "properties": {
           "env": {
@@ -2773,6 +3225,25 @@
         "title": "HealthCheck",
         "description": "Mirrors the Docker HealthCheck spec."
       },
+      "OnboardConfirmAcceptedResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "name"
+        ],
+        "title": "OnboardConfirmAcceptedResponse",
+        "description": "Returned by POST /onboard/confirm (202) when the job is queued."
+      },
       "OnboardConfirmRequest": {
         "properties": {
           "spec": {
@@ -2789,6 +3260,11 @@
               }
             ],
             "title": "Config Values"
+          },
+          "register_with_mill": {
+            "type": "boolean",
+            "title": "Register With Mill",
+            "default": true
           }
         },
         "type": "object",
@@ -2797,28 +3273,81 @@
         ],
         "title": "OnboardConfirmRequest"
       },
-      "OnboardConfirmResponse": {
+      "OnboardJobStatusResponse": {
         "properties": {
-          "name": {
+          "job_id": {
             "type": "string",
+            "title": "Job Id"
+          },
+          "component": {
+            "type": "string",
+            "title": "Component"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "writing_config",
+              "deploying_primary",
+              "waiting_health",
+              "deploying_siblings",
+              "done",
+              "failed"
+            ],
+            "title": "Phase"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Name"
           },
           "image": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Image"
           },
           "state": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "State"
           }
         },
         "type": "object",
         "required": [
-          "name",
-          "image",
-          "state"
+          "job_id",
+          "component",
+          "phase"
         ],
-        "title": "OnboardConfirmResponse"
+        "title": "OnboardJobStatusResponse",
+        "description": "Returned by GET /onboard/jobs/{job_id}."
       },
       "OnboardPreflightRequest": {
         "properties": {
@@ -3007,6 +3536,64 @@
         ],
         "title": "RollbackResponse",
         "description": "API response for ``POST /services/{name}/rollback``."
+      },
+      "SelfUpdateStatus": {
+        "properties": {
+          "supported": {
+            "type": "boolean",
+            "title": "Supported"
+          },
+          "container_name": {
+            "type": "string",
+            "title": "Container Name",
+            "default": ""
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "default": ""
+          },
+          "running_digest": {
+            "type": "string",
+            "title": "Running Digest",
+            "default": ""
+          },
+          "latest_digest": {
+            "type": "string",
+            "title": "Latest Digest",
+            "default": ""
+          },
+          "update_available": {
+            "type": "boolean",
+            "title": "Update Available",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "supported"
+        ],
+        "title": "SelfUpdateStatus",
+        "description": "Response model for ``GET /system/update``."
+      },
+      "SelfUpdateTriggered": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "update-started"
+          },
+          "updater_container_id": {
+            "type": "string",
+            "title": "Updater Container Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updater_container_id"
+        ],
+        "title": "SelfUpdateTriggered",
+        "description": "Response model for ``POST /system/update``."
       },
       "ServiceHealthResponse": {
         "properties": {
@@ -3316,6 +3903,26 @@
             "type": "string",
             "title": "Claude Host Mount Path",
             "default": ""
+          },
+          "caretaker_enabled": {
+            "type": "boolean",
+            "title": "Caretaker Enabled",
+            "default": false
+          },
+          "caretaker_interval_hours": {
+            "type": "integer",
+            "title": "Caretaker Interval Hours",
+            "default": 24
+          },
+          "mill_component_id": {
+            "type": "string",
+            "title": "Mill Component Id",
+            "default": "mill"
+          },
+          "image_auto_prune": {
+            "type": "boolean",
+            "title": "Image Auto Prune",
+            "default": false
           }
         },
         "type": "object",
@@ -3357,6 +3964,26 @@
             "type": "string",
             "title": "Claude Host Mount Path",
             "default": ""
+          },
+          "caretaker_enabled": {
+            "type": "boolean",
+            "title": "Caretaker Enabled",
+            "default": false
+          },
+          "caretaker_interval_hours": {
+            "type": "integer",
+            "title": "Caretaker Interval Hours",
+            "default": 24
+          },
+          "mill_component_id": {
+            "type": "string",
+            "title": "Mill Component Id",
+            "default": "mill"
+          },
+          "image_auto_prune": {
+            "type": "boolean",
+            "title": "Image Auto Prune",
+            "default": false
           }
         },
         "type": "object",
