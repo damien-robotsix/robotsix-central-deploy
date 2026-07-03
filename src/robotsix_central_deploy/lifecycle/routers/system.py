@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ...registry_check import RegistryChecker
 from ..auth import verify_auth
-from ..backend import ExecutionBackend
+from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
 from ..deps import _get_backend, _get_config, _get_registry_checker
 from ..models import SelfInspect, SelfUpdateStatus, SelfUpdateTriggered

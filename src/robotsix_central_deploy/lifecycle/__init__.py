@@ -10,7 +10,7 @@ from .models import (
     DeployHistoryResponse,
     RollbackRequest,
 )
-from .backend import ExecutionBackend, DockerBackend
+from .backends import ExecutionBackend, DockerBackend
 from .store import ServiceStore, InMemoryStore, FileStore
 from .config import LifecycleConfig
 from .app import app

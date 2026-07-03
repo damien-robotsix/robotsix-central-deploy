@@ -1,0 +1,185 @@
+"""Abstract execution backend interface."""
+
+from __future__ import annotations
+
+import logging
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Any, Optional
+
+from ..models import (
+    ComponentInspect,
+    DeployOutcome,
+    DockerDfStats,
+    RollbackOutcome,
+    SelfInspect,
+    ServiceRecord,
+    ServiceState,
+)
+
+if TYPE_CHECKING:
+    from ...registry.models import ComponentConfig
+
+logger = logging.getLogger(__name__)
+
+
+class ExecutionBackend(ABC):
+    """Abstract interface for service lifecycle operations."""
+
+    @abstractmethod
+    async def start(self, service: ServiceRecord) -> ServiceState: ...
+
+    @abstractmethod
+    async def stop(self, service: ServiceRecord) -> ServiceState: ...
+
+    @abstractmethod
+    async def remove_container(self, service: ServiceRecord) -> None:
+        """Remove the managed container for *service* (best-effort, already stopped)."""
+        ...
+
+    @abstractmethod
+    async def restart(self, service: ServiceRecord) -> ServiceState: ...
+
+    @abstractmethod
+    async def status(self, service: ServiceRecord) -> ComponentInspect: ...
+
+    @abstractmethod
+    async def deploy(
+        self,
+        service: ServiceRecord,
+        config: "ComponentConfig",
+        image_ref: str,
+    ) -> DeployOutcome: ...
+
+    @abstractmethod
+    async def rollback(
+        self,
+        service: ServiceRecord,
+        config: "ComponentConfig",
+    ) -> RollbackOutcome: ...
+
+    @abstractmethod
+    def stream_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 100,
+        since: str | None = None,
+        follow: bool = False,
+    ) -> AsyncIterator[bytes]: ...
+
+    @abstractmethod
+    async def disk_df(self) -> DockerDfStats:
+        """Return Docker storage breakdown (images, build cache, reclaimable)."""
+        ...
+
+    @abstractmethod
+    async def prune_builds(self) -> int:
+        """Prune Docker build cache. Returns bytes reclaimed."""
+        ...
+
+    @abstractmethod
+    async def prune_images(self, protected_refs: set[str]) -> int:
+        """Remove dangling images, skipping any whose image id or repo digest
+        is in *protected_refs* (rollback targets must stay pullable-free —
+        rollback recreates containers from a local image id, which Docker
+        cannot re-pull). Returns bytes reclaimed."""
+        ...
+
+    @abstractmethod
+    async def write_config_to_volume(
+        self, volume_name: str, config_dict: dict[str, Any]
+    ) -> None:
+        """Write *config_dict* as YAML into a Docker named volume."""
+        ...
+
+    @abstractmethod
+    async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
+        """Read /config/config.yaml from a named volume; return parsed dict (empty if absent)."""
+        ...
+
+    @abstractmethod
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        """Run a one-shot container from *image* executing *command_str* with the config
+        volume mounted at *volume_mount_path*. Returns captured stdout+stderr.
+        Raises TimeoutError if the container does not exit within *timeout_seconds*.
+        Always removes the container on exit or timeout."""
+        ...
+
+    @abstractmethod
+    async def measure_volume_bytes(self, volume_name: str) -> int:
+        """Return effective total bytes for *volume_name*, excluding SQLite
+        transient sidecars (*.db-wal, *.db-shm, *.db-journal).
+        Returns 0 on error or when the volume is inaccessible.
+        """
+
+    @abstractmethod
+    async def list_volume_dir(
+        self, volume_name: str, rel_path: str
+    ) -> list[dict[str, Any]]:
+        """Return one entry per immediate child of ``/vol/<rel_path>``.
+
+        Each entry is ``{"name": str, "type": 'file'|'dir', "size_bytes": int}``
+        (dirs report size_bytes 0).
+        """
+        ...
+
+    @abstractmethod
+    async def read_volume_file(
+        self, volume_name: str, rel_path: str, max_bytes: int
+    ) -> dict[str, Any]:
+        """Return ``{"size_bytes": int, "content": str|None, "binary": bool,
+        "truncated": bool}`` for the file at ``/vol/<rel_path>``.
+
+        *content* is None when the file is binary (NUL byte or UTF-8
+        decode failure).  *truncated* is True when the file exceeded
+        *max_bytes*.
+        """
+        ...
+
+    @abstractmethod
+    async def remove_volume(self, volume_name: str) -> None:
+        """Remove the Docker named volume *volume_name*.
+
+        Best-effort and IRREVERSIBLE: destroys all data stored in the
+        volume.  Implementations must NOT raise on failure (a volume that
+        is already gone, or a transient removal error, must not abort the
+        caller) — they log and return instead.
+        """
+        ...
+
+    @abstractmethod
+    async def inspect_self(self) -> Optional[SelfInspect]:
+        """Identify the container this server runs in.
+
+        Returns ``None`` when the server is not containerised (or the
+        backend cannot tell) — self-update is unsupported in that case.
+        """
+        ...
+
+    @abstractmethod
+    async def trigger_self_update(
+        self,
+        target: SelfInspect,
+        watchtower_image: str,
+        docker_host_url: str,
+        docker_api_version: str,
+    ) -> str:
+        """Launch a one-shot watchtower container that updates *target*.
+
+        The watchtower container is attached to the same networks as
+        *target* so it reaches the Docker API endpoint at
+        *docker_host_url* (the socket proxy). *docker_api_version* is
+        exported as ``DOCKER_API_VERSION`` — watchtower 1.7.1's client
+        defaults to API 1.25, below modern daemons' minimum, and crashes
+        without it. Returns the watchtower container id. Raises
+        ``RuntimeError`` on failure to launch.
+        """
+        ...

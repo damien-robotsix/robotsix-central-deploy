@@ -14,7 +14,7 @@ from fastapi.params import Body
 from fastapi.responses import StreamingResponse
 
 from ..auth import verify_auth
-from ..backend import ExecutionBackend, collect_protected_image_refs
+from ..backends import ExecutionBackend, collect_protected_image_refs
 from ..deps import (
     _canonical_hash,
     _compute_overall_health,
