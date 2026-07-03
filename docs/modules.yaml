@@ -103,8 +103,22 @@ modules:
       to determine whether an update is available.
     package: robotsix_central_deploy.registry_check
     dependencies:
+      - pydantic
       - httpx
     tests: tests/registry_check/
+
+  caretaker:
+    name: caretaker
+    description: >
+      Background maintenance agent — runs daily passes over managed components
+      for health checks, image-update detection/applying, volume auditing, and
+      disk monitoring. Orchestrated by a periodic scheduler; lifecycle exposes
+      a /caretaker/status endpoint.
+    package: robotsix_central_deploy.caretaker
+    dependencies:
+      - httpx
+      - pydantic
+    tests: tests/caretaker/
 
   onboard:
     name: onboard
