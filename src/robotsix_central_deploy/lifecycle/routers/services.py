@@ -193,7 +193,7 @@ async def _fanout_deploy_siblings(
             except Exception:
                 logger.warning(
                     "deploy sibling '%s': failed to record history",
-                    sib_name,
+                    repr(sib_name),
                     exc_info=True,
                 )
         except Exception:
