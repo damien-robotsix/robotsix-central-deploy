@@ -208,3 +208,38 @@ class ConfigAssistResponse(BaseModel):
         str, Any
     ]  # the auto-filled config dict read back from the volume after the command ran
     output: str  # captured stdout+stderr from the one-shot container
+
+
+# ---------------------------------------------------------------------------
+# Claude auth request / response models
+# ---------------------------------------------------------------------------
+
+
+class ClaudeAuthStatusResponse(BaseModel):
+    status: str  # "authenticated" | "not-authenticated" | "expiring" | "error"
+    detail: str = ""
+
+
+class ClaudeAuthLoginResponse(BaseModel):
+    container_id: str
+    oauth_url: str
+
+
+class ClaudeAuthCompleteRequest(BaseModel):
+    container_id: str
+    auth_code: str
+
+
+class ClaudeAuthCompleteResponse(BaseModel):
+    status: str  # "authenticated" | "error"
+    error: str = ""
+    logs: str = ""
+
+
+class ClaudeAuthCredentialsRequest(BaseModel):
+    credentials_json: str
+
+
+class ClaudeAuthCredentialsResponse(BaseModel):
+    status: str  # "authenticated" | "error"
+    error: str = ""

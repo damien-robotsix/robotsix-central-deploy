@@ -41,6 +41,11 @@ modules:
       - POST /volumes/prune
       - GET /volumes/{name}/ls
       - GET /volumes/{name}/cat
+      - GET /claude-auth/status
+      - POST /claude-auth/login
+      - POST /claude-auth/login/complete
+      - POST /claude-auth/login/cancel
+      - POST /claude-auth/credentials
     docs: /docs
     openapi: /openapi.json
     tests: tests/lifecycle/

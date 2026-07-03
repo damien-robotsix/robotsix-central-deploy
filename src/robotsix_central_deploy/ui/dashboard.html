@@ -461,6 +461,49 @@
   <div id="orphan-volumes-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
 </section>
 
+<!-- ═══ Claude auth panel ════════════════════════════════════════ -->
+<section class="disk-panel" id="claude-auth-panel">
+  <div class="disk-header">
+    <span class="disk-title">Claude Auth</span>
+    <span id="claude-auth-status-badge" style="font-size:0.85rem;"></span>
+  </div>
+  <div id="claude-auth-detail" style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"></div>
+
+  <!-- Login flow -->
+  <div id="claude-auth-login-section" style="display:none;">
+    <div id="claude-auth-oauth-url-box" style="margin-bottom:8px;padding:8px 12px;background:#1e1e1e;border-radius:4px;word-break:break-all;">
+      <strong style="color:#e2e8f0;">1.</strong> Visit this URL to authorize:<br>
+      <a id="claude-auth-oauth-url" href="#" target="_blank" rel="noopener" style="color:var(--blue);font-size:0.82rem;"></a>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <label style="font-size:0.85rem;color:#94a3b8;flex-shrink:0;">
+        <strong style="color:#e2e8f0;">2.</strong> Paste authorization code:
+      </label>
+      <input id="claude-auth-code-input" type="text" placeholder="Auth code from browser…" style="flex:1;padding:6px 10px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.85rem;">
+      <button id="claude-auth-submit-btn" class="btn-primary" style="font-size:0.82rem;">Complete Login</button>
+      <button id="claude-auth-cancel-btn" class="btn-secondary" style="font-size:0.82rem;">Cancel</button>
+    </div>
+    <div id="claude-auth-login-error" style="display:none;padding:8px 12px;background:var(--red-bg);color:var(--red);border-radius:4px;font-size:0.82rem;margin-bottom:8px;"></div>
+  </div>
+
+  <!-- Fallback: paste credentials JSON -->
+  <details id="claude-auth-paste-section" style="margin-top:8px;">
+    <summary style="cursor:pointer;font-size:0.82rem;color:#64748b;">Paste credentials JSON (fallback)</summary>
+    <div style="margin-top:8px;">
+      <textarea id="claude-auth-paste-textarea" rows="6" placeholder='Paste .credentials.json content…' style="width:100%;padding:8px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.8rem;font-family:monospace;resize:vertical;"></textarea>
+      <button id="claude-auth-paste-btn" class="btn-secondary" style="margin-top:4px;font-size:0.82rem;">Save Credentials</button>
+      <span id="claude-auth-paste-msg" style="margin-left:8px;font-size:0.82rem;"></span>
+    </div>
+  </details>
+
+  <!-- Actions -->
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <button id="claude-auth-login-btn" class="btn-primary" style="font-size:0.82rem;">Log in with Claude</button>
+    <button id="claude-auth-refresh-btn" class="btn-secondary" style="font-size:0.82rem;">Refresh Status</button>
+  </div>
+  <div id="claude-auth-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
+</section>
+
 <div id="remove-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
   <div class="env-panel" style="max-width:460px;">
     <div class="env-header">
@@ -3109,6 +3152,236 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+// ── Claude auth panel ────────────────────────────────────────────
+
+let claudeLoginContainerId = '';
+
+async function fetchClaudeAuthStatus() {
+  try {
+    const resp = await fetch('/claude-auth/status', {
+      headers: authHeaders(),
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) return;
+    renderClaudeAuthStatus(await resp.json());
+  } catch (_e) {
+    // silently skip — panel is optional
+  }
+}
+
+function renderClaudeAuthStatus(data) {
+  const panel = document.getElementById('claude-auth-panel');
+  if (!panel) return;
+  panel.style.display = '';
+
+  const badge = document.getElementById('claude-auth-status-badge');
+  const detail = document.getElementById('claude-auth-detail');
+  const loginSection = document.getElementById('claude-auth-login-section');
+  const loginBtn = document.getElementById('claude-auth-login-btn');
+
+  const statusMap = {
+    'authenticated':     { cls: 'badge-running',  text: '✓ Authenticated' },
+    'not-authenticated': { cls: 'badge-stopped',  text: '✗ Not authenticated' },
+    'expiring':          { cls: 'badge-restarting', text: '⚠ Expiring soon' },
+    'error':             { cls: 'badge-failed',    text: '⚠ Error' },
+  };
+  const info = statusMap[data.status] || { cls: 'badge-unknown', text: data.status };
+  badge.innerHTML = `<span class="badge ${info.cls}">${info.text}</span>`;
+  detail.textContent = data.detail || '';
+
+  if (data.status === 'authenticated') {
+    loginBtn.style.display = '';
+    loginSection.style.display = 'none';
+  } else {
+    loginBtn.style.display = '';
+  }
+}
+
+async function startClaudeLogin() {
+  const btn = document.getElementById('claude-auth-login-btn');
+  const toast = document.getElementById('claude-auth-toast');
+  const loginSection = document.getElementById('claude-auth-login-section');
+  const errorDiv = document.getElementById('claude-auth-login-error');
+  const urlLink = document.getElementById('claude-auth-oauth-url');
+  const codeInput = document.getElementById('claude-auth-code-input');
+  const submitBtn = document.getElementById('claude-auth-submit-btn');
+  const cancelBtn = document.getElementById('claude-auth-cancel-btn');
+
+  if (btn) btn.disabled = true;
+  errorDiv.style.display = 'none';
+  toast.textContent = 'Starting Claude login…';
+  toast.style.color = 'var(--grey)';
+
+  try {
+    const resp = await fetch('/claude-auth/login', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    claudeLoginContainerId = data.container_id;
+    urlLink.href = data.oauth_url;
+    urlLink.textContent = data.oauth_url;
+    codeInput.value = '';
+    loginSection.style.display = '';
+    submitBtn.disabled = false;
+    cancelBtn.disabled = false;
+    toast.textContent = 'Visit the URL above, authorize, then paste the code below.';
+    toast.style.color = 'var(--blue)';
+  } catch (e) {
+    toast.textContent = `Login start failed: ${e.message}`;
+    toast.style.color = 'var(--red)';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function completeClaudeLogin() {
+  const codeInput = document.getElementById('claude-auth-code-input');
+  const submitBtn = document.getElementById('claude-auth-submit-btn');
+  const cancelBtn = document.getElementById('claude-auth-cancel-btn');
+  const errorDiv = document.getElementById('claude-auth-login-error');
+  const toast = document.getElementById('claude-auth-toast');
+  const loginSection = document.getElementById('claude-auth-login-section');
+
+  const authCode = codeInput.value.trim();
+  if (!authCode) {
+    errorDiv.textContent = 'Please paste the authorization code.';
+    errorDiv.style.display = '';
+    return;
+  }
+  errorDiv.style.display = 'none';
+  submitBtn.disabled = true;
+  cancelBtn.disabled = true;
+  toast.textContent = 'Completing login…';
+  toast.style.color = 'var(--grey)';
+
+  try {
+    const resp = await fetch('/claude-auth/login/complete', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify({ container_id: claudeLoginContainerId, auth_code: authCode }),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (data.status === 'authenticated') {
+      toast.textContent = '✓ Login successful!';
+      toast.style.color = 'var(--green)';
+      loginSection.style.display = 'none';
+      claudeLoginContainerId = '';
+      await fetchClaudeAuthStatus();
+    } else {
+      errorDiv.textContent = data.error || 'Login failed.';
+      errorDiv.style.display = '';
+      if (data.logs) {
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'font-size:0.75rem;max-height:200px;overflow-y:auto;background:#1e1e1e;padding:8px;margin-top:4px;border-radius:4px;white-space:pre-wrap;';
+        pre.textContent = data.logs;
+        errorDiv.appendChild(pre);
+      }
+      toast.textContent = '';
+    }
+  } catch (e) {
+    errorDiv.textContent = `Login failed: ${e.message}`;
+    errorDiv.style.display = '';
+    toast.textContent = '';
+  } finally {
+    submitBtn.disabled = false;
+    cancelBtn.disabled = false;
+  }
+}
+
+async function cancelClaudeLogin() {
+  const loginSection = document.getElementById('claude-auth-login-section');
+  const toast = document.getElementById('claude-auth-toast');
+  const submitBtn = document.getElementById('claude-auth-submit-btn');
+  const cancelBtn = document.getElementById('claude-auth-cancel-btn');
+
+  submitBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  if (claudeLoginContainerId) {
+    try {
+      await fetch('/claude-auth/login/cancel', {
+        method: 'POST',
+        headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+        credentials: 'same-origin',
+        body: JSON.stringify({ container_id: claudeLoginContainerId, auth_code: '' }),
+      });
+    } catch (_) { /* best-effort */ }
+  }
+  claudeLoginContainerId = '';
+  loginSection.style.display = 'none';
+  toast.textContent = '';
+}
+
+async function saveClaudeCredentials() {
+  const textarea = document.getElementById('claude-auth-paste-textarea');
+  const btn = document.getElementById('claude-auth-paste-btn');
+  const msg = document.getElementById('claude-auth-paste-msg');
+
+  const json = textarea.value.trim();
+  if (!json) {
+    msg.textContent = 'Paste credentials JSON first.';
+    msg.style.color = 'var(--red)';
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = 'Saving…';
+  msg.style.color = 'var(--grey)';
+
+  try {
+    const resp = await fetch('/claude-auth/credentials', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      credentials: 'same-origin',
+      body: JSON.stringify({ credentials_json: json }),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (data.status === 'authenticated') {
+      msg.textContent = '✓ Credentials saved.';
+      msg.style.color = 'var(--green)';
+      textarea.value = '';
+      await fetchClaudeAuthStatus();
+    } else {
+      msg.textContent = data.error || 'Save failed.';
+      msg.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    msg.textContent = `Save failed: ${e.message}`;
+    msg.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Wire up event listeners after DOM is ready
+function wireClaudeAuthPanel() {
+  const loginBtn = document.getElementById('claude-auth-login-btn');
+  const submitBtn = document.getElementById('claude-auth-submit-btn');
+  const cancelBtn = document.getElementById('claude-auth-cancel-btn');
+  const refreshBtn = document.getElementById('claude-auth-refresh-btn');
+  const pasteBtn = document.getElementById('claude-auth-paste-btn');
+
+  if (loginBtn) loginBtn.addEventListener('click', startClaudeLogin);
+  if (submitBtn) submitBtn.addEventListener('click', completeClaudeLogin);
+  if (cancelBtn) cancelBtn.addEventListener('click', cancelClaudeLogin);
+  if (refreshBtn) refreshBtn.addEventListener('click', fetchClaudeAuthStatus);
+  if (pasteBtn) pasteBtn.addEventListener('click', saveClaudeCredentials);
+}
+
 // ── Server self-update ───────────────────────────────────────────
 
 let selfUpdateInitialDigest = '';
@@ -3175,11 +3448,13 @@ async function pollSelfUpdateRecovery(startedAt) {
 }
 
 (async () => {
+  wireClaudeAuthPanel();
   await loadSettings();
   loadDashboard();
   startAutoRefresh();
   checkSelfUpdate();
   checkCaretakerStatus();
+  fetchClaudeAuthStatus();
   setInterval(checkSelfUpdate, 5 * 60 * 1000);
 })();
 </script>
