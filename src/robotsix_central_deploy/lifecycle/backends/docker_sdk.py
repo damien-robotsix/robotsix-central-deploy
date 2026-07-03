@@ -111,7 +111,7 @@ class DockerSdkBackend(ExecutionBackend):
                     "org.opencontainers.image.revision",
                     "",
                 )
-            except Exception:
+            except Exception:  # Gracefully degrade; label stays empty
                 pass
 
             # health check result
@@ -120,7 +120,7 @@ class DockerSdkBackend(ExecutionBackend):
                 health_obj = container.attrs["State"].get("Health")
                 if health_obj:
                     health = health_obj.get("Status", "")
-            except Exception:
+            except Exception:  # Gracefully degrade; health stays empty
                 pass
 
             # running_digest from the image's RepoDigests
@@ -210,7 +210,7 @@ class DockerSdkBackend(ExecutionBackend):
             return
         try:
             await loop.run_in_executor(None, lambda: container.remove(force=True))
-        except docker.errors.NotFound:
+        except docker.errors.NotFound:  # Container already removed
             pass
         except Exception as exc:
             logger.warning("remove_container %s: %s", name, exc)
@@ -318,7 +318,7 @@ class DockerSdkBackend(ExecutionBackend):
         """Stop and force-remove a container (synchronous, best-effort stop)."""
         try:
             container.stop(timeout=30)
-        except Exception:
+        except Exception:  # Best-effort stop; proceed to force-remove
             pass
         container.remove(force=True)
 
@@ -361,7 +361,7 @@ class DockerSdkBackend(ExecutionBackend):
                 prior_digest = await loop.run_in_executor(
                     None, lambda: existing.image.id
                 )
-            except Exception:
+            except Exception:  # Gracefully degrade; prior_digest stays empty
                 pass
 
         # Step 3 — stop + remove old container (if present)
@@ -688,7 +688,7 @@ class DockerSdkBackend(ExecutionBackend):
 
         try:
             await loop.run_in_executor(None, _remove)
-        except docker.errors.NotFound:
+        except docker.errors.NotFound:  # Volume already removed
             pass
         except Exception as exc:
             logger.warning("remove_volume %s: %s", volume_name, exc)
@@ -729,7 +729,7 @@ class DockerSdkBackend(ExecutionBackend):
             except requests.exceptions.ReadTimeout:
                 try:
                     container.kill()
-                except Exception:
+                except Exception:  # Best-effort kill; container may already be gone
                     pass
                 raise TimeoutError(f"config-assist timed out after {timeout_seconds}s")
             finally:
@@ -795,7 +795,9 @@ class DockerSdkBackend(ExecutionBackend):
             if log_iter is not None:
                 try:
                     log_iter.close()
-                except Exception:
+                except (
+                    Exception
+                ):  # Best-effort close; iterator may already be exhausted
                     pass
 
     async def disk_df(self) -> DockerDfStats:
@@ -948,7 +950,7 @@ class DockerSdkBackend(ExecutionBackend):
             )
             if repo_digests:
                 digest = repo_digests[0].rsplit("@", 1)[-1]
-        except docker.errors.APIError:
+        except docker.errors.APIError:  # Gracefully degrade; digest stays empty
             pass
         networks = list(
             ((attrs.get("NetworkSettings") or {}).get("Networks") or {}).keys()

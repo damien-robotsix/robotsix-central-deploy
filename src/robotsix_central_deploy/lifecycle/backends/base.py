@@ -27,21 +27,25 @@ class ExecutionBackend(ABC):
     """Abstract interface for service lifecycle operations."""
 
     @abstractmethod
-    async def start(self, service: ServiceRecord) -> ServiceState: ...
+    async def start(self, service: ServiceRecord) -> ServiceState:
+        pass
 
     @abstractmethod
-    async def stop(self, service: ServiceRecord) -> ServiceState: ...
+    async def stop(self, service: ServiceRecord) -> ServiceState:
+        pass
 
     @abstractmethod
     async def remove_container(self, service: ServiceRecord) -> None:
         """Remove the managed container for *service* (best-effort, already stopped)."""
-        ...
+        pass
 
     @abstractmethod
-    async def restart(self, service: ServiceRecord) -> ServiceState: ...
+    async def restart(self, service: ServiceRecord) -> ServiceState:
+        pass
 
     @abstractmethod
-    async def status(self, service: ServiceRecord) -> ComponentInspect: ...
+    async def status(self, service: ServiceRecord) -> ComponentInspect:
+        pass
 
     @abstractmethod
     async def deploy(
@@ -49,14 +53,16 @@ class ExecutionBackend(ABC):
         service: ServiceRecord,
         config: "ComponentConfig",
         image_ref: str,
-    ) -> DeployOutcome: ...
+    ) -> DeployOutcome:
+        pass
 
     @abstractmethod
     async def rollback(
         self,
         service: ServiceRecord,
         config: "ComponentConfig",
-    ) -> RollbackOutcome: ...
+    ) -> RollbackOutcome:
+        pass
 
     @abstractmethod
     def stream_logs(
@@ -65,17 +71,18 @@ class ExecutionBackend(ABC):
         tail: int = 100,
         since: str | None = None,
         follow: bool = False,
-    ) -> AsyncIterator[bytes]: ...
+    ) -> AsyncIterator[bytes]:
+        pass
 
     @abstractmethod
     async def disk_df(self) -> DockerDfStats:
         """Return Docker storage breakdown (images, build cache, reclaimable)."""
-        ...
+        pass
 
     @abstractmethod
     async def prune_builds(self) -> int:
         """Prune Docker build cache. Returns bytes reclaimed."""
-        ...
+        pass
 
     @abstractmethod
     async def prune_images(self, protected_refs: set[str]) -> int:
@@ -83,19 +90,19 @@ class ExecutionBackend(ABC):
         is in *protected_refs* (rollback targets must stay pullable-free —
         rollback recreates containers from a local image id, which Docker
         cannot re-pull). Returns bytes reclaimed."""
-        ...
+        pass
 
     @abstractmethod
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
         """Write *config_dict* as YAML into a Docker named volume."""
-        ...
+        pass
 
     @abstractmethod
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Read /config/config.yaml from a named volume; return parsed dict (empty if absent)."""
-        ...
+        pass
 
     @abstractmethod
     async def run_config_assist(
@@ -111,7 +118,7 @@ class ExecutionBackend(ABC):
         volume mounted at *volume_mount_path*. Returns captured stdout+stderr.
         Raises TimeoutError if the container does not exit within *timeout_seconds*.
         Always removes the container on exit or timeout."""
-        ...
+        pass
 
     @abstractmethod
     async def measure_volume_bytes(self, volume_name: str) -> int:
@@ -129,7 +136,7 @@ class ExecutionBackend(ABC):
         Each entry is ``{"name": str, "type": 'file'|'dir', "size_bytes": int}``
         (dirs report size_bytes 0).
         """
-        ...
+        pass
 
     @abstractmethod
     async def read_volume_file(
@@ -142,7 +149,7 @@ class ExecutionBackend(ABC):
         decode failure).  *truncated* is True when the file exceeded
         *max_bytes*.
         """
-        ...
+        pass
 
     @abstractmethod
     async def remove_volume(self, volume_name: str) -> None:
@@ -153,7 +160,7 @@ class ExecutionBackend(ABC):
         is already gone, or a transient removal error, must not abort the
         caller) — they log and return instead.
         """
-        ...
+        pass
 
     @abstractmethod
     async def inspect_self(self) -> Optional[SelfInspect]:
@@ -162,7 +169,7 @@ class ExecutionBackend(ABC):
         Returns ``None`` when the server is not containerised (or the
         backend cannot tell) — self-update is unsupported in that case.
         """
-        ...
+        pass
 
     @abstractmethod
     async def trigger_self_update(
@@ -182,4 +189,4 @@ class ExecutionBackend(ABC):
         without it. Returns the watchtower container id. Raises
         ``RuntimeError`` on failure to launch.
         """
-        ...
+        pass
