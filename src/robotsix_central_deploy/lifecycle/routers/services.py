@@ -1128,7 +1128,7 @@ async def rollback_service(
             )
         except Exception:
             logger.warning(
-                "rollback %s: failed to record history entry", name, exc_info=True
+                "rollback %s: failed to record history entry", repr(name), exc_info=True
             )
 
         # Fan out siblings (one-step; current behaviour)
