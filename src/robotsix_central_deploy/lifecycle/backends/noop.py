@@ -78,6 +78,11 @@ class NoopBackend(ExecutionBackend):
     ) -> None:
         pass
 
+    async def write_llmio_tier_config_to_volume(
+        self, volume_name: str, tier_config: dict[str, Any]
+    ) -> None:
+        pass
+
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         return {}
 

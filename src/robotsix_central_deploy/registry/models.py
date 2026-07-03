@@ -88,3 +88,6 @@ class ComponentConfig(BaseModel):
     caretaker_auto_update: bool = True
     repo_id: str = ""
     mem_limit: str = "2g"
+    llmio_tier_level: Optional[str] = (
+        None  # "level1" | "level2" | "level3" | "level4" — which capability tier
+    )

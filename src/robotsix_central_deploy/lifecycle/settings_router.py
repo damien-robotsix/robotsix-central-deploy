@@ -49,6 +49,8 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         caretaker_interval_hours=settings.caretaker_interval_hours,
         mill_component_id=settings.mill_component_id,
         image_auto_prune=settings.image_auto_prune,
+        claude_auth_helper_image=settings.claude_auth_helper_image,
+        llmio_tier_config=settings.llmio_tier_config,
     )
 
 
@@ -87,6 +89,8 @@ async def get_settings(
         caretaker_interval_hours=effective_config.caretaker_interval_hours,
         mill_component_id=effective_config.mill_component_id,
         image_auto_prune=effective_config.image_auto_prune,
+        claude_auth_helper_image=effective_config.claude_auth_helper_image,
+        llmio_tier_config=getattr(effective_config, "llmio_tier_config", {}),
     )
     return _mask_response(effective)
 
@@ -141,6 +145,8 @@ async def put_settings(
         caretaker_interval_hours=body.caretaker_interval_hours,
         mill_component_id=body.mill_component_id,
         image_auto_prune=body.image_auto_prune,
+        claude_auth_helper_image=body.claude_auth_helper_image,
+        llmio_tier_config=body.llmio_tier_config,
     )
 
     await settings_store.put(new)

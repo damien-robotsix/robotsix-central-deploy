@@ -100,6 +100,13 @@ class ExecutionBackend(ABC):
         pass
 
     @abstractmethod
+    async def write_llmio_tier_config_to_volume(
+        self, volume_name: str, tier_config: dict[str, Any]
+    ) -> None:
+        """Write *tier_config* as ``llmio_tier_config.json`` into a Docker named volume."""
+        pass
+
+    @abstractmethod
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Read /config/config.json from a named volume; return parsed dict (empty if absent)."""
         pass

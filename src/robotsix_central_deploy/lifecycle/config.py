@@ -11,6 +11,7 @@ sync by the CI drift check) and rendered as help bubbles by the deploy UI.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -237,6 +238,26 @@ class LifecycleConfig(BaseModel):
     image_auto_prune: bool = Field(
         False,
         description=("After updates, remove dangling images not needed for rollback."),
+    )
+    claude_auth_helper_image: str = Field(
+        "",
+        description=(
+            "Docker image that ships the claude CLI, used by the OAuth login "
+            "helper container. Empty uses the default (ghcr.io/damien-robotsix/"
+            "robotsix-chat:main)."
+        ),
+    )
+    llmio_tier_config: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "level1": {"provider": "openai", "model": "gpt-4o-mini"},
+            "level2": {"provider": "openai", "model": "gpt-4o"},
+            "level3": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+            "level4": {"provider": "anthropic", "model": "claude-opus-4-20250514"},
+        },
+        description=(
+            "Fleet-global mapping from llmio capability level (level1-4) to "
+            "provider and model. Overridden by the System Settings store."
+        ),
     )
 
     @property

@@ -168,6 +168,13 @@ class DockerBackend(ExecutionBackend):
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def write_llmio_tier_config_to_volume(
+        self, volume_name: str, tier_config: dict[str, Any]
+    ) -> None:
+        raise NotImplementedError(
+            "write_llmio_tier_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         raise NotImplementedError(
             "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"

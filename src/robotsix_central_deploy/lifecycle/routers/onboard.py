@@ -592,6 +592,7 @@ async def onboard_confirm(
     config.config_volume = spec.config_volume  # None if no config-target label
     config.config_assist_command = spec.config_assist_command
     config.config_assist_seeds = spec.config_assist_seeds
+    config.llmio_tier_level = spec.llmio_tier_level
 
     # Derive repo_id from git_url when caretaker is enabled
     settings = await request.app.state.settings_store.get()
