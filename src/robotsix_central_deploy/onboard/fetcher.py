@@ -17,7 +17,7 @@ _LABEL_CONFIG_TEMPLATE = "robotsix.deploy.config-template"
 @dataclass
 class RepoFiles:
     compose_bytes: bytes
-    config_yaml: bytes | None  # None if config/config.json absent in repo (JSON config-standard)
+    config_yaml: bytes | None  # None if config/config.json absent in repo
     config_yaml_template: bytes | None = None  # fallback template bytes
     config_schema_json: bytes | None = None  # config/config.schema.json bytes, or None
 
