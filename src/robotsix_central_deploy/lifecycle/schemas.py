@@ -81,6 +81,14 @@ class EnvResponse(BaseModel):
     secrets: dict[str, str]  # values are always "***"
 
 
+class EnvSyncResponse(BaseModel):
+    """Body of the 200 response from POST /services/{name}/env/sync-keys."""
+
+    added_env: list[str]  # newly declared plain env keys, seeded with defaults
+    added_secrets: list[str]  # newly declared secret slots (empty value in contract)
+    undeclared: list[str]  # stored keys the compose contract no longer declares
+
+
 class EnvUpdate(BaseModel):
     env: dict[str, str] = {}
     secrets: dict[str, str] = {}
