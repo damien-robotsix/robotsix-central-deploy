@@ -434,18 +434,16 @@ class DockerSdkBackend(ExecutionBackend):
     async def rollback(
         self, service: ServiceRecord, config: "ComponentConfig"
     ) -> RollbackOutcome:
+        """Recreate container from ``service.previous_image_digest``."""
         import docker
 
         name = self._container_name(service)
+        target_digest = (
+            service.previous_image_digest
+        )  # guaranteed non-empty by server layer
         loop = asyncio.get_running_loop()
 
-        prior_digest = service.previous_image_digest
-        if not prior_digest:
-            raise ValueError(
-                f"No previous image digest recorded for {name} — cannot rollback"
-            )
-
-        # Step 1 — stop + remove current container
+        # Stop + remove current container
         existing = await self._get_container(name)
         if existing is not None:
             try:
@@ -454,46 +452,25 @@ class DockerSdkBackend(ExecutionBackend):
                 )
             except docker.errors.APIError as exc:
                 raise RuntimeError(
-                    f"Failed to remove existing container {name!r}: {exc}"
+                    f"Failed to remove container {name!r} for rollback: {exc}"
                 ) from exc
 
-        # Step 2 — create + start from previous digest, pre-creating named
-        #         volumes like deploy() does
+        # Create + start from prior digest
         try:
-            for vol_name in config.named_volumes:
-                try:
-                    await loop.run_in_executor(
-                        None, self._client.volumes.create, vol_name
-                    )
-                except docker.errors.APIError as exc:
-                    if exc.status_code == 409:
-                        logger.info(
-                            "Volume %s already exists, skipping creation", vol_name
-                        )
-                    else:
-                        raise RuntimeError(
-                            f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
-                        ) from exc
-                except docker.errors.DockerException as exc:
-                    raise RuntimeError(
-                        f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
-                    ) from exc
-
-            new_container = await loop.run_in_executor(
-                None, lambda: self._create_container(config, prior_digest)
+            rollback_container = await loop.run_in_executor(
+                None, lambda: self._create_container(config, target_digest)
             )
-            await loop.run_in_executor(None, new_container.start)
+            await loop.run_in_executor(None, rollback_container.start)
         except Exception as exc:
             raise RuntimeError(
-                f"Rollback create/start failed for {name!r}: {exc}"
+                f"Rollback container create/start failed for {name!r}: {exc}"
             ) from exc
 
         if config.health_check:
             await self._wait_healthy(name, timeout=60.0)
 
         return RollbackOutcome(
-            deployed_digest=prior_digest,
-            state=ServiceState.RUNNING,
+            deployed_digest=target_digest, state=ServiceState.RUNNING
         )
 
     # -- config volume helpers ----------------------------------------------
@@ -501,98 +478,100 @@ class DockerSdkBackend(ExecutionBackend):
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
+        """Write *config_dict* as YAML into a Docker named volume via a
+        temporary busybox container.
+
+        The volume **must** already exist; this method only writes to it.
+        """
+        import base64
+
+        import docker
         import yaml
 
-        loop = asyncio.get_running_loop()
-        yaml_text = yaml.dump(config_dict, default_flow_style=False)
-        script = (
-            "mkdir -p /vol/config\n"
-            "cat > /vol/config/config.yaml << 'ROBOTSIX_EOF'\n"
-            + yaml_text
-            + "\nROBOTSIX_EOF\n"
+        yaml_content = yaml.dump(
+            config_dict, default_flow_style=False, allow_unicode=True
         )
-        try:
-            await loop.run_in_executor(
-                None,
-                lambda: self._client.containers.run(
+        encoded = base64.b64encode(yaml_content.encode()).decode()
+        # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
+        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.yaml && chmod 777 /config && chmod 666 /config/config.yaml"
+        loop = asyncio.get_running_loop()
+
+        def _run() -> None:
+            try:
+                self._client.containers.run(
                     "busybox",
-                    command=["sh", "-c", script],
-                    volumes={volume_name: {"bind": "/vol", "mode": "rw"}},
+                    command=["sh", "-c", cmd],
+                    volumes={volume_name: {"bind": "/config", "mode": "rw"}},
                     remove=True,
-                ),
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to write config to volume {volume_name!r}: {exc}"
-            ) from exc
+                )
+            except docker.errors.APIError as exc:
+                raise RuntimeError(
+                    f"write_config_to_volume failed for {volume_name}: {exc}"
+                ) from exc
+
+        await loop.run_in_executor(None, _run)
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
+        """Read /config/config.yaml from a named volume via a temporary busybox container."""
         import yaml
 
         loop = asyncio.get_running_loop()
-        try:
-            raw: bytes = await loop.run_in_executor(
-                None,
-                lambda: self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cat /vol/config/config.yaml 2>/dev/null || true",
-                    ],
-                    volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                    remove=True,
-                ),
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to read config from volume {volume_name!r}: {exc}"
-            ) from exc
 
-        text = raw.decode(errors="replace").strip()
-        if not text:
-            return {}
-        try:
-            parsed = yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise YamlParseError(
-                f"YAML parse error in config volume {volume_name!r}: {exc}"
-            ) from exc
-        if not isinstance(parsed, dict):
-            raise InvalidConfigStructureError(
-                f"Config in volume {volume_name!r} is a {type(parsed).__name__}, expected a mapping"
-            )
-        return parsed
+        def _run() -> dict[str, Any]:
+            import docker
+
+            try:
+                raw = self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", "cat /config/config.yaml 2>/dev/null || true"],
+                    volumes={volume_name: {"bind": "/config", "mode": "ro"}},
+                    remove=True,
+                )
+                text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
+
+                data = yaml.safe_load(text)
+                if data is None:
+                    return {}
+                if not isinstance(data, dict):
+                    raise InvalidConfigStructureError(
+                        f"Expected a mapping in Docker volume {volume_name}, "
+                        f"got {type(data).__name__}"
+                    )
+                return data
+            except yaml.YAMLError as exc:
+                raise YamlParseError(
+                    f"YAML parse error in Docker volume {volume_name}: {exc}"
+                ) from exc
+            except docker.errors.APIError as exc:
+                raise RuntimeError(
+                    f"read_config_from_volume failed for {volume_name}: {exc}"
+                ) from exc
+
+        return await loop.run_in_executor(None, _run)
 
     # -- volume inspection helpers ------------------------------------------
 
     async def measure_volume_bytes(self, volume_name: str) -> int:
-        """Return effective total bytes for *volume_name* via ``du`` in a busybox
-        one-shot container. Excludes SQLite transient sidecars.
-        """
         loop = asyncio.get_running_loop()
-        script = (
-            # Exclude SQLite transient sidecar files: WAL, SHM, and journal.
-            # These can inflate the reported size significantly (WAL is
-            # typically 4+ MB, journal is the pre-WAL rollback journal) and
-            # do not represent persistent service state.
-            "du -sb /vol | tail -1 | cut -f1\n"
+        cmd = (
+            "find /vol -type f "
+            "! -name '*.db-wal' ! -name '*.db-shm' ! -name '*.db-journal' "
+            "-exec du -b {} + 2>/dev/null "
+            "| awk '{s+=$1}END{print s+0}'"
         )
         try:
             raw: bytes = await loop.run_in_executor(
                 None,
                 lambda: self._client.containers.run(
                     "busybox",
-                    command=["sh", "-c", script],
+                    command=["sh", "-c", cmd],
                     volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
                     remove=True,
                 ),
             )
-        except Exception:
-            return 0
-        try:
-            return int(raw.decode().strip())
-        except ValueError:
+            return int(raw.strip() or b"0")
+        except Exception as exc:
+            logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
             return 0
 
     async def list_volume_dir(
