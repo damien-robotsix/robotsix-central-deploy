@@ -59,7 +59,6 @@ def _make_lifecycle_config_from_env() -> LifecycleConfig:
         "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH": "system_settings_path",
         "ROBOTSIX_LIFECYCLE_LOG_LEVEL": "log_level",
         "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN": "gateway_base_domain",
-        "ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH": "claude_host_mount_path",
         "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_ENABLED": "volume_audit_enabled",
         "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_INTERVAL_SECONDS": "volume_audit_interval_seconds",
         "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_SNAPSHOT_PATH": "volume_audit_snapshot_path",
@@ -117,7 +116,6 @@ class TestSystemSettingsStore:
             registry_check_interval=42,
             log_level="WARNING",
             gateway_base_domain="deploy.example.net",
-            claude_host_mount_path="/home/op/.claude",
             caretaker_enabled=True,
             caretaker_interval_hours=12,
         )
@@ -158,7 +156,6 @@ class TestSystemSettingsStore:
                 registry_check_interval=60,
                 log_level="DEBUG",
                 gateway_base_domain="stored.example.net",
-                claude_host_mount_path="/stored/.claude",
                 caretaker_enabled=True,
                 caretaker_interval_hours=12,
             )
@@ -178,7 +175,6 @@ class TestSystemSettingsStore:
         assert result.registry_check_interval == 60
         assert result.log_level == "DEBUG"
         assert result.gateway_base_domain == "stored.example.net"
-        assert result.claude_host_mount_path == "/stored/.claude"
         assert result.caretaker_enabled is True
         assert result.caretaker_interval_hours == 12
         # Original untouched.
@@ -265,7 +261,6 @@ class TestSettingsRouter:
                 "registry_check_interval": 120,
                 "log_level": "warning",
                 "gateway_base_domain": "new.example.net",
-                "claude_host_mount_path": "/new/.claude",
             },
             headers=auth_headers,
         )

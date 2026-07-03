@@ -697,16 +697,6 @@
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Claude Host Mount Path</td>
-        <td style="padding:6px 12px;">
-          <input id="s-claude-mount" type="text"
-                 placeholder="default: ~/.claude"
-                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
-                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">requires restart to take effect</span>
-        </td>
-      </tr>
-      <tr>
         <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Auto-Prune Old Images</td>
         <td style="padding:6px 12px;">
           <input id="s-image-prune" type="checkbox" style="accent-color:var(--blue);" />
@@ -2876,7 +2866,6 @@ async function loadSettings() {
     document.getElementById('s-reg-interval').value = s.registry_check_interval;
     document.getElementById('s-log-level').value = s.log_level;
     document.getElementById('s-gateway-domain').value = s.gateway_base_domain || '';
-    document.getElementById('s-claude-mount').value = s.claude_host_mount_path || '';
     document.getElementById('s-caretaker-enabled').checked = !!s.caretaker_enabled;
     document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
     document.getElementById('s-mill-component').value = s.mill_component_id || 'mill';
@@ -2897,7 +2886,6 @@ async function saveSettings(event) {
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
     log_level: document.getElementById('s-log-level').value,
     gateway_base_domain: document.getElementById('s-gateway-domain').value,
-    claude_host_mount_path: document.getElementById('s-claude-mount').value,
     caretaker_enabled: document.getElementById('s-caretaker-enabled').checked,
     caretaker_interval_hours: parseInt(document.getElementById('s-caretaker-interval').value),
     mill_component_id: document.getElementById('s-mill-component').value.trim() || 'mill',

@@ -171,14 +171,6 @@ class LifecycleConfig(BaseModel):
         ),
     )
 
-    claude_host_mount_path: str = Field(
-        "",
-        description=(
-            "Host path mounted at /home/app/.claude in components that request a "
-            "Claude mount; empty means ~/.claude of the server user."
-        ),
-    )
-
     # Volume audit
     volume_audit_enabled: bool = Field(
         False,

@@ -28,9 +28,6 @@ class SystemSettings(BaseModel):
     registry_check_interval: int = 300  # seconds; 0 = disabled
     log_level: str = "INFO"
     gateway_base_domain: str = ""  # e.g. "deploy.robotsix.net"
-    claude_host_mount_path: str = (
-        ""  # e.g. "/home/operator/.claude"; empty = use ~/.claude
-    )
     caretaker_enabled: bool = False
     caretaker_interval_hours: int = 24
     mill_component_id: str = "mill"  # component id the caretaker reports to
@@ -135,7 +132,6 @@ class SystemSettingsStore:
                 "registry_check_interval": stored.registry_check_interval,
                 "log_level": stored.log_level,
                 "gateway_base_domain": stored.gateway_base_domain,
-                "claude_host_mount_path": stored.claude_host_mount_path,
                 "caretaker_enabled": stored.caretaker_enabled,
                 "caretaker_interval_hours": stored.caretaker_interval_hours,
                 "mill_component_id": stored.mill_component_id,

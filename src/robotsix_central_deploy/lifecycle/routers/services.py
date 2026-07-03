@@ -1018,6 +1018,7 @@ async def deploy_service(
         deployed_digest=outcome.deployed_digest,
         previous_digest=outcome.previous_digest,
         current_state=record.state,
+        warnings=outcome.warnings,
     )
 
 

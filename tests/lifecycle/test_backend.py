@@ -633,8 +633,8 @@ class TestDockerSdkBackendUserInjection:
         assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
 
     def test_create_container_with_claude_mount_also_injects_uid_gid(self, backend):
-        """A service with claude_mount=True also gets user=<uid>:<gid> —
-        both features compose correctly."""
+        """A service with claude_mount=True gets the claude-auth named volume
+        mounted at /home/app/.claude and user=<uid>:<gid>."""
         b, client = backend
         config = ComponentConfig(
             id="test-svc",
@@ -645,6 +645,69 @@ class TestDockerSdkBackendUserInjection:
         b._create_container(config, "test:latest")
         _, kwargs = client.containers.create.call_args
         assert kwargs["user"] == f"{os.getuid()}:{os.getgid()}"
+        # Verify named volume mount (not a host bind mount)
+        volumes = kwargs["volumes"]
+        assert "claude-auth" in volumes
+        assert volumes["claude-auth"] == {"bind": "/home/app/.claude", "mode": "rw"}
+
+
+# ---------------------------------------------------------------------------
+# Claude auth credential validation
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeAuthCredentialCheck:
+    """_check_claude_credentials must warn when the claude-auth volume
+    is missing or lacks a readable .credentials.json."""
+
+    @pytest.fixture
+    def client_mock(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
+    def backend(self, client_mock: MagicMock):
+        docker_mock = MagicMock()
+        docker_mock.DockerClient = MagicMock(return_value=client_mock)
+        docker_mock.errors.NotFound = type("NotFound", (Exception,), {})
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        docker_mock.errors.ContainerError = type("ContainerError", (Exception,), {})
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            b = DockerSdkBackend()
+            yield b, client_mock
+
+    def test_warns_when_volume_missing(self, backend):
+        """Returns a warning when claude-auth volume does not exist."""
+        b, client = backend
+        import docker
+
+        client.volumes.get.side_effect = docker.errors.NotFound("no such volume")
+        warnings = b._check_claude_credentials()
+        assert len(warnings) == 1
+        assert "does not exist" in warnings[0]
+        assert "claude-auth" in warnings[0]
+        assert "Claude auth" in warnings[0]
+
+    def test_warns_when_credentials_missing(self, backend):
+        """Returns a warning when volume exists but .credentials.json
+        is not readable."""
+        b, client = backend
+        import docker
+
+        # volumes.get succeeds (volume exists)
+        # containers.run raises ContainerError (test -f fails)
+        client.containers.run.side_effect = docker.errors.ContainerError()
+        warnings = b._check_claude_credentials()
+        assert len(warnings) == 1
+        assert "does not contain a readable .credentials.json" in warnings[0]
+        assert "claude-auth" in warnings[0]
+        assert "Claude auth" in warnings[0]
+
+    def test_no_warning_when_credentials_present(self, backend):
+        """Returns empty list when .credentials.json is readable."""
+        b, client = backend
+        # containers.run succeeds (test -f exits 0)
+        warnings = b._check_claude_credentials()
+        assert warnings == []
 
 
 # ---------------------------------------------------------------------------

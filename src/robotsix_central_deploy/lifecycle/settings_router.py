@@ -45,7 +45,6 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         registry_check_interval=settings.registry_check_interval,
         log_level=settings.log_level,
         gateway_base_domain=settings.gateway_base_domain,
-        claude_host_mount_path=settings.claude_host_mount_path,
         caretaker_enabled=settings.caretaker_enabled,
         caretaker_interval_hours=settings.caretaker_interval_hours,
         mill_component_id=settings.mill_component_id,
@@ -84,7 +83,6 @@ async def get_settings(
         registry_check_interval=effective_config.registry_check_interval,
         log_level=effective_config.log_level,
         gateway_base_domain=effective_config.gateway_base_domain,
-        claude_host_mount_path=effective_config.claude_host_mount_path,
         caretaker_enabled=effective_config.caretaker_enabled,
         caretaker_interval_hours=effective_config.caretaker_interval_hours,
         mill_component_id=effective_config.mill_component_id,
@@ -109,8 +107,8 @@ async def put_settings(
 
     - Secret fields sent as ``"***"`` preserve the existing stored value.
     - ``log_level`` is validated via Pydantic; an invalid value returns 422.
-    - All settings *except* ``registry_check_interval`` and
-      ``claude_host_mount_path`` take effect immediately without restart.
+    - All settings *except* ``registry_check_interval`` take effect immediately
+      without restart.
 
     # NOTE: ``registry_check_interval`` changes are persisted and reflected
       in ``app.state.config``, but the background ``_registry_check_loop``
@@ -118,11 +116,6 @@ async def put_settings(
       the config alone does **not** alter the running task's sleep period.
       A full service restart is required for an interval change to take
       effect on the background loop.
-
-    # NOTE: ``claude_host_mount_path`` is captured by ``DockerSdkBackend``
-      at construction time.  Updating the config alone does **not** alter
-      the running backend's mount path.  A full service restart is required
-      for a change to take effect.
     """
     SECRET = SECRET_MASK
     current = await settings_store.get()
@@ -137,7 +130,6 @@ async def put_settings(
         registry_check_interval=body.registry_check_interval,
         log_level=body.log_level,
         gateway_base_domain=body.gateway_base_domain,
-        claude_host_mount_path=body.claude_host_mount_path,
         caretaker_enabled=body.caretaker_enabled,
         caretaker_interval_hours=body.caretaker_interval_hours,
         mill_component_id=body.mill_component_id,

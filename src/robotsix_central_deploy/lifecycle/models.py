@@ -248,6 +248,7 @@ class DeployOutcome:
     deployed_digest: str  # sha256 digest of the newly pulled/started image
     previous_digest: str  # sha256 digest of the image that was running before
     state: ServiceState
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -274,6 +275,7 @@ class DeployResponse(BaseModel):
     deployed_digest: str
     previous_digest: str
     current_state: ServiceState
+    warnings: list[str] = []
 
 
 class RollbackRequest(BaseModel):
