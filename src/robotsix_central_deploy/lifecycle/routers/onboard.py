@@ -221,7 +221,7 @@ async def onboard_preflight(
                     "repo has a config file or template but no service declares "
                     "`robotsix.deploy.config-target` — add the label to "
                     "deploy/docker-compose.yml pointing to the full in-container "
-                    "path of the config file (e.g. /home/mailbot/config/config.yaml)"
+                    "path of the config file (e.g. /home/mailbot/config/config.json)"
                 ),
             },
         )
@@ -233,7 +233,7 @@ async def onboard_preflight(
             detail={
                 "error": (
                     "config-target label is set but no config file or template was found — "
-                    "commit config/config.example.yaml to the repo or set "
+                    "commit config/config.example.json to the repo or set "
                     "robotsix.deploy.config-template to a valid in-repo template path"
                 ),
             },
