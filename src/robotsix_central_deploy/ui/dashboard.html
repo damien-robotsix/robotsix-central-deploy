@@ -485,16 +485,17 @@
     <div class="env-section">
       <h3>Environment Variables</h3>
       <div id="env-rows"></div>
-      <button class="btn-add" onclick="addEnvRow()">+ Add variable</button>
     </div>
     <div class="env-section">
       <h3>Secrets</h3>
       <div id="secret-rows"></div>
-      <button class="btn-add" onclick="addSecretRow()">+ Add secret</button>
     </div>
     <div class="env-footer">
       <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
       <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
+      <button id="env-sync-keys-btn" class="btn-secondary" onclick="syncEnvKeys()"
+              title="Re-read the repo's compose env contract and add newly declared keys. Existing values are kept; keys are never removed."
+              style="margin-left:auto;">↻ Sync keys from repo</button>
     </div>
   </div>
 </div>
@@ -1423,7 +1424,6 @@ function buildEnvRow(key, value) {
   div.innerHTML = `
     <input type="text" class="env-key" value="${escAttr(key)}" readonly>
     <input type="text" class="env-value" value="${escAttr(value)}">
-    <button class="btn-delete" title="Delete" onclick="deleteEnvKey(this)">✕</button>
     <span class="inline-error" style="display:none;"></span>
   `;
   return div;
@@ -1437,89 +1437,47 @@ function buildSecretRow(key) {
     <span class="env-key" style="display:flex;align-items:center;">${escHtml(key)}</span>
     <span class="secret-value-masked">***</span>
     <input type="password" class="secret-new-value" placeholder="enter new value to update" autocomplete="off">
-    <button class="btn-delete" title="Delete" onclick="deleteSecretKey(this)">✕</button>
     <span class="inline-error" style="display:none;"></span>
   `;
   return div;
 }
 
-function addEnvRow() {
-  const div = document.createElement('div');
-  div.className = 'env-row';
-  div.dataset.new = 'true';
-  div.innerHTML = `
-    <input type="text" class="env-new-key" placeholder="KEY">
-    <input type="text" class="env-value" placeholder="VALUE">
-    <button class="btn-delete" title="Remove" onclick="this.closest('.env-row').remove()">✕</button>
-  `;
-  document.getElementById('env-rows').appendChild(div);
-}
 
-function addSecretRow() {
-  const div = document.createElement('div');
-  div.className = 'env-row';
-  div.dataset.new = 'true';
-  div.innerHTML = `
-    <input type="text" class="env-new-key" placeholder="KEY">
-    <input type="password" class="secret-new-value" placeholder="VALUE" autocomplete="off">
-    <button class="btn-delete" title="Remove" onclick="this.closest('.env-row').remove()">✕</button>
-  `;
-  document.getElementById('secret-rows').appendChild(div);
-}
 
-async function deleteEnvKey(btn) {
-  const row = btn.closest('.env-row');
-  const key = row.dataset.key;
-  if (!key) { row.remove(); return; }
-  if (!window.confirm(`Delete env key "${key}"?`)) return;
 
-  try {
-    const resp = await fetch(
-      `/services/${encodeURIComponent(currentEnvComponent)}/env/${encodeURIComponent(key)}`,
-      { method: 'DELETE', credentials: 'same-origin' }
-    );
-    if (resp.status === 204) {
-      row.remove();
-    } else if (resp.status === 404) {
-      showRowInlineError(row, 'Key not found on server');
-    } else {
-      const body = await resp.json().catch(() => ({}));
-      showRowInlineError(row, body.error || `HTTP ${resp.status}`);
-    }
-  } catch (err) {
-    showRowInlineError(row, err.message);
-  }
-}
-
-async function deleteSecretKey(btn) {
-  const row = btn.closest('.env-row');
-  const key = row.dataset.key;
-  if (!key) { row.remove(); return; }
-  if (!window.confirm(`Delete secret key "${key}"?`)) return;
-
-  try {
-    const resp = await fetch(
-      `/services/${encodeURIComponent(currentEnvComponent)}/env/${encodeURIComponent(key)}`,
-      { method: 'DELETE', credentials: 'same-origin' }
-    );
-    if (resp.status === 204) {
-      row.remove();
-    } else if (resp.status === 404) {
-      showRowInlineError(row, 'Key not found on server');
-    } else {
-      const body = await resp.json().catch(() => ({}));
-      showRowInlineError(row, body.error || `HTTP ${resp.status}`);
-    }
-  } catch (err) {
-    showRowInlineError(row, err.message);
-  }
-}
 
 function showRowInlineError(row, msg) {
   const errEl = row.querySelector('.inline-error');
   if (errEl) {
     errEl.textContent = msg;
     errEl.style.display = 'block';
+  }
+}
+
+async function syncEnvKeys() {
+  hideEnvModalError();
+  const name = currentEnvComponent;
+  if (!name) return;
+  const btn = document.getElementById('env-sync-keys-btn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  try {
+    const resp = await fetch(`/services/${encodeURIComponent(name)}/env/sync-keys`, {
+      method: 'POST', credentials: 'same-origin', headers: authHeaders(),
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.detail || body.error || `HTTP ${resp.status}`);
+    await fetchEnvConfig(name);  // re-render with any newly seeded keys
+    const added = (body.added_env || []).length + (body.added_secrets || []).length;
+    const stale = (body.undeclared || []);
+    let msg = added ? `Added ${added} new key(s) from the repo contract.` : 'No new keys — store matches the contract.';
+    if (stale.length) msg += ` Note: ${stale.length} stored key(s) no longer declared by the repo: ${stale.join(', ')}.`;
+    showEnvModalError(msg);  // reuse the banner as an info line
+  } catch (err) {
+    showEnvModalError('Key sync failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Sync keys from repo';
   }
 }
 
@@ -1532,7 +1490,7 @@ async function saveEnvChanges() {
   const env = {};
   const envRows = document.querySelectorAll('#env-rows .env-row');
   for (const row of envRows) {
-    const keyInput = row.querySelector('.env-key, .env-new-key');
+    const keyInput = row.querySelector('.env-key');
     const valueInput = row.querySelector('.env-value');
     const key = (keyInput.value || '').trim();
     if (!key) continue;
@@ -1543,14 +1501,8 @@ async function saveEnvChanges() {
   const secrets = {};
   const secretRows = document.querySelectorAll('#secret-rows .env-row');
   for (const row of secretRows) {
-    const keyInput = row.querySelector('.env-key, .env-new-key');
     const newValueInput = row.querySelector('.secret-new-value');
-    let key;
-    if (keyInput.tagName === 'INPUT') {
-      key = (keyInput.value || '').trim();
-    } else {
-      key = row.dataset.key || '';
-    }
+    const key = row.dataset.key || '';
     if (!key) continue;
     const newValue = newValueInput ? newValueInput.value : '';
     if (!newValue) continue; // skip unchanged secrets
