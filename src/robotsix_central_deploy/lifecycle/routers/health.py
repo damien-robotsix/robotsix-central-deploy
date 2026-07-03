@@ -7,7 +7,7 @@ import shutil
 from fastapi import APIRouter, Depends
 
 from ..auth import verify_auth
-from ..backend import ExecutionBackend
+from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
 from ..deps import _get_backend, _get_config
 from ..models import DiskUsageResponse, ReclaimResponse

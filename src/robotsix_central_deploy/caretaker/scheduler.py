@@ -15,7 +15,7 @@ from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import phase_health, phase_update, phase_volumes
 
 if TYPE_CHECKING:
-    from ..lifecycle.backend import ExecutionBackend
+    from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
@@ -114,7 +114,7 @@ class CaretakerScheduler:
                 try:
                     # Imported lazily: the lifecycle package's __init__ chain
                     # imports this module, so a top-level import is circular.
-                    from ..lifecycle.backend import (  # noqa: PLC0415
+                    from ..lifecycle.backends import (  # noqa: PLC0415
                         collect_protected_image_refs,
                     )
 

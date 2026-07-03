@@ -20,7 +20,7 @@ import yaml
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 
-from .backend import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
+from .backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from .config import LifecycleConfig
 from .models import (
     ContainerHealthSummary,

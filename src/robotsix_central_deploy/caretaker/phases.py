@@ -15,7 +15,7 @@ from ..lifecycle.models import DeployHistoryEntry, ServiceState
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
-    from ..lifecycle.backend import ExecutionBackend
+    from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore

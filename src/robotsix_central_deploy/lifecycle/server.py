@@ -17,7 +17,7 @@ from .app import app  # noqa: F401
 from .deps import lifespan as lifespan  # noqa: F401
 
 # Backend (tests monkeypatch server_mod.NoopBackend)
-from .backend import NoopBackend as NoopBackend  # noqa: F401
+from .backends import NoopBackend as NoopBackend  # noqa: F401
 
 # Config helpers (tests import these directly)
 from .deps import (  # noqa: F401

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from ..auth import verify_auth
-from ..backend import ExecutionBackend
+from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
 from ..deps import (
     VOLUME_CAT_MAX_BYTES,

@@ -7,6 +7,10 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Dashboard: add deploy history modal with per-entry rollback controls and full running digest tooltips
+- Refactor `lifecycle/backend.py` (1541 lines) into a `lifecycle/backends/` package
+  with one file per implementation: `base.py`, `noop.py`, `docker_cli.py`,
+  `docker_sdk.py`, and `_util.py`. The original `backend.py` is kept as a
+  backward-compatible re-export shim.
 - Fix caretaker auto-update pulling a bare digest: `phase_update` passed `latest_registry_digest` (`sha256:…`) as the image reference, which docker resolves as repository "sha256" and 404s — every auto-update failed on the live server. It now deploys `repo@sha256:…` (tag fallback when no digest), and `deploy()` digest derivation handles pinned refs so `update_available` clears correctly.
 - Remove dead `OnboardConfirmResponse` schema (superseded by `OnboardConfirmAcceptedResponse`)
   Regenerated `docs/openapi.json` to reflect the active schema.
