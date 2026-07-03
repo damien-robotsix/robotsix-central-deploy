@@ -41,6 +41,12 @@ from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize(value: str) -> str:
+    """Replace newlines to prevent log-injection (CWE-117)."""
+    return value.replace("\n", "\\n").replace("\r", "\\r")
+
+
 router = APIRouter(tags=["services"])
 
 
@@ -102,11 +108,11 @@ async def _fanout_deploy_siblings(
             except Exception:
                 logger.warning(
                     "deploy sibling '%s': failed to record history",
-                    repr(sib_name),
+                    _sanitize(sib_name),
                     exc_info=True,
                 )
         except Exception:
-            logger.warning("deploy sibling '%s' failed", repr(sib_name))
+            logger.warning("deploy sibling '%s' failed", _sanitize(sib_name))
 
 
 async def _fanout_rollback_siblings(
@@ -124,8 +130,8 @@ async def _fanout_rollback_siblings(
         if not sib_record.previous_image_digest:
             logger.warning(
                 "rollback sibling '%s-%s': no prior digest — skipping",
-                repr(name),
-                repr(sib_config.service_key),
+                _sanitize(name),
+                _sanitize(sib_config.service_key),
             )
             continue
         sib_name = f"{name}-{sib_config.service_key}"
@@ -156,8 +162,8 @@ async def _fanout_rollback_siblings(
         except Exception:
             logger.warning(
                 "rollback sibling '%s-%s' failed",
-                repr(name),
-                repr(sib_config.service_key),
+                _sanitize(name),
+                _sanitize(sib_config.service_key),
             )
 
 
@@ -228,7 +234,7 @@ async def deploy_service(
             except Exception as exc:
                 logger.warning(
                     "deploy %s: could not write config.yaml to volume %s: %s",
-                    repr(name),
+                    _sanitize(name),
                     config.config_volume,
                     exc,
                 )
@@ -237,7 +243,7 @@ async def deploy_service(
     try:
         outcome = await backend.deploy(record, config, image_ref)
     except Exception as exc:
-        logger.exception("deploy %s failed", repr(name))
+        logger.exception("deploy %s failed", _sanitize(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -268,7 +274,7 @@ async def deploy_service(
         )
     except Exception:
         logger.warning(
-            "deploy %s: failed to record history entry", repr(name), exc_info=True
+            "deploy %s: failed to record history entry", _sanitize(name), exc_info=True
         )
 
     # Deploy siblings
@@ -289,11 +295,13 @@ async def deploy_service(
             if reclaimed:
                 logger.info(
                     "deploy %s: image auto-prune reclaimed %d bytes",
-                    repr(name),
+                    _sanitize(name),
                     reclaimed,
                 )
     except Exception:
-        logger.warning("deploy %s: image auto-prune failed", repr(name), exc_info=True)
+        logger.warning(
+            "deploy %s: image auto-prune failed", _sanitize(name), exc_info=True
+        )
 
     return DeployResponse(
         name=name,
@@ -383,7 +391,7 @@ async def rollback_service(
         try:
             deploy_outcome = await backend.deploy(record, config, image_ref)
         except Exception as exc:
-            logger.exception("rollback %s failed", repr(name))
+            logger.exception("rollback %s failed", _sanitize(name))
             record.state = ServiceState.FAILED
             record.last_error = str(exc)
             await store.put(record)
@@ -412,7 +420,9 @@ async def rollback_service(
             )
         except Exception:
             logger.warning(
-                "rollback %s: failed to record history entry", repr(name), exc_info=True
+                "rollback %s: failed to record history entry",
+                _sanitize(name),
+                exc_info=True,
             )
 
         # Fan out siblings (one-step; current behaviour)
@@ -438,7 +448,7 @@ async def rollback_service(
     try:
         outcome = await backend.rollback(record, config)
     except Exception as exc:
-        logger.exception("rollback %s failed", repr(name))
+        logger.exception("rollback %s failed", _sanitize(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)

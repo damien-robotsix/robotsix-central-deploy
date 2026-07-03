@@ -53,6 +53,12 @@ from ...registry.loader import ComponentRegistry
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize(value: str) -> str:
+    """Replace newlines to prevent log-injection (CWE-117)."""
+    return value.replace("\n", "\\n").replace("\r", "\\r")
+
+
 router = APIRouter(tags=["services"])
 
 
@@ -345,7 +351,7 @@ async def put_service_config(
                 await backend.restart(record)
             except Exception as exc:
                 logger.warning(
-                    "config saved for %s but restart failed: %s", repr(name), exc
+                    "config saved for %s but restart failed: %s", _sanitize(name), exc
                 )
         # Fan out to siblings that share the same config volume
         config = registry.get(name) if registry else None
@@ -358,15 +364,15 @@ async def put_service_config(
                 except Exception as exc:
                     logger.warning(
                         "config saved for %s but sibling '%s' restart failed: %s",
-                        repr(name),
-                        repr(sib_record.name),
+                        _sanitize(name),
+                        _sanitize(sib_record.name),
                         exc,
                     )
     else:
         await config_yaml_store.update_current(name, merged)
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only",
-            repr(name),
+            _sanitize(name),
         )
 
 
@@ -500,7 +506,7 @@ async def refresh_config_schema(
         ) from exc
 
     await config_yaml_store.save_template(name, schema)
-    logger.info("Refreshed config schema for %s from repo", repr(name))
+    logger.info("Refreshed config schema for %s from repo", _sanitize(name))
     return ConfigSchemaRefreshResponse(config_schema=schema)
 
 
@@ -566,12 +572,14 @@ async def run_config_assist(
                 }
             )
             await component_config_store.put(comp_cfg)
-            logger.info("Refreshed config-assist fields for %s from repo", repr(name))
+            logger.info(
+                "Refreshed config-assist fields for %s from repo", _sanitize(name)
+            )
     except Exception as exc:
         logger.warning(
             "Could not refresh config-assist fields for %s from repo (%s); "
             "using stored values",
-            repr(name),
+            _sanitize(name),
             exc,
         )
 

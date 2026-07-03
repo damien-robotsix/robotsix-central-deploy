@@ -43,6 +43,13 @@ from ...registry.models import ComponentConfig
 from ...registry_check import RegistryChecker
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize(value: str) -> str:
+    """Replace newlines to prevent log-injection (CWE-117)."""
+    return value.replace("\n", "\\n").replace("\r", "\\r")
+
+
 router = APIRouter(tags=["services"])
 
 
@@ -62,7 +69,8 @@ async def _gather_sibling_health(
                 sib_inspect = await backend.status(sib_record)
             except Exception:
                 logger.warning(
-                    "failed to inspect sibling '%s'; skipping", repr(sib_record.name)
+                    "failed to inspect sibling '%s'; skipping",
+                    _sanitize(sib_record.name),
                 )
                 continue
             sib_changed = (
@@ -99,7 +107,7 @@ async def _delete_component_volumes(
             continue
         seen.add(vol)
         logger.info(
-            "delete %s: removing volume %s (remove_volumes=true)", repr(name), vol
+            "delete %s: removing volume %s (remove_volumes=true)", _sanitize(name), vol
         )
         try:
             await backend.remove_volume(vol)
@@ -107,7 +115,7 @@ async def _delete_component_volumes(
             logger.warning(
                 "remove_volume failed for %s during delete of %s",
                 vol,
-                repr(name),
+                _sanitize(name),
                 exc_info=True,
             )
 
@@ -354,7 +362,7 @@ async def start_service(
     try:
         final_state = await backend.start(record)
     except Exception as exc:
-        logger.exception("start %s failed", repr(name))
+        logger.exception("start %s failed", _sanitize(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -379,7 +387,9 @@ async def start_service(
                 await store.put(sib_record)
             except Exception:
                 logger.warning(
-                    "start sibling '%s-%s' failed", repr(name), repr(sib.service_key)
+                    "start sibling '%s-%s' failed",
+                    _sanitize(name),
+                    _sanitize(sib.service_key),
                 )
 
     return ActionResponse(
@@ -451,7 +461,7 @@ async def stop_service(
     try:
         final_state = await backend.stop(record)
     except Exception as exc:
-        logger.exception("stop %s failed", repr(name))
+        logger.exception("stop %s failed", _sanitize(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -476,7 +486,9 @@ async def stop_service(
                 await store.put(sib_record)
             except Exception:
                 logger.warning(
-                    "stop sibling '%s-%s' failed", repr(name), repr(sib.service_key)
+                    "stop sibling '%s-%s' failed",
+                    _sanitize(name),
+                    _sanitize(sib.service_key),
                 )
 
     return ActionResponse(
@@ -540,7 +552,7 @@ async def restart_service(
     try:
         final_state = await backend.restart(record)
     except Exception as exc:
-        logger.exception("restart %s failed", repr(name))
+        logger.exception("restart %s failed", _sanitize(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -565,7 +577,9 @@ async def restart_service(
                 await store.put(sib_record)
             except Exception:
                 logger.warning(
-                    "restart sibling '%s-%s' failed", repr(name), repr(sib.service_key)
+                    "restart sibling '%s-%s' failed",
+                    _sanitize(name),
+                    _sanitize(sib.service_key),
                 )
 
     return ActionResponse(
@@ -632,14 +646,14 @@ async def delete_service(
                 await backend.stop(record)
             except Exception:
                 logger.warning(
-                    "stop failed for %s during delete", repr(name), exc_info=True
+                    "stop failed for %s during delete", _sanitize(name), exc_info=True
                 )
             try:
                 await backend.remove_container(record)
             except Exception:
                 logger.warning(
                     "remove_container failed for %s during delete",
-                    repr(name),
+                    _sanitize(name),
                     exc_info=True,
                 )
         for _sib_cfg, sib_record in pairs:
@@ -648,7 +662,7 @@ async def delete_service(
             except Exception:
                 logger.warning(
                     "stop failed for %s during delete",
-                    repr(sib_record.name),
+                    _sanitize(sib_record.name),
                     exc_info=True,
                 )
             try:
@@ -656,7 +670,7 @@ async def delete_service(
             except Exception:
                 logger.warning(
                     "remove_container failed for %s during delete",
-                    repr(sib_record.name),
+                    _sanitize(sib_record.name),
                     exc_info=True,
                 )
 
