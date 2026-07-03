@@ -621,7 +621,9 @@ class DockerSdkBackend(ExecutionBackend):
                             "-c",
                             "cat /home/app/.claude/.login-ready 2>/dev/null || true",
                         ],
-                        volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
+                        volumes={
+                            volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                        },
                         remove=True,
                     )
                     if result.strip():
@@ -632,13 +634,15 @@ class DockerSdkBackend(ExecutionBackend):
                                 "-c",
                                 "cat /home/app/.claude/.login-url 2>/dev/null || true",
                             ],
-                            volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
+                            volumes={
+                                volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                            },
                             remove=True,
                         )
                         oauth_url = url_result.decode("utf-8", errors="replace").strip()
                         break
                 except docker.errors.ContainerError:
-                    pass
+                    pass  # file not ready yet; retry next iteration
                 time.sleep(1)
 
             if not oauth_url:
@@ -659,27 +663,30 @@ class DockerSdkBackend(ExecutionBackend):
                                         "cat /home/app/.claude/.login-output 2>/dev/null || true",
                                     ],
                                     volumes={
-                                        volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                                        volume_name: {
+                                            "bind": "/home/app/.claude",
+                                            "mode": "ro",
+                                        }
                                     },
                                     remove=True,
                                 )
                                 logs = file_result.decode("utf-8", errors="replace")
                             except Exception:
-                                pass
+                                pass  # best-effort log collection; ignore read failures
                         try:
                             container.remove(force=True)
                         except Exception:
-                            pass
+                            pass  # best-effort cleanup; container may already be gone
                         raise RuntimeError(
                             f"Claude login helper exited prematurely:\n{logs}"
                         )
                 except docker.errors.NotFound:
-                    pass
+                    pass  # container already gone; nothing to inspect
                 try:
                     container.kill()
                     container.remove(force=True)
                 except Exception:
-                    pass
+                    pass  # best-effort cleanup; ignore if container already gone
                 raise RuntimeError(
                     "Claude login: could not obtain OAuth URL within 120s."
                 )
@@ -695,7 +702,7 @@ class DockerSdkBackend(ExecutionBackend):
                 c.kill()
                 c.remove(force=True)
             except Exception:
-                pass
+                pass  # best-effort cleanup; container may not exist
             raise
 
     async def complete_claude_login(
@@ -734,7 +741,7 @@ class DockerSdkBackend(ExecutionBackend):
                     container.kill()
                     container.remove(force=True)
                 except Exception:
-                    pass
+                    pass  # best-effort cleanup on timeout; ignore failures
                 return {"status": "error", "error": "Login timed out after 300s."}
 
             # Read the result.
@@ -757,7 +764,7 @@ class DockerSdkBackend(ExecutionBackend):
             try:
                 logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
             except Exception:
-                pass
+                pass  # best-effort log read; logs stay empty on failure
             if not logs.strip():
                 try:
                     file_result = self._client.containers.run(
@@ -767,18 +774,18 @@ class DockerSdkBackend(ExecutionBackend):
                             "-c",
                             "cat /home/app/.claude/.login-output 2>/dev/null || true",
                         ],
-                        volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
+                        volumes={
+                            volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                        },
                         remove=True,
                     )
                     logs = file_result.decode("utf-8", errors="replace")
                 except Exception:
-                    pass
-
-            # Cleanup the container.
+                    pass  # best-effort log collection; ignore read failures
             try:
                 container.remove(force=True)
             except Exception:
-                pass
+                pass  # best-effort cleanup; container may already be gone
 
             # Cleanup temp files.
             try:
@@ -793,7 +800,7 @@ class DockerSdkBackend(ExecutionBackend):
                     remove=True,
                 )
             except Exception:
-                pass
+                pass  # best-effort temp file cleanup; ignore failures
 
             if result_str.startswith("EXIT:0"):
                 return {"status": "authenticated"}
@@ -818,7 +825,7 @@ class DockerSdkBackend(ExecutionBackend):
                 container.kill()
                 container.remove(force=True)
             except docker.errors.NotFound:
-                pass
+                pass  # container already gone; nothing to cancel
             # Clean up temp files
             try:
                 self._client.containers.run(
@@ -832,7 +839,7 @@ class DockerSdkBackend(ExecutionBackend):
                     remove=True,
                 )
             except Exception:
-                pass
+                pass  # best-effort temp file cleanup; ignore failures
 
         await loop.run_in_executor(None, _cancel)
 
