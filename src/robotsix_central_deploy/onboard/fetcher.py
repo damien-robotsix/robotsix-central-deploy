@@ -17,24 +17,24 @@ _LABEL_CONFIG_TEMPLATE = "robotsix.deploy.config-template"
 @dataclass
 class RepoFiles:
     compose_bytes: bytes
-    config_yaml: bytes | None  # None if config/config.yaml absent in repo
+    config_yaml: bytes | None  # None if config/config.json absent in repo
     config_yaml_template: bytes | None = None  # fallback template bytes
     config_schema_json: bytes | None = None  # config/config.schema.json bytes, or None
 
 
 def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
     """Clone a repo shallowly and return the bytes of deploy/docker-compose.yml
-    and (if present) config/config.yaml.
+    and (if present) config/config.json.
 
     The repo root ``docker-compose.yml`` (dev compose) is **ignored**.
     Only ``deploy/docker-compose.yml`` is read — this is the deploy-
     contract-compliant compose.
 
-    When ``config/config.yaml`` is absent (e.g. gitignored), two
+    When ``config/config.json`` is absent (e.g. gitignored), two
     fallback strategies are tried in order to locate a config template:
 
     * **Strategy A** — adjacent convention:
-      ``config/config.example.yaml`` alongside the config file.
+      ``config/config.example.json`` alongside the config file.
     * **Strategy B** — label-declared path: the
       ``robotsix.deploy.config-template`` label on the first service
       in the compose file points to a relative path inside the repo.
@@ -64,7 +64,7 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
             )
         compose_bytes = compose_path.read_bytes()
 
-        config_path = Path(tmpdir) / "config" / "config.yaml"
+        config_path = Path(tmpdir) / "config" / "config.json"
         config_yaml = config_path.read_bytes() if config_path.is_file() else None
 
         schema_path = Path(tmpdir) / "config" / "config.schema.json"
@@ -73,7 +73,7 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
         config_yaml_template: bytes | None = None
         if config_yaml is None:
             # Strategy A — adjacent convention
-            example_path = Path(tmpdir) / "config" / "config.example.yaml"
+            example_path = Path(tmpdir) / "config" / "config.example.json"
             if example_path.is_file():
                 config_yaml_template = example_path.read_bytes()
             else:

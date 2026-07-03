@@ -1143,9 +1143,9 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """When only config.yaml exists (no schema JSON), config_schema is None."""
+        """When only config.json exists (no schema JSON), config_schema is None."""
         spec = _make_derived_spec("cool-app")
-        config_yaml_bytes = b"host: localhost\n"
+        config_yaml_bytes = b'{"host": "localhost"}'
 
         with (
             patch(
@@ -1487,7 +1487,7 @@ class TestOnboardConfigSchemaValidation:
     ):
         """config_yaml present but config_schema_json=None → spec.config_schema is None."""
         spec = _make_derived_spec("cool-app")
-        config_yaml_bytes = b"host: localhost\n"
+        config_yaml_bytes = b'{"host": "localhost"}'
 
         with (
             patch(

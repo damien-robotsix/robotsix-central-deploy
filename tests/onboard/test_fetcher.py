@@ -8,12 +8,12 @@ actual git-clone-and-read logic is verified.  Network-only scenarios
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from unittest import mock
 
 import pytest
-import yaml
 
 from robotsix_central_deploy.onboard.fetcher import (
     FetchError,
@@ -67,7 +67,7 @@ def _init_local_git_repo(
     if config_yaml is not None:
         config_dir = root / "config"
         config_dir.mkdir()
-        (config_dir / "config.yaml").write_bytes(config_yaml)
+        (config_dir / "config.json").write_bytes(config_yaml)
 
     if extra_file is not None:
         (root / extra_file).write_text("unrelated\n")
@@ -125,10 +125,10 @@ class TestFetchRepoFiles:
 
     def test_successful_clone_with_config(self, tmp_path: Path):
         """Shallow clone of a local repo that has both deploy/compose
-        and config/config.yaml — both are returned."""
+        and config/config.json — both are returned."""
         source_repo = tmp_path / "source"
         compose_bytes = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
-        config_bytes = b"host: localhost\nport: 8080\n"
+        config_bytes = b'{"host": "localhost", "port": 8080}'
         _init_local_git_repo(
             source_repo,
             deploy_compose=compose_bytes,
@@ -145,7 +145,7 @@ class TestFetchRepoFiles:
         assert result.config_yaml == config_bytes
 
     def test_successful_clone_without_config(self, tmp_path: Path):
-        """When config/config.yaml is absent, ``config_yaml`` is ``None``."""
+        """When config/config.json is absent, ``config_yaml`` is ``None``."""
         source_repo = tmp_path / "source"
         compose_bytes = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
         _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
@@ -297,7 +297,7 @@ class TestFetchRepoFilesTemplateFallback:
     """Tests for the config_yaml_template fallback in ``fetch_repo_files``."""
 
     def test_adjacent_example_yaml_used_when_config_absent(self, tmp_path: Path):
-        """When config/config.yaml is absent but config.example.yaml exists,
+        """When config/config.json is absent but config.example.json exists,
         config_yaml_template is populated from the example file."""
         source_repo = tmp_path / "source"
         compose_bytes = (
@@ -306,11 +306,11 @@ class TestFetchRepoFilesTemplateFallback:
             b"  svc:\n"
             b"    image: img:latest\n"
         )
-        example_bytes = b"host: example.localhost\nport: 9090\n"
+        example_bytes = b'{"host": "example.localhost", "port": 9090}'
         _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
         _add_and_commit(
             source_repo,
-            {"config/config.example.yaml": example_bytes},
+            {"config/config.example.json": example_bytes},
         )
 
         with mock.patch(
@@ -321,11 +321,11 @@ class TestFetchRepoFilesTemplateFallback:
 
         assert result.config_yaml is None
         assert result.config_yaml_template == example_bytes
-        parsed = yaml.safe_load(result.config_yaml_template)
+        parsed = json.loads(result.config_yaml_template)
         assert parsed == {"host": "example.localhost", "port": 9090}
 
     def test_label_template_path_used_when_adjacent_absent(self, tmp_path: Path):
-        """When neither config/config.yaml nor config.example.yaml exist,
+        """When neither config/config.json nor config.example.json exist,
         but the compose carries robotsix.deploy.config-template pointing
         to a committed file, config_yaml_template is populated."""
         source_repo = tmp_path / "source"
@@ -354,7 +354,7 @@ class TestFetchRepoFilesTemplateFallback:
         assert result.config_yaml_template == template_bytes
 
     def test_config_yaml_takes_precedence_over_template(self, tmp_path: Path):
-        """When config/config.yaml IS present, config_yaml_template is
+        """When config/config.json IS present, config_yaml_template is
         left as None — the fallback block never runs."""
         source_repo = tmp_path / "source"
         compose_bytes = (
@@ -363,8 +363,8 @@ class TestFetchRepoFilesTemplateFallback:
             b"  svc:\n"
             b"    image: img:latest\n"
         )
-        config_bytes = b"host: real.localhost\n"
-        example_bytes = b"host: example.localhost\n"
+        config_bytes = b'{"host": "real.localhost"}'
+        example_bytes = b'{"host": "example.localhost"}'
         _init_local_git_repo(
             source_repo,
             deploy_compose=compose_bytes,
@@ -372,7 +372,7 @@ class TestFetchRepoFilesTemplateFallback:
         )
         _add_and_commit(
             source_repo,
-            {"config/config.example.yaml": example_bytes},
+            {"config/config.example.json": example_bytes},
         )
 
         with mock.patch(

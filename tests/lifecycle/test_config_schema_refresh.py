@@ -84,7 +84,7 @@ async def test_refresh_404_when_repo_has_no_schema(
 ) -> None:
     repo_files = RepoFiles(
         compose_bytes=b"services: {}",
-        config_yaml=b"host: x",
+        config_yaml=b'{"host": "x"}',
         config_yaml_template=None,
         config_schema_json=None,
     )

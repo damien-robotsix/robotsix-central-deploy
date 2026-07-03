@@ -1,11 +1,11 @@
-"""Tests for config.yaml parsing and ConfigYamlStore."""
+"""Tests for config.json parsing and ConfigYamlStore."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
-import yaml
 
 from fastapi import HTTPException
 
@@ -20,37 +20,37 @@ from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 
 class TestParseConfigYaml:
     def test_parse_config_yaml_flat(self):
-        yaml_bytes = yaml.dump({"host": "localhost", "port": 8080}).encode()
-        result = parse_config_yaml(yaml_bytes)
+        json_bytes = json.dumps({"host": "localhost", "port": 8080}).encode()
+        result = parse_config_yaml(json_bytes)
         assert result == {"host": "localhost", "port": 8080}
 
     def test_parse_config_yaml_nested(self):
-        yaml_bytes = yaml.dump(
+        json_bytes = json.dumps(
             {"server": {"host": "localhost", "port": 8080}, "log_level": "info"}
         ).encode()
-        result = parse_config_yaml(yaml_bytes)
+        result = parse_config_yaml(json_bytes)
         assert result == {
             "server": {"host": "localhost", "port": 8080},
             "log_level": "info",
         }
 
     def test_parse_config_yaml_empty_secret(self):
-        yaml_bytes = yaml.dump({"api_key": ""}).encode()
-        result = parse_config_yaml(yaml_bytes)
+        json_bytes = json.dumps({"api_key": ""}).encode()
+        result = parse_config_yaml(json_bytes)
         assert result == {"api_key": ""}
 
     def test_parse_config_yaml_null_secret(self):
-        yaml_str = "api_key:\n"
-        result = parse_config_yaml(yaml_str.encode())
+        json_bytes = b'{"api_key": null}'
+        result = parse_config_yaml(json_bytes)
         assert result == {"api_key": None}
 
     def test_parse_config_yaml_invalid_yaml(self):
         with pytest.raises(ConfigParseError, match="parse error"):
-            parse_config_yaml(b"\tinvalid: yaml: [")
+            parse_config_yaml(b'{"invalid": ')
 
     def test_parse_config_yaml_invalid_non_mapping(self):
-        with pytest.raises(ConfigParseError, match="top-level YAML mapping"):
-            parse_config_yaml(b"- item\n")
+        with pytest.raises(ConfigParseError, match="top-level JSON object"):
+            parse_config_yaml(b'["item"]')
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shlex
 
 import re
@@ -561,22 +562,22 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
 
 
 def parse_config_yaml(config_bytes: bytes) -> dict[str, Any]:
-    """Parse config/config.yaml from raw bytes; return parsed mapping.
+    """Parse config/config.json from raw bytes; return parsed mapping.
 
-    Returns the raw parsed YAML as a Python dict.  No secret annotation is
+    Returns the raw parsed JSON as a Python dict.  No secret annotation is
     applied here — callers that store the result as a config template must
     wrap it with ``_annotate_secret_sentinels()`` (server.py) to mark
     secret leaves with the ``"SECRET"`` sentinel.
 
     Raises:
-        ConfigParseError: if the YAML is malformed or not a top-level mapping.
+        ConfigParseError: if the JSON is malformed or not a top-level object.
     """
     try:
-        doc = yaml.safe_load(config_bytes)
-    except yaml.YAMLError as exc:
-        raise ConfigParseError(f"config/config.yaml parse error: {exc}") from exc
+        doc = json.loads(config_bytes)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ConfigParseError(f"config/config.json parse error: {exc}") from exc
     if not isinstance(doc, dict):
-        msg = "config/config.yaml must be a top-level YAML mapping"
+        msg = "config/config.json must be a top-level JSON object"
         if doc is not None:
             msg += f" (got {type(doc).__name__})"
         raise ConfigParseError(msg)

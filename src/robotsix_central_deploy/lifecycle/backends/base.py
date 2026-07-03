@@ -101,7 +101,7 @@ class ExecutionBackend(ABC):
 
     @abstractmethod
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
-        """Read /config/config.yaml from a named volume; return parsed dict (empty if absent)."""
+        """Read /config/config.json from a named volume; return parsed dict (empty if absent)."""
         pass
 
     @abstractmethod

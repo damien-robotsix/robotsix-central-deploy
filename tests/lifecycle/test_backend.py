@@ -1,5 +1,7 @@
 """Tests for the execution backends."""
 
+import base64
+import json
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -750,6 +752,27 @@ class TestDockerSdkBackendVolumeBrowser:
         assert result["content"] == "\n"
         assert result["binary"] is False
         assert result["truncated"] is False
+
+    # -- write_config_to_volume --
+
+    async def test_write_config_to_volume_writes_parseable_json(self, backend):
+        """write_config_to_volume writes parseable JSON to /config/config.json."""
+        b, client = backend
+        client.containers.run.return_value = b""
+        config = {"host": "localhost", "port": 8080, "nested": {"key": "value"}}
+
+        await b.write_config_to_volume("test-vol", config)
+
+        call_kwargs = client.containers.run.call_args[1]
+        cmd = call_kwargs["command"][2]
+        # Target path is the JSON config-standard file
+        assert "/config/config.json" in cmd
+        # The base64 payload decodes back to the JSON we wrote
+        encoded = cmd.split("echo ", 1)[1].split(" | base64 -d", 1)[0]
+        written = base64.b64decode(encoded).decode()
+        assert json.loads(written) == config
+        # Volume mounted read-write
+        assert call_kwargs["volumes"]["test-vol"]["mode"] == "rw"
 
     # -- NoopBackend stubs --
 

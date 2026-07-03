@@ -478,22 +478,20 @@ class DockerSdkBackend(ExecutionBackend):
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
-        """Write *config_dict* as YAML into a Docker named volume via a
+        """Write *config_dict* as JSON into a Docker named volume via a
         temporary busybox container.
 
         The volume **must** already exist; this method only writes to it.
         """
         import base64
+        import json
 
         import docker
-        import yaml
 
-        yaml_content = yaml.dump(
-            config_dict, default_flow_style=False, allow_unicode=True
-        )
-        encoded = base64.b64encode(yaml_content.encode()).decode()
+        json_content = json.dumps(config_dict, indent=2, sort_keys=True)
+        encoded = base64.b64encode(json_content.encode()).decode()
         # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
-        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.yaml && chmod 777 /config && chmod 666 /config/config.yaml"
+        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.json && chmod 777 /config && chmod 666 /config/config.json"
         loop = asyncio.get_running_loop()
 
         def _run() -> None:
@@ -512,8 +510,8 @@ class DockerSdkBackend(ExecutionBackend):
         await loop.run_in_executor(None, _run)
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
-        """Read /config/config.yaml from a named volume via a temporary busybox container."""
-        import yaml
+        """Read /config/config.json from a named volume via a temporary busybox container."""
+        import json
 
         loop = asyncio.get_running_loop()
 
@@ -523,24 +521,24 @@ class DockerSdkBackend(ExecutionBackend):
             try:
                 raw = self._client.containers.run(
                     "busybox",
-                    command=["sh", "-c", "cat /config/config.yaml 2>/dev/null || true"],
+                    command=["sh", "-c", "cat /config/config.json 2>/dev/null || true"],
                     volumes={volume_name: {"bind": "/config", "mode": "ro"}},
                     remove=True,
                 )
                 text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
 
-                data = yaml.safe_load(text)
-                if data is None:
+                if not text.strip():
                     return {}
+                data = json.loads(text)
                 if not isinstance(data, dict):
                     raise InvalidConfigStructureError(
                         f"Expected a mapping in Docker volume {volume_name}, "
                         f"got {type(data).__name__}"
                     )
                 return data
-            except yaml.YAMLError as exc:
+            except (json.JSONDecodeError, ValueError) as exc:
                 raise YamlParseError(
-                    f"YAML parse error in Docker volume {volume_name}: {exc}"
+                    f"JSON parse error in Docker volume {volume_name}: {exc}"
                 ) from exc
             except docker.errors.APIError as exc:
                 raise RuntimeError(
