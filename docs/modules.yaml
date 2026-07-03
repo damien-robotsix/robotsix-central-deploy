@@ -102,6 +102,11 @@ modules:
       latest manifest digest and compares against the deployed image digest
       to determine whether an update is available.
     package: robotsix_central_deploy.registry_check
+    dependencies:
+      - pydantic
+      - httpx
+    tests: tests/registry_check/
+
   caretaker:
     name: caretaker
     description: >
@@ -114,7 +119,6 @@ modules:
       - httpx
       - pydantic
     tests: tests/caretaker/
-    tests: tests/registry_check/
 
   onboard:
     name: onboard
