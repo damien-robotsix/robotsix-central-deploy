@@ -20,6 +20,15 @@ from robotsix_central_deploy.registry.models import ConfigAssistSeed  # noqa: TC
 # ---------------------------------------------------------------------------
 
 
+class PortShift(BaseModel):
+    container_port: int
+    protocol: str
+    original_host: int  # default from the repo's docker-compose.yml
+    assigned_host: int  # auto-assigned free port
+    collision_component_id: str  # component whose stored port collided ("central-deploy" for lifecycle port)
+    collision_repo_id: str  # that component's repo_id, or "" when unknown
+
+
 class OnboardPreflightRequest(BaseModel):
     git_url: str
     name: str  # validated: ^[a-z0-9][a-z0-9-]*$
@@ -27,12 +36,16 @@ class OnboardPreflightRequest(BaseModel):
 
 class OnboardPreflightResponse(BaseModel):
     spec: DerivedSpec
+    port_shifts: list[PortShift] = []
 
 
 class OnboardConfirmRequest(BaseModel):
     spec: DerivedSpec  # env values now user-filled
     config_values: dict[str, Any] | None = None  # optional, for config.yaml repos
     register_with_mill: bool = True
+    port_shifts: list[
+        PortShift
+    ] = []  # echoed from preflight; used only for ticket filing
 
 
 # Phase literal type for onboard background deploy jobs.
@@ -63,6 +76,9 @@ class OnboardJobStatusResponse(BaseModel):
     name: str | None = None
     image: str | None = None
     state: str | None = None
+    warnings: list[
+        str
+    ] = []  # non-empty when mill was unreachable during port-shift ticket filing
 
 
 # ---------------------------------------------------------------------------

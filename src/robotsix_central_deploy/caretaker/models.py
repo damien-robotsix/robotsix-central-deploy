@@ -16,6 +16,7 @@ class FindingKind(str, Enum):
     VOLUME_GROWTH = "volume_growth"
     VOLUME_ORPHAN = "volume_orphan"
     DISK = "disk"
+    PORT_COLLISION = "port_collision"
 
 
 class CaretakerFinding(BaseModel):
