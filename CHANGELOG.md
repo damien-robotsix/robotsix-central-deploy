@@ -2,8 +2,11 @@
 
 All notable changes to robotsix-central-deploy.
 
+<!-- towncrier release notes start -->
+
 ## 0.0.0 (unreleased)
 
+- Adopt towncrier newsfragments (`changelog.d/`) as the changelog mechanism; CHANGELOG.md becomes release-workflow-written only. Added `towncrier>=24.0` dev dependency and `[tool.towncrier]` config.
 - Env/secrets modal: the key set is the repo's compose contract, not operator-editable — removed "+ Add variable"/"+ Add secret" and per-row delete. New "↻ Sync keys from repo" button (POST /services/{name}/env/sync-keys) seeds keys the contract added since onboarding (values never modified; undeclared stored keys reported, not deleted).
 - Fix contradictory copy on unset secret fields in config forms: rows showed both "(required — set before deploy)" and "optional at onboard" at once. Unset secrets now read "(not set — can be saved later, needed to run)".
 - **Breaking (claude-mount):** the `robotsix.deploy.claude-mount` bind target moved from `/root/.claude` to `/home/app/.claude`, matching the robotsix-standards standardized container layout (non-root user `app`, uid 1001, home `/home/app`). Images still running as `root` (e.g. robotsix-mill) must set `CLAUDE_CONFIG_DIR=/home/app/.claude` until they migrate to the standard layout.
