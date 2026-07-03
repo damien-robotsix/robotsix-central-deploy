@@ -511,6 +511,9 @@
     <div class="env-footer">
       <button class="btn-primary" onclick="saveConfigValues()">Save</button>
       <button class="btn-secondary" onclick="closeConfigModal()">Close</button>
+      <button id="config-refresh-schema-btn" class="btn-secondary" onclick="refreshConfigSchema()"
+              title="Refetch config/config.schema.json from the component's repo — picks up new fields, types, and descriptions without re-onboarding. Stored values are kept."
+              style="margin-left:auto;">↻ Refresh schema</button>
     </div>
   </div>
 </div>
@@ -588,7 +591,7 @@
       <h3>Options</h3>
       <label>
         <input type="checkbox" id="ob-claude-mount" />
-        Mount ~/.claude as /root/.claude (read-write)
+        Mount ~/.claude as /home/app/.claude (read-write)
       </label>
 
       <div id="ob-mill-tracking" style="margin-top:12px;">
@@ -1628,6 +1631,27 @@ function closeConfigModal() {
   }
 }
 
+async function refreshConfigSchema() {
+  if (!_configComponent) return;
+  const btn = document.getElementById('config-refresh-schema-btn');
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  try {
+    const resp = await fetch(
+      `/services/${encodeURIComponent(_configComponent)}/config/refresh-schema`,
+      { method: 'POST', headers: authHeaders(), credentials: 'same-origin' }
+    );
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.detail || body.error || `HTTP ${resp.status}`);
+    await fetchConfigSchema(_configComponent);  // re-render with the fresh schema
+  } catch (err) {
+    showConfigModalError('Schema refresh failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Refresh schema';
+  }
+}
+
 async function fetchConfigSchema(name) {
   try {
     const resp = await fetch(`/services/${encodeURIComponent(name)}/config`, {
@@ -1744,7 +1768,10 @@ function _renderConfigNode(schema, current, prefix, container) {
     if (resolvedSchema.type === 'object') {
       const section = document.createElement('div');
       section.className = 'env-section';
-      section.innerHTML = `<h3>${escHtml(key)}</h3>`;
+      const sectionDesc = resolvedSchema.description
+        ? `<p style="margin:2px 0 8px;font-size:0.78rem;color:var(--muted);">${escHtml(resolvedSchema.description)}</p>`
+        : '';
+      section.innerHTML = `<h3>${escHtml(key)}</h3>${sectionDesc}`;
       const currentSub = (currentVal !== null && typeof currentVal === 'object'
                           && !Array.isArray(currentVal)) ? currentVal : {};
       _renderConfigNode(resolvedSchema, currentSub, fullKey, section);
@@ -1848,6 +1875,11 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   const displayVal = (currentVal !== undefined && currentVal !== null)
     ? currentVal
     : (defaultVal !== undefined && defaultVal !== null ? defaultVal : '');
+  // Help bubble: the schema's field description when the model provides one,
+  // with the dotted key path appended for orientation.
+  const helpText = propSchema.description
+    ? `${propSchema.description}\n(${fullKey})`
+    : fullKey;
 
   let inputHtml;
   if (isSecret) {
@@ -1858,7 +1890,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
       value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
     div.innerHTML = `
-      <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
+      <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
       <span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>
       ${!alreadySet ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">optional at onboard</span>' : ''}
@@ -1873,7 +1905,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
       data-json="1" value="${escAttr(jsonVal)}" spellcheck="false">`;
     div.innerHTML = `
-      <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
+      <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
       <span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">JSON list</span>
     `;
@@ -1903,7 +1935,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   }
 
   div.innerHTML = `
-    <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
+    <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
     ${inputHtml}
   `;
   return div;
