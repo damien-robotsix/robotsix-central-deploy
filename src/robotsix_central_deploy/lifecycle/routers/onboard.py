@@ -19,12 +19,14 @@ from ..deps import (
     _get_config_yaml_store,
     _get_env_store,
     _get_job_registry,
+    _get_config,
     _namespace_spec_volumes,
     _merge_config,
     _validate_config_or_422,
     _canonical_hash,
     JobRegistry,
 )
+from ..config import LifecycleConfig
 from ..models import ServiceRecord
 from ..schemas import (
     OnboardPreflightRequest,
@@ -32,6 +34,7 @@ from ..schemas import (
     OnboardConfirmRequest,
     OnboardConfirmAcceptedResponse,
     OnboardJobStatusResponse,
+    PortShift,
 )
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
@@ -141,6 +144,7 @@ async def onboard_preflight(
     _: None = Depends(verify_auth),
     store: ServiceStore = Depends(_get_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
 ) -> OnboardPreflightResponse:
     """Fetch and parse a service repo's docker-compose.yml, returning a DerivedSpec.
 
@@ -264,7 +268,52 @@ async def onboard_preflight(
                 },
             )
 
-    return OnboardPreflightResponse(spec=derived_spec)
+    # Port-collision preflight: auto-assign free host ports when defaults collide
+    from ...onboard.port_utils import collect_occupied_host_ports, find_free_host_port  # noqa: PLC0415
+
+    occupied = collect_occupied_host_ports(
+        component_config_store, lifecycle_config.port
+    )
+    port_shifts: list[PortShift] = []
+
+    # Collect all PortMapping objects across primary + siblings.
+    # Mutating pm.host in-place updates the DerivedSpec in memory before it is returned.
+    for pm in [
+        *derived_spec.ports,
+        *(pm for sib in derived_spec.siblings for pm in sib.ports),
+    ]:
+        if pm.host not in occupied:
+            occupied.add(pm.host)  # reserve so two incoming ports don't double-assign
+            continue
+        # Identify the colliding component
+        collision_id = ""
+        collision_repo_id = ""
+        if pm.host == lifecycle_config.port:
+            collision_id = "central-deploy"
+        else:
+            for existing_cfg in component_config_store.all():
+                all_ports = list(existing_cfg.ports) + [
+                    p for sib in existing_cfg.siblings for p in sib.ports
+                ]
+                if any(p.host == pm.host for p in all_ports):
+                    collision_id = existing_cfg.id
+                    collision_repo_id = existing_cfg.repo_id
+                    break
+        original = pm.host
+        pm.host = find_free_host_port(occupied)
+        occupied.add(pm.host)
+        port_shifts.append(
+            PortShift(
+                container_port=pm.container,
+                protocol=pm.protocol,
+                original_host=original,
+                assigned_host=pm.host,
+                collision_component_id=collision_id,
+                collision_repo_id=collision_repo_id,
+            )
+        )
+
+    return OnboardPreflightResponse(spec=derived_spec, port_shifts=port_shifts)
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +339,7 @@ async def _run_onboard_deploy_job(
     job_registry: JobRegistry,
     http_client: Any = None,
     settings_store: Any = None,
+    port_shifts: list[PortShift] | None = None,
 ) -> None:
     """Background task that runs the primary deploy → siblings sequence.
 
@@ -313,21 +363,53 @@ async def _run_onboard_deploy_job(
         await store.put(record)
 
         # Best-effort mill repo registration
-        if config.repo_id:
-            from ...caretaker.mill_client import MillClient
+        from ...caretaker.mill_client import MillClient  # noqa: PLC0415
 
-            mill_component_id = "mill"
-            if settings_store is not None:
-                mill_component_id = (await settings_store.get()).mill_component_id
-            mill_url = MillClient.derive_url_from_registry(
-                registry, component_config_store, mill_component_id
-            )
-            if mill_url and http_client is not None:
-                mc = MillClient(mill_url, http_client)
-                ok = await mc.register_repo(config.repo_id, spec.git_url)
-                if not ok:
-                    logger.warning(
-                        "mill repo registration failed for %s", config.repo_id
+        mill_component_id = "mill"
+        if settings_store is not None:
+            mill_component_id = (await settings_store.get()).mill_component_id
+        mill_url = MillClient.derive_url_from_registry(
+            registry, component_config_store, mill_component_id
+        )
+        if config.repo_id and mill_url and http_client is not None:
+            mc = MillClient(mill_url, http_client)
+            ok = await mc.register_repo(config.repo_id, spec.git_url)
+            if not ok:
+                logger.warning("mill repo registration failed for %s", config.repo_id)
+
+        # File port-collision tickets on affected components' boards
+        port_shift_warnings: list[str] = []
+        if port_shifts:
+            from ...caretaker.models import CaretakerFinding, FindingKind  # noqa: PLC0415
+
+            for shift in port_shifts:
+                filed = False
+                if shift.collision_repo_id and mill_url and http_client is not None:
+                    finding = CaretakerFinding(
+                        component_id=shift.collision_component_id,
+                        repo_id=shift.collision_repo_id,
+                        kind=FindingKind.PORT_COLLISION,
+                        title=(
+                            f"Default host port {shift.original_host} collides "
+                            f"\u2014 update deploy/docker-compose.yml"
+                        ),
+                        detail=(
+                            f"Component '{shift.collision_component_id}' declares host port "
+                            f"{shift.original_host} as a default in its deploy/docker-compose.yml. "
+                            f"A new component '{spec_name}' was onboarded and was auto-assigned port "
+                            f"{shift.assigned_host} to avoid the collision. "
+                            f"Update this component's deploy/docker-compose.yml to use a unique "
+                            f"default host port so future onboardings do not collide."
+                        ),
+                        severity="warning",
+                    )
+                    mc_ticket = MillClient(mill_url, http_client)
+                    filed = await mc_ticket.ingest_finding(finding)
+                if not filed and shift.collision_component_id:
+                    port_shift_warnings.append(
+                        f"Port {shift.original_host} \u2192 {shift.assigned_host}: collided with "
+                        f"'{shift.collision_component_id}' \u2014 mill unreachable, "
+                        f"update its deploy/docker-compose.yml manually."
                     )
 
         # Deploy siblings
@@ -361,6 +443,7 @@ async def _run_onboard_deploy_job(
             name=spec_name,
             image=spec_image,
             state=record.state.value,
+            warnings=port_shift_warnings,
         )
     except Exception as exc:
         logger.exception("onboard deploy failed for '%s'", spec_name)
@@ -568,6 +651,7 @@ async def onboard_confirm(
             if hasattr(request.app.state, "http_client")
             else None,
             settings_store=request.app.state.settings_store,
+            port_shifts=req.port_shifts,
         )
     )
 
@@ -600,4 +684,5 @@ async def onboard_job_status(
         name=job.name,
         image=job.image,
         state=job.state,
+        warnings=job.warnings,
     )

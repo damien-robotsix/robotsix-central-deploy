@@ -203,7 +203,16 @@ OnboardJobPhase = Literal[
 class OnboardJob:
     """In-memory record of one onboard confirm background deploy job."""
 
-    __slots__ = ("job_id", "component", "phase", "error", "name", "image", "state")
+    __slots__ = (
+        "job_id",
+        "component",
+        "phase",
+        "error",
+        "name",
+        "image",
+        "state",
+        "warnings",
+    )
 
     def __init__(self, job_id: str, component: str) -> None:
         self.job_id: str = job_id
@@ -213,6 +222,7 @@ class OnboardJob:
         self.name: str | None = None
         self.image: str | None = None
         self.state: str | None = None
+        self.warnings: list[str] = []
 
 
 class JobRegistry:
@@ -250,7 +260,14 @@ class JobRegistry:
             job.phase = "failed"
             job.error = error
 
-    def mark_done(self, job_id: str, name: str, image: str, state: str) -> None:
+    def mark_done(
+        self,
+        job_id: str,
+        name: str,
+        image: str,
+        state: str,
+        warnings: list[str] | None = None,
+    ) -> None:
         """Mark a job as done with terminal fields."""
         job = self._jobs.get(job_id)
         if job is not None:
@@ -258,6 +275,7 @@ class JobRegistry:
             job.name = name
             job.image = image
             job.state = state
+            job.warnings = warnings or []
 
     def has_active_job_for(self, component: str) -> bool:
         """Return True when a job for *component* is still in flight."""

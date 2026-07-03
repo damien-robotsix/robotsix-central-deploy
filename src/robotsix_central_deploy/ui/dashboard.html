@@ -2496,6 +2496,7 @@ function escAttr(s) {
 // ── Onboard modal ──────────────────────────────────────────────
 
 let _obSpec = null;
+let _obPortShifts = [];
 let _obJobPollTimer = null;
 
 function openOnboardModal() {
@@ -2511,6 +2512,7 @@ function closeOnboardModal() {
 
 function resetOnboardModal() {
   _obSpec = null;
+  _obPortShifts = [];
   document.getElementById('ob-git-url').value = '';
   document.getElementById('ob-name').value = '';
   var progEl = document.getElementById('ob-deploy-progress');
@@ -2607,6 +2609,22 @@ function pollOnboardJob(jobId, errEl) {
         progEl.style.display = '';
 
         if (job.phase === 'done') {
+          if (job.warnings && job.warnings.length > 0) {
+            var warnHtml = '<div style="background:#fff3cd;border:1px solid #ffc107;padding:8px 12px;'
+              + 'border-radius:4px;margin-top:8px;">'
+              + '\u26a0\ufe0f <strong>Port-shift notifications not sent \u2014 mill was unreachable:</strong>'
+              + '<ul style="margin:4px 0 0 16px">' + job.warnings.map(function(w) {
+                  return '<li>' + escHtml(w) + '</li>';
+                }).join('') + '</ul>'
+              + '<small>Please manually notify the affected component maintainers to update their deploy/docker-compose.yml.</small>'
+              + '<br><button onclick="this.parentElement.remove();closeOnboardModal();loadDashboard();">OK</button>'
+              + '</div>';
+            progEl.innerHTML = warnHtml;
+            progEl.style.display = '';
+            stopOnboardJobPoll();
+            // closeOnboardModal() and loadDashboard() are deferred to the OK button above
+            return;
+          }
           stopOnboardJobPoll();
           closeOnboardModal();
           loadDashboard();
@@ -2656,7 +2674,8 @@ async function onboardFetch() {
       return;
     }
     _obSpec = data.spec;
-    populateStep2(_obSpec);
+    _obPortShifts = data.port_shifts || [];
+    populateStep2(_obSpec, _obPortShifts);
     document.getElementById('onboard-step1').style.display = 'none';
     document.getElementById('onboard-step2').style.display = '';
   } catch (e) {
@@ -2667,12 +2686,30 @@ async function onboardFetch() {
   }
 }
 
-function populateStep2(spec) {
+function populateStep2(spec, portShifts) {
+  portShifts = portShifts || [];
   document.getElementById('ob-image').textContent = spec.image;
 
   // Ports
   var portsEl = document.getElementById('ob-ports');
-  portsEl.innerHTML = spec.ports.map(function(p, i) {
+  var shiftBanner = '';
+  if (portShifts.length > 0) {
+    var items = portShifts.map(function(s) {
+      return '<li>Port <em>' + escHtml(String(s.container_port)) + '/' + escHtml(s.protocol) + '</em>: '
+        + 'default ' + escHtml(String(s.original_host)) + ' \u2192 auto-assigned '
+        + escHtml(String(s.assigned_host))
+        + (s.collision_component_id ? ' (collides with \u2018' + escHtml(s.collision_component_id) + '\u2019)' : '')
+        + '</li>';
+    }).join('');
+    shiftBanner = '<div style="background:#fff3cd;border:1px solid #ffc107;padding:8px 12px;'
+      + 'border-radius:4px;margin-bottom:8px;">'
+      + '\u26a0\ufe0f <strong>Port defaults adjusted:</strong><ul style="margin:4px 0 0 16px">'
+      + items + '</ul>'
+      + '<small>Host ports were auto-assigned to avoid collisions with existing components. '
+      + 'You may override them below. Affected component maintainers will be notified via the mill (if reachable).</small>'
+      + '</div>';
+  }
+  portsEl.innerHTML = shiftBanner + spec.ports.map(function(p, i) {
     return '<div><label>Port ' + (i + 1) + ': <input class="ob-port-host" data-idx="' + i + '" type="number" value="' + escAttr(String(p.host)) + '" style="width:80px" /> → ' + escHtml(String(p.container)) + '/' + escHtml(p.protocol) + '</label></div>';
   }).join('');
 
@@ -2742,6 +2779,9 @@ async function onboardDeploy() {
 
   // Mill tracking opt-in
   body.register_with_mill = document.getElementById('ob-register-mill').checked;
+
+  // Echo port shifts from preflight
+  body.port_shifts = _obPortShifts;
 
   // When config.yaml schema is present, collect the filled-in values
   if (finalSpec.config_schema
