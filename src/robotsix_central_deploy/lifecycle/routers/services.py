@@ -1083,8 +1083,17 @@ async def rollback_service(
                 detail="digest not in deploy history",
             )
 
-        # Derive a digest-pinned repo ref from config.image
-        repo = config.image.split(":")[0] if ":" in config.image else config.image
+        # Derive a digest-pinned repo ref from config.image.
+        #   [registry[:port]/]name[:tag|@digest]
+        # Strip @digest, then split on the last '/' so ports are never
+        # mistaken for tags, then strip the :tag from the name portion.
+        bare = config.image.split("@", 1)[0]
+        if "/" in bare:
+            prefix, name = bare.rsplit("/", 1)
+            name = name.rsplit(":", 1)[0] if ":" in name else name
+            repo = f"{prefix}/{name}"
+        else:
+            repo = bare.rsplit(":", 1)[0] if ":" in bare else bare
         image_ref = f"{repo}@{target_digest}"
 
         try:
