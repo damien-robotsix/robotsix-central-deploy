@@ -18,10 +18,23 @@ from robotsix_central_deploy.lifecycle.app import app
 # ---------------------------------------------------------------------------
 
 
+def _is_gateway_route(route: object) -> bool:
+    """Return True if *route* belongs to the gateway router.
+
+    Identifies gateway routes by their endpoint's module rather than
+    relying on ``route.tags``, because FastAPI may not always propagate
+    the parent ``APIRouter``'s tags to individual routes (observed in
+    FastAPI ≥ 0.139.0).
+    """
+    endpoint = getattr(route, "endpoint", None)
+    module = getattr(endpoint, "__module__", "") if endpoint else ""
+    return module == "robotsix_central_deploy.gateway.router"
+
+
 def _first_gateway_idx(app: FastAPI) -> int | None:
-    """Return the index of the first gateway-tagged route, or None."""
+    """Return the index of the first gateway route, or None."""
     for i, route in enumerate(app.router.routes):
-        if hasattr(route, "tags") and "gateway" in (route.tags or []):
+        if _is_gateway_route(route):
             return i
     return None
 
@@ -58,16 +71,8 @@ def test_gateway_router_registered_last():
     # (i.e., no non-gateway route is registered after the gateway).
     for i in range(first + 1, len(routes)):
         route = routes[i]
-        tags = getattr(route, "tags", []) or []
-        path = route.path
-
-        # A route is considered "gateway" if it has the gateway tag, OR if
-        # it's a known gateway catch-all path (e.g. the WebSocket route,
-        # which as APIWebSocketRoute does not inherit the router's tags).
-        is_gateway = ("gateway" in tags) or (path in ("/{path:path}", "/"))
-
-        assert is_gateway, (
-            f"Non-gateway route at position {i} (path={path!r}) "
+        assert _is_gateway_route(route), (
+            f"Non-gateway route at position {i} (path={route.path!r}) "
             f"appears after the first gateway route at position {first}"
         )
 
@@ -125,8 +130,7 @@ def test_services_endpoint_reachable():
     """
     route = _first_matching_route(app, "GET", "/services")
     assert route is not None, "No route matches GET /services"
-    tags = getattr(route, "tags", []) or []
-    assert "gateway" not in tags, (
+    assert not _is_gateway_route(route), (
         "GET /services matched a gateway route — gateway is shadowing API routes"
     )
 
@@ -140,8 +144,7 @@ def test_onboard_preflight_reachable():
     """
     route = _first_matching_route(app, "POST", "/onboard/preflight")
     assert route is not None, "No route matches POST /onboard/preflight"
-    tags = getattr(route, "tags", []) or []
-    assert "gateway" not in tags, (
+    assert not _is_gateway_route(route), (
         "POST /onboard/preflight matched a gateway route — "
         "gateway is shadowing API routes"
     )
