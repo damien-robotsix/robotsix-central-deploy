@@ -451,6 +451,443 @@ class DockerSdkBackend(ExecutionBackend):
 
         return warnings
 
+    # -- claude-auth API (dashboard panel) ----------------------------------
+
+    async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:
+        """Check whether *volume_name* holds valid Claude credentials."""
+        import docker
+        import json as _json
+
+        loop = asyncio.get_running_loop()
+
+        def _check() -> dict[str, Any]:
+            # Ensure the volume exists.
+            try:
+                self._client.volumes.get(volume_name)
+            except docker.errors.NotFound:
+                return {
+                    "status": "not-authenticated",
+                    "detail": f"Volume '{volume_name}' does not exist.",
+                }
+
+            # Check for .credentials.json existence and parse it.
+            try:
+                result = self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
+                    ],
+                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                    remove=True,
+                )
+                content = result.decode("utf-8", errors="replace").strip()
+            except docker.errors.ContainerError:
+                return {
+                    "status": "not-authenticated",
+                    "detail": "Failed to read credentials from volume.",
+                }
+
+            if content == "MISSING" or not content:
+                return {
+                    "status": "not-authenticated",
+                    "detail": "No credentials file found.",
+                }
+
+            try:
+                creds = _json.loads(content)
+            except _json.JSONDecodeError:
+                return {
+                    "status": "error",
+                    "detail": "Credentials file exists but is not valid JSON.",
+                }
+
+            # Check for expiry information (typical in OAuth credentials).
+            # Anthropic stores expiration as an ISO timestamp in the credentials.
+            expires_at = creds.get("expires_at") or creds.get("expiresAt")
+            if expires_at:
+                try:
+                    from datetime import datetime, timezone
+
+                    if isinstance(expires_at, str):
+                        expire_dt = datetime.fromisoformat(
+                            expires_at.replace("Z", "+00:00")
+                        )
+                        now = datetime.now(timezone.utc)
+                        if expire_dt < now:
+                            return {
+                                "status": "not-authenticated",
+                                "detail": "Credentials have expired.",
+                            }
+                        remaining = (expire_dt - now).total_seconds()
+                        if remaining < 86400:  # less than 1 day
+                            return {
+                                "status": "expiring",
+                                "detail": f"Credentials expire in {remaining / 3600:.1f} hours.",
+                            }
+                except ValueError, TypeError:
+                    pass  # unparseable expiry → treat as valid
+
+            return {"status": "authenticated"}
+
+        return await loop.run_in_executor(None, _check)
+
+    async def start_claude_login(
+        self, volume_name: str, helper_image: str
+    ) -> dict[str, Any]:
+        """Spawn a helper container that runs ``claude login``, returning the
+        OAuth URL for the operator to visit.
+
+        The volume is mounted at ``/home/app/.claude`` (uid 1000's home) so
+        ``claude login`` writes ``.credentials.json`` onto the persistent
+        volume rather than the ephemeral container overlayfs.
+
+        The helper script:
+        1. Runs ``claude login``, capturing stdout/stderr to the volume.
+        2. Writes the OAuth URL to ``.login-url`` on the volume.
+        3. Waits for ``claude login`` to exit on its own (device-flow OAuth
+           callback — the operator authorises in the browser, not via a
+           pasted code).
+        4. On completion writes the exit code to ``.login-result``.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        # The helper runs ``claude login`` which writes credentials into
+        # ``~/.claude/.credentials.json``.  The volume is mounted at
+        # ``/home/app/.claude`` (uid 1000's home) so credentials land on
+        # the persistent volume.  The script captures the OAuth URL for the
+        # operator, then waits for the device-flow callback to complete
+        # (``claude login`` exits by itself once the browser authorisation
+        # finishes).  There is no paste-a-code path here — the operator
+        # pastes a code *in the browser*, not back into the CLI.
+        script = (
+            "claude login > /home/app/.claude/.login-output 2>&1 & "
+            "CLAUDE_PID=$!; "
+            # Poll for the OAuth URL to appear in the output.
+            "for i in $(seq 1 60); do "
+            "  if grep -qE 'https?://' /home/app/.claude/.login-output 2>/dev/null; then "
+            "    grep -oE 'https?://[^[:space:]]+' /home/app/.claude/.login-output | head -1 > /home/app/.claude/.login-url; "
+            "    touch /home/app/.claude/.login-ready; "
+            "    break; "
+            "  fi; "
+            "  sleep 1; "
+            "done; "
+            # Wait for claude login to finish on its own (device-flow OAuth
+            # callback).  $! captures the right PID because we launched
+            # ``claude login`` directly (no pipe/tee).
+            "for i in $(seq 1 300); do "
+            "  if ! kill -0 $CLAUDE_PID 2>/dev/null; then "
+            "    wait $CLAUDE_PID 2>/dev/null; "
+            '    echo "EXIT:$?" > /home/app/.claude/.login-result; '
+            "    break; "
+            "  fi; "
+            "  sleep 1; "
+            "done; "
+            # Timeout guard.
+            "if ! [ -f /home/app/.claude/.login-result ]; then "
+            "  kill $CLAUDE_PID 2>/dev/null; wait $CLAUDE_PID 2>/dev/null; "
+            "  echo 'EXIT:124' > /home/app/.claude/.login-result; "
+            "fi; "
+            "rm -f /home/app/.claude/.login-ready /home/app/.claude/.login-url"
+        )
+
+        container_name = f"claude-login-{os.urandom(4).hex()}"
+
+        def _start() -> dict[str, Any]:
+            container = self._client.containers.create(
+                helper_image,
+                command=["sh", "-c", script],
+                volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
+                name=container_name,
+                user="1000:1000",
+                detach=True,
+            )
+            container.start()
+
+            # Poll for the OAuth URL to appear in the volume.
+            import time
+
+            deadline = time.monotonic() + 120
+            oauth_url = ""
+            while time.monotonic() < deadline:
+                try:
+                    result = self._client.containers.run(
+                        "busybox",
+                        command=[
+                            "sh",
+                            "-c",
+                            "cat /home/app/.claude/.login-ready 2>/dev/null || true",
+                        ],
+                        volumes={
+                            volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                        },
+                        remove=True,
+                    )
+                    if result.strip():
+                        url_result = self._client.containers.run(
+                            "busybox",
+                            command=[
+                                "sh",
+                                "-c",
+                                "cat /home/app/.claude/.login-url 2>/dev/null || true",
+                            ],
+                            volumes={
+                                volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                            },
+                            remove=True,
+                        )
+                        oauth_url = url_result.decode("utf-8", errors="replace").strip()
+                        break
+                except docker.errors.ContainerError:
+                    pass  # file not ready yet; retry next iteration
+                time.sleep(1)
+
+            if not oauth_url:
+                # Check if the container exited already (error).
+                try:
+                    container.reload()
+                    if container.status in ("exited", "dead"):
+                        logs = container.logs(stdout=True, stderr=True).decode(
+                            errors="replace"
+                        )
+                        if not logs.strip():
+                            try:
+                                file_result = self._client.containers.run(
+                                    "busybox",
+                                    command=[
+                                        "sh",
+                                        "-c",
+                                        "cat /home/app/.claude/.login-output 2>/dev/null || true",
+                                    ],
+                                    volumes={
+                                        volume_name: {
+                                            "bind": "/home/app/.claude",
+                                            "mode": "ro",
+                                        }
+                                    },
+                                    remove=True,
+                                )
+                                logs = file_result.decode("utf-8", errors="replace")
+                            except Exception:
+                                pass  # best-effort log collection; ignore read failures
+                        try:
+                            container.remove(force=True)
+                        except Exception:
+                            pass  # best-effort cleanup; container may already be gone
+                        raise RuntimeError(
+                            f"Claude login helper exited prematurely:\n{logs}"
+                        )
+                except docker.errors.NotFound:
+                    pass  # container already gone; nothing to inspect
+                try:
+                    container.kill()
+                    container.remove(force=True)
+                except Exception:
+                    pass  # best-effort cleanup; ignore if container already gone
+                raise RuntimeError(
+                    "Claude login: could not obtain OAuth URL within 120s."
+                )
+
+            return {"container_id": container.id, "oauth_url": oauth_url}
+
+        try:
+            return await loop.run_in_executor(None, _start)
+        except Exception:
+            # Best-effort cleanup on failure.
+            try:
+                c = self._client.containers.get(container_name)
+                c.kill()
+                c.remove(force=True)
+            except Exception:
+                pass  # best-effort cleanup; container may not exist
+            raise
+
+    async def complete_claude_login(
+        self, volume_name: str, container_id: str, auth_code: str
+    ) -> dict[str, Any]:
+        """Wait for the helper container to finish and return the result.
+
+        The helper runs the device-flow OAuth callback on its own — no
+        auth code is fed back to the CLI.  *auth_code* is accepted for
+        API compatibility but is unused by this backend.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        def _complete() -> dict[str, Any]:
+            # Wait for the helper container to finish.  The device-flow
+            # OAuth callback completes automatically in the browser — no
+            # code is fed back to the CLI.  ``auth_code`` is accepted for
+            # API compatibility but is unused in this backend.
+            import time
+
+            try:
+                container = self._client.containers.get(container_id)
+            except docker.errors.NotFound:
+                return {"status": "error", "error": "Helper container not found."}
+
+            deadline = time.monotonic() + 300
+            while time.monotonic() < deadline:
+                container.reload()
+                if container.status in ("exited", "dead"):
+                    break
+                time.sleep(1)
+            else:
+                try:
+                    container.kill()
+                    container.remove(force=True)
+                except Exception:
+                    pass  # best-effort cleanup on timeout; ignore failures
+                return {"status": "error", "error": "Login timed out after 300s."}
+
+            # Read the result.
+            try:
+                result = self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        "cat /home/app/.claude/.login-result 2>/dev/null || echo 'EXIT:1'",
+                    ],
+                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
+                    remove=True,
+                )
+                result_str = result.decode("utf-8", errors="replace").strip()
+            except docker.errors.ContainerError:
+                result_str = "EXIT:1"
+
+            logs = ""
+            try:
+                logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
+            except Exception:
+                pass  # best-effort log read; logs stay empty on failure
+            if not logs.strip():
+                try:
+                    file_result = self._client.containers.run(
+                        "busybox",
+                        command=[
+                            "sh",
+                            "-c",
+                            "cat /home/app/.claude/.login-output 2>/dev/null || true",
+                        ],
+                        volumes={
+                            volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
+                        },
+                        remove=True,
+                    )
+                    logs = file_result.decode("utf-8", errors="replace")
+                except Exception:
+                    pass  # best-effort log collection; ignore read failures
+            try:
+                container.remove(force=True)
+            except Exception:
+                pass  # best-effort cleanup; container may already be gone
+
+            # Cleanup temp files.
+            try:
+                self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        "rm -f /home/app/.claude/.login-result /home/app/.claude/.login-ready /home/app/.claude/.login-url /home/app/.claude/.login-code /home/app/.claude/.login-output",
+                    ],
+                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
+                    remove=True,
+                )
+            except Exception:
+                pass  # best-effort temp file cleanup; ignore failures
+
+            if result_str.startswith("EXIT:0"):
+                return {"status": "authenticated"}
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Claude login failed: {result_str}",
+                    "logs": logs[-2000:],
+                }
+
+        return await loop.run_in_executor(None, _complete)
+
+    async def cancel_claude_login(self, volume_name: str, container_id: str) -> None:
+        """Kill and remove a running claude-login helper container."""
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        def _cancel() -> None:
+            try:
+                container = self._client.containers.get(container_id)
+                container.kill()
+                container.remove(force=True)
+            except docker.errors.NotFound:
+                pass  # container already gone; nothing to cancel
+            # Clean up temp files
+            try:
+                self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        "rm -f /home/app/.claude/.login-ready /home/app/.claude/.login-url /home/app/.claude/.login-code /home/app/.claude/.login-result /home/app/.claude/.login-output",
+                    ],
+                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
+                    remove=True,
+                )
+            except Exception:
+                pass  # best-effort temp file cleanup; ignore failures
+
+        await loop.run_in_executor(None, _cancel)
+
+    async def write_claude_credentials(
+        self, volume_name: str, credentials_json: str
+    ) -> dict[str, Any]:
+        """Write *credentials_json* into *volume_name* as ``.credentials.json``."""
+        import docker
+        import json as _json
+
+        # Validate that it's at least parseable JSON.
+        try:
+            _json.loads(credentials_json)
+        except _json.JSONDecodeError as exc:
+            return {"status": "error", "error": f"Invalid JSON: {exc}"}
+
+        loop = asyncio.get_running_loop()
+
+        def _write() -> dict[str, Any]:
+            # Ensure the volume exists.
+            try:
+                self._client.volumes.get(volume_name)
+            except docker.errors.NotFound:
+                return {
+                    "status": "error",
+                    "error": f"Volume '{volume_name}' does not exist.",
+                }
+
+            encoded = credentials_json.encode("utf-8")
+            import base64
+
+            b64 = base64.b64encode(encoded).decode("ascii")
+
+            self._client.containers.run(
+                "busybox",
+                command=[
+                    "sh",
+                    "-c",
+                    'echo "$B64" | base64 -d > /mnt/.credentials.json && chown 1000:1000 /mnt/.credentials.json && chmod 600 /mnt/.credentials.json',
+                ],
+                environment={"B64": b64},
+                volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
+                remove=True,
+            )
+            return {"status": "authenticated"}
+
+        return await loop.run_in_executor(None, _write)
+
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
     ) -> DeployOutcome:

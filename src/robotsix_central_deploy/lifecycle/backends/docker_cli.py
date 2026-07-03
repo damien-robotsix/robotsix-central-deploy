@@ -224,6 +224,39 @@ class DockerBackend(ExecutionBackend):
             "trigger_self_update not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    # -- claude-auth stubs --------------------------------------------------
+
+    async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:
+        raise NotImplementedError(
+            "check_claude_auth not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def start_claude_login(
+        self, volume_name: str, helper_image: str
+    ) -> dict[str, Any]:
+        raise NotImplementedError(
+            "start_claude_login not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def complete_claude_login(
+        self, volume_name: str, container_id: str, auth_code: str
+    ) -> dict[str, Any]:
+        raise NotImplementedError(
+            "complete_claude_login not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def cancel_claude_login(self, volume_name: str, container_id: str) -> None:
+        raise NotImplementedError(
+            "cancel_claude_login not supported for DockerBackend — use DockerSdkBackend"
+        )
+
+    async def write_claude_credentials(
+        self, volume_name: str, credentials_json: str
+    ) -> dict[str, Any]:
+        raise NotImplementedError(
+            "write_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
         rc, stdout, _stderr = await _run(

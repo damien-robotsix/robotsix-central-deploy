@@ -156,3 +156,49 @@ browser ── https ──> nginx (basic auth, TLS, WS upgrade)
                         ▼
                 managed component containers
 ```
+
+## Claude authentication
+
+Components that set `claude_mount: true` mount the `claude-auth` Docker named
+volume at `/home/app/.claude` inside the container (read-write).  The volume
+holds Anthropic OAuth credentials (`.credentials.json`) that allow the
+component to make authenticated Claude API calls.
+
+### Provisioning credentials
+
+Credentials are managed from the **Claude auth** panel on the central-deploy
+dashboard (`/ui` → "Claude Auth" section).  Two methods are available:
+
+1. **Interactive OAuth login** (recommended).  Click "Log in with Claude" to
+   spawn a temporary helper container that runs `claude login`.  The panel
+   displays an OAuth authorization URL — visit it in a browser, authorize the
+   device, and the CLI completes automatically.  If a code is prompted,
+   paste it back into the dashboard.
+
+2. **Paste credentials JSON** (fallback).  Expand "Paste credentials JSON"
+   and paste the contents of a `.credentials.json` file obtained elsewhere
+   (e.g. from a prior `claude login` on a developer machine).  The file is
+   written into the volume with ownership `1000:1000` and permissions `0600`.
+
+The helper container runs as uid:gid `1000:1000` and mounts the `claude-auth`
+volume at `/home/app/.claude`.  It is removed automatically when the login
+completes or is cancelled.
+
+### Helper image
+
+The OAuth login flow requires a container image that ships the `claude` CLI.
+By default central-deploy uses `ghcr.io/damien-robotsix/robotsix-chat:main`
+(any fleet image whose runtime stage includes the Claude CLI works).  The
+image can be overridden via the `claude_auth_helper_image` setting in the
+dashboard Settings panel.
+
+### OAuth refresh-token rotation caveat
+
+Anthropic OAuth credentials include a refresh token that can be rotated by
+the server at any time (e.g. after a password change or security event).
+When this happens the stored `.credentials.json` becomes invalid and the
+component will report "Not logged in".  **There is no automatic refresh** —
+the operator must re-run the login flow through the Claude auth panel to
+provision fresh credentials.  This is an expected maintenance task; the
+dashboard status panel shows the current authentication state so the
+operator can detect the issue before end users report it.

@@ -119,3 +119,26 @@ class NoopBackend(ExecutionBackend):
         docker_api_version: str,
     ) -> str:
         return "noop-self-update"
+
+    # -- claude-auth stubs --------------------------------------------------
+
+    async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:
+        return {"status": "not-authenticated", "detail": "noop backend"}
+
+    async def start_claude_login(
+        self, volume_name: str, helper_image: str
+    ) -> dict[str, Any]:
+        return {"container_id": "noop-login", "oauth_url": "https://example.com/oauth"}
+
+    async def complete_claude_login(
+        self, volume_name: str, container_id: str, auth_code: str
+    ) -> dict[str, Any]:
+        return {"status": "authenticated"}
+
+    async def cancel_claude_login(self, volume_name: str, container_id: str) -> None:
+        pass
+
+    async def write_claude_credentials(
+        self, volume_name: str, credentials_json: str
+    ) -> dict[str, Any]:
+        return {"status": "authenticated"}
