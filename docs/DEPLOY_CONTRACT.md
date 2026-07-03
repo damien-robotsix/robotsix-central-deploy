@@ -177,13 +177,16 @@ This is the **single permitted host bind-mount** in the contract.
   bind-mount at run time:
   - **Host path:** `~/.claude` (resolved relative to the server user running
     central-deploy)
-  - **Container path:** `/root/.claude`
+  - **Container path:** `/home/app/.claude` — the home of the standardized
+    container user (`app`, uid 1001; see the robotsix-standards docker page).
+    An image that still runs as `root` must set `CLAUDE_CONFIG_DIR=/home/app/.claude`
+    in its environment until it migrates to the standard layout.
   - **Mode:** read-write (Claude Code writes state to this directory)
 - This mount does **not** appear in the compose `volumes:` list and MUST NOT
   be declared in the top-level `volumes:` section.
 - At onboarding, the UI MUST display a confirmation toggle:
 
-  > ☑ Mount Claude configuration directory (`~/.claude` → `/root/.claude`)
+  > ☑ Mount Claude configuration directory (`~/.claude` → `/home/app/.claude`)
 
   The checkbox is **pre-checked** to the value declared in the compose label,
   but the operator may override it before saving.  The toggled value is stored
@@ -405,7 +408,7 @@ Reference: `src/robotsix_central_deploy/registry/models.py`
 | `services.<name>.volumes[*]` (named) | `mounts: list[VolumeMount]` | `VolumeMount(host=<volume-name>, container=<path>, read_only=<bool>)`.  Host bind-mounts are rejected unless via `claude-mount` label. |
 | `services.<name>.environment` keys | `env: dict[str, str]` | Values stored as `""` until set via UI. |
 | `services.<name>.healthcheck` | `health_check: Optional[HealthCheck]` | Durations (Go strings) → integer seconds.  `HealthCheck(test, interval_seconds, timeout_seconds, retries, start_period_seconds)`. |
-| `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/root/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
+| `labels.robotsix.deploy.claude-mount: "true"` | *(runtime injection only)* | Added at deploy time as `VolumeMount(host="~/.claude", container="/home/app/.claude", read_only=False)`.  **Not** stored in `ComponentConfig.mounts`. |
 | `labels.robotsix.deploy.host-docker-sock: "true"` | `host_docker_sock: bool` *(+ runtime injection)* | Non-primary only (parse error on primary). At deploy time binds `/var/run/docker.sock` → `/var/run/docker.sock` **read-only**.  **Not** stored in `ComponentConfig.mounts`.  ⚠ Grants root-equivalent host Docker control — hardened socket-proxy siblings only. |
 | `labels.robotsix.deploy.primary: "true"` | *(parser gate)* | Designates primary service. Not stored in `ComponentConfig`; drives the sibling split. |
 | `labels.robotsix.deploy.config-target` | `ComponentConfig.config_volume` | Full in-container path to config.yaml. Resolved to the named-volume name from the matching volume mount. Required when `config/config.yaml` is present. |
@@ -461,7 +464,7 @@ services:
       ANTHROPIC_API_KEY: ""
       AUTH_SECRET: ""
     labels:
-      # Enables ~/.claude:/root/.claude:rw bind-mount at run time
+      # Enables ~/.claude:/home/app/.claude:rw bind-mount at run time
       # (the single permitted host bind-mount exception)
       robotsix.deploy.claude-mount: "true"
     healthcheck:

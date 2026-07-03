@@ -171,6 +171,12 @@ class ConfigImportResponse(BaseModel):
     volume_hash: str  # canonical hash of the imported content
 
 
+class ConfigSchemaRefreshResponse(BaseModel):
+    """Body of the 200 response from POST /services/{name}/config/refresh-schema."""
+
+    config_schema: dict[str, Any] = Field(serialization_alias="schema")
+
+
 class ConfigAssistRequest(BaseModel):
     values: dict[
         str, Any
