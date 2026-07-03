@@ -1678,7 +1678,40 @@ function generateConfigForm(schema, current, containerOrId) {
     ? document.getElementById(containerOrId)
     : (containerOrId || document.getElementById('config-form-body'));
   container.innerHTML = '';
-  _renderConfigNode(schema, current, '', container);
+  _renderConfigNode(_ensureJsonSchema(schema), current, '', container);
+}
+
+// ── Legacy template support ─────────────────────────────────────────
+// Components onboarded before the schema-driven config store a raw YAML
+// template (plain values, "SECRET" sentinel) instead of a JSON Schema.
+// Convert on the fly so the typed renderer and collector work for both.
+
+function _ensureJsonSchema(schema) {
+  if (schema && typeof schema === 'object' && schema.properties) return schema;
+  return _legacyTemplateToSchema(schema || {});
+}
+
+function _legacyTemplateToSchema(template) {
+  const properties = {};
+  for (const [key, val] of Object.entries(template)) {
+    properties[key] = _legacyValueToProp(val);
+  }
+  return { type: 'object', properties: properties };
+}
+
+function _legacyValueToProp(val) {
+  if (val === 'SECRET') {
+    return { type: 'string', format: 'password', writeOnly: true };
+  }
+  if (typeof val === 'boolean') return { type: 'boolean', default: val };
+  if (typeof val === 'number') {
+    return Number.isInteger(val)
+      ? { type: 'integer', default: val }
+      : { type: 'number', default: val };
+  }
+  if (Array.isArray(val)) return { type: 'array', default: val };
+  if (val !== null && typeof val === 'object') return _legacyTemplateToSchema(val);
+  return { type: 'string', default: val == null ? '' : val };
 }
 
 function _resolveRef(propSchema, defs) {
@@ -1833,6 +1866,20 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     return div;
   }
 
+  if (propSchema.type === 'array' || Array.isArray(displayVal)) {
+    // Arrays are edited as raw JSON — an invalid value is skipped on save
+    // and the stored value is kept (prefer_existing_for_unset on the server).
+    const jsonVal = JSON.stringify(displayVal === '' ? [] : displayVal);
+    inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
+      data-json="1" value="${escAttr(jsonVal)}" spellcheck="false">`;
+    div.innerHTML = `
+      <span class="env-key" title="${escAttr(fullKey)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
+      ${inputHtml}
+      <span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">JSON list</span>
+    `;
+    return div;
+  }
+
   if (propSchema.enum && Array.isArray(propSchema.enum)) {
     const selectedVal = (currentVal !== undefined && currentVal !== null)
       ? String(currentVal)
@@ -1903,7 +1950,13 @@ function _collectFromProperties(schema, result, container, prefix) {
 
       const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
 
-      if (el.type === 'checkbox') {
+      if (el.dataset.json === '1') {
+        try {
+          result[key] = JSON.parse(el.value);
+        } catch (_) {
+          // invalid JSON → omit; the server keeps the stored value
+        }
+      } else if (el.type === 'checkbox') {
         result[key] = el.checked;
       } else if (el.type === 'number') {
         result[key] = resolvedSchema.type === 'integer'
@@ -1921,7 +1974,7 @@ function _collectFromProperties(schema, result, container, prefix) {
 function collectConfigValues(schema, containerEl) {
   const result = {};
   const root = containerEl || document.getElementById('config-form-body');
-  _collectFromProperties(schema, result, root, '');
+  _collectFromProperties(_ensureJsonSchema(schema), result, root, '');
   return result;
 }
 
@@ -2501,9 +2554,9 @@ function populateStep2(spec) {
   }).join('');
 
   // Env — show only for repos WITHOUT config.yaml
+  // (legacy raw templates are converted by _ensureJsonSchema)
   var hasConfig = spec.config_schema
-      && spec.config_schema.properties
-      && Object.keys(spec.config_schema.properties).length > 0;
+      && Object.keys(_ensureJsonSchema(spec.config_schema).properties).length > 0;
   var envTable = document.getElementById('ob-env-table');
   var configSection = document.getElementById('ob-config-section');
 
@@ -2558,8 +2611,7 @@ async function onboardDeploy() {
 
   // When config.yaml schema is present, collect the filled-in values
   if (finalSpec.config_schema
-      && finalSpec.config_schema.properties
-      && Object.keys(finalSpec.config_schema.properties).length > 0) {
+      && Object.keys(_ensureJsonSchema(finalSpec.config_schema).properties).length > 0) {
     var configFormContainer = document.getElementById('ob-config-form-body');
     body.config_values = collectConfigValues(finalSpec.config_schema, configFormContainer);
   }
