@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Eliminate triple field duplication by deriving `SystemSettingsResponse` and `SystemSettingsUpdate` from `SystemSettings` instead of `BaseModel`.
 - Dashboard: add deploy history modal with per-entry rollback controls and full running digest tooltips
 - Refactor `lifecycle/backend.py` (1541 lines) into a `lifecycle/backends/` package
   with one file per implementation: `base.py`, `noop.py`, `docker_cli.py`,
