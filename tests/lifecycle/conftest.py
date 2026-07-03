@@ -14,6 +14,7 @@ from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
+from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
@@ -47,6 +48,7 @@ def _reset_globals(monkeypatch, tmp_path):
     # Config store + registry
     config_store = ComponentConfigStore(state_dir / "config_store.json")
     config_yaml_store = ConfigYamlStore(state_dir / "config_yaml.json")
+    deploy_history_store = DeployHistoryStore(state_dir / "deploy_history.json")
     registry = ComponentRegistry([])
 
     # Set both the module-level globals and app.state so all code paths work.
@@ -61,6 +63,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.key_manager = km
     server_mod.app.state.env_store = env_store
     server_mod.app.state.config_yaml_store = config_yaml_store
+    server_mod.app.state.deploy_history_store = deploy_history_store
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
     server_mod.app.state.job_registry = JobRegistry()

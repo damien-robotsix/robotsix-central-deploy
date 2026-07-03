@@ -32,6 +32,7 @@ from .models import (
 )
 from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
+from ..registry.deploy_history_store import DeployHistoryStore
 from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig, ServiceConfig
@@ -282,12 +283,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _key_manager = SecretKeyManager(Path(_config.secret_key_path))
     _env_store = EnvStore(Path(_config.env_store_path), _key_manager)
     _config_yaml_store = ConfigYamlStore(Path(_config.config_yaml_store_path))
+    _deploy_history_store = DeployHistoryStore(
+        _config.effective_deploy_history_store_path
+    )
     app.state.config = _config
     app.state.store = _store
     app.state.backend = _backend
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
     app.state.config_yaml_store = _config_yaml_store
+    app.state.deploy_history_store = _deploy_history_store
 
     # -- System settings store (overlay persisted settings onto _config) ---
     from ..registry.settings_store import SystemSettings, SystemSettingsStore
@@ -416,6 +421,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         volume_audit_scheduler=_volume_audit_scheduler,
         settings_store=settings_store,
         http_client=http_client,
+        deploy_history_store=_deploy_history_store,
     )
     app.state.caretaker_scheduler = caretaker_scheduler
 
@@ -491,6 +497,10 @@ async def _get_env_store(request: Request) -> EnvStore:
 
 async def _get_config_yaml_store(request: Request) -> ConfigYamlStore:
     return request.app.state.config_yaml_store  # type: ignore[no-any-return]
+
+
+async def _get_deploy_history_store(request: Request) -> DeployHistoryStore:
+    return request.app.state.deploy_history_store  # type: ignore[no-any-return]
 
 
 async def _get_job_registry(request: Request) -> JobRegistry:

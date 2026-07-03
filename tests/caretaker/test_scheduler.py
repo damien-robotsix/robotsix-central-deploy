@@ -18,6 +18,7 @@ from robotsix_central_deploy.lifecycle.models import (
 )
 from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 
 
@@ -73,6 +74,7 @@ def scheduler_fixtures(tmp_path):
     )
 
     http_client = MagicMock(spec=httpx.AsyncClient)
+    deploy_history_store = DeployHistoryStore(tmp_path / "deploy_history.json")
 
     scheduler = CaretakerScheduler(
         config=config,
@@ -83,6 +85,7 @@ def scheduler_fixtures(tmp_path):
         volume_audit_scheduler=volume_audit_scheduler,
         settings_store=settings_store,
         http_client=http_client,
+        deploy_history_store=deploy_history_store,
     )
     return scheduler, service_store, backend, component_config_store, http_client
 

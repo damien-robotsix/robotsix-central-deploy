@@ -276,6 +276,16 @@ class DeployResponse(BaseModel):
     current_state: ServiceState
 
 
+class RollbackRequest(BaseModel):
+    """Optional body for ``POST /services/{name}/rollback``.
+
+    When *digest* is absent/None the current one-step rollback behaviour
+    (swap deployed ↔ previous) is preserved.
+    """
+
+    digest: Optional[str] = None
+
+
 class RollbackResponse(BaseModel):
     """API response for ``POST /services/{name}/rollback``."""
 
@@ -283,6 +293,26 @@ class RollbackResponse(BaseModel):
     action: str = "rollback"
     rolled_back_to_digest: str
     current_state: ServiceState
+
+
+class DeployHistoryEntry(BaseModel):
+    """One entry in a component's deploy-history ledger.
+
+    Recorded on every successful deploy (manual, caretaker, or rollback).
+    """
+
+    digest: str  # resolved sha256:... of the deployed image
+    image_ref: str  # the ref actually deployed (tag or digest pin)
+    timestamp: float  # unix seconds (time.time())
+    source: str  # "manual" | "caretaker" | "rollback"
+    previous_digest: str = ""  # sha256 that was running before this deploy
+
+
+class DeployHistoryResponse(BaseModel):
+    """Response for ``GET /services/{name}/history`` — most-recent-first."""
+
+    name: str
+    entries: list[DeployHistoryEntry] = []
 
 
 # ---------------------------------------------------------------------------
