@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Classify `_yaml_utils.py` under the lifecycle module in `docs/modules.yaml`; restructure manifest from dict to list format with `id` + `paths` entries so the `robotsix-modules check-registration` tool can parse it correctly.
 - Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import
 - Complete §8 transition: config is now JSON-Schema-driven (``config/config.schema.json`` + ``config/config.json``), secret detection via ``format: password`` + ``writeOnly: true``. Removed legacy YAML empty-leaf secret heuristic and ``_CONFIG_SECRET_SENTINEL`` support.
 - Refactor 180-line lifespan function in ``lifecycle/deps.py`` into five private async helpers (``_init_config``, ``_init_settings``, ``_init_background_tasks``, ``_init_component_registry``, ``_teardown``) with individual docstrings, reducing the lifespan body to ~15 lines of orchestration.
