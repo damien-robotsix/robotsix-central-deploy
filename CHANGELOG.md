@@ -8,6 +8,10 @@ All notable changes to robotsix-central-deploy.
 
 - Migrate onboarding config handling from YAML naming to JSON: rename ``config_yaml`` / ``config_yaml_template`` fields to ``config_json`` / ``config_json_template`` in ``RepoFiles``, rename ``parse_config_yaml`` to ``parse_config_json``, and update all docstrings/comments referencing ``config.yaml`` to ``config.json``.
 - Migrate onboarding config handling from YAML naming to JSON: rename ``config_yaml`` / ``config_yaml_template`` fields to ``config_json`` / ``config_json_template`` in ``RepoFiles``, rename ``parse_config_yaml`` to ``parse_config_json``, and update all docstrings/comments referencing ``config.yaml`` to ``config.json``.
+- Docker build: accept an optional `github_token` build secret to authenticate git
+  operations when resolving private/rate-limited GitHub dependencies during
+  `uv export --frozen`. The CI trivy job now passes `GITHUB_TOKEN` as a build
+  secret so the image can be built for vulnerability scanning.
 - Classify `_yaml_utils.py` under the lifecycle module in `docs/modules.yaml`; restructure manifest from dict to list format with `id` + `paths` entries so the `robotsix-modules check-registration` tool can parse it correctly.
 - Move `tests/lifecycle/test_volume_audit_endpoint.py` into the `tests/lifecycle/volume_audit/` directory as `test_endpoint.py`, consolidating all volume_audit tests under one module-aligned test directory.
 - Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import

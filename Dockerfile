@@ -21,7 +21,12 @@ COPY src/ ./src/
 # build stage or hatchling fails to resolve it when building the wheel.
 COPY docs/DEPLOY_CONTRACT.md ./docs/DEPLOY_CONTRACT.md
 
-RUN uv export --frozen --no-emit-project --format requirements-txt \
+RUN --mount=type=secret,id=github_token,required=false \
+    if [ -f /run/secrets/github_token ]; then \
+      GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
+      git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    uv export --frozen --no-emit-project --format requirements-txt \
          -o /tmp/requirements.txt \
     && uv pip install --system --no-cache -r /tmp/requirements.txt \
     && uv pip install --system --no-cache --no-deps . \
