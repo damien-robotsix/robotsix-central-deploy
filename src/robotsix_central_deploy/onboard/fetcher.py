@@ -17,8 +17,8 @@ _LABEL_CONFIG_TEMPLATE = "robotsix.deploy.config-template"
 @dataclass
 class RepoFiles:
     compose_bytes: bytes
-    config_yaml: bytes | None  # None if config/config.json absent in repo
-    config_yaml_template: bytes | None = None  # fallback template bytes
+    config_json: bytes | None  # None if config/config.json absent in repo
+    config_json_template: bytes | None = None  # fallback template bytes
     config_schema_json: bytes | None = None  # config/config.schema.json bytes, or None
 
 
@@ -65,17 +65,17 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
         compose_bytes = compose_path.read_bytes()
 
         config_path = Path(tmpdir) / "config" / "config.json"
-        config_yaml = config_path.read_bytes() if config_path.is_file() else None
+        config_json = config_path.read_bytes() if config_path.is_file() else None
 
         schema_path = Path(tmpdir) / "config" / "config.schema.json"
         config_schema_json = schema_path.read_bytes() if schema_path.is_file() else None
 
-        config_yaml_template: bytes | None = None
-        if config_yaml is None:
+        config_json_template: bytes | None = None
+        if config_json is None:
             # Strategy A — adjacent convention
             example_path = Path(tmpdir) / "config" / "config.example.json"
             if example_path.is_file():
-                config_yaml_template = example_path.read_bytes()
+                config_json_template = example_path.read_bytes()
             else:
                 # Strategy B — label-declared path
                 try:
@@ -93,15 +93,15 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
                                         candidate.is_relative_to(Path(tmpdir))
                                         and candidate.is_file()
                                     ):
-                                        config_yaml_template = candidate.read_bytes()
+                                        config_json_template = candidate.read_bytes()
                                 break
                 except Exception:  # noqa: S110
                     pass  # non-fatal; compose YAML errors surface later in parse_compose
 
         return RepoFiles(
             compose_bytes=compose_bytes,
-            config_yaml=config_yaml,
-            config_yaml_template=config_yaml_template,
+            config_json=config_json,
+            config_json_template=config_json_template,
             config_schema_json=config_schema_json,
         )
 

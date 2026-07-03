@@ -41,7 +41,7 @@ class OnboardPreflightResponse(BaseModel):
 
 class OnboardConfirmRequest(BaseModel):
     spec: DerivedSpec  # env values now user-filled
-    config_values: dict[str, Any] | None = None  # optional, for config.yaml repos
+    config_values: dict[str, Any] | None = None  # optional, for config.json repos
     register_with_mill: bool = True
     port_shifts: list[
         PortShift

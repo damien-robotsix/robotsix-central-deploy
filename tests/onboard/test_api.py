@@ -118,7 +118,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.config_yaml_store = ConfigYamlStore(
-        tmp_path / "config_yaml.json"
+        tmp_path / "config_json.json"
     )
     server_mod.app.state.env_store = EnvStore(
         tmp_path / "env_store.json", SecretKeyManager(tmp_path / "secret_key")
@@ -159,7 +159,7 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_yaml=None
+                    compose_bytes=b"fake compose bytes", config_json=None
                 ),
             ),
             patch(
@@ -204,7 +204,7 @@ class TestOnboardPreflight:
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
-                return_value=RepoFiles(compose_bytes=b"bad compose", config_yaml=None),
+                return_value=RepoFiles(compose_bytes=b"bad compose", config_json=None),
             ),
             patch(
                 "robotsix_central_deploy.onboard.parser.parse_compose",
@@ -301,7 +301,7 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_yaml=None
+                    compose_bytes=b"fake compose bytes", config_json=None
                 ),
             ),
             patch(
@@ -1007,7 +1007,7 @@ class TestMultiServiceOnboardConfirm:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_yaml=None
+                    compose_bytes=b"fake compose bytes", config_json=None
                 ),
             ),
             patch(
@@ -1033,7 +1033,7 @@ class TestMultiServiceOnboardConfirm:
 
 
 # ---------------------------------------------------------------------------
-# Preflight with config.yaml
+# Preflight with config.json
 # ---------------------------------------------------------------------------
 
 
@@ -1043,7 +1043,7 @@ class TestOnboardPreflightWithConfig:
     ):
         spec = _make_derived_spec("cool-app")
         spec.config_volume = (
-            "cool-app-config"  # required by preflight gate when config.yaml present
+            "cool-app-config"  # required by preflight gate when config.json present
         )
         schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
 
@@ -1052,7 +1052,7 @@ class TestOnboardPreflightWithConfig:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
+                    config_json=None,
                     config_schema_json=schema_json_bytes,
                 ),
             ),
@@ -1085,7 +1085,7 @@ class TestOnboardPreflightWithConfig:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
+                    config_json=None,
                 ),
             ),
             patch(
@@ -1116,7 +1116,7 @@ class TestOnboardPreflightWithConfig:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
+                    config_json=None,
                     config_schema_json=b"{invalid",
                 ),
             ),
@@ -1151,7 +1151,7 @@ class TestOnboardPreflightWithConfig:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
+                    config_json=None,
                     config_schema_json=schema_json_bytes,
                 ),
             ),
@@ -1186,8 +1186,8 @@ class TestOnboardPreflightWithConfig:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
-                    config_yaml_template=None,
+                    config_json=None,
+                    config_json_template=None,
                     config_schema_json=None,
                 ),
             ),
@@ -1214,15 +1214,15 @@ class TestOnboardPreflightWithConfig:
     ):
         """When only config.json exists (no schema JSON), config_schema is None."""
         spec = _make_derived_spec("cool-app")
-        config_yaml_bytes = b'{"host": "localhost"}'
+        config_json_bytes = b'{"host": "localhost"}'
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=config_yaml_bytes,
-                    config_yaml_template=None,
+                    config_json=config_json_bytes,
+                    config_json_template=None,
                     config_schema_json=None,
                 ),
             ),
@@ -1246,7 +1246,7 @@ class TestOnboardPreflightWithConfig:
 
 
 # ---------------------------------------------------------------------------
-# Confirm with config.yaml
+# Confirm with config.json
 # ---------------------------------------------------------------------------
 
 
@@ -1497,7 +1497,7 @@ class TestOnboardConfigSchemaValidation:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
+                    config_json=None,
                     config_schema_json=schema_json_bytes,
                 ),
             ),
@@ -1530,7 +1530,7 @@ class TestOnboardConfigSchemaValidation:
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=None,
+                    config_json=None,
                     config_schema_json=b"{invalid",
                 ),
             ),
@@ -1554,16 +1554,16 @@ class TestOnboardConfigSchemaValidation:
     async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """config_yaml present but config_schema_json=None → spec.config_schema is None."""
+        """config_json present but config_schema_json=None → spec.config_schema is None."""
         spec = _make_derived_spec("cool-app")
-        config_yaml_bytes = b'{"host": "localhost"}'
+        config_json_bytes = b'{"host": "localhost"}'
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
                     compose_bytes=b"fake compose bytes",
-                    config_yaml=config_yaml_bytes,
+                    config_json=config_json_bytes,
                     config_schema_json=None,
                 ),
             ),

@@ -32,7 +32,7 @@ def _init_local_git_repo(
     root: Path,
     *,
     deploy_compose: bytes | None = None,
-    config_yaml: bytes | None = None,
+    config_json: bytes | None = None,
     extra_file: str | None = None,
 ) -> None:
     """Create a local git repo at *root* with at least one commit.
@@ -64,10 +64,10 @@ def _init_local_git_repo(
         deploy_dir.mkdir()
         (deploy_dir / "docker-compose.yml").write_bytes(deploy_compose)
 
-    if config_yaml is not None:
+    if config_json is not None:
         config_dir = root / "config"
         config_dir.mkdir()
-        (config_dir / "config.json").write_bytes(config_yaml)
+        (config_dir / "config.json").write_bytes(config_json)
 
     if extra_file is not None:
         (root / extra_file).write_text("unrelated\n")
@@ -132,7 +132,7 @@ class TestFetchRepoFiles:
         _init_local_git_repo(
             source_repo,
             deploy_compose=compose_bytes,
-            config_yaml=config_bytes,
+            config_json=config_bytes,
         )
 
         with mock.patch(
@@ -142,10 +142,10 @@ class TestFetchRepoFiles:
 
         assert isinstance(result, RepoFiles)
         assert result.compose_bytes == compose_bytes
-        assert result.config_yaml == config_bytes
+        assert result.config_json == config_bytes
 
     def test_successful_clone_without_config(self, tmp_path: Path):
-        """When config/config.json is absent, ``config_yaml`` is ``None``."""
+        """When config/config.json is absent, ``config_json`` is ``None``."""
         source_repo = tmp_path / "source"
         compose_bytes = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
         _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
@@ -156,7 +156,7 @@ class TestFetchRepoFiles:
             result = fetch_repo_files("https://example.com/repo.git")
 
         assert result.compose_bytes == compose_bytes
-        assert result.config_yaml is None
+        assert result.config_json is None
 
     def test_missing_deploy_compose_raises_fetch_error(self, tmp_path: Path):
         """Repo without ``deploy/docker-compose.yml`` raises ``FetchError``."""
@@ -294,11 +294,11 @@ def _add_and_commit(repo: Path, files: dict[str, bytes]) -> None:
 
 
 class TestFetchRepoFilesTemplateFallback:
-    """Tests for the config_yaml_template fallback in ``fetch_repo_files``."""
+    """Tests for the config_json_template fallback in ``fetch_repo_files``."""
 
     def test_adjacent_example_yaml_used_when_config_absent(self, tmp_path: Path):
         """When config/config.json is absent but config.example.json exists,
-        config_yaml_template is populated from the example file."""
+        config_json_template is populated from the example file."""
         source_repo = tmp_path / "source"
         compose_bytes = (
             b"# central-deploy-contract-version: 1\n"
@@ -319,15 +319,15 @@ class TestFetchRepoFilesTemplateFallback:
         ):
             result = fetch_repo_files("https://example.com/repo.git")
 
-        assert result.config_yaml is None
-        assert result.config_yaml_template == example_bytes
-        parsed = json.loads(result.config_yaml_template)
+        assert result.config_json is None
+        assert result.config_json_template == example_bytes
+        parsed = json.loads(result.config_json_template)
         assert parsed == {"host": "example.localhost", "port": 9090}
 
     def test_label_template_path_used_when_adjacent_absent(self, tmp_path: Path):
         """When neither config/config.json nor config.example.json exist,
         but the compose carries robotsix.deploy.config-template pointing
-        to a committed file, config_yaml_template is populated."""
+        to a committed file, config_json_template is populated."""
         source_repo = tmp_path / "source"
         compose_bytes = (
             b"# central-deploy-contract-version: 1\n"
@@ -350,11 +350,11 @@ class TestFetchRepoFilesTemplateFallback:
         ):
             result = fetch_repo_files("https://example.com/repo.git")
 
-        assert result.config_yaml is None
-        assert result.config_yaml_template == template_bytes
+        assert result.config_json is None
+        assert result.config_json_template == template_bytes
 
-    def test_config_yaml_takes_precedence_over_template(self, tmp_path: Path):
-        """When config/config.json IS present, config_yaml_template is
+    def test_config_json_takes_precedence_over_template(self, tmp_path: Path):
+        """When config/config.json IS present, config_json_template is
         left as None — the fallback block never runs."""
         source_repo = tmp_path / "source"
         compose_bytes = (
@@ -368,7 +368,7 @@ class TestFetchRepoFilesTemplateFallback:
         _init_local_git_repo(
             source_repo,
             deploy_compose=compose_bytes,
-            config_yaml=config_bytes,
+            config_json=config_bytes,
         )
         _add_and_commit(
             source_repo,
@@ -381,8 +381,8 @@ class TestFetchRepoFilesTemplateFallback:
         ):
             result = fetch_repo_files("https://example.com/repo.git")
 
-        assert result.config_yaml == config_bytes
-        assert result.config_yaml_template is None
+        assert result.config_json == config_bytes
+        assert result.config_json_template is None
 
     def test_no_fallback_when_neither_present(self, tmp_path: Path):
         """When no config files at all exist, both fields are None."""
@@ -401,8 +401,8 @@ class TestFetchRepoFilesTemplateFallback:
         ):
             result = fetch_repo_files("https://example.com/repo.git")
 
-        assert result.config_yaml is None
-        assert result.config_yaml_template is None
+        assert result.config_json is None
+        assert result.config_json_template is None
 
     def test_label_template_traversal_rejected(self, tmp_path: Path):
         """A label path with .. traversal is silently ignored."""
@@ -423,5 +423,5 @@ class TestFetchRepoFilesTemplateFallback:
         ):
             result = fetch_repo_files("https://example.com/repo.git")
 
-        assert result.config_yaml is None
-        assert result.config_yaml_template is None
+        assert result.config_json is None
+        assert result.config_json_template is None

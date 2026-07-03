@@ -74,9 +74,9 @@ class ComponentConfig(BaseModel):
         None  # container entrypoint (from compose 'entrypoint:')
     )
     git_url: str = ""  # source repo URL from onboard
-    has_config_yaml: bool = False  # True when the repo declared config/config.yaml
+    has_config_yaml: bool = False  # True when the repo declared config/config.json
     config_volume: Optional[str] = (
-        None  # named volume that holds config.yaml (resolved from robotsix.deploy.config-target label)
+        None  # named volume that holds config.json (resolved from robotsix.deploy.config-target label)
     )
     config_assist_command: Optional[str] = (
         None  # command from robotsix.deploy.config-assist

@@ -11,7 +11,7 @@ from robotsix_central_deploy.onboard.models import (
     DerivedSpec,
     ParseError,
 )
-from robotsix_central_deploy.onboard.parser import parse_compose, parse_config_yaml
+from robotsix_central_deploy.onboard.parser import parse_compose, parse_config_json
 
 __all__ = [
     "ConfigParseError",
@@ -22,5 +22,5 @@ __all__ = [
     "fetch_compose_bytes",
     "fetch_repo_files",
     "parse_compose",
-    "parse_config_yaml",
+    "parse_config_json",
 ]
