@@ -89,6 +89,7 @@ class OnboardJobStatusResponse(BaseModel):
 class EnvResponse(BaseModel):
     env: dict[str, str]
     secrets: dict[str, str]  # values are always "***"
+    mem_limit: str = "2g"
 
 
 class EnvSyncResponse(BaseModel):
@@ -102,6 +103,7 @@ class EnvSyncResponse(BaseModel):
 class EnvUpdate(BaseModel):
     env: dict[str, str] = {}
     secrets: dict[str, str] = {}
+    mem_limit: str | None = None
 
 
 # ---------------------------------------------------------------------------

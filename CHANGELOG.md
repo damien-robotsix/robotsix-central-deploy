@@ -12,6 +12,7 @@ All notable changes to robotsix-central-deploy.
   operations when resolving private/rate-limited GitHub dependencies during
   `uv export --frozen`. The CI trivy job now passes `GITHUB_TOKEN` as a build
   secret so the image can be built for vulnerability scanning.
+- Apply a default memory limit (2g) to every managed container at create time, overridable per component via the dashboard Config modal. The limit is applied on the next deploy/rollback.
 - Classify `_yaml_utils.py` under the lifecycle module in `docs/modules.yaml`; restructure manifest from dict to list format with `id` + `paths` entries so the `robotsix-modules check-registration` tool can parse it correctly.
 - Move `tests/lifecycle/test_volume_audit_endpoint.py` into the `tests/lifecycle/volume_audit/` directory as `test_endpoint.py`, consolidating all volume_audit tests under one module-aligned test directory.
 - Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import

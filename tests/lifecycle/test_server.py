@@ -491,7 +491,7 @@ class TestEnvEndpoints:
         resp = await client.get("/services/chat/env", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data == {"env": {}, "secrets": {}}
+        assert data == {"env": {}, "secrets": {}, "mem_limit": "2g"}
 
     async def test_put_then_get_returns_env_and_masked_secrets(
         self, client: AsyncClient, auth_headers: dict

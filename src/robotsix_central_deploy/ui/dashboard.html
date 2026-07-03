@@ -507,6 +507,13 @@
       <h3>Secrets</h3>
       <div id="secret-rows"></div>
     </div>
+    <div class="env-section">
+      <h3>Memory Limit</h3>
+      <div class="env-row">
+        <input type="text" id="mem-limit-input" class="env-value" placeholder="2g" style="width:120px">
+        <span style="font-size:0.85em;color:var(--text-muted);margin-left:0.5rem;">Docker memory limit (e.g. 2g, 512m, 1g). Applied on next deploy.</span>
+      </div>
+    </div>
     <div class="env-footer">
       <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
       <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
@@ -1497,6 +1504,7 @@ async function fetchEnvConfig(name) {
     }
     const data = await resp.json();
     renderEnvRows(data.env || {}, data.secrets || {});
+    document.getElementById('mem-limit-input').value = data.mem_limit || '2g';
   } catch (err) {
     showEnvModalError(err.message);
   }
@@ -1610,11 +1618,16 @@ async function saveEnvChanges() {
   }
 
   try {
+    const memLimitInput = document.getElementById('mem-limit-input');
+    const body = { env, secrets };
+    if (memLimitInput && memLimitInput.value.trim()) {
+      body.mem_limit = memLimitInput.value.trim();
+    }
     const resp = await fetch(`/services/${encodeURIComponent(name)}/env`, {
       method: 'PUT',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ env, secrets }),
+      body: JSON.stringify(body),
     });
     if (resp.status === 204) {
       closeEnvModal();

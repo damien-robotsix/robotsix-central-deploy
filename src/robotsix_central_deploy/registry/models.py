@@ -41,6 +41,7 @@ class ServiceConfig(BaseModel):
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
+    mem_limit: str = "2g"
 
 
 class ConfigAssistSeed(BaseModel):
@@ -86,3 +87,4 @@ class ComponentConfig(BaseModel):
     ] = []  # seed field keys from robotsix.deploy.config-assist-seeds
     caretaker_auto_update: bool = True
     repo_id: str = ""
+    mem_limit: str = "2g"
