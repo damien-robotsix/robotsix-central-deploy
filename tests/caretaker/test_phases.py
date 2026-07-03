@@ -82,7 +82,33 @@ class TestPhaseUpdate:
         assert findings[0].kind == FindingKind.UPDATE_APPLIED
         assert findings[0].repo_id == "test-repo"
         backend.deploy.assert_called_once()
+        # image_ref must be a pullable repo@digest reference — a bare
+        # "sha256:…" digest resolves as repository "sha256" and 404s.
+        image_ref = backend.deploy.call_args[0][2]
+        assert image_ref == "repo@sha256:def"
         assert record.update_available is False
+
+    @pytest.mark.asyncio
+    async def test_deploy_falls_back_to_tag_without_digest(self):
+        store = MagicMock()
+        record = _make_record()
+        record.latest_registry_digest = ""
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+
+        await phase_update(registry, store, backend, ccs)
+        assert backend.deploy.call_args[0][2] == "repo:v1"
 
     @pytest.mark.asyncio
     async def test_skips_opted_out(self):

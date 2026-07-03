@@ -848,7 +848,9 @@ class DockerSdkBackend(ExecutionBackend):
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
         # Derive manifest digest from RepoDigests (comparable to registry
         # Docker-Content-Digest header), falling back to config digest.
-        repo_without_tag = image_ref.rsplit(":", 1)[0]
+        # Strip a digest suffix first (repo@sha256:… — the caretaker deploys
+        # pinned refs), then the tag, so RepoDigests matching works for both.
+        repo_without_tag = image_ref.split("@", 1)[0].rsplit(":", 1)[0]
         repo_digests = image.attrs.get("RepoDigests", [])
         new_digest: str = next(
             (
