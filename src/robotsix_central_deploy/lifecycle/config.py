@@ -238,14 +238,6 @@ class LifecycleConfig(BaseModel):
         False,
         description=("After updates, remove dangling images not needed for rollback."),
     )
-    claude_auth_helper_image: str = Field(
-        "",
-        description=(
-            "Docker image that ships the claude CLI, used by the OAuth login "
-            "helper container. Empty uses the default (ghcr.io/damien-robotsix/"
-            "robotsix-chat:main)."
-        ),
-    )
 
     @property
     def effective_store_path(self) -> Path:
