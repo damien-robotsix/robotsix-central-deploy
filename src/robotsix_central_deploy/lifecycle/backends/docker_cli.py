@@ -87,7 +87,9 @@ class DockerBackend(ExecutionBackend):
         return ServiceState.RUNNING
 
     async def stop(self, service: ServiceRecord) -> ServiceState:
-        rc, _, stderr = await _run(ExecutionBackendType.DOCKER.value, "stop", service.name)
+        rc, _, stderr = await _run(
+            ExecutionBackendType.DOCKER.value, "stop", service.name
+        )
         if rc != 0:
             # If it's already stopped, treat as success.
             state = await self._inspect_state(service.name)
@@ -108,7 +110,9 @@ class DockerBackend(ExecutionBackend):
                 return ServiceState.FAILED
             return await self.start(service)
 
-        rc, _, stderr = await _run(ExecutionBackendType.DOCKER.value, "restart", service.name)
+        rc, _, stderr = await _run(
+            ExecutionBackendType.DOCKER.value, "restart", service.name
+        )
         if rc != 0:
             # Container may not exist — fall back to stop + start.
             await self.stop(service)
