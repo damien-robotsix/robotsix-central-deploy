@@ -554,7 +554,7 @@ class DockerSdkBackend(ExecutionBackend):
         # then waits for the operator to either paste a code or authorize via
         # the OAuth device flow (which completes automatically).
         script = (
-            "claude login 2>&1 | tee /mnt/.login-output & "
+            "claude login > /mnt/.login-output 2>&1 & "
             "CLAUDE_PID=$!; "
             # Poll for the OAuth URL to appear in the output.
             "for i in $(seq 1 60); do "
@@ -586,7 +586,7 @@ class DockerSdkBackend(ExecutionBackend):
             "  kill $CLAUDE_PID 2>/dev/null; wait $CLAUDE_PID 2>/dev/null; "
             "  echo 'EXIT:124' > /mnt/.login-result; "
             "fi; "
-            "rm -f /mnt/.login-ready /mnt/.login-url /mnt/.login-output"
+            "rm -f /mnt/.login-ready /mnt/.login-url"
         )
 
         container_name = f"claude-login-{os.urandom(4).hex()}"
@@ -644,6 +644,23 @@ class DockerSdkBackend(ExecutionBackend):
                         logs = container.logs(stdout=True, stderr=True).decode(
                             errors="replace"
                         )
+                        if not logs.strip():
+                            try:
+                                file_result = self._client.containers.run(
+                                    "busybox",
+                                    command=[
+                                        "sh",
+                                        "-c",
+                                        "cat /mnt/.login-output 2>/dev/null || true",
+                                    ],
+                                    volumes={
+                                        volume_name: {"bind": "/mnt", "mode": "ro"}
+                                    },
+                                    remove=True,
+                                )
+                                logs = file_result.decode("utf-8", errors="replace")
+                            except Exception:
+                                pass
                         try:
                             container.remove(force=True)
                         except Exception:
@@ -748,6 +765,21 @@ class DockerSdkBackend(ExecutionBackend):
                 logs = container.logs(stdout=True, stderr=True).decode(errors="replace")
             except Exception:
                 pass
+            if not logs.strip():
+                try:
+                    file_result = self._client.containers.run(
+                        "busybox",
+                        command=[
+                            "sh",
+                            "-c",
+                            "cat /mnt/.login-output 2>/dev/null || true",
+                        ],
+                        volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                        remove=True,
+                    )
+                    logs = file_result.decode("utf-8", errors="replace")
+                except Exception:
+                    pass
 
             # Cleanup the container.
             try:
@@ -801,7 +833,7 @@ class DockerSdkBackend(ExecutionBackend):
                     command=[
                         "sh",
                         "-c",
-                        "rm -f /mnt/.login-ready /mnt/.login-url /mnt/.login-code /mnt/.login-result",
+                        "rm -f /mnt/.login-ready /mnt/.login-url /mnt/.login-code /mnt/.login-result /mnt/.login-output",
                     ],
                     volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
                     remove=True,
@@ -846,7 +878,7 @@ class DockerSdkBackend(ExecutionBackend):
                 command=[
                     "sh",
                     "-c",
-                    "echo '$B64' | base64 -d > /mnt/.credentials.json && chown 1000:1000 /mnt/.credentials.json && chmod 600 /mnt/.credentials.json",
+                    'echo "$B64" | base64 -d > /mnt/.credentials.json && chown 1000:1000 /mnt/.credentials.json && chmod 600 /mnt/.credentials.json',
                 ],
                 environment={"B64": b64},
                 volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
