@@ -79,7 +79,7 @@ extend-select = ["S"]
 # S105: "secrets.key" is a filename, not a hardcoded credential.
 "src/robotsix_central_deploy/lifecycle/config.py" = ["S104", "S105"]
 # S101 + S110: see notes above.
-"src/robotsix_central_deploy/lifecycle/routers/services.py" = ["S101", "S110"]
+"src/robotsix_central_deploy/lifecycle/routers/service_config.py" = ["S101", "S110"]
 # S105: SECRET_MASK is a sentinel placeholder, not a real credential.
 "src/robotsix_central_deploy/lifecycle/settings_router.py" = ["S105"]
 # S603 + S607: git clone via subprocess is constrained (https-only gate, temp dir);

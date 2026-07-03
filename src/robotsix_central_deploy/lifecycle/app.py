@@ -14,7 +14,10 @@ from .deps import lifespan
 from .error_handlers import register_error_handlers
 from .models import ErrorDetail
 from .routers.health import router as health_router
-from .routers.services import router as services_router
+from .routers.service_config import router as service_config_router
+from .routers.service_crud import router as service_crud_router
+from .routers.service_deploy import router as service_deploy_router
+from .routers.service_env import router as service_env_router
 from .routers.system import router as system_router
 from .routers.volumes import router as volumes_router
 from .routers.caretaker import router as caretaker_router
@@ -44,7 +47,10 @@ app.include_router(settings_router)
 app.include_router(health_router)
 app.include_router(system_router)
 app.include_router(volumes_router)
-app.include_router(services_router)
+app.include_router(service_crud_router)
+app.include_router(service_deploy_router)
+app.include_router(service_env_router)
+app.include_router(service_config_router)
 app.include_router(caretaker_router)
 app.include_router(onboard_router)
 
