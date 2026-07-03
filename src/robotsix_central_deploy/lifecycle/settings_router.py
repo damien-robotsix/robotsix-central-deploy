@@ -116,6 +116,13 @@ async def put_settings(
       the config alone does **not** alter the running task's sleep period.
       A full service restart is required for an interval change to take
       effect on the background loop.
+
+    # NOTE: Backend-consumed settings (e.g. ``docker_socket_url``,
+      ``claude_host_mount_path``, ``docker_sdk_timeout``) are captured by
+      ``DockerSdkBackend`` at construction time — the backend is now built
+      *after* the ``system_settings.json`` overlay at startup, so a full
+      service restart applies these settings.  Updating the config at
+      runtime alone does **not** alter the running backend.
     """
     SECRET = SECRET_MASK
     current = await settings_store.get()

@@ -550,6 +550,56 @@ class TestSettingsFirstBoot:
                 assert app.state.config.caretaker_enabled is True
                 assert app.state.config.caretaker_interval_hours == 6
 
+    async def test_lifespan_builds_backend_after_settings_overlay(
+        self, tmp_path, monkeypatch
+    ):
+        """Backend is constructed from the overlaid config, not the raw config.
+
+        When ``system_settings.json`` overrides a backend-consumed setting
+        (e.g. ``claude_host_mount_path``), the ``DockerSdkBackend`` (or
+        whichever backend is selected) must receive the *overlaid* value,
+        not the raw env-var default.
+        """
+        settings_path = tmp_path / "settings.json"
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        )
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        )
+        # Raw config default — different from what the overlay will supply.
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH", "/env/default")
+        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
+
+        from robotsix_central_deploy.registry.settings_store import (
+            SystemSettings,
+            SystemSettingsStore,
+        )
+
+        # Pre-write a settings file that overrides the env-var default.
+        store = SystemSettingsStore(settings_path)
+        await store.put(SystemSettings(claude_host_mount_path="/overlaid/path"))
+
+        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle import deps
+
+        mock_rc = MagicMock()
+        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+
+        with patch.object(
+            deps, "_build_backend", wraps=deps._build_backend
+        ) as mock_build:
+            with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
+                async with lifespan(app):
+                    # _build_backend must have been called at least once.
+                    mock_build.assert_called_once()
+                    # The config passed to _build_backend must carry the
+                    # overlaid claude_host_mount_path, not the raw env-var
+                    # default.
+                    called_cfg = mock_build.call_args[0][0]
+                    assert called_cfg.claude_host_mount_path == "/overlaid/path"
+
 
 # ---------------------------------------------------------------------------
 # cli.main — argument parsing + uvicorn launch (mocked)

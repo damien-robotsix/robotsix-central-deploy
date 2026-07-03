@@ -296,7 +296,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _config = robotsix_config.load_config(LifecycleConfig)
     _store = _build_store(_config)
-    _backend = _build_backend(_config)
     _key_manager = SecretKeyManager(Path(_config.secret_key_path))
     _env_store = EnvStore(Path(_config.env_store_path), _key_manager)
     _config_yaml_store = ConfigYamlStore(Path(_config.config_yaml_store_path))
@@ -305,7 +304,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.config = _config
     app.state.store = _store
-    app.state.backend = _backend
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
     app.state.config_yaml_store = _config_yaml_store
@@ -337,6 +335,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _config
     )  # returns new LifecycleConfig (or same if no file)
     app.state.config = _config  # replace with overlaid version
+
+    # -- Backend (constructed from overlaid config) ----------------------
+    _backend = _build_backend(_config)
+    app.state.backend = _backend
 
     # -- Session store (in-memory, no I/O) ------------------------------
     from .session import SessionStore
