@@ -325,6 +325,7 @@ async def _init_settings(app: FastAPI) -> None:
     and ``_backend`` globals.
     """
     global _config, _backend
+    assert _config is not None
     from ..registry.settings_store import SystemSettings, SystemSettingsStore
 
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
@@ -374,6 +375,9 @@ async def _init_background_tasks(app: FastAPI) -> None:
     ``_http_client`` globals.
     """
     global _registry_checker, _http_client
+    assert _config is not None
+    assert _store is not None
+    assert _backend is not None
 
     # -- Registry checker ------------------------------------------------
     http_client = httpx.AsyncClient(timeout=10.0)
@@ -418,6 +422,10 @@ async def _init_component_registry(app: FastAPI) -> None:
     global.
     """
     global _volume_audit_scheduler
+    assert _config is not None
+    assert _store is not None
+    assert _backend is not None
+    assert _http_client is not None
 
     # -- Component registry (in-memory, populated from persisted store) ------
     registry = ComponentRegistry([])
@@ -508,6 +516,7 @@ async def _teardown(app: FastAPI) -> None:
     ``_volume_audit_task``, ``_bg_task``) that were stored during
     initialisation.
     """
+    assert _http_client is not None
     _caretaker_task: asyncio.Task[Any] = app.state._caretaker_task
     _caretaker_task.cancel()
     with suppress(asyncio.CancelledError):
