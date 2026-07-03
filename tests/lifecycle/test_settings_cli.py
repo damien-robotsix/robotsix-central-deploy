@@ -555,10 +555,10 @@ class TestSettingsFirstBoot:
     ):
         """Backend is constructed from the overlaid config, not the raw config.
 
-        When ``system_settings.json`` overrides a backend-consumed setting
-        (e.g. ``claude_host_mount_path``), the ``DockerSdkBackend`` (or
-        whichever backend is selected) must receive the *overlaid* value,
-        not the raw env-var default.
+        When ``system_settings.json`` overrides a setting (e.g.
+        ``gateway_base_domain``), the ``DockerSdkBackend`` (or whichever
+        backend is selected) must receive the *overlaid* value, not the
+        raw env-var default.
         """
         settings_path = tmp_path / "settings.json"
         monkeypatch.setenv(
@@ -569,7 +569,9 @@ class TestSettingsFirstBoot:
             "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
         )
         # Raw config default — different from what the overlay will supply.
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CLAUDE_HOST_MOUNT_PATH", "/env/default")
+        monkeypatch.setenv(
+            "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN", "env-default.example.com"
+        )
         monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
 
         from robotsix_central_deploy.registry.settings_store import (
@@ -579,7 +581,9 @@ class TestSettingsFirstBoot:
 
         # Pre-write a settings file that overrides the env-var default.
         store = SystemSettingsStore(settings_path)
-        await store.put(SystemSettings(claude_host_mount_path="/overlaid/path"))
+        await store.put(
+            SystemSettings(gateway_base_domain="overlaid.example.com")
+        )
 
         from robotsix_central_deploy.lifecycle.server import app, lifespan
         from robotsix_central_deploy.lifecycle import deps
@@ -595,10 +599,12 @@ class TestSettingsFirstBoot:
                     # _build_backend must have been called at least once.
                     mock_build.assert_called_once()
                     # The config passed to _build_backend must carry the
-                    # overlaid claude_host_mount_path, not the raw env-var
+                    # overlaid gateway_base_domain, not the raw env-var
                     # default.
                     called_cfg = mock_build.call_args[0][0]
-                    assert called_cfg.claude_host_mount_path == "/overlaid/path"
+                    assert (
+                        called_cfg.gateway_base_domain == "overlaid.example.com"
+                    )
 
 
 # ---------------------------------------------------------------------------

@@ -118,7 +118,7 @@ async def put_settings(
       effect on the background loop.
 
     # NOTE: Backend-consumed settings (e.g. ``docker_socket_url``,
-      ``claude_host_mount_path``, ``docker_sdk_timeout``) are captured by
+      ``docker_sdk_timeout``) are captured by
       ``DockerSdkBackend`` at construction time — the backend is now built
       *after* the ``system_settings.json`` overlay at startup, so a full
       service restart applies these settings.  Updating the config at
