@@ -54,11 +54,6 @@ async def client() -> AsyncClient:
         yield c
 
 
-@pytest.fixture
-def auth_headers() -> dict[str, str]:
-    return {"X-API-Key": "test-key"}
-
-
 # ---------------------------------------------------------------------------
 # Test cases
 # ---------------------------------------------------------------------------

@@ -118,10 +118,6 @@ class TestDeployEndpoint:
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
 
-    @pytest.fixture
-    def auth_headers(self) -> dict[str, str]:
-        return {"X-API-Key": "test-key"}
-
     async def _seed(self, name: str = "svc-a"):
         store = server_mod.app.state.store
         await store.put(

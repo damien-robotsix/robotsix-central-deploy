@@ -71,3 +71,8 @@ async def client() -> AsyncClient:
     transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"X-API-Key": "test-key"}

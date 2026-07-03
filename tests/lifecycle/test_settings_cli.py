@@ -200,11 +200,6 @@ def settings_store(tmp_path):
     return store
 
 
-@pytest.fixture
-def auth_headers() -> dict[str, str]:
-    return {"X-API-Key": "test-key"}
-
-
 class TestSettingsRouter:
     async def test_get_settings_masks_secrets(
         self, client: AsyncClient, auth_headers, settings_store

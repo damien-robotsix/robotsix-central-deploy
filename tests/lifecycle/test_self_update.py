@@ -11,11 +11,6 @@ from robotsix_central_deploy.lifecycle.models import SelfInspect
 
 
 @pytest.fixture
-def auth_headers() -> dict[str, str]:
-    return {"X-API-Key": "test-key"}
-
-
-@pytest.fixture
 def self_info() -> SelfInspect:
     return SelfInspect(
         container_id="abc123",
