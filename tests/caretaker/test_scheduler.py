@@ -24,7 +24,8 @@ from robotsix_central_deploy.registry.loader import ComponentRegistry
 def _register_mill(ccs, mill_id="mill", port=9999):
     """Make the mocked config store discover a mill component under *mill_id*."""
     mill_cfg = MagicMock()
-    mill_cfg.ports = [MagicMock(host=port)]
+    mill_cfg.container_name = mill_id
+    mill_cfg.ports = [MagicMock(host=port, container=port)]
     default_cfg = MagicMock()
     default_cfg.repo_id = "my-repo"
     default_cfg.caretaker_auto_update = True
@@ -247,7 +248,8 @@ class TestScheduler:
         )
         # Only "my-mill" resolves; the default "mill" id does not exist.
         mill_cfg = MagicMock()
-        mill_cfg.ports = [MagicMock(host=9999)]
+        mill_cfg.container_name = "my-mill"
+        mill_cfg.ports = [MagicMock(host=9999, container=9999)]
         ccs.get = MagicMock(
             side_effect=lambda cid: mill_cfg if cid == "my-mill" else None
         )
@@ -264,7 +266,7 @@ class TestScheduler:
         assert report.mill_reported >= 1
         assert report.mill_reachable is True
         args, kwargs = http.post.call_args_list[0]
-        assert args[0].startswith("http://localhost:9999")
+        assert args[0].startswith("http://my-mill:9999")
 
     @pytest.mark.asyncio
     async def test_image_auto_prune_after_update(self, scheduler_fixtures):

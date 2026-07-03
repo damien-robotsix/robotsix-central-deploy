@@ -87,11 +87,13 @@ class TestMillClient:
             id="mill",
             image="mill:latest",
             container_name="mill",
-            ports=[PortMapping(host=8080, container=8080)],
+            ports=[PortMapping(host=8080, container=8077)],
         )
         config_store.get = MagicMock(return_value=mill_cfg)
         url = MillClient.derive_url_from_registry(registry, config_store)
-        assert url == "http://localhost:8080"
+        # Container name + container port: managed components publish no
+        # host ports, so the caretaker must go over the proxy network.
+        assert url == "http://mill:8077"
 
     def test_derive_url_returns_none_when_absent(self):
         registry = ComponentRegistry([])
@@ -114,4 +116,4 @@ class TestMillClient:
         )
         assert MillClient.derive_url_from_registry(registry, config_store) is None
         url = MillClient.derive_url_from_registry(registry, config_store, "my-mill")
-        assert url == "http://localhost:9090"
+        assert url == "http://my-mill:8080"
