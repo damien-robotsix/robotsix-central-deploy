@@ -9,15 +9,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, field_validator
 from starlette.requests import Request
 
 from ..lifecycle.auth import verify_auth
-from ..registry.settings_store import (
-    VALID_LOG_LEVELS,
-    SystemSettings,
-    SystemSettingsStore,
-)
+from ..registry.settings_store import SystemSettings, SystemSettingsStore
 
 settings_router = APIRouter(tags=["settings"])
 
@@ -29,57 +24,12 @@ SECRET_MASK = "***"
 # ---------------------------------------------------------------------------
 
 
-class SystemSettingsResponse(BaseModel):
-    auth_username: str = ""
-    auth_password: str = ""
-    disk_warn_pct: float = 10.0
-    registry_check_interval: int = 300
-    log_level: str = "INFO"
-    gateway_base_domain: str = ""
-    claude_host_mount_path: str = ""
-    caretaker_enabled: bool = False
-    caretaker_interval_hours: int = 24
-    mill_component_id: str = "mill"
-    image_auto_prune: bool = False
+class SystemSettingsResponse(SystemSettings):
+    """Response model — inherits all fields from SystemSettings."""
 
 
-class SystemSettingsUpdate(BaseModel):
-    auth_username: str = ""
-    auth_password: str = ""
-    disk_warn_pct: float = 10.0
-    registry_check_interval: int = 300
-    log_level: str = "INFO"
-    gateway_base_domain: str = ""
-    claude_host_mount_path: str = ""
-    caretaker_enabled: bool = False
-    caretaker_interval_hours: int = 24
-    mill_component_id: str = "mill"
-    image_auto_prune: bool = False
-
-    @field_validator("log_level")
-    @classmethod
-    def _validate_log_level(cls, v: str) -> str:
-        normalised = v.upper()
-        if normalised not in VALID_LOG_LEVELS:
-            raise ValueError(
-                f"Unknown log level '{v}'. Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
-            )
-        return normalised
-
-    @field_validator("caretaker_interval_hours")
-    @classmethod
-    def _validate_caretaker_interval(cls, v: int) -> int:
-        if v < 1:
-            raise ValueError("caretaker_interval_hours must be >= 1")
-        return v
-
-    @field_validator("mill_component_id")
-    @classmethod
-    def _validate_mill_component_id(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("mill_component_id must not be empty")
-        return stripped
+class SystemSettingsUpdate(SystemSettings):
+    """Update model — inherits all fields and validators from SystemSettings."""
 
 
 # ---------------------------------------------------------------------------
