@@ -539,54 +539,59 @@ class DockerSdkBackend(ExecutionBackend):
         """Spawn a helper container that runs ``claude login``, returning the
         OAuth URL for the operator to visit.
 
+        The volume is mounted at ``/home/app/.claude`` (uid 1000's home) so
+        ``claude login`` writes ``.credentials.json`` onto the persistent
+        volume rather than the ephemeral container overlayfs.
+
         The helper script:
-        1. Runs ``claude login``, capturing stdout/stderr to a volume file.
+        1. Runs ``claude login``, capturing stdout/stderr to the volume.
         2. Writes the OAuth URL to ``.login-url`` on the volume.
-        3. Waits for either an auth code (written to ``.login-code``) or for
-           ``claude login`` to complete on its own (device-flow OAuth callback).
+        3. Waits for ``claude login`` to exit on its own (device-flow OAuth
+           callback — the operator authorises in the browser, not via a
+           pasted code).
         4. On completion writes the exit code to ``.login-result``.
         """
         import docker
 
         loop = asyncio.get_running_loop()
 
-        # The helper script captures the OAuth URL from claude login output,
-        # then waits for the operator to either paste a code or authorize via
-        # the OAuth device flow (which completes automatically).
+        # The helper runs ``claude login`` which writes credentials into
+        # ``~/.claude/.credentials.json``.  The volume is mounted at
+        # ``/home/app/.claude`` (uid 1000's home) so credentials land on
+        # the persistent volume.  The script captures the OAuth URL for the
+        # operator, then waits for the device-flow callback to complete
+        # (``claude login`` exits by itself once the browser authorisation
+        # finishes).  There is no paste-a-code path here — the operator
+        # pastes a code *in the browser*, not back into the CLI.
         script = (
-            "claude login > /mnt/.login-output 2>&1 & "
+            "claude login > /home/app/.claude/.login-output 2>&1 & "
             "CLAUDE_PID=$!; "
             # Poll for the OAuth URL to appear in the output.
             "for i in $(seq 1 60); do "
-            "  if grep -qE 'https?://' /mnt/.login-output 2>/dev/null; then "
-            "    grep -oE 'https?://[^[:space:]]+' /mnt/.login-output | head -1 > /mnt/.login-url; "
-            "    touch /mnt/.login-ready; "
+            "  if grep -qE 'https?://' /home/app/.claude/.login-output 2>/dev/null; then "
+            "    grep -oE 'https?://[^[:space:]]+' /home/app/.claude/.login-output | head -1 > /home/app/.claude/.login-url; "
+            "    touch /home/app/.claude/.login-ready; "
             "    break; "
             "  fi; "
             "  sleep 1; "
             "done; "
-            # Wait for either a pasted code or for claude login to finish.
+            # Wait for claude login to finish on its own (device-flow OAuth
+            # callback).  $! captures the right PID because we launched
+            # ``claude login`` directly (no pipe/tee).
             "for i in $(seq 1 300); do "
-            "  if [ -f /mnt/.login-code ]; then "
-            "    CODE=$(cat /mnt/.login-code); rm -f /mnt/.login-code; "
-            '    echo "$CODE" | claude login 2>&1; '
-            '    RC=$?; echo "EXIT:$RC" > /mnt/.login-result; '
-            "    kill $CLAUDE_PID 2>/dev/null; wait $CLAUDE_PID 2>/dev/null; "
-            "    break; "
-            "  fi; "
             "  if ! kill -0 $CLAUDE_PID 2>/dev/null; then "
             "    wait $CLAUDE_PID 2>/dev/null; "
-            '    echo "EXIT:$?" > /mnt/.login-result; '
+            '    echo "EXIT:$?" > /home/app/.claude/.login-result; '
             "    break; "
             "  fi; "
             "  sleep 1; "
             "done; "
             # Timeout guard.
-            "if ! [ -f /mnt/.login-result ]; then "
+            "if ! [ -f /home/app/.claude/.login-result ]; then "
             "  kill $CLAUDE_PID 2>/dev/null; wait $CLAUDE_PID 2>/dev/null; "
-            "  echo 'EXIT:124' > /mnt/.login-result; "
+            "  echo 'EXIT:124' > /home/app/.claude/.login-result; "
             "fi; "
-            "rm -f /mnt/.login-ready /mnt/.login-url"
+            "rm -f /home/app/.claude/.login-ready /home/app/.claude/.login-url"
         )
 
         container_name = f"claude-login-{os.urandom(4).hex()}"
@@ -595,7 +600,7 @@ class DockerSdkBackend(ExecutionBackend):
             container = self._client.containers.create(
                 helper_image,
                 command=["sh", "-c", script],
-                volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
+                volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
                 name=container_name,
                 user="1000:1000",
                 detach=True,
@@ -614,9 +619,9 @@ class DockerSdkBackend(ExecutionBackend):
                         command=[
                             "sh",
                             "-c",
-                            "cat /mnt/.login-ready 2>/dev/null || true",
+                            "cat /home/app/.claude/.login-ready 2>/dev/null || true",
                         ],
-                        volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                        volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
                         remove=True,
                     )
                     if result.strip():
@@ -625,9 +630,9 @@ class DockerSdkBackend(ExecutionBackend):
                             command=[
                                 "sh",
                                 "-c",
-                                "cat /mnt/.login-url 2>/dev/null || true",
+                                "cat /home/app/.claude/.login-url 2>/dev/null || true",
                             ],
-                            volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                            volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
                             remove=True,
                         )
                         oauth_url = url_result.decode("utf-8", errors="replace").strip()
@@ -651,10 +656,10 @@ class DockerSdkBackend(ExecutionBackend):
                                     command=[
                                         "sh",
                                         "-c",
-                                        "cat /mnt/.login-output 2>/dev/null || true",
+                                        "cat /home/app/.claude/.login-output 2>/dev/null || true",
                                     ],
                                     volumes={
-                                        volume_name: {"bind": "/mnt", "mode": "ro"}
+                                        volume_name: {"bind": "/home/app/.claude", "mode": "ro"}
                                     },
                                     remove=True,
                                 )
@@ -696,33 +701,21 @@ class DockerSdkBackend(ExecutionBackend):
     async def complete_claude_login(
         self, volume_name: str, container_id: str, auth_code: str
     ) -> dict[str, Any]:
-        """Feed *auth_code* to the waiting helper container (if needed) and
-        wait for it to complete.
+        """Wait for the helper container to finish and return the result.
+
+        The helper runs the device-flow OAuth callback on its own — no
+        auth code is fed back to the CLI.  *auth_code* is accepted for
+        API compatibility but is unused by this backend.
         """
         import docker
 
         loop = asyncio.get_running_loop()
 
         def _complete() -> dict[str, Any]:
-            # If an auth code is provided, write it to the volume for the
-            # helper to pick up.  The helper also handles the case where
-            # claude login completes via device-flow OAuth without a code.
-            if auth_code.strip():
-                self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "printf '%s' \"$1\" > /mnt/.login-code",
-                        "_",
-                        auth_code.strip(),
-                    ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
-                    user="1000:1000",
-                    remove=True,
-                )
-
-            # Wait for the helper container to finish.
+            # Wait for the helper container to finish.  The device-flow
+            # OAuth callback completes automatically in the browser — no
+            # code is fed back to the CLI.  ``auth_code`` is accepted for
+            # API compatibility but is unused in this backend.
             import time
 
             try:
@@ -751,9 +744,9 @@ class DockerSdkBackend(ExecutionBackend):
                     command=[
                         "sh",
                         "-c",
-                        "cat /mnt/.login-result 2>/dev/null || echo 'EXIT:1'",
+                        "cat /home/app/.claude/.login-result 2>/dev/null || echo 'EXIT:1'",
                     ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
                     remove=True,
                 )
                 result_str = result.decode("utf-8", errors="replace").strip()
@@ -772,9 +765,9 @@ class DockerSdkBackend(ExecutionBackend):
                         command=[
                             "sh",
                             "-c",
-                            "cat /mnt/.login-output 2>/dev/null || true",
+                            "cat /home/app/.claude/.login-output 2>/dev/null || true",
                         ],
-                        volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                        volumes={volume_name: {"bind": "/home/app/.claude", "mode": "ro"}},
                         remove=True,
                     )
                     logs = file_result.decode("utf-8", errors="replace")
@@ -794,9 +787,9 @@ class DockerSdkBackend(ExecutionBackend):
                     command=[
                         "sh",
                         "-c",
-                        "rm -f /mnt/.login-result /mnt/.login-ready /mnt/.login-url /mnt/.login-code /mnt/.login-output",
+                        "rm -f /home/app/.claude/.login-result /home/app/.claude/.login-ready /home/app/.claude/.login-url /home/app/.claude/.login-code /home/app/.claude/.login-output",
                     ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
+                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
                     remove=True,
                 )
             except Exception:
@@ -833,9 +826,9 @@ class DockerSdkBackend(ExecutionBackend):
                     command=[
                         "sh",
                         "-c",
-                        "rm -f /mnt/.login-ready /mnt/.login-url /mnt/.login-code /mnt/.login-result /mnt/.login-output",
+                        "rm -f /home/app/.claude/.login-ready /home/app/.claude/.login-url /home/app/.claude/.login-code /home/app/.claude/.login-result /home/app/.claude/.login-output",
                     ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
+                    volumes={volume_name: {"bind": "/home/app/.claude", "mode": "rw"}},
                     remove=True,
                 )
             except Exception:
