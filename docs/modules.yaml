@@ -167,4 +167,4 @@ modules:
       - GET /volumes/audit
     paths:
       - src/robotsix_central_deploy/lifecycle/volume_audit/**/*
-    tests: tests/lifecycle/volume_audit/ tests/lifecycle/test_volume_audit_endpoint.py
+    tests: tests/lifecycle/volume_audit/
