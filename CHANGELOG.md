@@ -7,6 +7,8 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Fix caretaker auto-update pulling a bare digest: `phase_update` passed `latest_registry_digest` (`sha256:…`) as the image reference, which docker resolves as repository "sha256" and 404s — every auto-update failed on the live server. It now deploys `repo@sha256:…` (tag fallback when no digest), and `deploy()` digest derivation handles pinned refs so `update_available` clears correctly.
+- Remove dead `OnboardConfirmResponse` schema (superseded by `OnboardConfirmAcceptedResponse`)
+  Regenerated `docs/openapi.json` to reflect the active schema.
 - Adopt towncrier newsfragments (`changelog.d/`) as the changelog mechanism; CHANGELOG.md becomes release-workflow-written only. Added `towncrier>=24.0` dev dependency and `[tool.towncrier]` config.
 - Env/secrets modal: the key set is the repo's compose contract, not operator-editable — removed "+ Add variable"/"+ Add secret" and per-row delete. New "↻ Sync keys from repo" button (POST /services/{name}/env/sync-keys) seeds keys the contract added since onboarding (values never modified; undeclared stored keys reported, not deleted).
 - Fix contradictory copy on unset secret fields in config forms: rows showed both "(required — set before deploy)" and "optional at onboard" at once. Unset secrets now read "(not set — can be saved later, needed to run)".
