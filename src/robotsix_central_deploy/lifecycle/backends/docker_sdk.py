@@ -85,6 +85,7 @@ class DockerSdkBackend(ExecutionBackend):
     # -- ExecutionBackend ---------------------------------------------------
 
     async def status(self, service: ServiceRecord) -> ComponentInspect:
+        """Return a ComponentInspect with state, image revision, health status, and running digest."""
         name = self._container_name(service)
         import docker
 
@@ -155,6 +156,7 @@ class DockerSdkBackend(ExecutionBackend):
         return await loop.run_in_executor(None, _inspect)
 
     async def start(self, service: ServiceRecord) -> ServiceState:
+        """Start the container for *service*. Returns RUNNING on success, FAILED otherwise."""
         name = self._container_name(service)
         import docker
 
@@ -178,6 +180,7 @@ class DockerSdkBackend(ExecutionBackend):
         return ServiceState.RUNNING
 
     async def stop(self, service: ServiceRecord) -> ServiceState:
+        """Stop the container for *service*. Returns STOPPED on success (or if already gone), FAILED otherwise."""
         name = self._container_name(service)
         import docker
 
@@ -201,6 +204,7 @@ class DockerSdkBackend(ExecutionBackend):
         return ServiceState.STOPPED
 
     async def remove_container(self, service: ServiceRecord) -> None:
+        """Remove the managed container for *service* (best-effort, already stopped)."""
         import docker
 
         loop = asyncio.get_running_loop()
@@ -216,6 +220,7 @@ class DockerSdkBackend(ExecutionBackend):
             logger.warning("remove_container %s: %s", name, exc)
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
+        """Restart the container for *service*. Returns RUNNING on success, FAILED otherwise."""
         name = self._container_name(service)
         import docker
 
@@ -885,6 +890,7 @@ class DockerSdkBackend(ExecutionBackend):
     # -- volume inspection helpers ------------------------------------------
 
     async def measure_volume_bytes(self, volume_name: str) -> int:
+        """Return effective total bytes for *volume_name*, excluding SQLite transient sidecars (*.db-wal, *.db-shm, *.db-journal). Returns 0 on error or when the volume is inaccessible."""
         loop = asyncio.get_running_loop()
         cmd = (
             "find /vol -type f "
@@ -1080,6 +1086,7 @@ class DockerSdkBackend(ExecutionBackend):
         since: str | None = None,
         follow: bool = False,
     ) -> AsyncIterator[bytes]:
+        """Stream container logs. Returns an async iterator of text chunks."""
         import docker
 
         loop = asyncio.get_running_loop()
@@ -1134,6 +1141,7 @@ class DockerSdkBackend(ExecutionBackend):
                     pass
 
     async def disk_df(self) -> DockerDfStats:
+        """Return Docker disk usage statistics."""
         import docker  # noqa: PLC0415
 
         loop = asyncio.get_running_loop()
