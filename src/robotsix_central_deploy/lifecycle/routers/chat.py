@@ -44,8 +44,11 @@ async def list_chat_components(
 
     Each entry has ``id``, ``base_url``, and ``skill`` (the Markdown body
     fetched live from the component's ``GET /chat-skill``).  Components
-    that do not have ``allow_chat_access`` enabled, or whose skill probe
-    returns a non-200 response, are silently omitted.
+    that do not have ``allow_chat_access`` enabled are omitted.  A
+    component whose skill probe fails is served from its last-known-good
+    cached skill when one exists (stale-while-error), so a transient
+    probe failure does not drop it from the roster; it is omitted only
+    when it has never been probed successfully.
 
     Skill bodies are cached for 60 seconds; a component whose cached
     entry has expired is re-probed on the next request.
@@ -72,18 +75,37 @@ async def list_chat_components(
                 continue
 
         # Probe the component's chat-skill endpoint
+        skill_body: str | None = None
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{base_url}/chat-skill")
             if resp.status_code == 200 and resp.text.strip():
                 skill_body = resp.text
                 _skill_cache[comp_cfg.id] = (now, skill_body)
-                results.append(
-                    {"id": comp_cfg.id, "base_url": base_url, "skill": skill_body}
+            else:
+                logger.warning(
+                    "chat components: skill probe for %s (%s) returned %s",
+                    comp_cfg.id,
+                    base_url,
+                    resp.status_code,
                 )
-        except Exception:
-            logger.debug(
-                "chat components: skill probe failed for %s (%s)", comp_cfg.id, base_url
+        except Exception as exc:
+            logger.warning(
+                "chat components: skill probe failed for %s (%s): %s",
+                comp_cfg.id,
+                base_url,
+                exc,
+            )
+
+        if skill_body is None and cached is not None:
+            # Stale-while-error: serve the expired cached skill rather than
+            # dropping the component from the roster; the stale timestamp is
+            # kept so the next request re-probes.
+            skill_body = cached[1]
+
+        if skill_body is not None:
+            results.append(
+                {"id": comp_cfg.id, "base_url": base_url, "skill": skill_body}
             )
 
     return results
