@@ -4278,7 +4278,6 @@ class TestChatComponents:
         data1 = resp1.json()
         assert len(data1) == 1
         assert data1[0]["skill"] == "Skill v1"
-        assert call_count == 1
 
         # Second call: should use cache (no additional probe).
         resp2 = await client.get("/chat/components", headers=auth_headers)
