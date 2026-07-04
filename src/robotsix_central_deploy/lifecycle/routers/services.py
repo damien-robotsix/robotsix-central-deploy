@@ -971,8 +971,8 @@ async def deploy_service(
         except Exception as exc:
             logger.warning(
                 "deploy %s: could not write llmio tier config to volume %s: %s",
-                name,
-                config.config_volume,
+                name.replace("\n", "\\n"),
+                config.config_volume.replace("\n", "\\n"),
                 exc,
             )
             # non-fatal: container may still start if config was written earlier
@@ -1565,8 +1565,8 @@ async def put_service_config(
             except Exception as exc:
                 logger.warning(
                     "config %s: could not write llmio tier config to volume %s: %s",
-                    name,
-                    comp_cfg.config_volume,
+                    name.replace("\n", "\\n"),
+                    comp_cfg.config_volume.replace("\n", "\\n"),
                     exc,
                 )
         new_hash = _canonical_hash(merged)

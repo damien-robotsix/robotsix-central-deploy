@@ -241,8 +241,21 @@
       "description": "After updates, remove dangling images not needed for rollback.",
       "title": "Image Auto Prune",
       "type": "boolean"
+    },
+    "claude_auth_helper_image": {
+      "default": "",
+      "description": "Docker image that ships the claude CLI, used by the OAuth login helper container. Empty uses the default (ghcr.io/damien-robotsix/robotsix-chat:main).",
+      "title": "Claude Auth Helper Image",
+      "type": "string"
+    },
+    "llmio_tier_config": {
+      "additionalProperties": true,
+      "description": "Fleet-global mapping from llmio capability level (level1-4) to provider and model. Overridden by the System Settings store.",
+      "title": "Llmio Tier Config",
+      "type": "object"
     }
   },
   "title": "LifecycleConfig",
   "type": "object"
 }
+

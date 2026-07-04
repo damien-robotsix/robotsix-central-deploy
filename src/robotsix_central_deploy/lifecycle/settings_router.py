@@ -14,6 +14,8 @@ from starlette.requests import Request
 from ..lifecycle.auth import verify_auth
 from ..registry.settings_store import SystemSettings, SystemSettingsStore
 
+logger = logging.getLogger(__name__)
+
 settings_router = APIRouter(tags=["settings"])
 
 SECRET_MASK = "***"
@@ -173,7 +175,7 @@ async def put_settings(
             for comp_cfg in component_store.all():
                 if comp_cfg.llmio_tier_level and comp_cfg.config_volume:
                     try:
-                        await backend.write_llmio_tier_config_to_volume(
+                        await backend.write_llmio_tier_config_to_volume(  # type: ignore[attr-defined]
                             comp_cfg.config_volume, new.llmio_tier_config
                         )
                     except Exception as exc:
@@ -185,8 +187,6 @@ async def put_settings(
                             exc,
                         )
         except Exception as exc:
-            logger.warning(
-                "settings: llmio tier config propagation failed: %s", exc
-            )
+            logger.warning("settings: llmio tier config propagation failed: %s", exc)
 
     return _mask_response(new)
