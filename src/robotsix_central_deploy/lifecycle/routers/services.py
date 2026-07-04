@@ -56,6 +56,8 @@ from ..models import (
     can_transition,
 )
 from ..schemas import (
+    ComponentSuggestItem,
+    ComponentSuggestResponse,
     ConfigAssistRequest,
     ConfigAssistResponse,
     ConfigDriftConflict,
@@ -450,6 +452,37 @@ async def list_services(
             item.has_config_yaml = config.has_config_yaml
         items.append(item)
     return ServiceListResponse(services=items)
+
+
+# ---------------------------------------------------------------------------
+# GET /components/suggest
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/components/suggest",
+    response_model=ComponentSuggestResponse,
+    summary="List registered components for config-form URL suggestions",
+)
+async def list_component_suggestions(
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    _auth: None = Depends(verify_auth),
+) -> ComponentSuggestResponse:
+    """Return every registered component's id, container_name, and first
+    container port so the dashboard config form can offer one-click URL
+    suggestions for ``*_url`` / ``*_base_url`` fields.
+    """
+    items: list[ComponentSuggestItem] = []
+    for cfg in component_config_store.all():
+        container_port: int | None = cfg.ports[0].container if cfg.ports else None
+        items.append(
+            ComponentSuggestItem(
+                id=cfg.id,
+                container_name=cfg.container_name,
+                container_port=container_port,
+            )
+        )
+    return ComponentSuggestResponse(components=items)
 
 
 # ---------------------------------------------------------------------------

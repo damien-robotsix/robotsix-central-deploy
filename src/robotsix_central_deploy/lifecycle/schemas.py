@@ -176,6 +176,18 @@ class ConfigUpdate(BaseModel):
     force_overwrite: bool = False
 
 
+class ComponentSuggestItem(BaseModel):
+    """Lightweight component info for the config-form URL suggest feature."""
+
+    id: str
+    container_name: str
+    container_port: int | None  # first container port, None when no ports
+
+
+class ComponentSuggestResponse(BaseModel):
+    components: list[ComponentSuggestItem]
+
+
 class ConfigDriftConflict(BaseModel):
     """Body of the 409 Conflict response when drift is detected on Save."""
 
