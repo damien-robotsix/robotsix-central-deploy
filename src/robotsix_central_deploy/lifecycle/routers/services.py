@@ -2184,7 +2184,7 @@ async def refresh_contract(
 
     logger.info(
         "Refreshed contract for %s from repo: %d field(s) changed (%s)",
-        repr(name),
+        name.replace("\n", "\\n"),
         len(changed),
         ", ".join(changed) if changed else "none",
     )
