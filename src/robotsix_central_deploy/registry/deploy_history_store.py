@@ -6,11 +6,12 @@ Mirrors the lock + tmp-rename pattern of ``registry/env_store.py``.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
 
 from ..lifecycle.models import DeployHistoryEntry
+
+from ._store_utils import async_read_json, async_write_json
 
 MAX_HISTORY_ENTRIES: int = 20
 """Maximum retained history entries per component. Oldest entries are
@@ -29,17 +30,10 @@ class DeployHistoryStore:
         self._lock = asyncio.Lock()
 
     async def _load(self) -> dict[str, list[dict[str, Any]]]:
-        if not self._path.exists():
-            return {}
-        raw = self._path.read_text(encoding="utf-8").strip()
-        if not raw:
-            return {}
-        return json.loads(raw)  # type: ignore[no-any-return]
+        return await async_read_json(self._path)
 
     async def _save(self, data: dict[str, list[dict[str, Any]]]) -> None:
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.rename(self._path)
+        await async_write_json(self._path, data)
 
     async def append(self, name: str, entry: DeployHistoryEntry) -> None:
         """Prepend *entry* to the history for *name*, capping at ``MAX_HISTORY_ENTRIES``."""
