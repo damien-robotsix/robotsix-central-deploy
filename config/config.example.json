@@ -15,6 +15,7 @@
   "env_store_path": "component_env.json",
   "secret_key_path": "secrets.key",
   "config_yaml_store_path": "data/component_config_yaml.json",
+  "deploy_history_store_path": "data/deploy_history.json",
   "self_update_watchtower_image": "containrrr/watchtower:1.7.1",
   "self_update_docker_api_version": "1.44",
   "registry_check_ttl": 300,
@@ -34,5 +35,11 @@
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
   "mill_component_id": "mill",
-  "image_auto_prune": false
+  "image_auto_prune": false,
+  "llmio_tier_config": {
+    "level1": {"provider": "openai", "model": "gpt-4o-mini"},
+    "level2": {"provider": "openai", "model": "gpt-4o"},
+    "level3": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+    "level4": {"provider": "anthropic", "model": "claude-opus-4-20250514"}
+  }
 }
