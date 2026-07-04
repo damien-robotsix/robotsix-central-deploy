@@ -464,8 +464,7 @@ async def chat_restart_service(
     try:
         final_state = await backend.restart(record)
     except Exception as exc:
-        # lgtm[py/log-injection] — 'name' comes from the URL path (already path-validated by FastAPI)
-        logger.exception("chat restart %s failed", name)
+        logger.exception("chat restart %s failed", name.replace("\n", "\\n"))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -498,8 +497,11 @@ async def chat_restart_service(
                 sib_record.state = final
                 await store.put(sib_record)
             except Exception:
-                # lgtm[py/log-injection] — name/sib.service_key are from trusted config, not raw user input
-                logger.warning("chat restart sibling '%s-%s' failed", name, sib.service_key)
+                logger.warning(
+                    "chat restart sibling '%s-%s' failed",
+                    name.replace("\n", "\\n"),
+                    sib.service_key.replace("\n", "\\n"),
+                )
 
     await audit_store.append(
         ChatAgentAuditEntry(
@@ -575,8 +577,7 @@ async def chat_update_service(
     try:
         outcome = await backend.deploy(record, config, config.image)
     except Exception as exc:
-        # lgtm[py/log-injection] — 'name' comes from the URL path (already path-validated by FastAPI)
-        logger.exception("chat update %s failed", name)
+        logger.exception("chat update %s failed", name.replace("\n", "\\n"))
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
