@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove dead `__getattr__` and `__all__` from `caretaker/__init__.py` — all callers already import `CaretakerScheduler` directly from `caretaker.scheduler`.
 - Remove deprecated `lifecycle/backend.py` shim module; all callers (caretaker, tests) now import directly from `lifecycle.backends` or `lifecycle.models`
 - Onboard: seed the component config from `config/config.example.json`'s values (precedence: user input > example > schema default), so deploy-appropriate example values (e.g. `api_host: 0.0.0.0`) are honored instead of the code's schema default. Secret leaves from the example are stripped.
 
