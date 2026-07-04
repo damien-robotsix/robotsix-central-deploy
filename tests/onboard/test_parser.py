@@ -944,6 +944,67 @@ volumes:
 """
 
 
+# ---------------------------------------------------------------------------
+# user: parsing
+# ---------------------------------------------------------------------------
+
+
+class TestParseComposeUser:
+    def test_user_string_on_primary(self):
+        """user: 'root' on the primary service is parsed."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    user: root
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.user == "root"
+
+    def test_user_string_on_sibling(self):
+        """user: 'root' on a sibling service is parsed."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/app:main
+    labels:
+      robotsix.deploy.primary: "true"
+  worker:
+    image: ghcr.io/damien-robotsix/worker:main
+    user: "1000:1000"
+"""
+        spec = parse_compose(_bytes(y), name="app", git_url="https://x.com/r.git")
+        assert spec.user is None  # primary has no user
+        assert len(spec.siblings) == 1
+        assert spec.siblings[0].user == "1000:1000"
+
+    def test_user_absent_defaults_none(self):
+        """When user: is absent, spec.user is None."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.user is None
+
+    def test_user_invalid_type_raises(self):
+        """user: with a non-string value (int) → ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    user: 1000
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "user:" in str(exc.value)
+
+
 class TestMillSocketProxyContract:
     """Regression: mill-socket-proxy contract with tmpfs and multi-line command."""
 

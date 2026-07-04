@@ -597,6 +597,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         config_assist_seeds=primary_parsed["config_assist_seeds"],
         llmio_tier_level=primary_parsed["llmio_tier_level"],
         allow_chat_access=primary_parsed["allow_chat_access"],
+        user=primary_parsed["user"],
     )
 
 
