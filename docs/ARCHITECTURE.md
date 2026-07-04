@@ -203,8 +203,6 @@ Docker volume growth over time.
 UNKNOWN ──► STARTING | STOPPING
 ```
 
-States at rest (`RESTING_STATES`): `STOPPED`, `RUNNING`, `FAILED`, `UNKNOWN`.
-
 All mutating endpoints are **idempotent**: if the service is already in
 the requested state (or mid-transition toward it), the endpoint returns
 success without action. Invalid transitions return **409 Conflict**.

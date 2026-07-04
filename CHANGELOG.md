@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove dead constant `RESTING_STATES` from `lifecycle/models.py` — never imported or referenced anywhere.
 - Remove fabricated llmio_tier_config defaults (openai/gpt-4o-mini, etc.) — default to empty per-level entries that inherit robotsix-llmio's baked defaults. The settings UI now shows the baked defaults (openrouter-deepseek/deepseek-v4-flash, …/deepseek-v4-pro, claudeSDK/opus, claudeSDK/claude-fable-5) as grey placeholder text. Also remove the stale `claude_auth_helper_image` setting (obsoleted by the PKCE login rewrite).
 - Add Hypothesis property-based tests for lifecycle state machine, input validation fuzzing, and enum roundtrip serialisation
   Add `hypothesis>=6.0` to dev dependencies and create `tests/lifecycle/test_hypothesis.py` with three test groups:
