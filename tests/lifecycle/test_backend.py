@@ -689,6 +689,34 @@ class TestDockerSdkBackendUserInjection:
         _, kwargs = client.containers.create.call_args
         assert kwargs["user"] == "root"
 
+    def test_create_container_host_docker_sock_keeps_image_user(self, backend):
+        """A socket-mounting service without an explicit user keeps the
+        image's default user (needed to reach the root:docker socket)."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-proxy",
+            image="tecnativa/docker-socket-proxy:latest",
+            container_name="test-proxy",
+            host_docker_sock=True,
+        )
+        b._create_container(config, "tecnativa/docker-socket-proxy:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["user"] is None
+
+    def test_create_container_host_docker_sock_explicit_user_wins(self, backend):
+        """An explicit config.user still applies to socket-mounting services."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-proxy",
+            image="tecnativa/docker-socket-proxy:latest",
+            container_name="test-proxy",
+            host_docker_sock=True,
+            user="1000:994",
+        )
+        b._create_container(config, "tecnativa/docker-socket-proxy:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["user"] == "1000:994"
+
 
 # ---------------------------------------------------------------------------
 # Claude auth credential validation

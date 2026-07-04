@@ -248,6 +248,18 @@ class DockerSdkBackend(ExecutionBackend):
     def _create_container(self, config: "ComponentConfig", image_ref: str) -> Any:
         """Create a Docker container from a ComponentConfig spec (synchronous)."""
 
+        # Containers that mount the host Docker socket must keep their
+        # image's default user: the socket is root:docker on the host, and
+        # forcing the non-root default uid locks them out (haproxy in the
+        # tecnativa socket-proxy got EACCES on every request and answered
+        # 503 — took down mill's sandboxes on 2026-07-04).
+        if config.user:
+            user = config.user
+        elif config.host_docker_sock:
+            user = None
+        else:
+            user = f"{os.getuid()}:{os.getgid()}"
+
         # Host ports are intentionally NOT published: the gateway reaches
         # managed containers over the central-deploy-proxy network by
         # container_name:container_port (gateway/router.py). Publishing host
@@ -289,7 +301,7 @@ class DockerSdkBackend(ExecutionBackend):
             ports=ports,
             tmpfs={p: "" for p in config.tmpfs} if config.tmpfs else None,
             detach=True,
-            user=config.user or f"{os.getuid()}:{os.getgid()}",
+            user=user,
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
             network=PROXY_NETWORK,
             mem_limit=config.mem_limit,
