@@ -1055,8 +1055,8 @@ async def _run_deploy_job(
                 except Exception as exc:
                     logger.warning(
                         "deploy %s: could not write config.json to volume %s: %s",
-                        name.replace("\n", "\\n"),
-                        config.config_volume.replace("\n", "\\n"),
+                        repr(name),
+                        repr(config.config_volume),
                         exc,
                     )
                     # non-fatal: container may still start if config was written earlier
@@ -1141,7 +1141,7 @@ async def _run_deploy_job(
         except Exception:
             logger.warning(
                 "deploy %s: image auto-prune failed",
-                name.replace("\n", "\\n"),
+                repr(name),
                 exc_info=True,
             )
 
