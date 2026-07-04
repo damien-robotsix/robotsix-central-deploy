@@ -231,11 +231,6 @@ async def _claude_auth_refresh_loop(
             # Read credentials to inspect expiry and refresh token.
             try:
                 creds = await backend.read_claude_credentials(CLAUDE_AUTH_VOLUME)
-            except ValueError, NotImplementedError:
-                logger.debug(
-                    "Claude auth refresh: read_claude_credentials failed", exc_info=True
-                )
-                continue
             except Exception:
                 logger.debug(
                     "Claude auth refresh: read_claude_credentials failed", exc_info=True
