@@ -47,8 +47,9 @@ default-groups = ["dev"]
 robotsix-lifecycle = "robotsix_central_deploy.lifecycle.cli:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = []
+build-backend = "_mill_build"
+backend-path = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_central_deploy"]

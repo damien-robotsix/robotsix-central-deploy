@@ -1,20 +1,55 @@
-"""Chat agent component roster endpoint.
+"""Chat agent component roster and scoped write-surface endpoints.
 
-Exposes ``GET /chat/components`` so the chat agent can discover
-which managed components are reachable and what their chat skill is.
+Exposes:
+- ``GET /chat/components`` — list components reachable by the chat agent
+- ``PUT /chat/config/{name}`` — update non-secret config keys (allowlisted services only)
+- ``POST /chat/config/{name}/rollback`` — restore previous config version
+- ``POST /chat/services/{name}/restart`` — restart a service (allowlisted)
+- ``POST /chat/services/{name}/update`` — pull + recreate (deploy) a service (allowlisted)
+- ``GET /chat/audit-log`` — read recent audit entries
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..auth import verify_auth
-from ..deps import _get_component_config_store
+from ..backends import ExecutionBackend
+from ..deps import (
+    _get_backend,
+    _get_chat_agent_audit_store,
+    _get_component_config_store,
+    _get_config_yaml_store,
+    _get_env_store,
+    _get_or_create_record,
+    _get_registry,
+    _get_store,
+    _validate_config_or_422,
+)
+from .._config_utils import _mask_secrets, _merge_config, _canonical_hash
+from ..models import (
+    ServiceState,
+    can_transition,
+)
+from ..schemas import (
+    ChatAgentAuditEntryResponse,
+    ChatAgentAuditLogResponse,
+    ChatAgentConfigRollbackResponse,
+    ChatAgentConfigUpdate,
+    ChatAgentRestartResponse,
+    ChatAgentUpdateResponse,
+)
+from ..store import ServiceStore
+from ...deploy_lock import release_deploy_lock, try_acquire_deploy_lock
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.loader import ComponentRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +58,93 @@ router = APIRouter(tags=["chat"])
 # Simple TTL cache for skill bodies: {component_id: (timestamp, body)}
 _skill_cache: dict[str, tuple[float, str]] = {}
 _SKILL_CACHE_TTL: float = 60.0
+
+# ---------------------------------------------------------------------------
+# Server-side allowlists
+# ---------------------------------------------------------------------------
+
+# Services the chat agent is permitted to mutate.
+_CHAT_ALLOWED_SERVICES: frozenset[str] = frozenset({"robotsix-chat", "cognee"})
+
+# Rate-limit cooldowns (seconds) per action type.
+_RATE_LIMIT_COOLDOWNS: dict[str, float] = {
+    "restart": 60.0,
+    "update": 300.0,
+    "config_update": 5.0,
+    "config_rollback": 10.0,
+}
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter helper
+# ---------------------------------------------------------------------------
+
+
+def _check_rate_limit(
+    app_state: Any, service: str, action: str
+) -> None:
+    """Raise HTTP 429 if *action* on *service* is within the cooldown window."""
+    cooldown = _RATE_LIMIT_COOLDOWNS.get(action, 30.0)
+    key = f"{service}:{action}"
+    rate_limits: dict[str, float] = getattr(app_state, "chat_agent_rate_limits", {})
+    last = rate_limits.get(key, 0.0)
+    now = time.monotonic()
+    if now - last < cooldown:
+        remaining = cooldown - (now - last)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Rate limit: {action} on '{service}' is allowed once every "
+                f"{cooldown:.0f}s. Retry in {remaining:.1f}s."
+            ),
+        )
+    rate_limits[key] = now
+
+
+# ---------------------------------------------------------------------------
+# Service allowlist guard
+# ---------------------------------------------------------------------------
+
+
+def _require_allowed_service(name: str) -> None:
+    """Raise HTTP 403 when *name* is not in the chat-agent service allowlist."""
+    if name not in _CHAT_ALLOWED_SERVICES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Chat agent is not permitted to mutate service '{name}'.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Secret-free key guard
+# ---------------------------------------------------------------------------
+
+
+def _reject_secret_keys(
+    schema: dict[str, Any], submitted: dict[str, Any]
+) -> None:
+    """Raise HTTP 403 when *submitted* contains any secret-typed keys.
+
+    Secrets are detected via ``"format": "password"`` + ``"writeOnly": true``
+    in the JSON Schema properties.
+    """
+    from .._config_utils import _is_json_schema, _is_secret_prop, _resolve_ref
+
+    if not _is_json_schema(schema):
+        return  # legacy flat template — no secret annotations
+
+    def _check(prop_schema: dict[str, Any], vals: dict[str, Any]) -> None:
+        for key, prop in prop_schema.get("properties", {}).items():
+            resolved = _resolve_ref(prop, schema)  # resolve against root schema
+            if _is_secret_prop(resolved) and key in vals:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Chat agent cannot mutate secret key '{key}'.",
+                )
+            if resolved.get("type") == "object" and isinstance(vals.get(key), dict):
+                _check(resolved, vals[key])
+
+    _check(schema, submitted)
 
 
 # ---------------------------------------------------------------------------
@@ -109,3 +231,429 @@ async def list_chat_components(
             )
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# PUT /chat/config/{name}
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/chat/config/{name}",
+    response_model=ChatAgentConfigRollbackResponse,
+    summary="Update non-secret config keys for an allowlisted service",
+    responses={
+        403: {"description": "Service not allowlisted or secret key rejected"},
+        404: {"description": "Service has no config schema"},
+        429: {"description": "Rate limited"},
+    },
+)
+async def chat_update_config(
+    name: str,
+    body: ChatAgentConfigUpdate,
+    request: Request,
+    store: ServiceStore = Depends(_get_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentConfigRollbackResponse:
+    """Update non-secret config keys for an allowlisted service.
+
+    Saves the current config as a rollback snapshot before applying the
+    update.  Secret keys are rejected with 403.  Writes the merged config
+    to the service's config volume and records an audit entry for every
+    changed key.
+    """
+    _require_allowed_service(name)
+    _check_rate_limit(request.app.state, name, "config_update")
+
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for component '{name}'",
+        )
+
+    # Reject any secret keys in the submitted values.
+    _reject_secret_keys(template, body.values)
+
+    # Snapshot current config for rollback before mutating.
+    existing = await config_yaml_store.get_current(name)
+    if existing is not None:
+        await config_yaml_store.save_previous(name, existing)
+    else:
+        # No current config yet — snapshot the template defaults so the
+        # operator can still roll back the first change.
+        default_config = _merge_config(template, {}, {})
+        await config_yaml_store.save_previous(name, default_config)
+
+    # Merge submitted values over existing (or template defaults when no
+    # current config exists yet).
+    try:
+        merged = _merge_config(template, existing or {}, body.values)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": str(exc)},
+        )
+
+    _validate_config_or_422(template, merged)
+
+    # Write to volume if available.
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg and comp_cfg.config_volume:
+        await backend.write_config_to_volume(comp_cfg.config_volume, merged)
+        new_hash = _canonical_hash(merged)
+        await config_yaml_store.update_current_and_hash(name, merged, new_hash)
+    else:
+        await config_yaml_store.update_current(name, merged)
+
+    # Audit-log each changed key.
+    for key, new_val in body.values.items():
+        old_val = existing.get(key) if isinstance(existing, dict) else None
+        await audit_store.append(
+            ChatAgentAuditEntry(
+                component=name,
+                action="config_update",
+                key=key,
+                old_value=old_val,
+                new_value=new_val,
+            )
+        )
+
+    masked = _mask_secrets(template, merged)
+    return ChatAgentConfigRollbackResponse(
+        component=name,
+        restored=masked,
+        detail="Config updated; previous version saved for rollback.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/config/{name}/rollback
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/chat/config/{name}/rollback",
+    response_model=ChatAgentConfigRollbackResponse,
+    summary="Restore the previous config version for an allowlisted service",
+    responses={
+        403: {"description": "Service not allowlisted"},
+        404: {"description": "No previous config snapshot available"},
+        429: {"description": "Rate limited"},
+    },
+)
+async def chat_rollback_config(
+    name: str,
+    request: Request,
+    store: ServiceStore = Depends(_get_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentConfigRollbackResponse:
+    """Restore the previous config snapshot for an allowlisted service.
+
+    Returns 404 when no previous snapshot exists (e.g. no config update
+    has been performed yet through the chat surface).
+    """
+    _require_allowed_service(name)
+    _check_rate_limit(request.app.state, name, "config_rollback")
+
+    previous = await config_yaml_store.get_previous(name)
+    if previous is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No previous config snapshot for component '{name}'.",
+        )
+
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for component '{name}'",
+        )
+
+    _validate_config_or_422(template, previous)
+
+    # Write the previous config back.
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg and comp_cfg.config_volume:
+        await backend.write_config_to_volume(comp_cfg.config_volume, previous)
+        new_hash = _canonical_hash(previous)
+        await config_yaml_store.update_current_and_hash(name, previous, new_hash)
+    else:
+        await config_yaml_store.update_current(name, previous)
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component=name,
+            action="config_rollback",
+            detail="Restored previous config snapshot.",
+        )
+    )
+
+    masked = _mask_secrets(template, previous)
+    return ChatAgentConfigRollbackResponse(
+        component=name,
+        restored=masked,
+        detail="Config rolled back to previous snapshot.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/services/{name}/restart
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/chat/services/{name}/restart",
+    response_model=ChatAgentRestartResponse,
+    summary="Restart an allowlisted service (idempotent)",
+    responses={
+        403: {"description": "Service not allowlisted"},
+        404: {"description": "Service not found"},
+        409: {"description": "Invalid state transition"},
+        429: {"description": "Rate limited"},
+    },
+)
+async def chat_restart_service(
+    name: str,
+    request: Request,
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentRestartResponse:
+    """Restart an allowlisted service. Idempotent.
+
+    Raises 403 if the service is not in the chat-agent allowlist.
+    Rate-limited to one restart per 60 seconds per service.
+    """
+    _require_allowed_service(name)
+    _check_rate_limit(request.app.state, name, "restart")
+
+    record = await _get_or_create_record(name, store)
+    previous = record.state
+
+    if record.state == ServiceState.RESTARTING:
+        await audit_store.append(
+            ChatAgentAuditEntry(
+                component=name,
+                action="restart",
+                detail="Restart already in progress.",
+            )
+        )
+        return ChatAgentRestartResponse(
+            name=name,
+            previous_state=previous.value,
+            current_state=ServiceState.RESTARTING.value,
+            detail="Restart already in progress",
+        )
+
+    if not can_transition(record.state, ServiceState.RESTARTING):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot restart from state '{record.state.value}'",
+        )
+
+    record.state = ServiceState.RESTARTING
+    await store.put(record)
+
+    try:
+        final_state = await backend.restart(record)
+    except Exception as exc:
+        logger.exception("chat restart %s failed", name)
+        record.state = ServiceState.FAILED
+        record.last_error = str(exc)
+        await store.put(record)
+        await audit_store.append(
+            ChatAgentAuditEntry(
+                component=name,
+                action="restart",
+                detail=f"Restart failed: {exc}",
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Restart failed: {exc}",
+        )
+
+    record.state = final_state
+    record.last_error = (
+        "" if final_state == ServiceState.RUNNING else "backend reported failure"
+    )
+    await store.put(record)
+
+    # Restart siblings (best-effort).
+    config = registry.get(name)
+    if config and config.siblings:
+        from ..deps import _get_sibling_pairs
+
+        for sib, sib_record in await _get_sibling_pairs(name, config, store):
+            try:
+                final = await backend.restart(sib_record)
+                sib_record.state = final
+                await store.put(sib_record)
+            except Exception:
+                logger.warning("chat restart sibling '%s-%s' failed", name, sib.service_key)
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component=name,
+            action="restart",
+            detail=f"Restarted: {previous.value} → {final_state.value}",
+        )
+    )
+
+    return ChatAgentRestartResponse(
+        name=name,
+        previous_state=previous.value,
+        current_state=record.state.value,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/services/{name}/update
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/chat/services/{name}/update",
+    response_model=ChatAgentUpdateResponse,
+    summary="Pull + recreate (deploy) an allowlisted service",
+    responses={
+        403: {"description": "Service not allowlisted"},
+        404: {"description": "Service not found"},
+        409: {"description": "Deploy already in progress"},
+        429: {"description": "Rate limited"},
+        503: {"description": "Registry not loaded"},
+    },
+)
+async def chat_update_service(
+    name: str,
+    request: Request,
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentUpdateResponse:
+    """Pull the latest image and recreate the container for an allowlisted service.
+
+    Synchronous — waits for the deploy to complete before returning.
+    Rate-limited to one update per 300 seconds per service.
+    """
+    _require_allowed_service(name)
+    _check_rate_limit(request.app.state, name, "update")
+
+    record = await _get_or_create_record(name, store)
+
+    config = registry.get(name)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No component config for '{name}'.",
+        )
+
+    # Merge env overrides from the env store (same as the main deploy endpoint).
+    env_store = await _get_env_store(request)
+    merged_env = await env_store.get_merged_env(name, config.env)
+    config = config.model_copy(update={"env": merged_env})
+
+    # Serialise concurrent deploys.
+    if not await try_acquire_deploy_lock(name):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Deploy already in progress for '{name}'.",
+        )
+
+    try:
+        outcome = await backend.deploy(record, config, config.image)
+    except Exception as exc:
+        logger.exception("chat update %s failed", name)
+        release_deploy_lock(name)
+        await audit_store.append(
+            ChatAgentAuditEntry(
+                component=name,
+                action="update",
+                detail=f"Update failed: {exc}",
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Update failed: {exc}",
+        )
+    finally:
+        release_deploy_lock(name)
+
+    record.state = outcome.state
+    record.deployed_image_digest = outcome.deployed_digest
+    record.previous_image_digest = outcome.previous_digest
+    await store.put(record)
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component=name,
+            action="update",
+            detail=(
+                f"Deployed {outcome.deployed_digest[:19]}… "
+                f"(previous: {outcome.previous_digest[:19]}…) "
+                f"→ {outcome.state.value}"
+            ),
+        )
+    )
+
+    return ChatAgentUpdateResponse(
+        name=name,
+        deployed_digest=outcome.deployed_digest,
+        previous_digest=outcome.previous_digest,
+        current_state=outcome.state.value,
+        detail="Update completed.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/audit-log
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/audit-log",
+    response_model=ChatAgentAuditLogResponse,
+    summary="Read recent chat-agent mutation audit entries",
+    responses={401: {"description": "Unauthorized"}},
+)
+async def chat_audit_log(
+    request: Request,
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    limit: int = 50,
+    component: str | None = None,
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentAuditLogResponse:
+    """Return recent chat-agent audit entries, most-recent-first.
+
+    Optionally filter by *component* name.
+    """
+    entries = await audit_store.list(limit=limit, component=component)
+    return ChatAgentAuditLogResponse(
+        entries=[
+            ChatAgentAuditEntryResponse(
+                timestamp=e.timestamp,
+                agent_id=e.agent_id,
+                component=e.component,
+                action=e.action,
+                key=e.key,
+                old_value=e.old_value,
+                new_value=e.new_value,
+                detail=e.detail,
+            )
+            for e in entries
+        ]
+    )

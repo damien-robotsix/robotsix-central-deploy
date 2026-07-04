@@ -21,6 +21,11 @@ modules:
       - GET /disk
       - POST /disk/reclaim
       - GET /chat/components
+      - PUT /chat/config/{name}
+      - POST /chat/config/{name}/rollback
+      - POST /chat/services/{name}/restart
+      - POST /chat/services/{name}/update
+      - GET /chat/audit-log
       - GET /services
       - GET /services/{name}
       - GET /services/{name}/health

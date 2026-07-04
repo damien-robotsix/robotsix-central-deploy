@@ -308,3 +308,65 @@ class ClaudeAuthCredentialsRequest(BaseModel):
 class ClaudeAuthCredentialsResponse(BaseModel):
     status: str  # "authenticated" | "error"
     error: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Chat agent write-surface models
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentConfigUpdate(BaseModel):
+    """Request body for PUT /chat/config/{name}.
+
+    Only non-secret keys are accepted; secret fields are rejected with 403.
+    """
+
+    values: dict[str, Any]
+
+
+class ChatAgentConfigRollbackResponse(BaseModel):
+    """Response body for POST /chat/config/{name}/rollback."""
+
+    component: str
+    restored: dict[str, Any]  # secret-masked snapshot of the restored config
+    detail: str = ""
+
+
+class ChatAgentRestartResponse(BaseModel):
+    """Response body for POST /chat/services/{name}/restart."""
+
+    name: str
+    action: str = "restart"
+    previous_state: str
+    current_state: str
+    detail: str = ""
+
+
+class ChatAgentUpdateResponse(BaseModel):
+    """Response body for POST /chat/services/{name}/update."""
+
+    name: str
+    action: str = "update"
+    deployed_digest: str = ""
+    previous_digest: str = ""
+    current_state: str
+    detail: str = ""
+
+
+class ChatAgentAuditEntryResponse(BaseModel):
+    """One audit-log entry exposed by GET /chat/audit-log."""
+
+    timestamp: float
+    agent_id: str
+    component: str
+    action: str
+    key: str | None = None
+    old_value: Any = None
+    new_value: Any = None
+    detail: str = ""
+
+
+class ChatAgentAuditLogResponse(BaseModel):
+    """Response body for GET /chat/audit-log."""
+
+    entries: list[ChatAgentAuditEntryResponse] = []
