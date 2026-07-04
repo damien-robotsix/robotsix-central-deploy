@@ -8,25 +8,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from robotsix_central_deploy.lifecycle.deps import (
-    _claude_auth_refresh_loop,
-    get_claude_auth_refresh_state,
-)
+import robotsix_central_deploy.lifecycle.deps as deps_mod
 
 
 class TestClaudeAuthRefreshState:
     """Tests for ``get_claude_auth_refresh_state``."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_state(self) -> None:
+        """Reset module-level refresh state before each test."""
+        deps_mod._claude_auth_refresh_state = {
+            "last_refresh": None,
+            "last_error": None,
+        }
+
     def test_returns_snapshot_copy(self) -> None:
         """The returned dict is a copy, not a reference to module state."""
-        s1 = get_claude_auth_refresh_state()
-        s2 = get_claude_auth_refresh_state()
+        s1 = deps_mod.get_claude_auth_refresh_state()
+        s2 = deps_mod.get_claude_auth_refresh_state()
         assert s1 is not s2
         assert s1 == s2
 
     def test_default_state(self) -> None:
         """Default state has last_refresh and last_error as None."""
-        state = get_claude_auth_refresh_state()
+        state = deps_mod.get_claude_auth_refresh_state()
         assert "last_refresh" in state
         assert "last_error" in state
         assert state["last_refresh"] is None
@@ -39,8 +44,6 @@ class TestClaudeAuthRefreshLoop:
     @pytest.fixture(autouse=True)
     def _reset_state(self) -> None:
         """Reset module-level refresh state before each test."""
-        import robotsix_central_deploy.lifecycle.deps as deps_mod
-
         deps_mod._claude_auth_refresh_state = {
             "last_refresh": None,
             "last_error": None,
@@ -55,7 +58,7 @@ class TestClaudeAuthRefreshLoop:
         backend.check_claude_auth = AsyncMock(side_effect=NotImplementedError)
 
         with patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]):
-            await _claude_auth_refresh_loop(backend, 1)
+            await deps_mod._claude_auth_refresh_loop(backend, 1)
 
     async def test_refresh_loop_not_authenticated_skips(self) -> None:
         """When status is not 'authenticated', the loop continues."""
@@ -65,7 +68,7 @@ class TestClaudeAuthRefreshLoop:
         )
 
         with patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]):
-            await _claude_auth_refresh_loop(backend, 1)
+            await deps_mod._claude_auth_refresh_loop(backend, 1)
 
     async def test_refresh_loop_check_fails_continues(self) -> None:
         """When check_claude_auth raises a generic Exception, loop continues."""
@@ -73,7 +76,7 @@ class TestClaudeAuthRefreshLoop:
         backend.check_claude_auth = AsyncMock(side_effect=RuntimeError("boom"))
 
         with patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]):
-            await _claude_auth_refresh_loop(backend, 1)
+            await deps_mod._claude_auth_refresh_loop(backend, 1)
 
     async def test_refresh_loop_success_path(self) -> None:
         """Full success path: authenticated, expiring soon, refresh succeeds."""
@@ -107,16 +110,14 @@ class TestClaudeAuthRefreshLoop:
         client_instance.__aenter__ = AsyncMock(return_value=client_instance)
         client_instance.__aexit__ = AsyncMock(return_value=None)
 
-        import robotsix_central_deploy.lifecycle.deps as deps_mod
-
         with (
             patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]),
             patch.object(deps_mod.httpx, "AsyncClient", return_value=client_instance),
         ):
-            await _claude_auth_refresh_loop(backend, 1)
+            await deps_mod._claude_auth_refresh_loop(backend, 1)
 
         # Refresh state should be updated to success.
-        state = get_claude_auth_refresh_state()
+        state = deps_mod.get_claude_auth_refresh_state()
         assert state["last_refresh"] is not None
         assert state["last_error"] is None
         backend.write_claude_credentials.assert_awaited_once()
