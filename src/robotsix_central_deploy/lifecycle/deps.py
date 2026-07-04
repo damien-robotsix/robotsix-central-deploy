@@ -15,7 +15,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -31,6 +31,7 @@ from .models import (
     VolumeStat,
     StoreBackend,
 )
+from .schemas import OnboardJobPhase
 from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
 from ..registry.deploy_history_store import DeployHistoryStore
@@ -370,15 +371,6 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
 # ---------------------------------------------------------------------------
 # Onboard job registry (in-memory, single-process)
 # ---------------------------------------------------------------------------
-
-OnboardJobPhase = Literal[
-    "writing_config",
-    "deploying_primary",
-    "waiting_health",
-    "deploying_siblings",
-    "done",
-    "failed",
-]
 
 
 class OnboardJob:

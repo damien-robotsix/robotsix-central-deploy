@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Eliminate duplicated `OnboardJobPhase` literal type alias; `deps.py` now imports it from `schemas.py`
 - Add missing `deploy_history_store_path` and `llmio_tier_config` fields to `config/config.example.json` (skip `claude_auth_helper_image` — already removed).
 - Remove dead constant `RESTING_STATES` from `lifecycle/models.py` — never imported or referenced anywhere.
 - Background credential refresh for the claude-auth volume: periodically checks `.credentials.json` and POSTs a refresh_token grant to the Anthropic OAuth token endpoint when the access token is within 1 hour of expiry. Uses a CLI-like User-Agent to avoid Cloudflare 403, persists the rotated refresh token atomically (0600, 1000:1000), and surfaces refresh success/failure in the Claude Auth dashboard panel. Configurable via `claude_auth_refresh_interval` (default 1800 s; 0 disables).
