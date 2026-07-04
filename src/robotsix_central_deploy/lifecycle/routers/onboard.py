@@ -22,6 +22,7 @@ from ..deps import (
     _get_config,
     _namespace_spec_volumes,
     _merge_config,
+    _strip_secret_values,
     _validate_config_or_422,
     _canonical_hash,
     JobRegistry,
@@ -227,6 +228,23 @@ async def onboard_preflight(
             )
     else:
         derived_spec.config_schema = None
+
+    # Parse config/config.example.json (or a committed config/config.json) into
+    # the base "deploy default" values. These are layered UNDER the user's form
+    # input and OVER the schema defaults during /onboard/confirm, so a field
+    # whose example value differs from its schema default deploys with the
+    # example value. Absent/invalid JSON → None (non-fatal).
+    example_bytes = repo_files.config_json or repo_files.config_json_template
+    if example_bytes is not None:
+        try:
+            parsed_example = json.loads(example_bytes)
+        except json.JSONDecodeError:
+            parsed_example = None
+        derived_spec.config_example_values = (
+            parsed_example if isinstance(parsed_example, dict) else None
+        )
+    else:
+        derived_spec.config_example_values = None
 
     # Preflight gate: config (or template) present but no config-target label
     if derived_spec.config_schema is not None and derived_spec.config_volume is None:
@@ -612,8 +630,19 @@ async def onboard_confirm(
     # config.json to the real config volume so the container starts healthy.
     if spec.config_schema is not None:
         await config_yaml_store.save_template(spec.name, spec.config_schema)
+        # Base layer: the repo's config.example.json values ("deploy defaults"),
+        # with secret fields stripped so example placeholders never inject a
+        # secret. Precedence: user form values > example values > schema default.
+        base_values = _strip_secret_values(
+            spec.config_schema, spec.config_example_values or {}
+        )
         try:
-            merged = _merge_config(spec.config_schema, {}, req.config_values or {})
+            merged = _merge_config(
+                spec.config_schema,
+                base_values,
+                req.config_values or {},
+                prefer_existing_for_unset=True,
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,

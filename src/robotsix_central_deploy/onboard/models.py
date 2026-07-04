@@ -49,6 +49,11 @@ class DerivedSpec(BaseModel):
     config_schema: dict[str, Any] | None = (
         None  # parsed config/config.json, null when absent
     )
+    config_example_values: dict[str, Any] | None = (
+        None  # parsed config/config.example.json (or committed config/config.json)
+        # values — the "deploy default" base layered under schema defaults and
+        # over-ridden by user form input during onboard confirm; null when absent
+    )
     config_volume: Optional[str] = (
         None  # named volume that holds config.json (resolved from robotsix.deploy.config-target label)
     )

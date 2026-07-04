@@ -1477,6 +1477,166 @@ class TestOnboardConfirmWithConfig:
 
 
 # ---------------------------------------------------------------------------
+# config.example.json seed values (deploy defaults) tests
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardConfigExampleValues:
+    """config.example.json values seed the onboard config as deploy defaults.
+
+    Precedence: user form values > config.example.json values > schema default.
+    """
+
+    @staticmethod
+    def _schema() -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "settings": {
+                    "type": "object",
+                    "properties": {
+                        # schema default binds loopback; the example flips it.
+                        "api_host": {"type": "string", "default": "127.0.0.1"},
+                        "port": {"type": "integer", "default": 8080},
+                    },
+                },
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+            },
+        }
+
+    @staticmethod
+    def _wire_capture(monkeypatch) -> list:
+        captured: list[tuple] = []
+        original_write = server_mod.app.state.backend.write_config_to_volume
+
+        async def _fake_write(volume_name: str, config_dict: dict) -> None:
+            captured.append((volume_name, config_dict))
+            return await original_write(volume_name, config_dict)
+
+        monkeypatch.setattr(
+            server_mod.app.state.backend, "write_config_to_volume", _fake_write
+        )
+        return captured
+
+    async def test_example_value_wins_over_schema_default_when_user_untouched(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Example api_host=0.0.0.0 (≠ schema default 127.0.0.1); user leaves it
+        untouched → merged config carries the EXAMPLE value."""
+        spec = _make_derived_spec("ex-svc")
+        spec.config_schema = self._schema()
+        spec.config_example_values = {
+            "settings": {"api_host": "0.0.0.0"},
+            "api_key": "",  # empty placeholder secret
+        }
+        spec.config_volume = "ex-svc-data"
+        spec.volume_mounts.append(VolumeMount(host="ex-svc-data", container="/cfg"))
+
+        captured = self._wire_capture(monkeypatch)
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},  # no config_values → user untouched
+            headers=auth_headers,
+        )
+        assert resp.status_code == 202
+        job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
+        assert job["phase"] == "done"
+
+        assert len(captured) == 1
+        written = captured[0][1]
+        # Example value wins over schema default 127.0.0.1
+        assert written["settings"]["api_host"] == "0.0.0.0"
+        # Port unset in example → schema default fills in
+        assert written["settings"]["port"] == 8080
+        # Empty-placeholder secret stays empty (never set from example)
+        assert written["api_key"] == ""
+
+    async def test_user_value_overrides_example_value(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A user-supplied form value beats the example value."""
+        spec = _make_derived_spec("ex-svc2")
+        spec.config_schema = self._schema()
+        spec.config_example_values = {"settings": {"api_host": "0.0.0.0"}}
+        spec.config_volume = "ex-svc2-data"
+        spec.volume_mounts.append(VolumeMount(host="ex-svc2-data", container="/cfg"))
+
+        captured = self._wire_capture(monkeypatch)
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={
+                "spec": spec.model_dump(),
+                "config_values": {"settings": {"api_host": "10.0.0.5"}},
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 202
+        job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
+        assert job["phase"] == "done"
+
+        assert captured[0][1]["settings"]["api_host"] == "10.0.0.5"
+
+    async def test_absent_example_values_falls_back_to_schema_default(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """No config.example.json → schema defaults (unchanged legacy behavior)."""
+        spec = _make_derived_spec("ex-svc3")
+        spec.config_schema = self._schema()
+        spec.config_example_values = None
+        spec.config_volume = "ex-svc3-data"
+        spec.volume_mounts.append(VolumeMount(host="ex-svc3-data", container="/cfg"))
+
+        captured = self._wire_capture(monkeypatch)
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 202
+        job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
+        assert job["phase"] == "done"
+
+        assert captured[0][1]["settings"]["api_host"] == "127.0.0.1"
+
+    async def test_example_secret_placeholder_never_injected(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A NON-empty secret placeholder in the example must not become set —
+        the operator still has to supply the secret."""
+        spec = _make_derived_spec("ex-svc4")
+        spec.config_schema = self._schema()
+        spec.config_example_values = {
+            "settings": {"api_host": "0.0.0.0"},
+            "api_key": "REPLACE_ME",  # bogus placeholder that must be stripped
+        }
+        spec.config_volume = "ex-svc4-data"
+        spec.volume_mounts.append(VolumeMount(host="ex-svc4-data", container="/cfg"))
+
+        captured = self._wire_capture(monkeypatch)
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 202
+        job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
+        assert job["phase"] == "done"
+
+        # Secret stripped from example → falls to "" (unset), not "REPLACE_ME"
+        assert captured[0][1]["api_key"] == ""
+        # Non-secret example value still seeds
+        assert captured[0][1]["settings"]["api_host"] == "0.0.0.0"
+
+
+# ---------------------------------------------------------------------------
 # New JSON Schema-driven config tests
 # ---------------------------------------------------------------------------
 
