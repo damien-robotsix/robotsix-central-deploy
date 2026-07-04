@@ -7,6 +7,8 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Remove deprecated `lifecycle/backend.py` shim module; all callers (caretaker, tests) now import directly from `lifecycle.backends` or `lifecycle.models`
+- Onboard: seed the component config from `config/config.example.json`'s values (precedence: user input > example > schema default), so deploy-appropriate example values (e.g. `api_host: 0.0.0.0`) are honored instead of the code's schema default. Secret leaves from the example are stripped.
+
 - Migrate onboarding config handling from YAML naming to JSON: rename ``config_yaml`` / ``config_yaml_template`` fields to ``config_json`` / ``config_json_template`` in ``RepoFiles``, rename ``parse_config_yaml`` to ``parse_config_json``, and update all docstrings/comments referencing ``config.yaml`` to ``config.json``.
 - Migrate onboarding config handling from YAML naming to JSON: rename ``config_yaml`` / ``config_yaml_template`` fields to ``config_json`` / ``config_json_template`` in ``RepoFiles``, rename ``parse_config_yaml`` to ``parse_config_json``, and update all docstrings/comments referencing ``config.yaml`` to ``config.json``.
 - Docker build: accept an optional `github_token` build secret to authenticate git

@@ -742,6 +742,46 @@ def _is_secret_prop(prop_schema: dict[str, Any]) -> bool:
     )
 
 
+def _strip_secret_values(
+    schema: dict[str, Any] | None, values: dict[str, Any]
+) -> dict[str, Any]:
+    """Return a copy of *values* with all secret-typed leaves removed.
+
+    Walks a JSON Schema and drops any value whose property is a secret
+    (``format: password`` + ``writeOnly: true``), recursing into object
+    properties.  Used to stop example/config-template files from injecting
+    secret values during onboard — the operator must always supply secrets,
+    so seeded example values must never resurrect a secret field.
+
+    Non-JSON-Schema (flat) templates have no secret concept, so *values* is
+    returned unchanged.
+    """
+    if not schema or not _is_json_schema(schema) or not isinstance(values, dict):
+        return values if isinstance(values, dict) else {}
+
+    def _recursive(
+        i_schema: dict[str, Any], i_values: dict[str, Any]
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        props = i_schema.get("properties", {})
+        for key, val in i_values.items():
+            prop = props.get(key)
+            resolved = _resolve_ref(prop, i_schema) if isinstance(prop, dict) else None
+            if resolved is not None and _is_secret_prop(resolved):
+                continue  # drop secret leaves — the operator supplies them
+            if (
+                resolved is not None
+                and resolved.get("type") == "object"
+                and isinstance(val, dict)
+            ):
+                result[key] = _recursive(resolved, val)
+            else:
+                result[key] = val
+        return result
+
+    return _recursive(schema, values)
+
+
 def _resolve_ref(prop: dict[str, Any], root_schema: dict[str, Any]) -> dict[str, Any]:
     """Resolve a local ``$ref`` (``#/$defs/<Name>``) against *root_schema*.
 
