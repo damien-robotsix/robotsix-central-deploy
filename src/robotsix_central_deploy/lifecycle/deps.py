@@ -905,7 +905,8 @@ async def _get_sibling_pairs(
         sib_name = f"{name}-{sib.service_key}"
         sib_record = await store.get(sib_name)
         if sib_record is None:
-            logger.warning("sibling record '%s' not found; skipping", sib_name)  # lgtm[py/log-injection]
+            # lgtm[py/log-injection] — sib_name is derived from trusted config, not raw user input
+            logger.warning("sibling record '%s' not found; skipping", sib_name)
             continue
         pairs.append((sib, sib_record))
     return pairs

@@ -86,7 +86,26 @@ def _write_dist_info(metadata_dir: _Path, name: str, version: str) -> str:
         "Root-Is-Purelib: true\n"
         "Tag: py3-none-any\n"
     )
-    (dist_info / "entry_points.txt").write_text("")
+    # Generate entry_points.txt from [project.scripts] and
+    # [project.gui-scripts] in pyproject.toml so that console scripts
+    # (e.g. robotsix-lifecycle) exist even without hatchling.
+    _entry_points_lines: list[str] = []
+    if _tomllib is not None and _project:
+        _scripts = _project.get("scripts", {})
+        if _scripts:
+            _entry_points_lines.append("[console_scripts]")
+            for _ep_name, _ep_target in _scripts.items():
+                _entry_points_lines.append(f"{_ep_name} = {_ep_target}")
+            _entry_points_lines.append("")
+        _gui_scripts = _project.get("gui-scripts", {})
+        if _gui_scripts:
+            _entry_points_lines.append("[gui_scripts]")
+            for _ep_name, _ep_target in _gui_scripts.items():
+                _entry_points_lines.append(f"{_ep_name} = {_ep_target}")
+            _entry_points_lines.append("")
+    (dist_info / "entry_points.txt").write_text(
+        "\n".join(_entry_points_lines) + "\n"
+    )
     return dist_info_name
 
 

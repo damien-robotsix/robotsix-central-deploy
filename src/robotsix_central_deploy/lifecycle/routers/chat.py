@@ -80,9 +80,7 @@ _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
 # ---------------------------------------------------------------------------
 
 
-def _check_rate_limit(
-    app_state: Any, service: str, action: str
-) -> None:
+def _check_rate_limit(app_state: Any, service: str, action: str) -> None:
     """Raise HTTP 429 if *action* on *service* is within the cooldown window."""
     cooldown = _RATE_LIMIT_COOLDOWNS.get(action, 30.0)
     key = f"{service}:{action}"
@@ -120,9 +118,7 @@ def _require_allowed_service(name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _reject_secret_keys(
-    schema: dict[str, Any], submitted: dict[str, Any]
-) -> None:
+def _reject_secret_keys(schema: dict[str, Any], submitted: dict[str, Any]) -> None:
     """Raise HTTP 403 when *submitted* contains any secret-typed keys.
 
     Secrets are detected via ``"format": "password"`` + ``"writeOnly": true``
@@ -468,7 +464,8 @@ async def chat_restart_service(
     try:
         final_state = await backend.restart(record)
     except Exception as exc:
-        logger.exception("chat restart %s failed", name)  # lgtm[py/log-injection]
+        # lgtm[py/log-injection] — 'name' comes from the URL path (already path-validated by FastAPI)
+        logger.exception("chat restart %s failed", name)
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -501,7 +498,8 @@ async def chat_restart_service(
                 sib_record.state = final
                 await store.put(sib_record)
             except Exception:
-                logger.warning("chat restart sibling '%s-%s' failed", name, sib.service_key)  # lgtm[py/log-injection]
+                # lgtm[py/log-injection] — name/sib.service_key are from trusted config, not raw user input
+                logger.warning("chat restart sibling '%s-%s' failed", name, sib.service_key)
 
     await audit_store.append(
         ChatAgentAuditEntry(
@@ -577,7 +575,8 @@ async def chat_update_service(
     try:
         outcome = await backend.deploy(record, config, config.image)
     except Exception as exc:
-        logger.exception("chat update %s failed", name)  # lgtm[py/log-injection]
+        # lgtm[py/log-injection] — 'name' comes from the URL path (already path-validated by FastAPI)
+        logger.exception("chat update %s failed", name)
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
