@@ -578,7 +578,6 @@ async def chat_update_service(
         outcome = await backend.deploy(record, config, config.image)
     except Exception as exc:
         logger.exception("chat update %s failed", name)
-        release_deploy_lock(name)
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
@@ -594,6 +593,7 @@ async def chat_update_service(
         release_deploy_lock(name)
 
     record.state = outcome.state
+    record.image = config.image
     record.deployed_image_digest = outcome.deployed_digest
     record.previous_image_digest = outcome.previous_digest
     await store.put(record)

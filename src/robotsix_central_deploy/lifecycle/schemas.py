@@ -325,7 +325,7 @@ class ChatAgentConfigUpdate(BaseModel):
 
 
 class ChatAgentConfigRollbackResponse(BaseModel):
-    """Response body for POST /chat/config/{name}/rollback."""
+    """Response body for PUT /chat/config/{name} and POST /chat/config/{name}/rollback."""
 
     component: str
     restored: dict[str, Any]  # secret-masked snapshot of the restored config
