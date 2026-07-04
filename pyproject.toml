@@ -33,6 +33,7 @@ dev = [
     "types-PyYAML>=6.0",
     "types-docker>=7.1",
     "towncrier>=24.0",
+    "hypothesis>=6.0",
 ]
 docs = [
     "mkdocs-material>=9.5",

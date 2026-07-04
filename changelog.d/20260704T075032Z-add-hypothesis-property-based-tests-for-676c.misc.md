@@ -1,0 +1,1 @@
+Add Hypothesis property-based tests for state-machine transitions, input validation, and enum roundtrip
