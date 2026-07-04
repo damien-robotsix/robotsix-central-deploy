@@ -908,25 +908,6 @@ def _fetch_fresh_config_assist(
     return spec.config_assist_command, spec.config_assist_seeds
 
 
-# ---------------------------------------------------------------------------
-# Config helpers (re-exported from _config_utils)
-# ---------------------------------------------------------------------------
-
-from ._config_utils import (  # noqa: E402, F401
-    _canonical_hash as _canonical_hash,
-    _coerce_by_schema as _coerce_by_schema,
-    _is_json_schema as _is_json_schema,
-    _is_secret_prop as _is_secret_prop,
-    _mask_secrets as _mask_secrets,
-    _mask_secrets_json_schema as _mask_secrets_json_schema,
-    _merge_config as _merge_config,
-    _merge_config_flat as _merge_config_flat,
-    _merge_config_json_schema as _merge_config_json_schema,
-    _resolve_ref as _resolve_ref,
-    _strip_secret_values as _strip_secret_values,
-)
-
-
 def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> None:
     """Validate *values* against JSON Schema, raising HTTP 422 on failure."""
     import jsonschema

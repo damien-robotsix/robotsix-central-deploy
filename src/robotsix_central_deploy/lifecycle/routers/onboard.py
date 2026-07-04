@@ -21,12 +21,10 @@ from ..deps import (
     _get_job_registry,
     _get_config,
     _namespace_spec_volumes,
-    _merge_config,
-    _strip_secret_values,
     _validate_config_or_422,
-    _canonical_hash,
     JobRegistry,
 )
+from .._config_utils import _canonical_hash, _merge_config, _strip_secret_values
 from ..config import LifecycleConfig
 from ..models import ServiceRecord
 from ..schemas import (

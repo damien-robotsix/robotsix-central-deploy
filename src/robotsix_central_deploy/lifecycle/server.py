@@ -20,9 +20,11 @@ from .deps import lifespan as lifespan  # noqa: F401
 from .backends import NoopBackend as NoopBackend  # noqa: F401
 
 # Config helpers (tests import these directly)
-from .deps import (  # noqa: F401
+from ._config_utils import (  # noqa: F401
     _mask_secrets as _mask_secrets,
     _merge_config as _merge_config,
+)
+from .deps import (  # noqa: F401
     _prune_unset as _prune_unset,
     _seed_for_detect as _seed_for_detect,
     _validate_account_ids as _validate_account_ids,
