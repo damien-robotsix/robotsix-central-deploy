@@ -10,7 +10,13 @@ from .models import (
     DeployHistoryResponse,
     RollbackRequest,
 )
-from .backends import ExecutionBackend, DockerBackend
+from .backends import (
+    ExecutionBackend,
+    DockerBackend,
+    DockerSdkBackend,
+    NoopBackend,
+    collect_protected_image_refs,
+)
 from .store import ServiceStore, InMemoryStore, FileStore
 from .config import LifecycleConfig
 from .app import app
@@ -26,6 +32,9 @@ __all__ = [
     "RollbackRequest",
     "ExecutionBackend",
     "DockerBackend",
+    "DockerSdkBackend",
+    "NoopBackend",
+    "collect_protected_image_refs",
     "ServiceStore",
     "InMemoryStore",
     "FileStore",
