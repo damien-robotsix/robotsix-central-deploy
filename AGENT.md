@@ -73,6 +73,7 @@ All service endpoints require auth when configured.
 | POST | `/services/{name}/restart` | Restart a service (idempotent) |
 | POST | `/services/{name}/deploy` | Deploy a new image version |
 | POST | `/services/{name}/rollback` | Roll back to prior image digest |
+| POST | `/services/{name}/refresh-contract` | Re-fetch deploy/docker-compose.yml from the repo and update stored contract settings |
 | DELETE | `/services/{name}?stop_container=true` | Remove an onboarded component |
 
 ### Onboarding

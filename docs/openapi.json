@@ -1785,6 +1785,79 @@
         }
       }
     },
+    "/services/{name}/refresh-contract": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Refetch deploy/docker-compose.yml from the repo and update stored contract",
+        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, ports, mounts, command, entrypoint,\nhealth check, siblings, labels, etc.) are refreshed from the repo HEAD.\nOperator-set fields (repo_id, caretaker_auto_update, mem_limit) and\nenvironment overrides in the EnvStore are left untouched. The endpoint\nreturns which fields changed so the operator can decide whether a\nredeploy is needed.",
+        "operationId": "refresh_contract_services__name__refresh_contract_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractRefreshResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Component has no git_url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found or repo has no deploy/docker-compose.yml",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Repo fetch failed or compose parse failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services/{name}/config/assist": {
       "post": {
         "tags": [
@@ -2938,6 +3011,40 @@
         ],
         "title": "ConfigSchemaRefreshResponse",
         "description": "Body of the 200 response from POST /services/{name}/config/refresh-schema."
+      },
+      "ContractRefreshResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Changed Fields",
+            "default": []
+          },
+          "previous": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Previous",
+            "default": {}
+          },
+          "current": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ContractRefreshResponse",
+        "description": "Body of the 200 response from POST /services/{name}/refresh-contract."
       },
       "ConfigUpdate": {
         "properties": {
