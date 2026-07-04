@@ -494,7 +494,7 @@ class TestEnvEndpoints:
         resp = await client.get("/services/chat/env", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data == {"env": {}, "secrets": {}}
+        assert data == {"env": {}, "secrets": {}, "mem_limit": "2g"}
 
     async def test_put_then_get_returns_env_and_masked_secrets(
         self, client: AsyncClient, auth_headers: dict
@@ -630,6 +630,64 @@ class TestEnvEndpoints:
             "OVERRIDE": "user-val",
             "SECRET": "s3cret",
         }
+
+    async def test_put_with_mem_limit_updates_config(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """PUT /services/{name}/env with mem_limit persists to ComponentConfig."""
+        await _seed_store("chat")
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "chat")
+
+        r = await client.put(
+            "/services/chat/env",
+            json={"mem_limit": "4g"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 204
+
+        # Verify the mem_limit was persisted
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mem_limit"] == "4g"
+
+    async def test_put_without_mem_limit_preserves_existing(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """PUT without mem_limit should not change the existing value."""
+        await _seed_store("chat")
+        config_store = server_mod.app.state.component_config_store
+        cfg = await _seed_config(config_store, "chat")
+        cfg.mem_limit = "8g"
+        await config_store.put(cfg)
+
+        r = await client.put(
+            "/services/chat/env",
+            json={"env": {"KEY": "val"}},
+            headers=auth_headers,
+        )
+        assert r.status_code == 204
+
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mem_limit"] == "8g"  # unchanged
+
+    async def test_get_env_returns_stored_mem_limit(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """GET /services/{name}/env returns mem_limit from ComponentConfig."""
+        await _seed_store("chat")
+        config_store = server_mod.app.state.component_config_store
+        cfg = await _seed_config(config_store, "chat")
+        cfg.mem_limit = "512m"
+        await config_store.put(cfg)
+
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mem_limit"] == "512m"
 
 
 # ---------------------------------------------------------------------------

@@ -286,6 +286,7 @@ class DockerSdkBackend(ExecutionBackend):
             user=f"{os.getuid()}:{os.getgid()}",
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
             network=PROXY_NETWORK,
+            mem_limit=config.mem_limit,
         )
 
     async def _wait_healthy(self, name: str, timeout: float = 60.0) -> None:

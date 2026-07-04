@@ -168,6 +168,7 @@ async def _fanout_deploy_siblings(
             named_volumes=[m.host for m in sib_config.mounts],
             command=sib_config.command,
             entrypoint=sib_config.entrypoint,
+            mem_limit=sib_config.mem_limit,
         )
         try:
             sib_outcome = await backend.deploy(
@@ -234,6 +235,7 @@ async def _fanout_rollback_siblings(
             named_volumes=[m.host for m in sib_config.mounts],
             command=sib_config.command,
             entrypoint=sib_config.entrypoint,
+            mem_limit=sib_config.mem_limit,
         )
         try:
             sib_outcome = await backend.rollback(sib_record, effective_sib)
@@ -1227,6 +1229,7 @@ async def get_service_env(
     name: str,
     store: ServiceStore = Depends(_get_store),
     env_store: EnvStore = Depends(_get_env_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> EnvResponse:
     """Return stored environment variables and masked secret keys for a service.
@@ -1237,7 +1240,9 @@ async def get_service_env(
     await _get_or_create_record(name, store)
     config = await env_store.get(name)
     secrets_masked = {key: "***" for key in config.secret_tokens}
-    return EnvResponse(env=config.env, secrets=secrets_masked)
+    comp_cfg = component_config_store.get(name)
+    mem_limit = comp_cfg.mem_limit if comp_cfg else "2g"
+    return EnvResponse(env=config.env, secrets=secrets_masked, mem_limit=mem_limit)
 
 
 # ---------------------------------------------------------------------------
@@ -1256,14 +1261,23 @@ async def put_service_env(
     body: EnvUpdate,
     store: ServiceStore = Depends(_get_store),
     env_store: EnvStore = Depends(_get_env_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Create or update environment variables and secrets for a service.
 
+    Optionally update the memory limit for the component's container.
     Returns 204 No Content on success. Raises 404 if the service is not found.
     """
     await _get_or_create_record(name, store)
     await env_store.upsert(name, body.env, body.secrets)
+    if body.mem_limit is not None:
+        comp_cfg = component_config_store.get(name)
+        if comp_cfg is not None:
+            comp_cfg.mem_limit = body.mem_limit
+            await component_config_store.put(comp_cfg)
+            registry.register(comp_cfg)
 
 
 # ---------------------------------------------------------------------------
