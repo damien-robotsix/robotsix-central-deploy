@@ -82,6 +82,39 @@ class OnboardJobStatusResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Deploy job models (async deploy pattern)
+# ---------------------------------------------------------------------------
+
+DeployJobPhase = Literal[
+    "deploying",
+    "waiting_health",
+    "deploying_siblings",
+    "done",
+    "failed",
+]
+
+
+class DeployAcceptedResponse(BaseModel):
+    """Returned by POST /services/{name}/deploy (202) when the job is queued."""
+
+    job_id: str
+    name: str
+
+
+class DeployJobStatusResponse(BaseModel):
+    """Returned by GET /services/deploy-jobs/{job_id}."""
+
+    job_id: str
+    component: str
+    phase: DeployJobPhase
+    error: str | None = None
+    name: str | None = None
+    image: str | None = None
+    state: str | None = None
+    warnings: list[str] = []
+
+
+# ---------------------------------------------------------------------------
 # Env endpoint models
 # ---------------------------------------------------------------------------
 

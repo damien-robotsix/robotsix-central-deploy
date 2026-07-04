@@ -1365,13 +1365,95 @@ async function loadDashboard() {
   }
 }
 
+var DEPLOY_PHASE_LABELS = {
+  deploying: 'Deploying\u2026',
+  waiting_health: 'Waiting for health\u2026',
+  deploying_siblings: 'Deploying siblings\u2026',
+  done: 'Done',
+  failed: 'Failed',
+};
+
+var _deployJobPollTimers = {};
+
+function stopDeployJobPoll(name) {
+  if (_deployJobPollTimers[name] !== undefined) {
+    clearTimeout(_deployJobPollTimers[name]);
+    delete _deployJobPollTimers[name];
+  }
+}
+
+function pollDeployJob(name, jobId, btn, origText) {
+  stopDeployJobPoll(name);
+
+  function poll() {
+    _deployJobPollTimers[name] = setTimeout(async function() {
+      try {
+        var res = await fetch('/services/deploy-jobs/' + encodeURIComponent(jobId), {
+          headers: authHeaders(),
+          credentials: 'same-origin',
+        });
+        if (res.status === 404) {
+          stopDeployJobPoll(name);
+          showRowError(name, 'Deploy job lost \u2014 server may have restarted.');
+          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          return;
+        }
+        if (!res.ok) {
+          stopDeployJobPoll(name);
+          var errData = await res.json().catch(function() { return {}; });
+          showRowError(name, 'Deploy failed: ' + (errData.error || 'HTTP ' + res.status));
+          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          return;
+        }
+        var data = await res.json();
+        var phase = data.phase;
+        if (btn) { btn.textContent = DEPLOY_PHASE_LABELS[phase] || phase; }
+
+        if (phase === 'done') {
+          stopDeployJobPoll(name);
+          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          // Refresh the row
+          try {
+            var svc = await fetchOneStatus(name);
+            var rowEl = document.getElementById('row-' + name);
+            if (rowEl) rowEl.outerHTML = renderRow(svc);
+          } catch (e) { /* best-effort */ }
+          updateRefreshTime();
+          if (data.warnings && data.warnings.length > 0) {
+            showWarning('\u26a0\ufe0f ' + data.warnings.join(' '));
+          }
+        } else if (phase === 'failed') {
+          stopDeployJobPoll(name);
+          showRowError(name, 'Deploy failed: ' + (data.error || 'unknown error'));
+          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          // Try to refresh the row anyway
+          try {
+            var svc2 = await fetchOneStatus(name);
+            var rowEl2 = document.getElementById('row-' + name);
+            if (rowEl2) rowEl2.outerHTML = renderRow(svc2);
+          } catch (e) { /* best-effort */ }
+          updateRefreshTime();
+        } else {
+          // Still in progress — keep polling.
+          poll();
+        }
+      } catch (err) {
+        stopDeployJobPoll(name);
+        showRowError(name, 'Deploy poll error: ' + err.message);
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
+      }
+    }, 1500);
+  }
+  poll();
+}
+
 async function updateService(name) {
   if (!window.confirm(`Force-update "${name}" to the latest image?\n\nThis pulls the latest image from the registry and recreates the container (brief restart).`)) return;
   hideRowError(name);
   hideWarning();
   const btn = document.getElementById(`btn-update-${name}`);
   const orig = btn ? btn.textContent : 'Update';
-  if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Deploying\u2026'; }
   try {
     const resp = await fetch(`/services/${encodeURIComponent(name)}/deploy`, {
       method: 'POST',
@@ -1384,17 +1466,11 @@ async function updateService(name) {
       throw new Error(body.error || `HTTP ${resp.status}`);
     }
     const body = await resp.json().catch(() => ({}));
-    const svc = await fetchOneStatus(name);
-    const rowEl = document.getElementById(`row-${name}`);
-    if (rowEl) rowEl.outerHTML = renderRow(svc);
-    updateRefreshTime();
-    if (body.warnings && body.warnings.length > 0) {
-      showWarning('\u26a0\ufe0f ' + body.warnings.join(' '));
-    }
+    // 202 Accepted — poll the deploy job for progress.
+    pollDeployJob(name, body.job_id, btn, orig);
   } catch (err) {
     showRowError(name, 'Update failed: ' + err.message);
-    const b = document.getElementById(`btn-update-${name}`);
-    if (b) { b.disabled = false; b.textContent = orig; }
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
   }
 }
 

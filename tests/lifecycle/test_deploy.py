@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,6 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.backends import DockerSdkBackend
+from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.models import (
     ExecutionBackendType,
     ServiceRecord,
@@ -67,9 +69,13 @@ def _ensure_registry(monkeypatch, registry):
 
     from robotsix_central_deploy.lifecycle.backends import NoopBackend
     from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+    from robotsix_central_deploy.lifecycle.deps import JobRegistry
     from robotsix_central_deploy.lifecycle.store import InMemoryStore
     from robotsix_central_deploy.registry.config_store import ComponentConfigStore
     from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
+    from robotsix_central_deploy.registry.deploy_history_store import (
+        DeployHistoryStore,
+    )
     from robotsix_central_deploy.registry.env_store import EnvStore
     from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
@@ -89,6 +95,8 @@ def _ensure_registry(monkeypatch, registry):
     env_store = EnvStore(Path("/tmp/test_env_store.json"), key_manager)  # noqa: S108
     config_store = ComponentConfigStore(Path("/tmp/test_config_store.json"))  # noqa: S108
     config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
+    deploy_history_store = DeployHistoryStore(Path("/tmp/test_deploy_history.json"))  # noqa: S108
+    job_registry = JobRegistry()
 
     server_mod._config = cfg
     server_mod._store = store
@@ -102,6 +110,8 @@ def _ensure_registry(monkeypatch, registry):
     server_mod.app.state.env_store = env_store
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.config_yaml_store = config_yaml_store
+    server_mod.app.state.deploy_history_store = deploy_history_store
+    server_mod.app.state.job_registry = job_registry
 
 
 # ---------------------------------------------------------------------------
@@ -124,21 +134,18 @@ class TestDeployEndpoint:
             ServiceRecord(name=name, state=ServiceState.STOPPED, image="repo:v1")
         )
 
-    async def test_deploy_uses_config_image_when_body_omitted(
+    async def test_deploy_returns_202_with_job_id(
         self, client: AsyncClient, auth_headers: dict, registry
     ):
         await self._seed("svc-a")
         resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
         assert data["name"] == "svc-a"
-        assert data["action"] == "deploy"
-        assert (
-            data["deployed_digest"] == "sha256:noop"
-        )  # NoopBackend always returns this
-        assert data["current_state"] == ServiceState.RUNNING.value
+        assert "job_id" in data
+        assert data["job_id"].startswith("svc-a-")
 
-    async def test_deploy_with_image_override(
+    async def test_deploy_with_image_override_returns_202(
         self, client: AsyncClient, auth_headers: dict, registry
     ):
         await self._seed("svc-a")
@@ -147,22 +154,27 @@ class TestDeployEndpoint:
             json={"image": "repo:v2"},
             headers=auth_headers,
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
-        assert data["deployed_digest"] == "sha256:noop"
+        assert data["job_id"].startswith("svc-a-")
 
-        # Verify the record was updated with the override image ref
+        # The background task runs in the same event loop; wait for it.
+        await asyncio.sleep(0)
+
         store = server_mod.app.state.store
         rec = await store.get("svc-a")
         assert rec is not None
         assert rec.image == "repo:v2"
 
-    async def test_deploy_updates_record_digests(
+    async def test_deploy_completes_and_updates_record(
         self, client: AsyncClient, auth_headers: dict, registry
     ):
         await self._seed("svc-a")
         resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+
+        # Let the background task run to completion.
+        await asyncio.sleep(0)
 
         store = server_mod.app.state.store
         rec = await store.get("svc-a")
@@ -194,13 +206,12 @@ class TestDeployEndpoint:
         resp = await client.post("/services/svc-a/deploy")
         assert resp.status_code == 401
 
-    async def test_deploy_returns_409_when_already_in_progress(
+    async def test_deploy_returns_409_when_lock_held_no_job(
         self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
     ):
-        """Two concurrent deploys of the same component: the second gets 409."""
+        """When the deploy lock is held and no active deploy job exists, return 409."""
         await self._seed("svc-a")
 
-        # Replace the lock helper with one that always says "locked".
         async def _fake_try_acquire(_name: str) -> bool:
             return False
 
@@ -212,6 +223,77 @@ class TestDeployEndpoint:
         assert resp.status_code == 409
         data = resp.json()
         assert "already in progress" in data["error"]
+
+    async def test_deploy_returns_existing_job_id_when_active_job_exists(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """When an API-initiated deploy job is already active, return 202 with
+        the existing job_id."""
+        await self._seed("svc-a")
+
+        # Manually create an active deploy job before calling the endpoint.
+        job_registry: JobRegistry = server_mod.app.state.job_registry
+        existing_job_id = job_registry.create_deploy("svc-a")
+
+        resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["job_id"] == existing_job_id
+
+    async def test_deploy_job_status_polling(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """GET /services/deploy-jobs/{job_id} returns job progress."""
+        await self._seed("svc-a")
+
+        # Manually create a deploy job to verify the polling endpoint.
+        job_registry: JobRegistry = server_mod.app.state.job_registry
+        job_id = job_registry.create_deploy("svc-a")
+        job_registry.update_deploy_phase(job_id, "waiting_health")
+
+        resp = await client.get(f"/services/deploy-jobs/{job_id}", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["job_id"] == job_id
+        assert data["component"] == "svc-a"
+        assert data["phase"] == "waiting_health"
+        assert data["error"] is None
+
+    async def test_deploy_job_status_404_unknown_job(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """GET /services/deploy-jobs/{job_id} returns 404 for unknown job."""
+        resp = await client.get(
+            "/services/deploy-jobs/nonexistent-999", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+    async def test_deploy_job_status_requires_auth(self, client: AsyncClient, registry):
+        resp = await client.get("/services/deploy-jobs/svc-a-1")
+        assert resp.status_code == 401
+
+    async def test_deploy_job_done_phase(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """After a deploy background task completes, the job is in 'done' phase."""
+        await self._seed("svc-a")
+        resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Let the background task run to completion.
+        await asyncio.sleep(0)
+
+        # Poll for the final state
+        resp2 = await client.get(
+            f"/services/deploy-jobs/{job_id}", headers=auth_headers
+        )
+        assert resp2.status_code == 200
+        data = resp2.json()
+        assert data["phase"] == "done"
+        assert data["name"] == "svc-a"
+        assert data["state"] == ServiceState.RUNNING.value
+        assert data["error"] is None
 
     # -- rollback -----------------------------------------------------------
 
@@ -227,11 +309,19 @@ class TestDeployEndpoint:
         self, client: AsyncClient, auth_headers: dict, registry
     ):
         await self._seed("svc-a")
-        # First, deploy to set prior digest
+        # First, deploy to set prior digest (now async 202)
         resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["deployed_digest"] == "sha256:noop"
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Wait for background deploy to complete
+        await asyncio.sleep(0)
+
+        # Verify job completed
+        job_resp = await client.get(
+            f"/services/deploy-jobs/{job_id}", headers=auth_headers
+        )
+        assert job_resp.json()["phase"] == "done"
 
         # NoopBackend returns previous_digest="" — manually inject a prior digest
         # so the rollback guard passes

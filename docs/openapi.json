@@ -1009,8 +1009,8 @@
         "tags": [
           "services"
         ],
-        "summary": "Deploy a new image version for a service",
-        "description": "Pull and deploy a new image version for a service.\n\nOptionally accepts a specific image reference; defaults to the component's\nconfigured image. Writes merged config.yaml to the config volume before\nstarting when a config schema is present. Raises 404 if the service or\ncomponent config is not found, 503 if the registry checker is not loaded,\nand 500 on backend failure. Sibling services are deployed on a best-effort\nbasis. Persists the new and previous image digests to the store.",
+        "summary": "Deploy a new image version for a service (async)",
+        "description": "Queue a deploy for a service and return immediately with a job id.\n\nOptionally accepts a specific image reference; defaults to the component's\nconfigured image. The deploy runs as a background job \u2014 the caller polls\n``GET /services/deploy-jobs/{job_id}`` for progress.\n\nReturns 202 with a ``job_id`` so the UI can poll progress. Raises 404 if\nthe service or component config is not found, 409 when a deploy is already\nin progress for the component and no job record exists (e.g. caretaker\ndeploy), and 503 when the registry checker is not loaded.",
         "operationId": "deploy_service_services__name__deploy_post",
         "parameters": [
           {
@@ -1041,12 +1041,12 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Successful Response",
+          "202": {
+            "description": "Deploy queued \u2014 poll job_id for progress",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeployResponse"
+                  "$ref": "#/components/schemas/DeployAcceptedResponse"
                 }
               }
             }
@@ -1071,8 +1071,81 @@
               }
             }
           },
+          "409": {
+            "description": "Deploy already in progress for this component",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
           "503": {
             "description": "Registry not loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/deploy-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Poll the status of a background deploy job",
+        "description": "Return the current phase of a background deploy job.",
+        "operationId": "deploy_job_status_services_deploy_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeployJobStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3201,7 +3274,106 @@
           "current_state"
         ],
         "title": "DeployResponse",
-        "description": "API response for ``POST /services/{name}/deploy``."
+        "description": "Legacy sync deploy response (now unused by deploy endpoint; kept for rollback compat)."
+      },
+      "DeployAcceptedResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "name"
+        ],
+        "title": "DeployAcceptedResponse",
+        "description": "Returned by POST /services/{name}/deploy (202) when the job is queued."
+      },
+      "DeployJobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "component": {
+            "type": "string",
+            "title": "Component"
+          },
+          "phase": {
+            "type": "string",
+            "title": "Phase"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Image"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "component",
+          "phase"
+        ],
+        "title": "DeployJobStatusResponse",
+        "description": "Returned by GET /services/deploy-jobs/{job_id}."
       },
       "DerivedSpec": {
         "properties": {

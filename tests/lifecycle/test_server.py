@@ -6,6 +6,8 @@ full request/response pipeline including middleware, auth, and error handlers.
 
 from __future__ import annotations
 
+import asyncio
+
 from httpx import AsyncClient
 
 from unittest.mock import AsyncMock, MagicMock
@@ -628,7 +630,10 @@ class TestEnvEndpoints:
         monkeypatch.setattr(server_mod.app.state.backend, "deploy", _fake_deploy)
 
         r = await client.post("/services/chat/deploy", headers=auth_headers)
-        assert r.status_code == 200
+        assert r.status_code == 202
+
+        # Let the background task run to completion.
+        await asyncio.sleep(0)
 
         assert len(captured_configs) == 1
         deployed_env = captured_configs[0].env
@@ -1311,7 +1316,10 @@ class TestDeployWithSibling:
         monkeypatch.setattr(server_mod.app.state.backend, "deploy", _fake_deploy)
 
         resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
-        assert resp.status_code == 200
+        assert resp.status_code == 202
+
+        # Let the background task run to completion.
+        await asyncio.sleep(0)
 
         # Both primary and sibling were deployed
         assert "svc-a" in deploy_names
