@@ -1135,7 +1135,7 @@ async def _run_deploy_job(
                 if reclaimed:
                     logger.info(
                         "deploy %s: image auto-prune reclaimed %d bytes",
-                        name,
+                        name.replace("\n", "\\n"),
                         reclaimed,
                     )
         except Exception:
