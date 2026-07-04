@@ -586,6 +586,7 @@ async def onboard_confirm(
                 command=sib.command,
                 entrypoint=sib.entrypoint,
                 tmpfs=sib.tmpfs,
+                user=sib.user,
             )
             for sib in spec.siblings
         ],

@@ -875,6 +875,7 @@ class TestMultiServiceOnboardConfirm:
     ):
         """POST /onboard/confirm with multi-service spec creates sibling record."""
         spec = _make_multi_service_derived_spec("multi-svc")
+        spec.siblings[0].user = "1000:1000"
         store: InMemoryStore = server_mod.app.state.store
 
         resp = await client.post(
@@ -912,6 +913,7 @@ class TestMultiServiceOnboardConfirm:
         assert all_configs[0].id == "multi-svc"
         assert len(all_configs[0].siblings) == 1
         assert all_configs[0].siblings[0].service_key == "worker"
+        assert all_configs[0].siblings[0].user == "1000:1000"
 
     async def test_confirm_multi_service_rollback_on_sibling_deploy_failure(
         self,
