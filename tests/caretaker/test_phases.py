@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -205,8 +206,7 @@ class TestPhaseUpdate:
         async def _fake_try_acquire(_name: str) -> bool:
             return False
 
-        import robotsix_central_deploy.caretaker.phases as phases_mod
-
+        phases_mod = sys.modules["robotsix_central_deploy.caretaker.phases"]
         monkeypatch.setattr(phases_mod, "try_acquire_deploy_lock", _fake_try_acquire)
 
         findings = await phase_update(registry, store, backend, ccs, dhs)
