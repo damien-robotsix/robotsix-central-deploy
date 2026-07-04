@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract config-merge helpers from ``lifecycle/deps.py`` into new ``lifecycle/_config_utils.py`` module, and move ``_deep_merge`` from ``services.py`` into the same module. This makes the merge logic independently testable and reduces ``deps.py`` by ~300 lines.
 - Eliminate duplicated `OnboardJobPhase` literal type alias; `deps.py` now imports it from `schemas.py`
 - Add missing `deploy_history_store_path` and `llmio_tier_config` fields to `config/config.example.json` (skip `claude_auth_helper_image` — already removed).
 - Remove dead constant `RESTING_STATES` from `lifecycle/models.py` — never imported or referenced anywhere.

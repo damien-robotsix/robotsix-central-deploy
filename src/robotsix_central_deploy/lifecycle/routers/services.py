@@ -7,7 +7,7 @@ import logging
 import shlex
 import time
 from collections.abc import AsyncIterator
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.params import Body
@@ -81,21 +81,7 @@ from ...registry.models import ComponentConfig
 from ...registry_check import RegistryChecker
 
 
-def _deep_merge(
-    base: dict[str, object], override: dict[str, object]
-) -> dict[str, object]:
-    """Recursively merge *override* into *base*; override values win on conflict."""
-    result: dict[str, object] = dict(base)
-    for key, val in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(
-                cast("dict[str, object]", result[key]),
-                cast("dict[str, object]", val),
-            )
-        else:
-            result[key] = val
-    return result
-
+from .._config_utils import _deep_merge  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
