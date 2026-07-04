@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend, NoopBackend
+from robotsix_central_deploy.lifecycle.backends import DockerSdkBackend, NoopBackend
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
 from robotsix_central_deploy.registry.models import (
     ComponentConfig,
@@ -340,7 +340,7 @@ class TestDockerSdkBackendPruneImages:
 
 class TestCollectProtectedImageRefs:
     async def test_collects_all_digest_fields(self):
-        from robotsix_central_deploy.lifecycle.backend import (
+        from robotsix_central_deploy.lifecycle.backends import (
             collect_protected_image_refs,
         )
 
@@ -840,14 +840,14 @@ class TestDockerSdkBackendVolumeBrowser:
     # -- NoopBackend stubs --
 
     async def test_noop_list_volume_dir_raises(self):
-        from robotsix_central_deploy.lifecycle.backend import NoopBackend
+        from robotsix_central_deploy.lifecycle.backends import NoopBackend
 
         b = NoopBackend()
         with pytest.raises(NotImplementedError):
             await b.list_volume_dir("v", "")
 
     async def test_noop_read_volume_file_raises(self):
-        from robotsix_central_deploy.lifecycle.backend import NoopBackend
+        from robotsix_central_deploy.lifecycle.backends import NoopBackend
 
         b = NoopBackend()
         with pytest.raises(NotImplementedError):

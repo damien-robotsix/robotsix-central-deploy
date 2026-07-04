@@ -10,8 +10,11 @@ from httpx import AsyncClient
 
 from unittest.mock import AsyncMock, MagicMock
 
-from robotsix_central_deploy.lifecycle.backend import ComponentInspect
-from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
+from robotsix_central_deploy.lifecycle.models import (
+    ComponentInspect,
+    ServiceRecord,
+    ServiceState,
+)
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.onboard.models import DerivedSpec, SiblingDerivedSpec

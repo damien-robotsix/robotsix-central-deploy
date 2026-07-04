@@ -75,7 +75,6 @@ extend-select = ["S"]
 "src/robotsix_central_deploy/lifecycle/deps.py" = ["S101", "S105", "S110"]
 # S110: best-effort inspection paths where failures are intentionally swallowed.
 "src/robotsix_central_deploy/lifecycle/backends/docker_sdk.py" = ["S110"]
-"src/robotsix_central_deploy/lifecycle/backend.py" = ["S110"]
 # S104: 0.0.0.0 bind is intentional for the containerised service.
 # S105: "secrets.key" is a filename, not a hardcoded credential.
 "src/robotsix_central_deploy/lifecycle/config.py" = ["S104", "S105"]
