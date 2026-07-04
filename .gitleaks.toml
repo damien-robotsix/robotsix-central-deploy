@@ -1,0 +1,7 @@
+# gitleaks configuration
+# The .secrets.baseline file contains hashed secrets from detect-secrets
+# and should not be scanned by gitleaks.
+[allowlist]
+  paths = [
+    ".secrets.baseline",
+  ]
