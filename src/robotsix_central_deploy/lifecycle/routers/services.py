@@ -1989,8 +1989,6 @@ async def delete_service(
     # 3. Resolve sibling pairs (requires config; fall back to prefix scan)
     if config is not None:
         pairs = await _get_sibling_pairs(name, config, store)
-    else:
-        pairs = []
 
     # 4. Best-effort container stop/remove (only when config is present)
     if stop_container and config is not None:
