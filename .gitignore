@@ -30,3 +30,6 @@ component_env.json
 # OS / editor
 .DS_Store
 *.swp
+
+# local pip installs
+.local/
