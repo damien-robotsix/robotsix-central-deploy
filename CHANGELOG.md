@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Removed unused `spec_config_schema` parameter from `_run_onboard_deploy_job` in `lifecycle/routers/onboard.py` — it was never referenced in the function body.
 - Made dashboard deploys asynchronous: ``POST /services/{name}/deploy`` now returns ``202 Accepted`` with a ``job_id`` immediately, while the deploy runs as a background job. Added ``GET /services/deploy-jobs/{job_id}`` for polling job progress. The dashboard UI now polls and renders deploy-phase labels (deploying / waiting-health / deploying-siblings) instead of blocking on a frozen button. When an API-initiated deploy job is already active for a component, a second request returns the existing ``job_id`` instead of ``409 Conflict``.
 - Serialise concurrent deploys per component: when a deploy is already in
   progress for a component (e.g. caretaker auto-update), operator-initiated

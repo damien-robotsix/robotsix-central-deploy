@@ -355,7 +355,6 @@ async def _run_onboard_deploy_job(
     job_id: str,
     spec_name: str,
     spec_image: str,
-    spec_config_schema: dict[str, Any] | None,
     spec: DerivedSpec,
     config: ComponentConfig,
     record: ServiceRecord,
@@ -373,8 +372,7 @@ async def _run_onboard_deploy_job(
 ) -> None:
     """Background task that runs the primary deploy → siblings sequence.
 
-    On any failure, calls ``_rollback_onboard`` with the exact same
-    arguments and ordering as the old synchronous handler.
+    On any failure, calls ``_rollback_onboard``.
     """
     try:
         # Deploy primary
@@ -702,7 +700,6 @@ async def onboard_confirm(
             job_id=job_id,
             spec_name=spec.name,
             spec_image=spec.image,
-            spec_config_schema=spec.config_schema,
             spec=spec,
             config=config,
             record=record,
