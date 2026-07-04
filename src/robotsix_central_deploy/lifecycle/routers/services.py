@@ -36,6 +36,7 @@ from ..deps import (
     _validate_account_ids,
     _validate_config_or_422,
 )
+from ...deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..models import (
     ActionResponse,
     ContainerHealthSummary,
@@ -923,6 +924,10 @@ async def restart_service(
             "model": ErrorDetail,
             "description": "Service or component config not found",
         },
+        409: {
+            "model": ErrorDetail,
+            "description": "Deploy already in progress for this component",
+        },
         503: {"model": ErrorDetail, "description": "Registry not loaded"},
     },
 )
@@ -1004,6 +1009,12 @@ async def deploy_service(
             )
             # non-fatal: container may still start if config was written earlier
 
+    # Serialise concurrent deploys of the same component (operator + caretaker).
+    if not await try_acquire_deploy_lock(name):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Deploy already in progress for '{name}'",
+        )
     try:
         outcome = await backend.deploy(record, config, image_ref)
     except Exception as exc:
@@ -1015,6 +1026,8 @@ async def deploy_service(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Deploy failed: {exc}",
         )
+    finally:
+        release_deploy_lock(name)
 
     record.state = outcome.state
     record.image = image_ref

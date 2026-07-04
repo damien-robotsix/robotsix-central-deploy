@@ -11,6 +11,7 @@ import shutil
 import time
 from typing import TYPE_CHECKING
 
+from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..lifecycle.models import DeployHistoryEntry, ServiceState
 from .models import CaretakerFinding, FindingKind
 
@@ -75,6 +76,13 @@ async def phase_update(
         else:
             image_ref = record.image or config.image
 
+        # Serialise concurrent deploys of the same component (operator + caretaker).
+        if not await try_acquire_deploy_lock(record.name):
+            logger.info(
+                "phase_update: deploy already in progress for %s, skipping",
+                record.name,
+            )
+            continue
         try:
             outcome = await backend.deploy(record, config, image_ref)
             record.state = outcome.state
@@ -132,6 +140,8 @@ async def phase_update(
                     severity="error",
                 )
             )
+        finally:
+            release_deploy_lock(record.name)
 
     return findings
 
