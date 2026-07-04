@@ -82,6 +82,7 @@ async def _deploy_onboard_siblings(
             command=sib.command,
             entrypoint=sib.entrypoint,
             tmpfs=sib.tmpfs,
+            user=sib.user,
         )
         sib_record = ServiceRecord(
             name=sib_name,

@@ -412,6 +412,17 @@ def _parse_one_service(
         )
         tmpfs = []
 
+    raw_user = svc.get("user")
+    if raw_user is None:
+        user: Optional[str] = None
+    elif isinstance(raw_user, str):
+        user = raw_user
+    else:
+        violations.append(
+            f"{prefix}user: must be a string, got {type(raw_user).__name__}"
+        )
+        user = None
+
     return {
         "image": image,
         "env": env,
@@ -424,6 +435,7 @@ def _parse_one_service(
         "command": command,
         "entrypoint": entrypoint,
         "tmpfs": tmpfs,
+        "user": user,
         "config_volume": config_volume,
         "config_assist_command": config_assist_command,
         "config_assist_seeds": config_assist_seeds,
@@ -529,6 +541,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 command=sib_parsed["command"],
                 entrypoint=sib_parsed["entrypoint"],
                 tmpfs=sib_parsed["tmpfs"],
+                user=sib_parsed["user"],
             )
         )
 

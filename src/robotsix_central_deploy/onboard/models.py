@@ -29,6 +29,7 @@ class SiblingDerivedSpec(BaseModel):
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
     tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
+    user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
 
 
 class DerivedSpec(BaseModel):

@@ -284,7 +284,7 @@ class DockerSdkBackend(ExecutionBackend):
             ports=ports,
             tmpfs={p: "" for p in config.tmpfs} if config.tmpfs else None,
             detach=True,
-            user=f"{os.getuid()}:{os.getgid()}",
+            user=config.user or f"{os.getuid()}:{os.getgid()}",
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
             network=PROXY_NETWORK,
             mem_limit=config.mem_limit,

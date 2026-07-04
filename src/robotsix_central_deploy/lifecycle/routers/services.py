@@ -174,6 +174,7 @@ async def _fanout_deploy_siblings(
             entrypoint=sib_config.entrypoint,
             tmpfs=sib_config.tmpfs,
             mem_limit=sib_config.mem_limit,
+            user=sib_config.user,
         )
         try:
             sib_outcome = await backend.deploy(
@@ -242,6 +243,7 @@ async def _fanout_rollback_siblings(
             entrypoint=sib_config.entrypoint,
             tmpfs=sib_config.tmpfs,
             mem_limit=sib_config.mem_limit,
+            user=sib_config.user,
         )
         try:
             sib_outcome = await backend.rollback(sib_record, effective_sib)
@@ -2110,6 +2112,7 @@ async def refresh_contract(
                 command=sib.command,
                 entrypoint=sib.entrypoint,
                 tmpfs=sib.tmpfs,
+                user=sib.user,
             )
             for sib in spec.siblings
         ],
