@@ -1,0 +1,1 @@
+Containers with `host_docker_sock: true` and no explicit `user` now keep their image's default user instead of the forced host uid:gid — the non-root default locked socket proxies out of the Docker socket (503 on every request)
