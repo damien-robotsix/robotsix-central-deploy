@@ -255,6 +255,52 @@ class TestClaudeAuthRouter:
 
     # -- Basic Auth support ------------------------------------------------
 
+    async def test_get_claude_auth_status_refresh_never(self, client: AsyncClient):
+        """When no refresh has happened, refresh_status is 'never'."""
+        import robotsix_central_deploy.lifecycle.deps as deps_mod
+
+        deps_mod._claude_auth_refresh_state = {
+            "last_refresh": None,
+            "last_error": None,
+        }
+        resp = await client.get(
+            "/claude-auth/status", headers={"X-API-Key": self.API_KEY}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["refresh_status"] == "never"
+
+    async def test_get_claude_auth_status_refresh_ok(self, client: AsyncClient):
+        """When last refresh succeeded, refresh_status is 'ok'."""
+        import robotsix_central_deploy.lifecycle.deps as deps_mod
+
+        deps_mod._claude_auth_refresh_state = {
+            "last_refresh": 12345.0,
+            "last_error": None,
+        }
+        resp = await client.get(
+            "/claude-auth/status", headers={"X-API-Key": self.API_KEY}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["refresh_status"] == "ok"
+
+    async def test_get_claude_auth_status_refresh_failed(self, client: AsyncClient):
+        """When last refresh failed, refresh_status is 'failed' with error."""
+        import robotsix_central_deploy.lifecycle.deps as deps_mod
+
+        deps_mod._claude_auth_refresh_state = {
+            "last_refresh": 12345.0,
+            "last_error": "network timeout",
+        }
+        resp = await client.get(
+            "/claude-auth/status", headers={"X-API-Key": self.API_KEY}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["refresh_status"] == "failed"
+        assert data["last_refresh_error"] == "network timeout"
+
     async def test_status_with_basic_auth(self, client: AsyncClient):
         resp = await client.get(
             "/claude-auth/status",
