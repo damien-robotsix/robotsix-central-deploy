@@ -77,14 +77,6 @@ TRANSITIONS: dict[ServiceState, set[ServiceState]] = {
     ServiceState.UNKNOWN: {ServiceState.STARTING, ServiceState.STOPPING},
 }
 
-#: States that are "at rest" — a subsequent start/stop produces a clean transition.
-RESTING_STATES: set[ServiceState] = {
-    ServiceState.STOPPED,
-    ServiceState.RUNNING,
-    ServiceState.FAILED,
-    ServiceState.UNKNOWN,
-}
-
 
 def can_transition(current: ServiceState, target: ServiceState) -> bool:
     """Return *True* if the state machine allows *current → target*."""
