@@ -6,6 +6,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Serialise concurrent deploys per component: when a deploy is already in
+  progress for a component (e.g. caretaker auto-update), operator-initiated
+  deploys now receive 409 "Deploy already in progress" instead of racing
+  into Docker. The caretaker skips auto-deploy when an operator deploy holds
+  the lock, retrying on the next cycle.
 - Extract config-merge helpers from ``lifecycle/deps.py`` into new ``lifecycle/_config_utils.py`` module, and move ``_deep_merge`` from ``services.py`` into the same module. This makes the merge logic independently testable and reduces ``deps.py`` by ~300 lines.
 - Eliminate duplicated `OnboardJobPhase` literal type alias; `deps.py` now imports it from `schemas.py`
 - Extract shared ``async_read_json`` / ``async_write_json`` helpers into ``registry._store_utils``, deduplicating the tmp-file-rename persistence pattern across ``ConfigYamlStore``, ``EnvStore``, and ``DeployHistoryStore``.

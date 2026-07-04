@@ -194,6 +194,25 @@ class TestDeployEndpoint:
         resp = await client.post("/services/svc-a/deploy")
         assert resp.status_code == 401
 
+    async def test_deploy_returns_409_when_already_in_progress(
+        self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
+    ):
+        """Two concurrent deploys of the same component: the second gets 409."""
+        await self._seed("svc-a")
+
+        # Replace the lock helper with one that always says "locked".
+        async def _fake_try_acquire(_name: str) -> bool:
+            return False
+
+        import robotsix_central_deploy.lifecycle.routers.services as svc_mod
+
+        monkeypatch.setattr(svc_mod, "try_acquire_deploy_lock", _fake_try_acquire)
+
+        resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
+        assert resp.status_code == 409
+        data = resp.json()
+        assert "already in progress" in data["error"]
+
     # -- rollback -----------------------------------------------------------
 
     async def test_rollback_returns_409_when_no_prior_digest(

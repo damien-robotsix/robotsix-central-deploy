@@ -187,6 +187,32 @@ class TestPhaseUpdate:
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_skips_when_deploy_locked(self, monkeypatch):
+        """Caretaker skips a component whose deploy lock is already held."""
+        store = MagicMock()
+        record = _make_record()
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock()
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+
+        # Simulate lock already held by another deploy.
+        async def _fake_try_acquire(_name: str) -> bool:
+            return False
+
+        import robotsix_central_deploy.caretaker.phases as phases_mod
+
+        monkeypatch.setattr(phases_mod, "try_acquire_deploy_lock", _fake_try_acquire)
+
+        findings = await phase_update(registry, store, backend, ccs, dhs)
+        assert len(findings) == 0
+        backend.deploy.assert_not_called()
+
 
 class TestPhaseHealth:
     @pytest.mark.asyncio
