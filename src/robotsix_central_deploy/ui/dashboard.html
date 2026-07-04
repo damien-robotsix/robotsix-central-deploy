@@ -547,6 +547,16 @@
         </label>
       </div>
     </div>
+    <div class="env-section">
+      <h3>Claude Mount</h3>
+      <div class="env-row">
+        <label>
+          <input type="checkbox" id="claude-mount-checkbox" />
+          Mount Claude credentials (~/.claude → /root/.claude)
+        </label>
+        <span style="font-size:0.82em;color:var(--text-muted);margin-left:0.5rem;">Takes effect on next deploy.</span>
+      </div>
+    </div>
     <div class="env-footer">
       <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
       <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
@@ -979,7 +989,8 @@ function renderRow(svc) {
       <button onclick="updateService('${escAttr(svc.name)}')" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container">Update</button>
       <button onclick="openHistoryModal('${escAttr(svc.name)}')" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
       ${svc.has_config_yaml
-        ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>`
+        ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>
+           <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Deploy</button>`
         : `<button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>`
       }
       <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
@@ -1568,6 +1579,7 @@ async function fetchEnvConfig(name) {
     renderEnvRows(data.env || {}, data.secrets || {});
     document.getElementById('mem-limit-input').value = data.mem_limit || '2g';
     document.getElementById('chat-access-checkbox').checked = !!data.allow_chat_access;
+    document.getElementById('claude-mount-checkbox').checked = !!data.claude_mount;
   } catch (err) {
     showEnvModalError(err.message);
   }
@@ -1687,6 +1699,7 @@ async function saveEnvChanges() {
       body.mem_limit = memLimitInput.value.trim();
     }
     body.allow_chat_access = document.getElementById('chat-access-checkbox').checked;
+    body.claude_mount = document.getElementById('claude-mount-checkbox').checked;
     const resp = await fetch(`/services/${encodeURIComponent(name)}/env`, {
       method: 'PUT',
       credentials: 'same-origin',

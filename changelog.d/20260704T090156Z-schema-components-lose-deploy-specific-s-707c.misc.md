@@ -1,0 +1,1 @@
+schema components lose deploy-specific settings (env, mem_limit, chat access); claude_mount has no post-onboarding toggle
