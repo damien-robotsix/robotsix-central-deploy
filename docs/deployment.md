@@ -196,3 +196,34 @@ the operator must re-run the login flow through the Claude auth panel to
 provision fresh credentials.  This is an expected maintenance task; the
 dashboard status panel shows the current authentication state so the
 operator can detect the issue before end users report it.
+
+## Chat access
+
+Components can opt in to being reachable by the chat agent by setting the
+`allow_chat_access` flag.  When enabled, the component must expose a
+`GET /chat-skill` endpoint that returns a Markdown body describing how the
+chat agent should interact with it (the *skill*).
+
+The chat agent discovers reachable components by calling the lifecycle API
+at `GET /chat/components` (authentication required).  The response is a JSON
+array of `{id, base_url, skill}` objects — one per component that has
+`allow_chat_access = true` **and** whose skill probe returned 200.  Skill
+bodies are cached for 60 seconds; a component whose probe fails is silently
+omitted from the roster (sibling resilience — one failing component does not
+block the whole list).
+
+`base_url` is derived from the component's container name and first
+container port (`http://<container_name>:<container_port>`), which is the
+same derivation used by the caretaker's mill client.
+
+### Enabling chat access
+
+- **At onboard time:** check "Allow chat agent access" in the onboard modal
+  (default from the compose label `robotsix.deploy.chat-access`, which
+  accepts `"true"`, `"1"`, or `"yes"`).
+- **Post-onboard:** open the component's Config panel (the "Config" button
+  on the dashboard row), then toggle the "Allow chat agent access" checkbox
+  under the Chat Access section and click Save.
+
+The flag is stored on the component's `ComponentConfig` and persists across
+redeploys.

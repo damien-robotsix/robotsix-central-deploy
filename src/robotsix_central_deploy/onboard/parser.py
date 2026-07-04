@@ -39,6 +39,7 @@ LABEL_CONFIG_ASSIST_SEEDS = (
     "robotsix.deploy.config-assist-seeds"  # comma-separated config keys
 )
 LABEL_LLMIO_TIER_LEVEL = "robotsix.deploy.llmio-tier-level"  # "level1"–"level4"
+LABEL_CHAT_ACCESS = "robotsix.deploy.chat-access"  # "true" / "false"
 
 # Service-key validation pattern: must match ^[a-z0-9][a-z0-9-]*$
 _SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -356,6 +357,13 @@ def _parse_one_service(
         if isinstance(val, str) and val.strip():
             llmio_tier_level = val.strip()
 
+    # Labels — chat-access
+    allow_chat_access = False
+    if isinstance(labels, dict):
+        val = labels.get(LABEL_CHAT_ACCESS)
+        if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
+            allow_chat_access = True
+
     # container_name override
     container_name = svc.get("container_name", "")
     if container_name is not None and not isinstance(container_name, str):
@@ -408,6 +416,7 @@ def _parse_one_service(
         "config_assist_command": config_assist_command,
         "config_assist_seeds": config_assist_seeds,
         "llmio_tier_level": llmio_tier_level,
+        "allow_chat_access": allow_chat_access,
     }, violations
 
 
@@ -560,6 +569,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         config_assist_command=primary_parsed["config_assist_command"],
         config_assist_seeds=primary_parsed["config_assist_seeds"],
         llmio_tier_level=primary_parsed["llmio_tier_level"],
+        allow_chat_access=primary_parsed["allow_chat_access"],
     )
 
 

@@ -514,6 +514,15 @@
         <span style="font-size:0.85em;color:var(--text-muted);margin-left:0.5rem;">Docker memory limit (e.g. 2g, 512m, 1g). Applied on next deploy.</span>
       </div>
     </div>
+    <div class="env-section">
+      <h3>Chat Access</h3>
+      <div class="env-row">
+        <label>
+          <input type="checkbox" id="chat-access-checkbox" />
+          Allow chat agent access
+        </label>
+      </div>
+    </div>
     <div class="env-footer">
       <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
       <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
@@ -644,6 +653,11 @@
       <label>
         <input type="checkbox" id="ob-claude-mount" />
         Mount Claude credentials
+      </label>
+      <br/>
+      <label>
+        <input type="checkbox" id="ob-chat-access" />
+        Allow chat agent access
       </label>
 
       <div id="ob-mill-tracking" style="margin-top:12px;">
@@ -1529,6 +1543,7 @@ async function fetchEnvConfig(name) {
     const data = await resp.json();
     renderEnvRows(data.env || {}, data.secrets || {});
     document.getElementById('mem-limit-input').value = data.mem_limit || '2g';
+    document.getElementById('chat-access-checkbox').checked = !!data.allow_chat_access;
   } catch (err) {
     showEnvModalError(err.message);
   }
@@ -1647,6 +1662,7 @@ async function saveEnvChanges() {
     if (memLimitInput && memLimitInput.value.trim()) {
       body.mem_limit = memLimitInput.value.trim();
     }
+    body.allow_chat_access = document.getElementById('chat-access-checkbox').checked;
     const resp = await fetch(`/services/${encodeURIComponent(name)}/env`, {
       method: 'PUT',
       credentials: 'same-origin',
@@ -2871,6 +2887,9 @@ function populateStep2(spec, portShifts) {
 
   // Claude mount toggle
   document.getElementById('ob-claude-mount').checked = !!spec.claude_mount;
+
+  // Chat access toggle
+  document.getElementById('ob-chat-access').checked = !!spec.allow_chat_access;
 }
 
 async function onboardDeploy() {
@@ -2895,6 +2914,9 @@ async function onboardDeploy() {
 
   // Claude mount toggle
   finalSpec.claude_mount = document.getElementById('ob-claude-mount').checked;
+
+  // Chat access toggle
+  finalSpec.allow_chat_access = document.getElementById('ob-chat-access').checked;
 
   // Build the confirm body
   var body = { spec: finalSpec };
