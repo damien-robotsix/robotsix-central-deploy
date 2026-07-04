@@ -1,0 +1,1 @@
+Classify docs/architecture/registry_check.md: assign to existing module registry_check or propose a new one

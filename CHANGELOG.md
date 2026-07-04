@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Add docstrings to caretaker models: ``FindingKind``, ``CaretakerFinding``, and ``CaretakerReport``.
+- Register `docs/architecture/registry_check.md` under the `registry_check` module in `docs/modules.yaml`.
 - Removed unused `spec_config_schema` parameter from `_run_onboard_deploy_job` in `lifecycle/routers/onboard.py` — it was never referenced in the function body.
 - Add missing docstrings to 8 public methods of ``DockerSdkBackend`` (``status``, ``start``, ``stop``, ``remove_container``, ``restart``, ``measure_volume_bytes``, ``stream_logs``, ``disk_df``).
 - Made dashboard deploys asynchronous: ``POST /services/{name}/deploy`` now returns ``202 Accepted`` with a ``job_id`` immediately, while the deploy runs as a background job. Added ``GET /services/deploy-jobs/{job_id}`` for polling job progress. The dashboard UI now polls and renders deploy-phase labels (deploying / waiting-health / deploying-siblings) instead of blocking on a frozen button. When an API-initiated deploy job is already active for a component, a second request returns the existing ``job_id`` instead of ``409 Conflict``.
