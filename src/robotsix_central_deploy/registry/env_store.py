@@ -6,12 +6,12 @@ Secrets are stored as Fernet ciphertext tokens; plaintext never touches disk.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
+from ._store_utils import async_read_json, async_write_json
 from .secret_key import SecretKeyManager
 
 
@@ -35,18 +35,10 @@ class EnvStore:
         self._lock = asyncio.Lock()
 
     async def _load(self) -> dict[str, Any]:
-        if not self._path.exists():
-            return {}
-        raw = self._path.read_text(encoding="utf-8").strip()
-        if not raw:
-            return {}
-        data: dict[str, Any] = json.loads(raw)
-        return data
+        return await async_read_json(self._path)
 
     async def _save(self, data: dict[str, Any]) -> None:
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.rename(self._path)
+        await async_write_json(self._path, data)
 
     async def get(self, name: str) -> ComponentEnvConfig:
         data = await self._load()
