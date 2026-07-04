@@ -11,6 +11,7 @@ All notable changes to robotsix-central-deploy.
   deploys now receive 409 "Deploy already in progress" instead of racing
   into Docker. The caretaker skips auto-deploy when an operator deploy holds
   the lock, retrying on the next cycle.
+- Add ``.github/workflows/docs.yml`` to build and deploy docs to GitHub Pages on every push to main, using the shared ``python-docs.yml`` reusable workflow.
 - Extract config-merge helpers from ``lifecycle/deps.py`` into new ``lifecycle/_config_utils.py`` module, and move ``_deep_merge`` from ``services.py`` into the same module. This makes the merge logic independently testable and reduces ``deps.py`` by ~300 lines.
 - Eliminate duplicated `OnboardJobPhase` literal type alias; `deps.py` now imports it from `schemas.py`
 - Extract shared ``async_read_json`` / ``async_write_json`` helpers into ``registry._store_utils``, deduplicating the tmp-file-rename persistence pattern across ``ConfigYamlStore``, ``EnvStore``, and ``DeployHistoryStore``.
