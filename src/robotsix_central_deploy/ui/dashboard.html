@@ -270,6 +270,30 @@
     background: #243044; color: #e2e8f0; border: 1px solid #334155;
     border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
   }
+  .btn-suggest {
+    flex-shrink: 0; width: 28px; height: 28px; line-height: 28px;
+    background: rgba(59,130,246,0.18); border: 1px solid rgba(59,130,246,0.35);
+    border-radius: 4px; color: var(--blue); cursor: pointer;
+    font-size: 0.8rem; padding: 0; text-align: center;
+  }
+  .btn-suggest:hover { background: rgba(59,130,246,0.30); }
+  .suggest-dropdown {
+    position: absolute; z-index: 1000;
+    background: #1a2332; border: 1px solid #334155; border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); min-width: 240px; max-height: 220px;
+    overflow-y: auto; padding: 4px 0;
+  }
+  .suggest-dropdown .suggest-item {
+    padding: 6px 12px; cursor: pointer; font-size: 0.82rem; color: #e2e8f0;
+  }
+  .suggest-dropdown .suggest-item:hover { background: rgba(59,130,246,0.18); }
+  .suggest-dropdown .suggest-item.preselected { color: var(--blue); font-weight: 600; }
+  .suggest-dropdown .suggest-item .suggest-url {
+    display: block; font-size: 0.72rem; color: #64748b;
+  }
+  .suggest-dropdown .suggest-none {
+    padding: 8px 12px; font-size: 0.78rem; color: #64748b;
+  }
   .env-row .env-new-key {
     width: 140px; flex-shrink: 0;
     background: #243044; color: #e2e8f0; border: 1px solid #334155;
@@ -1696,12 +1720,14 @@ let _configComponent = null;
 let _configSchema = null;
 let _configAssistCommand = null;   // string|null
 let _configAssistSeeds = [];       // {key, label}[]
+let _componentSuggestions = [];    // [{id, container_name, container_port}]
 
 function openConfigModal(name) {
   _configComponent = name;
   _configSchema = null;
   _configAssistCommand = null;
   _configAssistSeeds = [];
+  _componentSuggestions = [];
   document.getElementById('config-modal-component').textContent = name;
   document.getElementById('config-modal-error').style.display = 'none';
   document.getElementById('config-form-body').innerHTML = '';
@@ -1723,6 +1749,8 @@ function closeConfigModal() {
   _configSchema = null;
   _configAssistCommand = null;
   _configAssistSeeds = [];
+  _componentSuggestions = [];
+  _closeSuggestDropdown();
   // Remove any stale drift banner / conflict panel
   const driftBanner = document.getElementById('config-drift-banner');
   if (driftBanner) driftBanner.remove();
@@ -1778,6 +1806,9 @@ async function fetchConfigSchema(name) {
     _configAssistCommand = data.config_assist_command || null;
     _configAssistSeeds   = data.config_assist_seeds   || [];
 
+    // Fetch component URL suggestions in the background
+    _fetchComponentSuggestions();
+
     // Drift detection
     const hasDrift = data.drift === true;
     if (hasDrift) {
@@ -1799,6 +1830,21 @@ async function fetchConfigSchema(name) {
     }
   } catch (err) {
     showConfigModalError(err.message);
+  }
+}
+
+async function _fetchComponentSuggestions() {
+  try {
+    const resp = await fetch('/components/suggest', {
+      headers: authHeaders(),
+      credentials: 'same-origin',
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      _componentSuggestions = data.components || [];
+    }
+  } catch {
+    _componentSuggestions = [];
   }
 }
 
@@ -2009,6 +2055,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     : fullKey;
 
   let inputHtml;
+  let urlSuggestHtml = '';
   if (isSecret) {
     const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
     // One state, one message: an unset secret can be skipped now (onboard)
@@ -2058,6 +2105,11 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     inputHtml = `<input type="checkbox" class="env-value" data-key="${escAttr(fullKey)}"
       ${checked ? 'checked' : ''}>`;
   } else {
+    if (/_url$/.test(labelKey) || /_base_url$/.test(labelKey)) {
+      const prefix = labelKey.replace(/(_base)?_url$/, '');
+      urlSuggestHtml = `<button type="button" class="btn-suggest" title="Suggest URL from peer components"
+        data-suggest-for="${escAttr(fullKey)}" data-suggest-prefix="${escAttr(prefix)}">🔍</button>`;
+    }
     inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
       value="${escAttr(String(displayVal))}">`;
   }
@@ -2065,6 +2117,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   div.innerHTML = `
     <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
     ${inputHtml}
+    ${urlSuggestHtml || ''}
   `;
   return div;
 }
@@ -3252,10 +3305,88 @@ function showVbError(msg) {
   el.classList.add('open');
 }
 
+// ── Config suggest dropdown ─────────────────────────────────────
+
+let _activeSuggestDropdown = null;
+
+function _closeSuggestDropdown() {
+  if (_activeSuggestDropdown) {
+    _activeSuggestDropdown.remove();
+    _activeSuggestDropdown = null;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-suggest');
+  if (btn) {
+    e.stopPropagation();
+    _closeSuggestDropdown();
+    _showSuggestDropdown(btn);
+    return;
+  }
+  // Close dropdown when clicking outside
+  if (_activeSuggestDropdown && !_activeSuggestDropdown.contains(e.target)) {
+    _closeSuggestDropdown();
+  }
+});
+
+function _showSuggestDropdown(btn) {
+  const fullKey = btn.dataset.suggestFor;
+  const prefix = btn.dataset.suggestPrefix || '';
+  const input = document.querySelector(`.env-value[data-key="${CSS.escape(fullKey)}"]`);
+  if (!input || _componentSuggestions.length === 0) return;
+
+  // Build dropdown HTML
+  const dd = document.createElement('div');
+  dd.className = 'suggest-dropdown';
+
+  // Preselect: component id matching the field prefix
+  const preselectedId = prefix
+    ? _componentSuggestions.find(c => c.id === prefix)
+    : null;
+  const suggestions = preselectedId
+    ? [preselectedId, ..._componentSuggestions.filter(c => c.id !== prefix)]
+    : _componentSuggestions;
+
+  suggestions.forEach(c => {
+    const url = c.container_port != null
+      ? `http://${c.container_name}:${c.container_port}`
+      : null;
+    const item = document.createElement('div');
+    item.className = 'suggest-item' + (c === preselectedId ? ' preselected' : '');
+    item.innerHTML = `<strong>${escHtml(c.id)}</strong>` +
+      (url ? `<span class="suggest-url">${escHtml(url)}</span>` : '');
+    item.addEventListener('click', () => {
+      if (url) {
+        input.value = url;
+        // Trigger change so the value collector picks it up
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      _closeSuggestDropdown();
+    });
+    dd.appendChild(item);
+  });
+
+  if (suggestions.length === 0) {
+    dd.innerHTML = '<div class="suggest-none">No peer components registered.</div>';
+  }
+
+  // Position below the button
+  const btnRect = btn.getBoundingClientRect();
+  dd.style.position = 'fixed';
+  dd.style.top = (btnRect.bottom + 4) + 'px';
+  dd.style.left = btnRect.left + 'px';
+
+  document.body.appendChild(dd);
+  _activeSuggestDropdown = dd;
+}
+
 // Bootstrap
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (document.getElementById('vb-modal').classList.contains('open')) {
+    if (_activeSuggestDropdown) {
+      _closeSuggestDropdown();
+    } else if (document.getElementById('vb-modal').classList.contains('open')) {
       closeVolumeBrowser();
     } else if (document.getElementById('onboard-modal').classList.contains('open')) {
       closeOnboardModal();

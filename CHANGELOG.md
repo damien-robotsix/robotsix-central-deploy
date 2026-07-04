@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Config UI: suggest peer-component URLs for `*_url` / `*_base_url` fields. A 🔍 button next to matching config fields opens a dropdown of registered components; picking one fills `http://<container_name>:<first container port>`. The field-name prefix is used as a hint to preselect the matching component (e.g. `mill_url` → component `mill`).
 - DELETE /services/{name} is now idempotent and atomic: it purges ServiceRecord(s), env, config YAML, and component config even when the component config store entry is already absent. Sibling/helper services (e.g. ``<name>-socket-proxy``) discovered by prefix scan are also torn down.
 - Per-component chat access control: `ComponentConfig.allow_chat_access` flag (defaulted from compose label `robotsix.deploy.chat-access`) with onboarding UI checkbox and post-onboard toggle. New `GET /chat/components` roster endpoint for the chat agent, returning `{id, base_url, skill}` with a 60s skill-body cache.
 - Remove dead `__getattr__` and `__all__` from `caretaker/__init__.py` — all callers already import `CaretakerScheduler` directly from `caretaker.scheduler`.
