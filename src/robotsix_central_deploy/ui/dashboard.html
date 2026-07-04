@@ -2039,6 +2039,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     : fullKey;
 
   let inputHtml;
+  let urlSuggestHtml = '';
   if (isSecret) {
     const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
     // One state, one message: an unset secret can be skipped now (onboard)
@@ -2088,7 +2089,6 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     inputHtml = `<input type="checkbox" class="env-value" data-key="${escAttr(fullKey)}"
       ${checked ? 'checked' : ''}>`;
   } else {
-    let urlSuggestHtml = '';
     if (/_url$/.test(labelKey) || /_base_url$/.test(labelKey)) {
       const prefix = labelKey.replace(/(_base)?_url$/, '');
       urlSuggestHtml = `<button type="button" class="btn-suggest" title="Suggest URL from peer components"
