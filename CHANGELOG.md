@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- When central-deploy creates a named volume for the first time, chown its root to the container's uid:gid (mode 0755, or 0700 for claude-auth). This fixes PermissionError on data persistence for components running as a non-root user. The claude-auth special-case volume helper is retired in favour of the general mechanism.
 - Add docstrings to caretaker models: ``FindingKind``, ``CaretakerFinding``, and ``CaretakerReport``.
 - Register `docs/architecture/registry_check.md` under the `registry_check` module in `docs/modules.yaml`.
 - Removed unused `spec_config_schema` parameter from `_run_onboard_deploy_job` in `lifecycle/routers/onboard.py` — it was never referenced in the function body.

@@ -341,31 +341,56 @@ class DockerSdkBackend(ExecutionBackend):
             pass
         container.remove(force=True)
 
-    # -- claude-auth volume helpers -----------------------------------------
+    # -- volume ownership helpers -------------------------------------------
 
-    def _ensure_claude_auth_volume(self) -> None:
-        """Create the ``claude-auth`` named volume if it does not exist.
-
-        Labels it with ``robotsix.deploy.stateful=true`` for consistency
-        with other managed stateful volumes.  The volume root is owned by
-        ``1000:1000`` — components run as uid 1000 and Claude Code must be
-        able to rewrite ``.credentials.json`` on token refresh.
+    @staticmethod
+    def _resolve_user_to_uid_gid(user_str: str) -> tuple[int, int]:
+        """Resolve a Docker user string (``uid:gid``, ``uid``, or username)
+        to numeric (uid, gid) using the host user/group database.
         """
-        import docker
+        import pwd
+        import grp
 
-        try:
-            self._client.volumes.get(CLAUDE_AUTH_VOLUME)
-        except docker.errors.NotFound:
-            self._client.volumes.create(
-                CLAUDE_AUTH_VOLUME,
-                labels={"robotsix.deploy.stateful": "true"},
-            )
-            self._client.containers.run(
-                "busybox",
-                command=["sh", "-c", "chown 1000:1000 /mnt && chmod 700 /mnt"],
-                volumes={CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "rw"}},
-                remove=True,
-            )
+        if ":" in user_str:
+            u_part, g_part = user_str.split(":", 1)
+        else:
+            u_part = g_part = user_str
+
+        def _resolve_uid(s: str) -> int:
+            try:
+                return int(s)
+            except ValueError:
+                return pwd.getpwnam(s).pw_uid
+
+        def _resolve_gid(s: str) -> int:
+            try:
+                return int(s)
+            except ValueError:
+                try:
+                    return grp.getgrnam(s).gr_gid
+                except KeyError:
+                    return pwd.getpwnam(s).pw_gid
+
+        return _resolve_uid(u_part), _resolve_gid(g_part)
+
+    def _ensure_volume_ownership(
+        self, vol_name: str, uid: int, gid: int, mode: int
+    ) -> None:
+        """Chown the root of a newly-created named volume to *uid:gid*
+        and set its permissions to *mode* (e.g. ``0o755``).
+
+        Runs synchronously — callers must wrap in an executor.
+        """
+        self._client.containers.run(
+            "busybox",
+            command=[
+                "sh",
+                "-c",
+                f"chown {uid}:{gid} /mnt && chmod {mode:03o} /mnt",
+            ],
+            volumes={vol_name: {"bind": "/mnt", "mode": "rw"}},
+            remove=True,
+        )
 
     def _check_claude_credentials(self) -> list[str]:
         """Validate that the ``claude-auth`` volume contains a readable
@@ -525,7 +550,8 @@ class DockerSdkBackend(ExecutionBackend):
             try:
                 self._client.volumes.get(volume_name)
             except docker.errors.NotFound:
-                self._ensure_claude_auth_volume()
+                self._client.volumes.create(volume_name)
+                self._ensure_volume_ownership(volume_name, 1000, 1000, 0o700)
 
             encoded = credentials_json.encode("utf-8")
             import base64
@@ -644,8 +670,16 @@ class DockerSdkBackend(ExecutionBackend):
         # Step 4 — create + start new container
         deploy_warnings: list[str] = []
         try:
-            # Pre-create named volumes
-            for vol_name in config.named_volumes:
+            # Determine container user for volume ownership
+            container_user = config.user or f"{os.getuid()}:{os.getgid()}"
+            chown_uid, chown_gid = self._resolve_user_to_uid_gid(container_user)
+
+            # Pre-create named volumes (including claude-auth when needed)
+            volumes_to_create: list[str] = list(config.named_volumes)
+            if config.claude_mount:
+                volumes_to_create.append(CLAUDE_AUTH_VOLUME)
+
+            for vol_name in volumes_to_create:
                 try:
                     await loop.run_in_executor(
                         None, self._client.volumes.create, vol_name
@@ -655,25 +689,29 @@ class DockerSdkBackend(ExecutionBackend):
                         logger.info(
                             "Volume %s already exists, skipping creation", vol_name
                         )
-                    else:
-                        raise RuntimeError(
-                            f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
-                        ) from exc
+                        continue
+                    raise RuntimeError(
+                        f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
+                    ) from exc
                 except docker.errors.DockerException as exc:
                     raise RuntimeError(
                         f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
                     ) from exc
 
-            # Claude auth: ensure named volume, validate credentials
-            if config.claude_mount:
-                try:
-                    await loop.run_in_executor(None, self._ensure_claude_auth_volume)
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Failed to ensure claude-auth volume: {exc}"
-                    ) from exc
+                # Freshly-created volume — fix ownership so the container
+                # user can write to it.
+                vol_mode = 0o700 if vol_name == CLAUDE_AUTH_VOLUME else 0o755
+                await loop.run_in_executor(
+                    None,
+                    self._ensure_volume_ownership,
+                    vol_name,
+                    chown_uid,
+                    chown_gid,
+                    vol_mode,
+                )
 
-                # Validate credentials
+            # Validate claude credentials (non-fatal)
+            if config.claude_mount:
                 try:
                     cred_warnings = await loop.run_in_executor(
                         None, self._check_claude_credentials
@@ -750,16 +788,8 @@ class DockerSdkBackend(ExecutionBackend):
 
         # Create + start from prior digest
         try:
-            # Claude auth: ensure named volume, validate credentials
+            # Validate claude credentials (non-fatal)
             if config.claude_mount:
-                try:
-                    await loop.run_in_executor(None, self._ensure_claude_auth_volume)
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"Failed to ensure claude-auth volume during rollback: {exc}"
-                    ) from exc
-
-                # Validate credentials
                 try:
                     cred_warnings = await loop.run_in_executor(
                         None, self._check_claude_credentials
