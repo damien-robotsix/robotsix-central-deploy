@@ -1,0 +1,1 @@
+Remove dead __getattr__ in caretaker/__init__.py
