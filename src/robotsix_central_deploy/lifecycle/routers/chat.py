@@ -85,10 +85,9 @@ def _check_rate_limit(app_state: Any, service: str, action: str) -> None:
     cooldown = _RATE_LIMIT_COOLDOWNS.get(action, 30.0)
     key = f"{service}:{action}"
     rate_limits: dict[str, float] = getattr(app_state, "chat_agent_rate_limits", {})
-    last = rate_limits.get(key, 0.0)
     now = time.monotonic()
-    if now - last < cooldown:
-        remaining = cooldown - (now - last)
+    if key in rate_limits and now - rate_limits[key] < cooldown:
+        remaining = cooldown - (now - rate_limits[key])
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
