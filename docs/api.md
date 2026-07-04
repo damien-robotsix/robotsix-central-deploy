@@ -14,8 +14,6 @@
 
 ::: robotsix_central_deploy.lifecycle.settings_router
 
-::: robotsix_central_deploy.lifecycle.backend
-
 ::: robotsix_central_deploy.lifecycle.auth
 
 ::: robotsix_central_deploy.lifecycle.models

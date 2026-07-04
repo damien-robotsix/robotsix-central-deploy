@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from robotsix_central_deploy.lifecycle.backend import NoopBackend
+from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import (

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from robotsix_central_deploy.lifecycle.backend import DockerSdkBackend
+from robotsix_central_deploy.lifecycle.backends import DockerSdkBackend
 from robotsix_central_deploy.lifecycle.models import (
     ExecutionBackendType,
     ServiceRecord,
@@ -65,7 +65,7 @@ def _ensure_registry(monkeypatch, registry):
     """Ensure app.state has store, backend, config, and registry set for every test."""
     from pathlib import Path
 
-    from robotsix_central_deploy.lifecycle.backend import NoopBackend
+    from robotsix_central_deploy.lifecycle.backends import NoopBackend
     from robotsix_central_deploy.lifecycle.config import LifecycleConfig
     from robotsix_central_deploy.lifecycle.store import InMemoryStore
     from robotsix_central_deploy.registry.config_store import ComponentConfigStore
