@@ -87,13 +87,33 @@ class CaretakerScheduler:
 
         settings = await self._settings_store.get()
 
-        # 1. Discover mill URL
+        # 1. Discover mill URL and probe reachability
         mill_url = MillClient.derive_url_from_registry(
             self._registry,
             self._component_config_store,
             settings.mill_component_id,
         )
-        mill_client = MillClient(mill_url, self._http_client) if mill_url else None
+        mill_client: MillClient | None = None
+        mill_reachable_detail = ""
+
+        if mill_url is None:
+            # Distinguish whether the component is missing or just has no ports.
+            mill_cfg = self._component_config_store.get(settings.mill_component_id)
+            if mill_cfg is None:
+                mill_reachable_detail = "mill component not registered"
+            else:
+                mill_reachable_detail = "no ports declared"
+        else:
+            mill_client = MillClient(mill_url, self._http_client)
+            try:
+                healthy = await mill_client.health_check()
+            except Exception as exc:
+                logger.warning("mill health probe raised: %s", exc)
+                healthy = False
+            if healthy:
+                mill_reachable_detail = "ok"
+            else:
+                mill_reachable_detail = "health probe failed"
 
         # 2. Phase: UPDATE
         try:
@@ -180,12 +200,10 @@ class CaretakerScheduler:
                 self._append_local(f)
                 local_only += 1
 
-        # mill_reachable: True when no ingest was attempted (no trackable
-        # findings) OR at least one ingest succeeded. False only when every
-        # attempted ingest call failed.
-        mill_reachable = (
-            ingest_attempted == 0 or ingest_succeeded > 0
-        ) and mill_client is not None
+        # mill_reachable: determined by the /health probe performed above,
+        # not by ingest success.  A healthy mill is reachable regardless of
+        # whether individual ingest calls succeed.
+        mill_reachable = mill_reachable_detail == "ok"
         self._mill_reachable = mill_reachable
 
         finished_at = datetime.now(tz=timezone.utc)
@@ -198,6 +216,7 @@ class CaretakerScheduler:
             local_only=local_only,
             errors=errors,
             mill_reachable=mill_reachable,
+            mill_reachable_detail=mill_reachable_detail,
         )
         self._last_report = report
         return report
@@ -229,6 +248,11 @@ class CaretakerScheduler:
                 else None
             ),
             "mill_reachable": self._mill_reachable,
+            "mill_reachable_detail": (
+                self._last_report.mill_reachable_detail
+                if self._last_report is not None
+                else ""
+            ),
             "last_report": (
                 self._last_report.model_dump(mode="json")
                 if self._last_report is not None

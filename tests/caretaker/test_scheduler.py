@@ -120,6 +120,7 @@ class TestScheduler:
 
         _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         # Make phase_health emit a finding with repo_id
         record = ServiceRecord(
@@ -142,6 +143,8 @@ class TestScheduler:
         scheduler, store, backend, ccs, http = scheduler_fixtures
 
         _register_mill(ccs)
+        # Health probe fails → mill_reachable=False, detail="health probe failed".
+        http.get = AsyncMock(return_value=MagicMock(is_success=False, status_code=503))
         http.post = AsyncMock(return_value=MagicMock(is_success=False, status_code=500))
 
         record = ServiceRecord(
@@ -159,6 +162,7 @@ class TestScheduler:
         assert report.mill_reported == 0
         assert report.local_only >= 1
         assert report.mill_reachable is False
+        assert report.mill_reachable_detail == "health probe failed"
 
     @pytest.mark.asyncio
     async def test_run_once_no_findings_mill_reachable(
@@ -189,6 +193,7 @@ class TestScheduler:
 
         _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         # Component with no repo_id → local only
         record = ServiceRecord(
@@ -213,6 +218,7 @@ class TestScheduler:
 
         _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         record = ServiceRecord(
             name="svc",
@@ -257,6 +263,7 @@ class TestScheduler:
             side_effect=lambda cid: mill_cfg if cid == "my-mill" else None
         )
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         record = ServiceRecord(name="svc", image="repo:v1", repo_id="my-repo")
         store.list_all = AsyncMock(return_value=[record])
@@ -282,6 +289,7 @@ class TestScheduler:
         )
         _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         record = ServiceRecord(
             name="svc",
@@ -319,6 +327,7 @@ class TestScheduler:
         scheduler, store, backend, ccs, http = scheduler_fixtures
         _register_mill(ccs)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         record = ServiceRecord(
             name="svc",
@@ -352,5 +361,6 @@ class TestScheduler:
         assert "enabled" in status
         assert "last_run_at" in status
         assert "mill_reachable" in status
+        assert "mill_reachable_detail" in status
         assert "last_report" in status
         assert status["enabled"] is True

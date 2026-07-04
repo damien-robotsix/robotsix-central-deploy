@@ -37,3 +37,4 @@ class CaretakerReport(BaseModel):
     local_only: int = 0
     errors: list[str] = []
     mill_reachable: bool = True
+    mill_reachable_detail: str = ""

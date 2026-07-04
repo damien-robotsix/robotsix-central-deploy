@@ -57,6 +57,26 @@ class MillClient:
             logger.warning("mill ingest call failed: %s", exc)
             return False
 
+    async def health_check(self) -> bool:
+        """GET {base_url}/health — lightweight reachability probe.
+
+        Returns True when the mill responds with a 2xx status, False
+        on any error or non-2xx response.  This is the authoritative
+        reachability signal; it is independent of ingest success.
+        """
+        try:
+            resp = await self._http.get(f"{self._base_url}/health")
+            if resp.is_success:
+                return True
+            logger.warning(
+                "mill health probe returned %d",
+                resp.status_code,
+            )
+            return False
+        except httpx.HTTPError as exc:
+            logger.warning("mill health probe failed: %s", exc)
+            return False
+
     async def register_repo(self, repo_id: str, git_url: str) -> bool:
         """POST {base_url}/repos — register a new repo with the mill.
 
