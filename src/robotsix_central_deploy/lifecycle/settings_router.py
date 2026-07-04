@@ -159,4 +159,34 @@ async def put_settings(
     # Hot-apply log_level immediately
     logging.getLogger().setLevel(new.log_level)
 
+    # Propagate llmio_tier_config changes to every LLM component's config
+    # volume so that robotsix-llmio's TierConfig.for_level() resolves
+    # capability levels against the new fleet-global mapping.
+    if new.llmio_tier_config != current.llmio_tier_config:
+        try:
+            from ..registry.config_store import ComponentConfigStore
+
+            component_store: ComponentConfigStore = (
+                request.app.state.component_config_store
+            )
+            backend: object = request.app.state.execution_backend
+            for comp_cfg in component_store.all():
+                if comp_cfg.llmio_tier_level and comp_cfg.config_volume:
+                    try:
+                        await backend.write_llmio_tier_config_to_volume(
+                            comp_cfg.config_volume, new.llmio_tier_config
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "settings: could not propagate llmio tier config "
+                            "to %s volume %s: %s",
+                            comp_cfg.id,
+                            comp_cfg.config_volume,
+                            exc,
+                        )
+        except Exception as exc:
+            logger.warning(
+                "settings: llmio tier config propagation failed: %s", exc
+            )
+
     return _mask_response(new)

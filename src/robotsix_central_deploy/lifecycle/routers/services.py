@@ -955,20 +955,18 @@ async def deploy_service(
                 )
                 # non-fatal: container may still start if config was written earlier
 
-    # Write llmio tier config into the config volume when the component
-    # declares an llmio capability level.
+    # Write the fleet-global llmio tier config mapping (all four levels)
+    # into the component's config volume so robotsix-llmio's
+    # TierConfig.for_level() can resolve any capability level.
     if config.llmio_tier_level and config.config_volume:
         try:
             settings_store = getattr(request.app.state, "settings_store", None)
             settings = (
                 await settings_store.get() if settings_store is not None else None
             )
-            tier_config = (settings.llmio_tier_config if settings else {}).get(
-                config.llmio_tier_level
-            )
-            if tier_config:
+            if settings and settings.llmio_tier_config:
                 await backend.write_llmio_tier_config_to_volume(
-                    config.config_volume, tier_config
+                    config.config_volume, settings.llmio_tier_config
                 )
         except Exception as exc:
             logger.warning(
@@ -1550,20 +1548,19 @@ async def put_service_config(
 
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, merged)
-        # Write llmio tier config alongside config.json when the component
-        # declares an llmio capability level.
+        # Write the fleet-global llmio tier config mapping (all four levels)
+        # alongside config.json when the component declares an llmio
+        # capability level, so robotsix-llmio's TierConfig.for_level() can
+        # resolve any capability level.
         if comp_cfg.llmio_tier_level:
             try:
                 settings_store = getattr(request.app.state, "settings_store", None)
                 settings = (
                     await settings_store.get() if settings_store is not None else None
                 )
-                tier_cfg = (settings.llmio_tier_config if settings else {}).get(
-                    comp_cfg.llmio_tier_level
-                )
-                if tier_cfg:
+                if settings and settings.llmio_tier_config:
                     await backend.write_llmio_tier_config_to_volume(
-                        comp_cfg.config_volume, tier_cfg
+                        comp_cfg.config_volume, settings.llmio_tier_config
                     )
             except Exception as exc:
                 logger.warning(
