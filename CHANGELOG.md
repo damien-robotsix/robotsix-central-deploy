@@ -6,6 +6,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added ``POST /services/{name}/refresh-contract`` endpoint that re-fetches
+  ``deploy/docker-compose.yml`` from the component's git repo and updates the
+  stored ``ComponentConfig`` with fresh contract-derived settings (image, ports,
+  mounts, command, entrypoint, health check, siblings, labels, etc.).  Operator-set
+  fields (repo_id, caretaker_auto_update, mem_limit) are left untouched.  Returns
+  which fields changed so the operator can decide whether a redeploy is needed.
 - Enable triage-boilerplate periodic workflow via `.robotsix-mill/periodic/triage_boilerplate.yaml` presence file.
 - Config UI: suggest peer-component URLs for `*_url` / `*_base_url` fields. A 🔍 button next to matching config fields opens a dropdown of registered components; picking one fills `http://<container_name>:<first container port>`. The field-name prefix is used as a hint to preselect the matching component (e.g. `mill_url` → component `mill`).
 - Caretaker: distinguish mill reachability failure modes (not registered / no ports / health probe failed) and use a lightweight GET /health probe instead of inferring reachability from ingest success.

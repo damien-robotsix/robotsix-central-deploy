@@ -31,6 +31,7 @@ from ..deps import (
     _get_store,
     _mask_secrets,
     _merge_config,
+    _namespace_spec_volumes,
     _prune_unset,
     _relocate_account_seed_values,
     _resolve_placeholders,
@@ -65,6 +66,7 @@ from ..schemas import (
     ConfigSchemaRefreshResponse,
     ConfigResponse,
     ConfigUpdate,
+    ContractRefreshResponse,
     EnvResponse,
     EnvSyncResponse,
     EnvUpdate,
@@ -1981,6 +1983,217 @@ async def run_config_assist(
     )
 
     return ConfigAssistResponse(config=merged, output=output)
+
+
+# ---------------------------------------------------------------------------
+# POST /services/{name}/refresh-contract
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/services/{name}/refresh-contract",
+    response_model=ContractRefreshResponse,
+    summary="Refetch deploy/docker-compose.yml from the repo and update stored contract",
+    responses={
+        400: {
+            "model": ErrorDetail,
+            "description": "Component has no git_url",
+        },
+        404: {
+            "model": ErrorDetail,
+            "description": "Component not found or repo has no deploy/docker-compose.yml",
+        },
+        422: {
+            "model": ErrorDetail,
+            "description": "Repo fetch failed or compose parse failed",
+        },
+    },
+)
+async def refresh_contract(
+    name: str,
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    registry: ComponentRegistry = Depends(_get_registry),
+    _auth: None = Depends(verify_auth),
+) -> ContractRefreshResponse:
+    """Re-parse the component's deploy/docker-compose.yml and update stored settings.
+
+    Contract-derived fields (image, ports, mounts, command, entrypoint,
+    health check, siblings, labels, etc.) are refreshed from the repo HEAD.
+    Operator-set fields (repo_id, caretaker_auto_update, mem_limit) and
+    environment overrides in the EnvStore are left untouched.  The endpoint
+    returns which fields changed so the operator can decide whether a
+    redeploy is needed.
+    """
+    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
+        FetchError,
+        fetch_repo_files,
+    )
+    from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
+        ParseError,
+        parse_compose,
+    )
+    from robotsix_central_deploy.registry.models import ServiceConfig  # noqa: PLC0415
+
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Component '{name}' not found",
+        )
+    if not comp_cfg.git_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Component '{name}' has no git_url — cannot fetch its repo",
+        )
+
+    loop = asyncio.get_running_loop()
+    try:
+        repo_files = await loop.run_in_executor(
+            None, fetch_repo_files, comp_cfg.git_url
+        )
+    except FetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if repo_files.compose_bytes is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Repo of '{name}' has no deploy/docker-compose.yml — "
+                "the component must commit a deploy contract first"
+            ),
+        )
+
+    try:
+        spec = await loop.run_in_executor(
+            None, parse_compose, repo_files.compose_bytes, name, comp_cfg.git_url
+        )
+    except ParseError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"deploy/docker-compose.yml parse failed: {'; '.join(exc.violations)}",
+        ) from exc
+
+    # Namespace volume names (same as onboard confirm)
+    spec = _namespace_spec_volumes(spec, name)
+
+    # Build the new ComponentConfig from the DerivedSpec (same logic as onboard confirm).
+    # Preserve operator-set / system-set fields from the existing config.
+    new_config = ComponentConfig(
+        id=name,
+        image=spec.image,
+        container_name=spec.container_name or name,
+        ports=spec.ports,
+        mounts=spec.volume_mounts,
+        env=spec.env,
+        health_check=spec.health_check,
+        command=spec.command,
+        entrypoint=spec.entrypoint,
+        claude_mount=spec.claude_mount,
+        host_docker_sock=spec.host_docker_sock,
+        named_volumes=[m.host for m in spec.volume_mounts]
+        + [m.host for sib in spec.siblings for m in sib.volume_mounts],
+        siblings=[
+            ServiceConfig(
+                service_key=sib.service_key,
+                container_name=sib.container_name,
+                image=sib.image,
+                ports=sib.ports,
+                mounts=sib.volume_mounts,
+                env=sib.env,
+                claude_mount=sib.claude_mount,
+                host_docker_sock=sib.host_docker_sock,
+                health_check=sib.health_check,
+                command=sib.command,
+                entrypoint=sib.entrypoint,
+            )
+            for sib in spec.siblings
+        ],
+        git_url=comp_cfg.git_url,
+        has_config_yaml=(spec.config_schema is not None),
+        # Preserve operator-set fields
+        repo_id=comp_cfg.repo_id,
+        caretaker_auto_update=comp_cfg.caretaker_auto_update,
+        mem_limit=comp_cfg.mem_limit,
+    )
+    new_config.config_volume = spec.config_volume
+    new_config.config_assist_command = spec.config_assist_command
+    new_config.config_assist_seeds = spec.config_assist_seeds
+    new_config.llmio_tier_level = spec.llmio_tier_level
+    new_config.allow_chat_access = spec.allow_chat_access
+
+    # Diff: collect which contract-derived fields changed.
+    _CONTRACT_FIELDS = (
+        "image",
+        "container_name",
+        "ports",
+        "mounts",
+        "env",
+        "health_check",
+        "command",
+        "entrypoint",
+        "claude_mount",
+        "host_docker_sock",
+        "named_volumes",
+        "siblings",
+        "config_volume",
+        "config_assist_command",
+        "config_assist_seeds",
+        "llmio_tier_level",
+        "allow_chat_access",
+    )
+    changed: list[str] = []
+    previous: dict[str, Any] = {}
+    current: dict[str, Any] = {}
+    for field in _CONTRACT_FIELDS:
+        old_val = getattr(comp_cfg, field)
+        new_val = getattr(new_config, field)
+        if old_val != new_val:
+            changed.append(field)
+            # Serialize model fields for the response
+            if hasattr(old_val, "model_dump"):
+                previous[field] = old_val.model_dump()
+            elif (
+                isinstance(old_val, list)
+                and old_val
+                and hasattr(old_val[0], "model_dump")
+            ):
+                previous[field] = [v.model_dump() for v in old_val]
+            else:
+                previous[field] = old_val
+            if hasattr(new_val, "model_dump"):
+                current[field] = new_val.model_dump()
+            elif (
+                isinstance(new_val, list)
+                and new_val
+                and hasattr(new_val[0], "model_dump")
+            ):
+                current[field] = [v.model_dump() for v in new_val]
+            else:
+                current[field] = new_val
+
+    # Persist the updated config
+    await component_config_store.put(new_config)
+    registry.register(new_config)
+
+    # If the config schema changed (new or removed), refresh the stored template.
+    if spec.config_schema is not None:
+        await config_yaml_store.save_template(name, spec.config_schema)
+    # Note: we do NOT remove the template if the schema is now absent —
+    # the operator may still want the old schema in the dashboard.
+
+    logger.info(
+        "Refreshed contract for %s from repo: %d field(s) changed (%s)",
+        name.replace("\n", "\\n"),
+        len(changed),
+        ", ".join(changed) if changed else "none",
+    )
+    return ContractRefreshResponse(
+        name=name,
+        changed_fields=changed,
+        previous=previous,
+        current=current,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -30,10 +30,15 @@ modules:
       - POST /services/{name}/restart
       - POST /services/{name}/deploy
       - POST /services/{name}/rollback
+      - GET /services/{name}/history
       - GET/PUT /services/{name}/env
       - DELETE /services/{name}/env/{key}
+      - POST /services/{name}/env/sync-keys
       - GET/PUT /services/{name}/config
       - POST /services/{name}/config/assist
+      - POST /services/{name}/config/import
+      - POST /services/{name}/config/refresh-schema
+      - POST /services/{name}/refresh-contract
       - DELETE /services/{name}
       - GET/PUT /settings
       - GET/POST /system/update
