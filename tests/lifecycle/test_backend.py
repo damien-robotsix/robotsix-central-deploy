@@ -596,6 +596,32 @@ class TestDockerSdkBackendCommandAndEntrypoint:
         _, kwargs = client.containers.create.call_args
         assert kwargs["entrypoint"] is None
 
+    def test_create_container_passes_tmpfs(self, backend):
+        """tmpfs list is converted to a dict for the Docker SDK."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            tmpfs=["/run", "/tmp"],
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["tmpfs"] == {"/run": "", "/tmp": ""}
+
+    def test_create_container_empty_tmpfs_passes_none(self, backend):
+        """Empty tmpfs list results in tmpfs=None (no tmpfs mounts)."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            tmpfs=[],
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs.get("tmpfs") is None
+
 
 # ---------------------------------------------------------------------------
 # Docker SDK backend — user= injection (host UID/GID)

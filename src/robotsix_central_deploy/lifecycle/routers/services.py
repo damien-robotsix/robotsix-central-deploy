@@ -172,6 +172,7 @@ async def _fanout_deploy_siblings(
             named_volumes=[m.host for m in sib_config.mounts],
             command=sib_config.command,
             entrypoint=sib_config.entrypoint,
+            tmpfs=sib_config.tmpfs,
             mem_limit=sib_config.mem_limit,
         )
         try:
@@ -239,6 +240,7 @@ async def _fanout_rollback_siblings(
             named_volumes=[m.host for m in sib_config.mounts],
             command=sib_config.command,
             entrypoint=sib_config.entrypoint,
+            tmpfs=sib_config.tmpfs,
             mem_limit=sib_config.mem_limit,
         )
         try:
@@ -2089,6 +2091,7 @@ async def refresh_contract(
         health_check=spec.health_check,
         command=spec.command,
         entrypoint=spec.entrypoint,
+        tmpfs=spec.tmpfs,
         claude_mount=spec.claude_mount,
         host_docker_sock=spec.host_docker_sock,
         named_volumes=[m.host for m in spec.volume_mounts]
@@ -2106,6 +2109,7 @@ async def refresh_contract(
                 health_check=sib.health_check,
                 command=sib.command,
                 entrypoint=sib.entrypoint,
+                tmpfs=sib.tmpfs,
             )
             for sib in spec.siblings
         ],
@@ -2132,6 +2136,7 @@ async def refresh_contract(
         "health_check",
         "command",
         "entrypoint",
+        "tmpfs",
         "claude_mount",
         "host_docker_sock",
         "named_volumes",

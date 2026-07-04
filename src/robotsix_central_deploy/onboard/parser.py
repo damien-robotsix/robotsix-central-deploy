@@ -401,6 +401,17 @@ def _parse_one_service(
         )
         entrypoint = None
 
+    raw_tmpfs = svc.get("tmpfs")
+    if raw_tmpfs is None:
+        tmpfs: list[str] = []
+    elif isinstance(raw_tmpfs, list) and all(isinstance(p, str) for p in raw_tmpfs):
+        tmpfs = raw_tmpfs
+    else:
+        violations.append(
+            f"{prefix}tmpfs: must be a list of strings, got {type(raw_tmpfs).__name__}"
+        )
+        tmpfs = []
+
     return {
         "image": image,
         "env": env,
@@ -412,6 +423,7 @@ def _parse_one_service(
         "container_name": container_name,
         "command": command,
         "entrypoint": entrypoint,
+        "tmpfs": tmpfs,
         "config_volume": config_volume,
         "config_assist_command": config_assist_command,
         "config_assist_seeds": config_assist_seeds,
@@ -516,6 +528,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 health_check=sib_parsed["health_check"],
                 command=sib_parsed["command"],
                 entrypoint=sib_parsed["entrypoint"],
+                tmpfs=sib_parsed["tmpfs"],
             )
         )
 
@@ -563,6 +576,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         health_check=primary_parsed["health_check"],
         command=primary_parsed["command"],
         entrypoint=primary_parsed["entrypoint"],
+        tmpfs=primary_parsed["tmpfs"],
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
         config_volume=primary_parsed["config_volume"],

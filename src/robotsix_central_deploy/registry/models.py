@@ -41,6 +41,7 @@ class ServiceConfig(BaseModel):
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
+    tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
     mem_limit: str = "2g"
 
 
@@ -74,6 +75,7 @@ class ComponentConfig(BaseModel):
     entrypoint: Optional[list[str]] = (
         None  # container entrypoint (from compose 'entrypoint:')
     )
+    tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
     git_url: str = ""  # source repo URL from onboard
     has_config_yaml: bool = False  # True when the repo declared config/config.json
     config_volume: Optional[str] = (
