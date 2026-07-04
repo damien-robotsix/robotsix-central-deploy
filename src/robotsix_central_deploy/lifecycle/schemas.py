@@ -91,6 +91,7 @@ class EnvResponse(BaseModel):
     secrets: dict[str, str]  # values are always "***"
     mem_limit: str = "2g"
     allow_chat_access: bool = False
+    claude_mount: bool = False
 
 
 class EnvSyncResponse(BaseModel):
@@ -106,6 +107,7 @@ class EnvUpdate(BaseModel):
     secrets: dict[str, str] = {}
     mem_limit: str | None = None
     allow_chat_access: bool | None = None
+    claude_mount: bool | None = None
 
 
 # ---------------------------------------------------------------------------

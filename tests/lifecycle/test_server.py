@@ -500,6 +500,7 @@ class TestEnvEndpoints:
             "secrets": {},
             "mem_limit": "2g",
             "allow_chat_access": False,
+            "claude_mount": False,
         }
 
     async def test_put_then_get_returns_env_and_masked_secrets(

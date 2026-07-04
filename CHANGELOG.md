@@ -7,6 +7,8 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Remove fabricated llmio_tier_config defaults (openai/gpt-4o-mini, etc.) — default to empty per-level entries that inherit robotsix-llmio's baked defaults. The settings UI now shows the baked defaults (openrouter-deepseek/deepseek-v4-flash, …/deepseek-v4-pro, claudeSDK/opus, claudeSDK/claude-fable-5) as grey placeholder text. Also remove the stale `claude_auth_helper_image` setting (obsoleted by the PKCE login rewrite).
+- Show both **Configure** (schema-driven) and **Deploy** (env/secrets/mem_limit/chat_access) buttons for every component, so schema components no longer lose access to deploy-specific settings.
+- Add **Claude Mount** toggle to the Deploy settings modal (takes effect on next deploy).
 - Add Hypothesis property-based tests for lifecycle state machine, input validation fuzzing, and enum roundtrip serialisation
   Add `hypothesis>=6.0` to dev dependencies and create `tests/lifecycle/test_hypothesis.py` with three test groups:
   `RuleBasedStateMachine` for state-transition completeness, `@given`-based fuzzing of log endpoint query parameters (`tail`, `since`, `follow`),
