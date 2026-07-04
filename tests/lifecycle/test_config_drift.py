@@ -10,7 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle import server as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
-from robotsix_central_deploy.lifecycle.deps import _canonical_hash
+from robotsix_central_deploy.lifecycle._config_utils import _canonical_hash
 from robotsix_central_deploy.registry.models import ComponentConfig
 
 
