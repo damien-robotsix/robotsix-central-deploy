@@ -840,3 +840,159 @@ class TestParseComposeConfigAssistSeeds:
         assert spec.config_assist_seeds == [
             ConfigAssistSeed(key="accounts.0.auth.username", label=None),
         ]
+
+
+# ---------------------------------------------------------------------------
+# tmpfs parsing
+# ---------------------------------------------------------------------------
+
+
+class TestParseComposeTmpfs:
+    def test_tmpfs_list_of_paths(self):
+        """tmpfs as a list of strings is parsed correctly."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    tmpfs:
+      - /run
+      - /tmp
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.tmpfs == ["/run", "/tmp"]
+
+    def test_tmpfs_absent_defaults_empty(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.tmpfs == []
+
+    def test_tmpfs_invalid_type(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    tmpfs: "/run"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "tmpfs:" in str(exc.value)
+
+    def test_sibling_tmpfs(self):
+        """tmpfs on a sibling service is propagated correctly."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  board:
+    image: ghcr.io/damien-robotsix/app:main
+    labels:
+      robotsix.deploy.primary: "true"
+  worker:
+    image: ghcr.io/damien-robotsix/worker:main
+    tmpfs:
+      - /run
+"""
+        spec = parse_compose(_bytes(y), name="app", git_url="https://x.com/r.git")
+        assert spec.tmpfs == []
+        assert len(spec.siblings) == 1
+        assert spec.siblings[0].tmpfs == ["/run"]
+
+
+# ---------------------------------------------------------------------------
+# mill-socket-proxy regression fixture: tmpfs + multi-line list-form command
+# ---------------------------------------------------------------------------
+
+MILL_SOCKET_PROXY_COMPOSE_YAML = """\
+# central-deploy-contract-version: 1
+services:
+  mill:
+    image: ghcr.io/damien-robotsix/mill:main
+    labels:
+      robotsix.deploy.primary: "true"
+    ports:
+      - "8100:8100"
+    environment:
+      OPENAI_API_KEY: ""
+    volumes:
+      - mill-agent-defs:/agent-defs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+  mill-socket-proxy:
+    image: haproxy:lts-alpine
+    tmpfs:
+      - /run
+    command:
+      - sh
+      - -c
+      - |
+        sed -i 's/^    bind :80/    bind :2375/' /etc/haproxy/haproxy.cfg
+        exec haproxy -W -db -f /etc/haproxy/haproxy.cfg
+    labels:
+      robotsix.deploy.host-docker-sock: "true"
+volumes:
+  mill-agent-defs: {}
+"""
+
+
+class TestMillSocketProxyContract:
+    """Regression: mill-socket-proxy contract with tmpfs and multi-line command."""
+
+    def test_tmpfs_parsed_on_sibling(self):
+        spec = parse_compose(
+            _bytes(MILL_SOCKET_PROXY_COMPOSE_YAML),
+            name="mill",
+            git_url="https://github.com/example/mill.git",
+        )
+        assert len(spec.siblings) == 1
+        sib = spec.siblings[0]
+        assert sib.service_key == "mill-socket-proxy"
+        assert sib.tmpfs == ["/run"]
+
+    def test_multi_line_list_command_preserved_verbatim(self):
+        """List-form command with a block-scalar element is kept exactly."""
+        spec = parse_compose(
+            _bytes(MILL_SOCKET_PROXY_COMPOSE_YAML),
+            name="mill",
+            git_url="https://github.com/example/mill.git",
+        )
+        sib = spec.siblings[0]
+        assert sib.command is not None
+        assert len(sib.command) == 3
+        assert sib.command[0] == "sh"
+        assert sib.command[1] == "-c"
+        # The third element must be the full multi-line sed + exec script
+        assert "sed -i" in sib.command[2]
+        assert "exec haproxy -W -db" in sib.command[2]
+        assert "/etc/haproxy/haproxy.cfg" in sib.command[2]
+
+    def test_string_form_command_split_correctly(self):
+        """String-form command with shell syntax is shlex.split correctly."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    command: "sh -c 'echo hello world'"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.command == ["sh", "-c", "echo hello world"]
+
+    def test_primary_tmpfs_empty_for_mill_socket_proxy_fixture(self):
+        spec = parse_compose(
+            _bytes(MILL_SOCKET_PROXY_COMPOSE_YAML),
+            name="mill",
+            git_url="https://github.com/example/mill.git",
+        )
+        # Primary (mill) has no tmpfs
+        assert spec.tmpfs == []
+        assert spec.command is None

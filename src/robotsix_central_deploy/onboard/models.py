@@ -28,6 +28,7 @@ class SiblingDerivedSpec(BaseModel):
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
+    tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
 
 
 class DerivedSpec(BaseModel):
@@ -44,6 +45,7 @@ class DerivedSpec(BaseModel):
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
+    tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
     config_schema: dict[str, Any] | None = (
