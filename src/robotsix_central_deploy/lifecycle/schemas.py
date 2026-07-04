@@ -90,6 +90,7 @@ class EnvResponse(BaseModel):
     env: dict[str, str]
     secrets: dict[str, str]  # values are always "***"
     mem_limit: str = "2g"
+    allow_chat_access: bool = False
 
 
 class EnvSyncResponse(BaseModel):
@@ -104,6 +105,7 @@ class EnvUpdate(BaseModel):
     env: dict[str, str] = {}
     secrets: dict[str, str] = {}
     mem_limit: str | None = None
+    allow_chat_access: bool | None = None
 
 
 # ---------------------------------------------------------------------------

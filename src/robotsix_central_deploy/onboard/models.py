@@ -66,6 +66,7 @@ class DerivedSpec(BaseModel):
     llmio_tier_level: Optional[str] = (
         None  # "level1"–"level4" from robotsix.deploy.llmio-tier-level label
     )
+    allow_chat_access: bool = False  # from robotsix.deploy.chat-access label
 
 
 class ParseError(Exception):

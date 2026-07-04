@@ -20,6 +20,7 @@ modules:
       - GET /health
       - GET /disk
       - POST /disk/reclaim
+      - GET /chat/components
       - GET /services
       - GET /services/{name}
       - GET /services/{name}/health

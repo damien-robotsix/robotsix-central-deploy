@@ -91,3 +91,6 @@ class ComponentConfig(BaseModel):
     llmio_tier_level: Optional[str] = (
         None  # "level1" | "level2" | "level3" | "level4" — which capability tier
     )
+    allow_chat_access: bool = (
+        False  # true = component exposes GET /chat-skill for the chat agent
+    )
