@@ -63,6 +63,9 @@ class DerivedSpec(BaseModel):
     config_assist_seeds: list[
         ConfigAssistSeed
     ] = []  # seed field keys from robotsix.deploy.config-assist-seeds
+    llmio_tier_level: Optional[str] = (
+        None  # "level1"–"level4" from robotsix.deploy.llmio-tier-level label
+    )
 
 
 class ParseError(Exception):

@@ -14,6 +14,8 @@ from starlette.requests import Request
 from ..lifecycle.auth import verify_auth
 from ..registry.settings_store import SystemSettings, SystemSettingsStore
 
+logger = logging.getLogger(__name__)
+
 settings_router = APIRouter(tags=["settings"])
 
 SECRET_MASK = "***"
@@ -49,6 +51,8 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         caretaker_interval_hours=settings.caretaker_interval_hours,
         mill_component_id=settings.mill_component_id,
         image_auto_prune=settings.image_auto_prune,
+        claude_auth_helper_image=settings.claude_auth_helper_image,
+        llmio_tier_config=settings.llmio_tier_config,
     )
 
 
@@ -87,6 +91,8 @@ async def get_settings(
         caretaker_interval_hours=effective_config.caretaker_interval_hours,
         mill_component_id=effective_config.mill_component_id,
         image_auto_prune=effective_config.image_auto_prune,
+        claude_auth_helper_image=effective_config.claude_auth_helper_image,
+        llmio_tier_config=getattr(effective_config, "llmio_tier_config", {}),
     )
     return _mask_response(effective)
 
@@ -141,6 +147,8 @@ async def put_settings(
         caretaker_interval_hours=body.caretaker_interval_hours,
         mill_component_id=body.mill_component_id,
         image_auto_prune=body.image_auto_prune,
+        claude_auth_helper_image=body.claude_auth_helper_image,
+        llmio_tier_config=body.llmio_tier_config,
     )
 
     await settings_store.put(new)
@@ -152,5 +160,33 @@ async def put_settings(
 
     # Hot-apply log_level immediately
     logging.getLogger().setLevel(new.log_level)
+
+    # Propagate llmio_tier_config changes to every LLM component's config
+    # volume so that robotsix-llmio's TierConfig.for_level() resolves
+    # capability levels against the new fleet-global mapping.
+    if new.llmio_tier_config != current.llmio_tier_config:
+        try:
+            from ..registry.config_store import ComponentConfigStore
+
+            component_store: ComponentConfigStore = (
+                request.app.state.component_config_store
+            )
+            backend: object = request.app.state.execution_backend
+            for comp_cfg in component_store.all():
+                if comp_cfg.llmio_tier_level and comp_cfg.config_volume:
+                    try:
+                        await backend.write_llmio_tier_config_to_volume(  # type: ignore[attr-defined]
+                            comp_cfg.config_volume, new.llmio_tier_config
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "settings: could not propagate llmio tier config "
+                            "to %s volume %s: %s",
+                            comp_cfg.id,
+                            comp_cfg.config_volume,
+                            exc,
+                        )
+        except Exception as exc:
+            logger.warning("settings: llmio tier config propagation failed: %s", exc)
 
     return _mask_response(new)

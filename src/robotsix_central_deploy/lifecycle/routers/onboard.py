@@ -592,6 +592,7 @@ async def onboard_confirm(
     config.config_volume = spec.config_volume  # None if no config-target label
     config.config_assist_command = spec.config_assist_command
     config.config_assist_seeds = spec.config_assist_seeds
+    config.llmio_tier_level = spec.llmio_tier_level
 
     # Derive repo_id from git_url when caretaker is enabled
     settings = await request.app.state.settings_store.get()
@@ -661,6 +662,25 @@ async def onboard_confirm(
                 raise
         else:
             await config_yaml_store.update_current(spec.name, merged)
+
+    # Write the fleet-global llmio tier config mapping (all four levels)
+    # into the component's config volume before the deploy starts, so
+    # robotsix-llmio's TierConfig.for_level() can resolve any capability
+    # level from first boot.  Matching deploy_service and put_service_config.
+    if config.llmio_tier_level and config.config_volume:
+        try:
+            settings = await request.app.state.settings_store.get()
+            if settings.llmio_tier_config:
+                await backend.write_llmio_tier_config_to_volume(
+                    config.config_volume, settings.llmio_tier_config
+                )
+        except Exception as exc:
+            logger.warning(
+                "onboard %s: could not write llmio tier config to volume %s: %s",
+                config.id,
+                config.config_volume,
+                exc,
+            )
 
     # Create and persist ServiceRecord
     record = ServiceRecord(

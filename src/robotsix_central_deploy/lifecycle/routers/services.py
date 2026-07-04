@@ -955,6 +955,28 @@ async def deploy_service(
                 )
                 # non-fatal: container may still start if config was written earlier
 
+    # Write the fleet-global llmio tier config mapping (all four levels)
+    # into the component's config volume so robotsix-llmio's
+    # TierConfig.for_level() can resolve any capability level.
+    if config.llmio_tier_level and config.config_volume:
+        try:
+            settings_store = getattr(request.app.state, "settings_store", None)
+            settings = (
+                await settings_store.get() if settings_store is not None else None
+            )
+            if settings and settings.llmio_tier_config:
+                await backend.write_llmio_tier_config_to_volume(
+                    config.config_volume, settings.llmio_tier_config
+                )
+        except Exception as exc:
+            logger.warning(
+                "deploy %s: could not write llmio tier config to volume %s: %s",
+                name.replace("\n", "\\n"),
+                config.config_volume.replace("\n", "\\n"),
+                exc,
+            )
+            # non-fatal: container may still start if config was written earlier
+
     try:
         outcome = await backend.deploy(record, config, image_ref)
     except Exception as exc:
@@ -1526,6 +1548,27 @@ async def put_service_config(
 
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, merged)
+        # Write the fleet-global llmio tier config mapping (all four levels)
+        # alongside config.json when the component declares an llmio
+        # capability level, so robotsix-llmio's TierConfig.for_level() can
+        # resolve any capability level.
+        if comp_cfg.llmio_tier_level:
+            try:
+                settings_store = getattr(request.app.state, "settings_store", None)
+                settings = (
+                    await settings_store.get() if settings_store is not None else None
+                )
+                if settings and settings.llmio_tier_config:
+                    await backend.write_llmio_tier_config_to_volume(
+                        comp_cfg.config_volume, settings.llmio_tier_config
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "config %s: could not write llmio tier config to volume %s: %s",
+                    name.replace("\n", "\\n"),
+                    comp_cfg.config_volume.replace("\n", "\\n"),
+                    exc,
+                )
         new_hash = _canonical_hash(merged)
         await config_yaml_store.update_current_and_hash(name, merged, new_hash)
         # Restart primary + siblings sharing the same config volume so the

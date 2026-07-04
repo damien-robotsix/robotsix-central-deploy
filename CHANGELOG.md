@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Remove dead `__getattr__` and `__all__` from `caretaker/__init__.py` — all callers already import `CaretakerScheduler` directly from `caretaker.scheduler`.
+- Fleet-global LLMIO tier configuration: add ``llmio_tier_config`` to system settings (dashboard-editable mapping from capability level1-4 to provider+model), ``llmio_tier_level`` to ``ComponentConfig`` (declared via ``robotsix.deploy.llmio-tier-level`` docker-compose label). Deploy, config-update, and onboard flows now write the full tier mapping into each LLM component's config volume as ``llmio_tier_config.json``, and ``PUT /settings`` propagates tier config changes to all LLM components immediately. Changing the global mapping affects every component on its next deploy with zero per-repo changes.
 - Remove deprecated `lifecycle/backend.py` shim module; all callers (caretaker, tests) now import directly from `lifecycle.backends` or `lifecycle.models`
 - Onboard: seed the component config from `config/config.example.json`'s values (precedence: user input > example > schema default), so deploy-appropriate example values (e.g. `api_host: 0.0.0.0`) are honored instead of the code's schema default. Secret leaves from the example are stripped.
 
@@ -17,6 +18,8 @@ All notable changes to robotsix-central-deploy.
   `uv export --frozen`. The CI trivy job now passes `GITHUB_TOKEN` as a build
   secret so the image can be built for vulnerability scanning.
 - Apply a default memory limit (2g) to every managed container at create time, overridable per component via the dashboard Config modal. The limit is applied on the next deploy/rollback.
+- Add `llmio_tier_config` to system settings — a fleet-global mapping from capability level1-4 to provider+model, editable in the dashboard. Components declare their tier via `robotsix.deploy.llmio-tier-level` label (exposed as `ComponentConfig.llmio_tier_level`), and central-deploy writes the resolved `llmio_tier_config.json` into the config volume at deploy/config-update time. Changing the global mapping propagates on next deploy with zero per-component repo changes.
+- Fleet-global LLMIO tier configuration: add `llmio_tier_config` to system settings (dashboard-editable mapping from capability level1-4 to provider+model), `llmio_tier_level` to `ComponentConfig` (declared via `robotsix.deploy.llmio-tier-level` docker-compose label), and write the resolved tier config as `llmio_tier_config.json` into each LLM component's config volume at deploy time. Changing the global mapping affects every component on its next deploy with zero per-repo changes.
 - Classify `_yaml_utils.py` under the lifecycle module in `docs/modules.yaml`; restructure manifest from dict to list format with `id` + `paths` entries so the `robotsix-modules check-registration` tool can parse it correctly.
 - Move `tests/lifecycle/test_volume_audit_endpoint.py` into the `tests/lifecycle/volume_audit/` directory as `test_endpoint.py`, consolidating all volume_audit tests under one module-aligned test directory.
 - Move `ContainerHealthSummary` import under `TYPE_CHECKING` in `lifecycle/deps.py` to avoid unnecessary runtime import
