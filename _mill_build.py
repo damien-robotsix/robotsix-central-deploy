@@ -103,14 +103,13 @@ def _write_dist_info(metadata_dir: _Path, name: str, version: str) -> str:
             for _ep_name, _ep_target in _gui_scripts.items():
                 _entry_points_lines.append(f"{_ep_name} = {_ep_target}")
             _entry_points_lines.append("")
-    (dist_info / "entry_points.txt").write_text(
-        "\n".join(_entry_points_lines) + "\n"
-    )
+    (dist_info / "entry_points.txt").write_text("\n".join(_entry_points_lines) + "\n")
     return dist_info_name
 
 
 def _write_record(zf: _zipfile.ZipFile, dist_info_name: str) -> None:
     import hashlib as _hashlib
+
     lines: list[str] = []
     for name in sorted(zf.namelist()):
         if name.endswith("/") or name == f"{dist_info_name}/RECORD":
@@ -147,9 +146,7 @@ if _HAS_HATCHLING:
         )
 
     def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-        return _real_build_wheel(
-            wheel_directory, config_settings, metadata_directory
-        )
+        return _real_build_wheel(wheel_directory, config_settings, metadata_directory)
 
     def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
         return _real_build_editable(
@@ -204,9 +201,7 @@ else:
 
         return wheel_name
 
-    def build_editable(
-        wheel_directory, config_settings=None, metadata_directory=None
-    ):
+    def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
         dist_info_name = f"{_NAME_NORMALIZED}-{_VERSION}.dist-info"
         wheel_name = f"{_NAME_NORMALIZED}-{_VERSION}-0-py3-none-any.whl"
         wheel_path = _Path(wheel_directory) / wheel_name

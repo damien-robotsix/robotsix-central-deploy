@@ -99,6 +99,7 @@ def _make_config(
 # Test runner infrastructure
 # ---------------------------------------------------------------------------
 
+
 class TestContext:
     """Mutable bag that holds per-test fixtures and state."""
 
@@ -116,9 +117,7 @@ class TestContext:
         self.store = InMemoryStore()
         self.backend = NoopBackend()
         self.config_yaml_store = ConfigYamlStore(self.state_dir / "config_yaml.json")
-        self.audit_store = ChatAgentAuditStore(
-            self.state_dir / "chat_agent_audit.json"
-        )
+        self.audit_store = ChatAgentAuditStore(self.state_dir / "chat_agent_audit.json")
         self.component_config_store = ComponentConfigStore(
             self.state_dir / "component_configs.json"
         )
@@ -179,9 +178,7 @@ class TestContext:
 
 async def test_chat_config_update_happy_path(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.put(
             "/chat/config/robotsix-chat",
@@ -198,9 +195,7 @@ async def test_chat_config_update_happy_path(ctx: TestContext) -> None:
 
 async def test_chat_config_update_rejects_secret_keys(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.put(
             "/chat/config/robotsix-chat",
@@ -213,9 +208,7 @@ async def test_chat_config_update_rejects_secret_keys(ctx: TestContext) -> None:
 
 async def test_chat_config_update_secret_in_nested_object(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.put(
             "/chat/config/robotsix-chat",
@@ -228,9 +221,7 @@ async def test_chat_config_update_secret_in_nested_object(ctx: TestContext) -> N
 
 async def test_chat_config_update_not_allowlisted(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("other-svc", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="other-svc", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.put(
             "/chat/config/other-svc",
@@ -241,9 +232,7 @@ async def test_chat_config_update_not_allowlisted(ctx: TestContext) -> None:
 
 
 async def test_chat_config_update_no_schema_returns_404(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.put(
             "/chat/config/robotsix-chat",
@@ -255,9 +244,7 @@ async def test_chat_config_update_no_schema_returns_404(ctx: TestContext) -> Non
 
 async def test_chat_config_rollback_happy_path(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         await client.put(
             "/chat/config/robotsix-chat",
@@ -277,9 +264,7 @@ async def test_chat_config_rollback_happy_path(ctx: TestContext) -> None:
 
 async def test_chat_config_rollback_no_previous(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.post(
             "/chat/config/robotsix-chat/rollback",
@@ -298,9 +283,7 @@ async def test_chat_config_rollback_not_allowlisted(ctx: TestContext) -> None:
 
 
 async def test_chat_restart_happy_path(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.post(
             "/chat/services/robotsix-chat/restart",
@@ -315,9 +298,7 @@ async def test_chat_restart_happy_path(ctx: TestContext) -> None:
 
 
 async def test_chat_restart_not_allowlisted(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="other-svc", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.post(
             "/chat/services/other-svc/restart",
@@ -327,9 +308,7 @@ async def test_chat_restart_not_allowlisted(ctx: TestContext) -> None:
 
 
 async def test_chat_restart_rate_limited(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp1 = await client.post(
             "/chat/services/robotsix-chat/restart",
@@ -345,9 +324,7 @@ async def test_chat_restart_rate_limited(ctx: TestContext) -> None:
 
 
 async def test_chat_update_happy_path(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.post(
             "/chat/services/robotsix-chat/update",
@@ -362,9 +339,7 @@ async def test_chat_update_happy_path(ctx: TestContext) -> None:
 
 
 async def test_chat_update_not_allowlisted(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="other-svc", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp = await client.post(
             "/chat/services/other-svc/update",
@@ -374,9 +349,7 @@ async def test_chat_update_not_allowlisted(ctx: TestContext) -> None:
 
 
 async def test_chat_update_rate_limited(ctx: TestContext) -> None:
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         resp1 = await client.post(
             "/chat/services/robotsix-chat/update",
@@ -393,9 +366,7 @@ async def test_chat_update_rate_limited(ctx: TestContext) -> None:
 
 async def test_chat_audit_log(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         await client.put(
             "/chat/config/robotsix-chat",
@@ -416,9 +387,7 @@ async def test_chat_audit_log(ctx: TestContext) -> None:
 async def test_chat_audit_log_filtered(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("cognee", _CONFIG_TEMPLATE)
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     await ctx.store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
     async with await ctx.client() as client:
         await client.put(
@@ -437,9 +406,7 @@ async def test_chat_audit_log_filtered(ctx: TestContext) -> None:
 
 async def test_chat_endpoints_require_auth(ctx: TestContext) -> None:
     await ctx.config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await ctx.store.put(
-        ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING)
-    )
+    await ctx.store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
     endpoints = [
         ("PUT", "/chat/config/robotsix-chat", {"values": {"debug": True}}),
         ("POST", "/chat/config/robotsix-chat/rollback", None),
@@ -501,7 +468,7 @@ async def main() -> None:
 
                 traceback.print_exc()
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Results: {passed} passed, {failed} failed, {len(TESTS)} total")
         if failed:
             print("SOME TESTS FAILED")
