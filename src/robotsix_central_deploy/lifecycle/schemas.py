@@ -211,6 +211,15 @@ class ConfigSchemaRefreshResponse(BaseModel):
     config_schema: dict[str, Any] = Field(serialization_alias="schema")
 
 
+class ContractRefreshResponse(BaseModel):
+    """Body of the 200 response from POST /services/{name}/refresh-contract."""
+
+    name: str
+    changed_fields: list[str] = []
+    previous: dict[str, Any] = {}
+    current: dict[str, Any] = {}
+
+
 class ConfigAssistRequest(BaseModel):
     values: dict[
         str, Any
