@@ -1048,6 +1048,85 @@ class TestDeleteService:
         assert await store.get("svc-a") is None
         assert config_store.get("svc-a") is None
 
+    async def test_delete_missing_config_still_purges_service_record(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """DELETE succeeds and purges the ServiceRecord even when the
+        component config entry is already absent (no 404-abort)."""
+        store = server_mod.app.state.store
+        env_store = server_mod.app.state.env_store
+        config_yaml_store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+
+        # Seed a service record and env WITHOUT a component config
+        prim = ServiceRecord(name="orphan", image="orphan:latest")
+        await store.put(prim)
+        await env_store.upsert("orphan", {"KEY": "val"}, {"SECRET": "tok"})
+        await config_yaml_store.save_template("orphan", {"type": "object"})
+        await config_yaml_store.update_current("orphan", {"foo": "bar"})
+
+        resp = await client.delete("/services/orphan", headers=auth_headers)
+        assert resp.status_code == 204
+
+        # ServiceRecord is gone
+        assert await store.get("orphan") is None
+
+        # Env is cleared
+        cfg = await env_store.get("orphan")
+        assert cfg.env == {}
+        assert cfg.secret_tokens == {}
+
+        # Config YAML is cleared
+        assert await config_yaml_store.get_template("orphan") is None
+        assert await config_yaml_store.get_current("orphan") is None
+
+    async def test_delete_clears_config_yaml_store(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """DELETE clears the config_yaml_store current + template for the component."""
+        config_store = server_mod.app.state.component_config_store
+        config_yaml_store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+
+        await _seed_config(config_store, "svc-a")
+        await _seed_store("svc-a", image="svc-a:latest")
+        await config_yaml_store.save_template("svc-a", {"type": "object"})
+        await config_yaml_store.update_current("svc-a", {"host": "example.com"})
+
+        resp = await client.delete("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 204
+
+        # Both template and current are gone
+        assert await config_yaml_store.get_template("svc-a") is None
+        assert await config_yaml_store.get_current("svc-a") is None
+
+    async def test_delete_with_socket_proxy_helper(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """DELETE tears down helper services (e.g. <name>-socket-proxy) alongside
+        the primary, even when discovered by prefix scan (config absent)."""
+        store = server_mod.app.state.store
+        env_store = server_mod.app.state.env_store
+
+        # Seed primary + a socket-proxy helper service record (no config)
+        prim = ServiceRecord(name="mill", image="mill:latest")
+        helper = ServiceRecord(name="mill-socket-proxy", image="socket-proxy:latest")
+        await store.put(prim)
+        await store.put(helper)
+        await env_store.upsert("mill", {"PRIMARY": "1"}, {})
+        await env_store.upsert("mill-socket-proxy", {"HELPER": "1"}, {})
+
+        resp = await client.delete("/services/mill", headers=auth_headers)
+        assert resp.status_code == 204
+
+        # Both primary and helper are gone
+        assert await store.get("mill") is None
+        assert await store.get("mill-socket-proxy") is None
+
+        # Both env entries are cleared
+        prim_env = await env_store.get("mill")
+        helper_env = await env_store.get("mill-socket-proxy")
+        assert prim_env.env == {}
+        assert helper_env.env == {}
+
 
 # ---------------------------------------------------------------------------
 # Lifecycle sibling fan-out
