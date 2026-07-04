@@ -7,7 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Remove dead `__getattr__` and `__all__` from `caretaker/__init__.py` — all callers already import `CaretakerScheduler` directly from `caretaker.scheduler`.
-- Fix fleet-global llmio tier config distribution: deploy and config-update flows now write the full tier mapping (all four levels) into each LLM component's config volume, and PUT /settings propagates tier config changes to all LLM components immediately.
+- Fleet-global LLMIO tier configuration: add ``llmio_tier_config`` to system settings (dashboard-editable mapping from capability level1-4 to provider+model), ``llmio_tier_level`` to ``ComponentConfig`` (declared via ``robotsix.deploy.llmio-tier-level`` docker-compose label). Deploy, config-update, and onboard flows now write the full tier mapping into each LLM component's config volume as ``llmio_tier_config.json``, and ``PUT /settings`` propagates tier config changes to all LLM components immediately. Changing the global mapping affects every component on its next deploy with zero per-repo changes.
 - Remove deprecated `lifecycle/backend.py` shim module; all callers (caretaker, tests) now import directly from `lifecycle.backends` or `lifecycle.models`
 - Onboard: seed the component config from `config/config.example.json`'s values (precedence: user input > example > schema default), so deploy-appropriate example values (e.g. `api_host: 0.0.0.0`) are honored instead of the code's schema default. Secret leaves from the example are stripped.
 
