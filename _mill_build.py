@@ -30,7 +30,6 @@ except ImportError:
 
 # -- fallback: minimal stdlib-only backend ----------------------------------
 
-import os as _os
 import zipfile as _zipfile
 from pathlib import Path as _Path
 
@@ -54,7 +53,7 @@ if _tomllib is not None:
         _project = _data.get("project", {})
         _NAME = _project.get("name", _NAME)
         _VERSION = _project.get("version", _VERSION)
-    except Exception:
+    except Exception:  # noqa: S110 — best-effort; pyproject.toml may be absent/unparseable
         pass
 
 _NAME_NORMALIZED = _NAME.replace("-", "_")

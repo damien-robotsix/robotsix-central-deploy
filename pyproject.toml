@@ -111,7 +111,7 @@ fail_under = 80
 
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
-per_rule_ignores = { "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config"], "DEP003" = ["starlette", "requests"] }
+per_rule_ignores = { "DEP001" = ["hatchling"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config"], "DEP003" = ["starlette", "requests", "tomli"] }
 
 [tool.towncrier]
 package = "robotsix_central_deploy"

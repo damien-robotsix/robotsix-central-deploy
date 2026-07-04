@@ -14,7 +14,7 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock _mill_build.py ./
 COPY src/ ./src/
 # src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md is a symlink to
 # ../../../docs/DEPLOY_CONTRACT.md; the canonical file must exist in the

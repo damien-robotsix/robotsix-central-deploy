@@ -567,7 +567,7 @@ async def _init_config(app: FastAPI) -> None:
     app.state.config_yaml_store = _config_yaml_store
     app.state.deploy_history_store = _deploy_history_store
     app.state.chat_agent_audit_store = _chat_agent_audit_store
-    app.state.chat_agent_rate_limits: dict[str, float] = {}
+    app.state.chat_agent_rate_limits = {}
 
 
 async def _init_settings(app: FastAPI) -> None:
@@ -905,7 +905,7 @@ async def _get_sibling_pairs(
         sib_name = f"{name}-{sib.service_key}"
         sib_record = await store.get(sib_name)
         if sib_record is None:
-            logger.warning("sibling record '%s' not found; skipping", sib_name)
+            logger.warning("sibling record '%s' not found; skipping", sib_name)  # lgtm[py/log-injection]
             continue
         pairs.append((sib, sib_record))
     return pairs

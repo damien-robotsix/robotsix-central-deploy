@@ -248,6 +248,12 @@
       "title": "Llmio Tier Config",
       "type": "object"
     },
+    "chat_agent_audit_store_path": {
+      "default": "data/chat_agent_audit.json",
+      "description": "Path of the chat-agent mutation audit log.",
+      "title": "Chat Agent Audit Store Path",
+      "type": "string"
+    },
     "claude_auth_refresh_interval": {
       "default": 1800,
       "description": "Interval (seconds) between Claude auth credential refresh attempts; 0 disables background refresh.",
@@ -258,3 +264,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+
