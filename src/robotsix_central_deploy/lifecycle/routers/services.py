@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
 from ..deps import (
+    JobRegistry,
     _compute_overall_health,
     _derive_account_id,
     _get_backend,
@@ -23,6 +24,7 @@ from ..deps import (
     _get_config_yaml_store,
     _get_deploy_history_store,
     _get_env_store,
+    _get_job_registry,
     _get_or_create_record,
     _get_registry,
     _get_registry_checker,
@@ -43,13 +45,13 @@ from ..models import (
     DeployHistoryEntry,
     DeployHistoryResponse,
     DeployRequest,
-    DeployResponse,
     ErrorDetail,
     RollbackRequest,
     RollbackResponse,
     ServiceHealthResponse,
     ServiceListItem,
     ServiceListResponse,
+    ServiceRecord,
     ServiceState,
     ServiceStatus,
     can_transition,
@@ -65,6 +67,8 @@ from ..schemas import (
     ConfigResponse,
     ConfigUpdate,
     ContractRefreshResponse,
+    DeployAcceptedResponse,
+    DeployJobStatusResponse,
     EnvResponse,
     EnvSyncResponse,
     EnvUpdate,
@@ -917,8 +921,9 @@ async def restart_service(
 
 @router.post(
     "/services/{name}/deploy",
-    response_model=DeployResponse,
-    summary="Deploy a new image version for a service",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=DeployAcceptedResponse,
+    summary="Deploy a new image version for a service (async)",
     responses={
         404: {
             "model": ErrorDetail,
@@ -941,16 +946,19 @@ async def deploy_service(
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
+    job_registry: JobRegistry = Depends(_get_job_registry),
     _auth: None = Depends(verify_auth),
-) -> DeployResponse:
-    """Pull and deploy a new image version for a service.
+) -> DeployAcceptedResponse:
+    """Queue a deploy for a service and return immediately with a job id.
 
     Optionally accepts a specific image reference; defaults to the component's
-    configured image. Writes merged config.json to the config volume before
-    starting when a config schema is present. Raises 404 if the service or
-    component config is not found, 503 if the registry checker is not loaded,
-    and 500 on backend failure. Sibling services are deployed on a best-effort
-    basis. Persists the new and previous image digests to the store.
+    configured image.  The deploy runs as a background job — the caller polls
+    ``GET /services/deploy-jobs/{job_id}`` for progress.
+
+    Returns 202 with a ``job_id`` so the UI can poll progress.  Raises 404 if
+    the service or component config is not found, 409 when a deploy is already
+    in progress for the component and no job record exists (e.g. caretaker
+    deploy), and 503 when the registry checker is not loaded.
     """
     if body is None:
         body = DeployRequest()
@@ -970,44 +978,11 @@ async def deploy_service(
 
     image_ref = body.image or config.image
 
-    # Write merged config.json into the config volume before starting the container.
-    if config.has_config_yaml and config.config_volume:
-        merged_cfg = await config_yaml_store.get_current(
-            name
-        ) or await config_yaml_store.get_template(name)
-        if merged_cfg:
-            try:
-                await backend.write_config_to_volume(config.config_volume, merged_cfg)
-            except Exception as exc:
-                logger.warning(
-                    "deploy %s: could not write config.json to volume %s: %s",
-                    name,
-                    config.config_volume,
-                    exc,
-                )
-                # non-fatal: container may still start if config was written earlier
-
-    # Write the fleet-global llmio tier config mapping (all four levels)
-    # into the component's config volume so robotsix-llmio's
-    # TierConfig.for_level() can resolve any capability level.
-    if config.llmio_tier_level and config.config_volume:
-        try:
-            settings_store = getattr(request.app.state, "settings_store", None)
-            settings = (
-                await settings_store.get() if settings_store is not None else None
-            )
-            if settings and settings.llmio_tier_config:
-                await backend.write_llmio_tier_config_to_volume(
-                    config.config_volume, settings.llmio_tier_config
-                )
-        except Exception as exc:
-            logger.warning(
-                "deploy %s: could not write llmio tier config to volume %s: %s",
-                name.replace("\n", "\\n"),
-                config.config_volume.replace("\n", "\\n"),
-                exc,
-            )
-            # non-fatal: container may still start if config was written earlier
+    # If an API-initiated deploy job is already active for this component,
+    # return its job_id so the caller can poll the existing deploy.
+    existing_job_id = job_registry.active_deploy_job_id_for(name)
+    if existing_job_id is not None:
+        return DeployAcceptedResponse(job_id=existing_job_id, name=name)
 
     # Serialise concurrent deploys of the same component (operator + caretaker).
     if not await try_acquire_deploy_lock(name):
@@ -1015,73 +990,208 @@ async def deploy_service(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Deploy already in progress for '{name}'",
         )
+
+    job_id = job_registry.create_deploy(name)
+
+    # Schedule the deploy sequence as a background task.
+    settings_store = getattr(request.app.state, "settings_store", None)
+    asyncio.create_task(
+        _run_deploy_job(
+            job_id=job_id,
+            name=name,
+            image_ref=image_ref,
+            record=record,
+            config=config,
+            store=store,
+            backend=backend,
+            registry=registry,
+            env_store=env_store,
+            deploy_history_store=deploy_history_store,
+            config_yaml_store=config_yaml_store,
+            job_registry=job_registry,
+            settings_store=settings_store,
+        )
+    )
+
+    return DeployAcceptedResponse(job_id=job_id, name=name)
+
+
+# ---------------------------------------------------------------------------
+# Background deploy job runner
+# ---------------------------------------------------------------------------
+
+
+async def _run_deploy_job(
+    job_id: str,
+    name: str,
+    image_ref: str,
+    record: ServiceRecord,
+    config: ComponentConfig,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    registry: ComponentRegistry,
+    env_store: EnvStore,
+    deploy_history_store: DeployHistoryStore,
+    config_yaml_store: ConfigYamlStore,
+    job_registry: JobRegistry,
+    settings_store: Any = None,
+) -> None:
+    """Background task that runs the full deploy sequence and updates the job.
+
+    On failure the component record is marked FAILED and the job is marked
+    failed so the polling endpoint surfaces the error.
+    """
     try:
+        # Write merged config.json into the config volume before starting.
+        if config.has_config_yaml and config.config_volume:
+            merged_cfg = await config_yaml_store.get_current(
+                name
+            ) or await config_yaml_store.get_template(name)
+            if merged_cfg:
+                try:
+                    await backend.write_config_to_volume(
+                        config.config_volume, merged_cfg
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "deploy %s: could not write config.json to volume %s: %s",
+                        name,
+                        config.config_volume,
+                        exc,
+                    )
+                    # non-fatal: container may still start if config was written earlier
+
+        # Write the fleet-global llmio tier config mapping (all four levels)
+        # into the component's config volume so robotsix-llmio's
+        # TierConfig.for_level() can resolve any capability level.
+        if config.llmio_tier_level and config.config_volume:
+            try:
+                settings = (
+                    await settings_store.get() if settings_store is not None else None
+                )
+                if settings and settings.llmio_tier_config:
+                    await backend.write_llmio_tier_config_to_volume(
+                        config.config_volume, settings.llmio_tier_config
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "deploy %s: could not write llmio tier config to volume %s: %s",
+                    name.replace("\n", "\\n"),
+                    config.config_volume.replace("\n", "\\n"),
+                    exc,
+                )
+                # non-fatal
+
+        # Deploy — update job phase for health-wait visibility.
+        if config.health_check is not None:
+            job_registry.update_deploy_phase(job_id, "waiting_health")
+
         outcome = await backend.deploy(record, config, image_ref)
+
+        record.state = outcome.state
+        record.image = image_ref
+        record.image_revision = outcome.deployed_digest
+        record.deployed_image_digest = outcome.deployed_digest
+        record.previous_image_digest = outcome.previous_digest
+        record.last_error = ""
+        await store.put(record)
+
+        # Record deploy history (best-effort — never fail a successful deploy)
+        try:
+            await deploy_history_store.append(
+                name,
+                DeployHistoryEntry(
+                    digest=outcome.deployed_digest,
+                    image_ref=image_ref,
+                    timestamp=time.time(),
+                    source="manual",
+                    previous_digest=outcome.previous_digest,
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "deploy %s: failed to record history entry",
+                repr(name),
+                exc_info=True,
+            )
+
+        # Deploy siblings
+        job_registry.update_deploy_phase(job_id, "deploying_siblings")
+        await _fanout_deploy_siblings(
+            name, store, backend, registry, env_store, deploy_history_store
+        )
+
+        # Auto-prune dangling images left behind by the update (opt-in setting);
+        # rollback targets recorded in the store are protected. Entirely
+        # best-effort: a settings-store or prune failure must never fail the
+        # deploy that already succeeded.
+        try:
+            settings = (
+                await settings_store.get() if settings_store is not None else None
+            )
+            if settings is not None and settings.image_auto_prune:
+                protected = await collect_protected_image_refs(store)
+                reclaimed = await backend.prune_images(protected)
+                if reclaimed:
+                    logger.info(
+                        "deploy %s: image auto-prune reclaimed %d bytes",
+                        name,
+                        reclaimed,
+                    )
+        except Exception:
+            logger.warning("deploy %s: image auto-prune failed", name, exc_info=True)
+
+        job_registry.mark_deploy_done(
+            job_id,
+            name=name,
+            image=image_ref,
+            state=record.state.value,
+            warnings=outcome.warnings,
+        )
     except Exception as exc:
         logger.exception("deploy %s failed", name)
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Deploy failed: {exc}",
-        )
+        job_registry.mark_deploy_failed(job_id, str(exc))
     finally:
         release_deploy_lock(name)
 
-    record.state = outcome.state
-    record.image = image_ref
-    record.image_revision = outcome.deployed_digest
-    record.deployed_image_digest = outcome.deployed_digest
-    record.previous_image_digest = outcome.previous_digest
-    record.last_error = ""
-    await store.put(record)
 
-    # Record deploy history (best-effort — never fail a successful deploy)
-    try:
-        await deploy_history_store.append(
-            name,
-            DeployHistoryEntry(
-                digest=outcome.deployed_digest,
-                image_ref=image_ref,
-                timestamp=time.time(),
-                source="manual",
-                previous_digest=outcome.previous_digest,
-            ),
+# ---------------------------------------------------------------------------
+# GET /services/deploy-jobs/{job_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/services/deploy-jobs/{job_id}",
+    response_model=DeployJobStatusResponse,
+    summary="Poll the status of a background deploy job",
+    responses={
+        404: {"model": ErrorDetail, "description": "Job not found"},
+    },
+)
+async def deploy_job_status(
+    job_id: str,
+    _: None = Depends(verify_auth),
+    job_registry: JobRegistry = Depends(_get_job_registry),
+) -> DeployJobStatusResponse:
+    """Return the current phase of a background deploy job."""
+    job = job_registry.get_deploy(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown deploy job '{job_id}'",
         )
-    except Exception:
-        logger.warning(
-            "deploy %s: failed to record history entry", repr(name), exc_info=True
-        )
-
-    # Deploy siblings
-    await _fanout_deploy_siblings(
-        name, store, backend, registry, env_store, deploy_history_store
-    )
-
-    # Auto-prune dangling images left behind by the update (opt-in setting);
-    # rollback targets recorded in the store are protected. Entirely
-    # best-effort: a settings-store or prune failure must never fail the
-    # deploy that already succeeded.
-    try:
-        settings_store = getattr(request.app.state, "settings_store", None)
-        settings = await settings_store.get() if settings_store is not None else None
-        if settings is not None and settings.image_auto_prune:
-            protected = await collect_protected_image_refs(store)
-            reclaimed = await backend.prune_images(protected)
-            if reclaimed:
-                logger.info(
-                    "deploy %s: image auto-prune reclaimed %d bytes", name, reclaimed
-                )
-    except Exception:
-        logger.warning("deploy %s: image auto-prune failed", name, exc_info=True)
-
-    return DeployResponse(
-        name=name,
-        deployed_digest=outcome.deployed_digest,
-        previous_digest=outcome.previous_digest,
-        current_state=record.state,
-        warnings=outcome.warnings,
+    return DeployJobStatusResponse(
+        job_id=job.job_id,
+        component=job.component,
+        phase=job.phase,
+        error=job.error,
+        name=job.name,
+        image=job.image,
+        state=job.state,
+        warnings=job.warnings,
     )
 
 
