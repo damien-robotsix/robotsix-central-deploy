@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Honor docker-compose ``user:`` key: when a service declares a user override (e.g. ``user: root``), the Docker SDK backend uses it instead of the forced host UID:GID. Fixes third-party sibling containers (tecnativa/docker-socket-proxy) that require their image-default user.
 - Add tmpfs support to compose parser, ComponentConfig model, and container creation backend. tmpfs mounts declared in deploy/docker-compose.yml now flow through to Docker HostConfig.Tmpfs, fixing the mill-socket-proxy crash-loop after contract refresh. Also add regression tests for multi-line list-form command preservation using the mill-socket-proxy contract as a fixture.
 - Added ``POST /services/{name}/refresh-contract`` endpoint that re-fetches
   ``deploy/docker-compose.yml`` from the component's git repo and updates the

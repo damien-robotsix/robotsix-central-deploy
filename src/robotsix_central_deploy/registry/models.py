@@ -43,6 +43,7 @@ class ServiceConfig(BaseModel):
     entrypoint: Optional[list[str]] = None
     tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
     mem_limit: str = "2g"
+    user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
 
 
 class ConfigAssistSeed(BaseModel):
@@ -90,6 +91,7 @@ class ComponentConfig(BaseModel):
     caretaker_auto_update: bool = True
     repo_id: str = ""
     mem_limit: str = "2g"
+    user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
     llmio_tier_level: Optional[str] = (
         None  # "level1" | "level2" | "level3" | "level4" — which capability tier
     )

@@ -174,6 +174,7 @@ async def _fanout_deploy_siblings(
             entrypoint=sib_config.entrypoint,
             tmpfs=sib_config.tmpfs,
             mem_limit=sib_config.mem_limit,
+            user=sib_config.user,
         )
         try:
             sib_outcome = await backend.deploy(
@@ -242,6 +243,7 @@ async def _fanout_rollback_siblings(
             entrypoint=sib_config.entrypoint,
             tmpfs=sib_config.tmpfs,
             mem_limit=sib_config.mem_limit,
+            user=sib_config.user,
         )
         try:
             sib_outcome = await backend.rollback(sib_record, effective_sib)
@@ -2110,6 +2112,7 @@ async def refresh_contract(
                 command=sib.command,
                 entrypoint=sib.entrypoint,
                 tmpfs=sib.tmpfs,
+                user=sib.user,
             )
             for sib in spec.siblings
         ],
@@ -2119,6 +2122,7 @@ async def refresh_contract(
         repo_id=comp_cfg.repo_id,
         caretaker_auto_update=comp_cfg.caretaker_auto_update,
         mem_limit=comp_cfg.mem_limit,
+        user=spec.user,
     )
     new_config.config_volume = spec.config_volume
     new_config.config_assist_command = spec.config_assist_command
@@ -2146,6 +2150,7 @@ async def refresh_contract(
         "config_assist_seeds",
         "llmio_tier_level",
         "allow_chat_access",
+        "user",
     )
     changed: list[str] = []
     previous: dict[str, Any] = {}

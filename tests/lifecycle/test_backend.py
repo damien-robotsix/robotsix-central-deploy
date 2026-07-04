@@ -676,6 +676,19 @@ class TestDockerSdkBackendUserInjection:
         assert "claude-auth" in volumes
         assert volumes["claude-auth"] == {"bind": "/home/app/.claude", "mode": "rw"}
 
+    def test_create_container_respects_explicit_user(self, backend):
+        """When config.user is set, it overrides the host UID:GID."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            user="root",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["user"] == "root"
+
 
 # ---------------------------------------------------------------------------
 # Claude auth credential validation

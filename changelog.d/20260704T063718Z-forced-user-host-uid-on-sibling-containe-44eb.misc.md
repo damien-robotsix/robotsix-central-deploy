@@ -1,0 +1,1 @@
+forced user=<host uid> on sibling containers breaks third-party images (socket-proxy pidfile)

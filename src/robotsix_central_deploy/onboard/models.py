@@ -29,6 +29,7 @@ class SiblingDerivedSpec(BaseModel):
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
     tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
+    user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
 
 
 class DerivedSpec(BaseModel):
@@ -69,6 +70,7 @@ class DerivedSpec(BaseModel):
         None  # "level1"–"level4" from robotsix.deploy.llmio-tier-level label
     )
     allow_chat_access: bool = False  # from robotsix.deploy.chat-access label
+    user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
 
 
 class ParseError(Exception):
