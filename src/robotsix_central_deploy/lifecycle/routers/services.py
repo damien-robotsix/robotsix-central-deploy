@@ -1970,25 +1970,30 @@ async def delete_service(
 
     Deletes the service record, env/secrets, config.json, and component config.
     Optionally stops and removes the Docker container (``stop_container``) and
-    deletes data volumes (``remove_volumes``, irreversible). Raises 404 if the
-    component is not found.
+    deletes data volumes (``remove_volumes``, irreversible).  Idempotent —
+    succeeds even when some persisted state is already absent (e.g. the
+    component config was cleared).  Raises 404 only when *neither* a service
+    record nor a component config exists for *name*.
     """
-    # 1. Verify component exists in config store
+    # 1. Look up primary record and config independently (either may be absent)
+    record = await store.get(name)
     config = config_store.get(name)
-    if config is None:
+
+    # 2. If neither exists, there is nothing to tear down
+    if record is None and config is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Component '{name}' not found",
         )
 
-    # 2. Resolve sibling pairs
-    pairs = await _get_sibling_pairs(name, config, store)
+    # 3. Resolve sibling pairs (requires config; fall back to prefix scan)
+    if config is not None:
+        pairs = await _get_sibling_pairs(name, config, store)
+    else:
+        pairs = []
 
-    # 3. Get primary record (may be None if partially onboarded)
-    record = await store.get(name)
-
-    # 4. Best-effort container stop/remove
-    if stop_container:
+    # 4. Best-effort container stop/remove (only when config is present)
+    if stop_container and config is not None:
         if record is not None:
             try:
                 await backend.stop(record)
@@ -2020,14 +2025,23 @@ async def delete_service(
                     exc_info=True,
                 )
 
-    # 4b. Best-effort volume removal (opt-in; IRREVERSIBLE).
-    if remove_volumes:
+    # 4b. Best-effort volume removal (opt-in; IRREVERSIBLE; requires config).
+    if remove_volumes and config is not None:
         await _delete_component_volumes(name, config, pairs, backend)
 
     # 5. Delete sibling records and env
-    for sib_cfg, sib_record in pairs:
-        await store.delete(sib_record.name)
-        await env_store.delete(f"{name}-{sib_cfg.service_key}")
+    if config is not None:
+        for sib_cfg, sib_record in pairs:
+            await store.delete(sib_record.name)
+            await env_store.delete(f"{name}-{sib_cfg.service_key}")
+    else:
+        # Discover siblings by prefix scan on the service store when
+        # the component config is absent (e.g. already cleared).
+        all_records = await store.list_all()
+        for r in all_records:
+            if r.name.startswith(f"{name}-"):
+                await store.delete(r.name)
+                await env_store.delete(r.name)
 
     # 6. Delete primary record
     if record is not None:
@@ -2039,8 +2053,8 @@ async def delete_service(
     # 8. Delete primary config.json
     await config_yaml_store.delete(name)
 
-    # 9. Delete from config store
+    # 9. Delete from config store (no-op if absent)
     await config_store.delete(name)
 
-    # 10. Remove from in-memory registry
+    # 10. Remove from in-memory registry (no-op if absent)
     registry.unregister(name)

@@ -1,0 +1,1 @@
+Component removal must atomically clear ALL state (ServiceRecord, config stores, volumes) — orphaned records leave phantom 'unknown' services
