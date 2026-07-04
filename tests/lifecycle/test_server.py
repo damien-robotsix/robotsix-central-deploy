@@ -21,6 +21,7 @@ from robotsix_central_deploy.onboard.models import DerivedSpec, SiblingDerivedSp
 from robotsix_central_deploy.registry.models import (
     ComponentConfig,
     ConfigAssistSeed,
+    PortMapping,
     VolumeMount,
 )
 
@@ -4072,3 +4073,299 @@ class TestNamespaceSpecVolumes:
             "zzztest-auto-mail-logs",
         }
         assert mail_hosts.isdisjoint(zzz_hosts)
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/components
+# ---------------------------------------------------------------------------
+
+
+class TestChatComponents:
+    async def test_empty_when_no_components(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/components")
+        assert resp.status_code == 401
+
+    async def test_skips_components_without_allow_chat_access(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="no-chat",
+            image="no-chat:latest",
+            container_name="no-chat",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = False
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_returns_component_with_skill(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="chatty",
+            image="chatty:latest",
+            container_name="chatty",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Mock the httpx.AsyncClient so the skill probe succeeds.
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "# Chatty Skill\nDo the thing."
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        # Clear the cache so we get a fresh probe.
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "chatty"
+        assert data[0]["base_url"] == "http://chatty:8080"
+        assert data[0]["skill"] == "# Chatty Skill\nDo the thing."
+
+    async def test_skips_component_with_failed_probe(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="flaky",
+            image="flaky:latest",
+            container_name="flaky",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Mock httpx.AsyncClient to raise an exception.
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(side_effect=Exception("boom"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_skips_component_with_non_200_probe(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="bad-status",
+            image="bad-status:latest",
+            container_name="bad-status",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Error"
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_skips_empty_skill_body(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="empty-skill",
+            image="empty-skill:latest",
+            container_name="empty-skill",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "   "  # whitespace-only
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_caches_skill_bodies(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="cached",
+            image="cached:latest",
+            container_name="cached",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        call_count = 0
+
+        async def mock_get(url):
+            nonlocal call_count
+            call_count += 1
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = f"Skill v{call_count}"
+            return mock_resp
+
+        mock_client = MagicMock()
+        mock_client.get = mock_get
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        # First call: probes and caches.
+        resp1 = await client.get("/chat/components", headers=auth_headers)
+        assert resp1.status_code == 200
+        data1 = resp1.json()
+        assert len(data1) == 1
+        assert data1[0]["skill"] == "Skill v1"
+        assert call_count == 1
+
+        # Second call: should use cache (no additional probe).
+        resp2 = await client.get("/chat/components", headers=auth_headers)
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        assert data2[0]["skill"] == "Skill v1"
+        assert call_count == 1  # still 1 — cache hit
+
+    async def test_skips_component_without_ports(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="noport",
+            image="noport:latest",
+            container_name="noport",
+            ports=[],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_multiple_components_mixed(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+
+        # Component with chat access enabled that returns a skill.
+        cfg1 = ComponentConfig(
+            id="alpha",
+            image="alpha:latest",
+            container_name="alpha",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg1.allow_chat_access = True
+        await config_store.put(cfg1)
+        server_mod.app.state.registry.register(cfg1)
+
+        # Component without chat access — should be skipped.
+        cfg2 = ComponentConfig(
+            id="beta",
+            image="beta:latest",
+            container_name="beta",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg2.allow_chat_access = False
+        await config_store.put(cfg2)
+        server_mod.app.state.registry.register(cfg2)
+
+        # Component with chat access but probe fails — should be skipped.
+        cfg3 = ComponentConfig(
+            id="gamma",
+            image="gamma:latest",
+            container_name="gamma",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg3.allow_chat_access = True
+        await config_store.put(cfg3)
+        server_mod.app.state.registry.register(cfg3)
+
+        # Mock: alpha returns 200, gamma returns 500.
+        async def mock_get(url):
+            mock_resp = MagicMock()
+            if "alpha" in url:
+                mock_resp.status_code = 200
+                mock_resp.text = "# Alpha Skill"
+            else:
+                mock_resp.status_code = 500
+                mock_resp.text = "Error"
+            return mock_resp
+
+        mock_client = MagicMock()
+        mock_client.get = mock_get
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "alpha"
