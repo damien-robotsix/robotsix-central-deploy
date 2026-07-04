@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Enable triage-boilerplate periodic workflow via `.robotsix-mill/periodic/triage_boilerplate.yaml` presence file.
 - Config UI: suggest peer-component URLs for `*_url` / `*_base_url` fields. A 🔍 button next to matching config fields opens a dropdown of registered components; picking one fills `http://<container_name>:<first container port>`. The field-name prefix is used as a hint to preselect the matching component (e.g. `mill_url` → component `mill`).
 - Caretaker: distinguish mill reachability failure modes (not registered / no ports / health probe failed) and use a lightweight GET /health probe instead of inferring reachability from ingest success.
 - DELETE /services/{name} is now idempotent and atomic: it purges ServiceRecord(s), env, config YAML, and component config even when the component config store entry is already absent. Sibling/helper services (e.g. ``<name>-socket-proxy``) discovered by prefix scan are also torn down.
