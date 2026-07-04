@@ -245,6 +245,11 @@ class DockerBackend(ExecutionBackend):
             "write_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
+        raise NotImplementedError(
+            "read_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
         """Map ``docker inspect`` output to a ``ServiceState``."""
         rc, stdout, _stderr = await _run(

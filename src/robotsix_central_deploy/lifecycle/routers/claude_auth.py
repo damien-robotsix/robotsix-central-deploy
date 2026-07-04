@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
-from ..deps import _get_backend
+from ..deps import _get_backend, get_claude_auth_refresh_state
 from ..schemas import (
     ClaudeAuthStatusResponse,
     ClaudeAuthLoginResponse,
@@ -85,6 +85,16 @@ async def get_claude_auth_status(
             status_code=501,
             detail="Claude auth not supported by this backend. Use the Docker SDK backend.",
         )
+    # Enrich with background-refresh state.
+    refresh_state = get_claude_auth_refresh_state()
+    if refresh_state["last_refresh"] is not None:
+        if refresh_state["last_error"] is None:
+            result["refresh_status"] = "ok"
+        else:
+            result["refresh_status"] = "failed"
+            result["last_refresh_error"] = refresh_state["last_error"]
+    else:
+        result["refresh_status"] = "never"
     return ClaudeAuthStatusResponse(**result)
 
 

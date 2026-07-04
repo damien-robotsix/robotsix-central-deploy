@@ -52,6 +52,7 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         mill_component_id=settings.mill_component_id,
         image_auto_prune=settings.image_auto_prune,
         llmio_tier_config=settings.llmio_tier_config,
+        claude_auth_refresh_interval=settings.claude_auth_refresh_interval,
     )
 
 
@@ -91,6 +92,7 @@ async def get_settings(
         mill_component_id=effective_config.mill_component_id,
         image_auto_prune=effective_config.image_auto_prune,
         llmio_tier_config=getattr(effective_config, "llmio_tier_config", {}),
+        claude_auth_refresh_interval=effective_config.claude_auth_refresh_interval,
     )
     return _mask_response(effective)
 
@@ -146,6 +148,7 @@ async def put_settings(
         mill_component_id=body.mill_component_id,
         image_auto_prune=body.image_auto_prune,
         llmio_tier_config=body.llmio_tier_config,
+        claude_auth_refresh_interval=body.claude_auth_refresh_interval,
     )
 
     await settings_store.put(new)

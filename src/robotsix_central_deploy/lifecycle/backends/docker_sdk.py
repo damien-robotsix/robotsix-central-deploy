@@ -530,6 +530,47 @@ class DockerSdkBackend(ExecutionBackend):
 
         return await loop.run_in_executor(None, _write)
 
+    async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
+        """Read and return the parsed ``.credentials.json`` from *volume_name*."""
+        import docker
+        import json as _json
+
+        loop = asyncio.get_running_loop()
+
+        def _read() -> dict[str, Any]:
+            try:
+                self._client.volumes.get(volume_name)
+            except docker.errors.NotFound:
+                raise ValueError(f"Volume '{volume_name}' does not exist.")
+
+            try:
+                raw = self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
+                    ],
+                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                    remove=True,
+                )
+                content = raw.decode("utf-8", errors="replace").strip()
+            except docker.errors.ContainerError:
+                raise ValueError("Failed to read credentials from volume.")
+
+            if content == "MISSING" or not content:
+                raise ValueError("No credentials file found.")
+
+            try:
+                result: Any = _json.loads(content)
+                if not isinstance(result, dict):
+                    raise ValueError("Credentials file is not a JSON object.")
+                return result
+            except _json.JSONDecodeError as exc:
+                raise ValueError(f"Credentials file is not valid JSON: {exc}")
+
+        return await loop.run_in_executor(None, _read)
+
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
     ) -> DeployOutcome:

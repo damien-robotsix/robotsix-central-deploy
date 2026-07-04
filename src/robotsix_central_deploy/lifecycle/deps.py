@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -59,6 +61,33 @@ VOLUME_CAT_MAX_BYTES: int = 1_048_576
 _config: LifecycleConfig | None = None
 _store: ServiceStore | None = None
 _backend: ExecutionBackend | None = None
+
+# -- Claude auth background refresh ---------------------------------------
+
+CLAUDE_AUTH_VOLUME = "claude-auth"
+CLAUDE_AUTH_REFRESH_BEFORE_SECONDS = 3600  # refresh when ≤ 1 hour until expiry
+CLAUDE_AUTH_USER_AGENT = "claude-cli/2.1.199 (external, cli)"  # noqa: E501 — avoids Cloudflare 403
+CLAUDE_AUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL, not a password
+CLAUDE_AUTH_CLIENT_ID = (
+    "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # gitleaks:allow — public OAuth client id
+)
+
+#: Module-level state for the last Claude auth refresh attempt.
+_claude_auth_refresh_state: dict[str, Any] = {
+    "last_refresh": None,  # float — monotonic timestamp of last attempt
+    "last_error": None,  # str | None — error message if last refresh failed
+}
+
+
+def get_claude_auth_refresh_state() -> dict[str, Any]:
+    """Return a snapshot of the Claude auth refresh state.
+
+    Keys: ``last_refresh`` (float | None), ``last_error`` (str | None).
+    Callers can derive ``refresh_status`` — ``"ok"`` when last_refresh is
+    set and last_error is None, ``"failed"`` when last_error is set, or
+    ``"never"`` otherwise.
+    """
+    return dict(_claude_auth_refresh_state)
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +188,159 @@ async def _registry_check_loop(
                             await store.put(record)
                 except Exception:  # noqa: BLE001
                     pass
+    except asyncio.CancelledError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Background Claude auth credential refresh loop
+# ---------------------------------------------------------------------------
+
+
+async def _claude_auth_refresh_loop(
+    backend: ExecutionBackend,
+    interval_sec: int,
+) -> None:
+    """Periodically check and refresh Claude auth credentials in the
+    ``claude-auth`` named volume.
+
+    Reads ``.credentials.json``, checks whether the access token expires
+    within *CLAUDE_AUTH_REFRESH_BEFORE_SECONDS*, and POSTs a refresh_token
+    grant to the Anthropic OAuth token endpoint when needed.  Rotated
+    refresh tokens are persisted immediately — losing the rotated token
+    strands the volume until a manual re-login.
+    """
+    global _claude_auth_refresh_state
+    try:
+        while True:
+            await asyncio.sleep(interval_sec)
+            try:
+                # Check current status — skip if not authenticated.
+                status = await backend.check_claude_auth(CLAUDE_AUTH_VOLUME)
+            except NotImplementedError:
+                return  # backend does not support claude auth -> nothing to do
+            except Exception:
+                logger.debug(
+                    "Claude auth refresh: check_claude_auth failed", exc_info=True
+                )
+                continue
+
+            if status.get("status") != "authenticated":
+                continue
+
+            # Read credentials to inspect expiry and refresh token.
+            try:
+                creds = await backend.read_claude_credentials(CLAUDE_AUTH_VOLUME)
+            except Exception:
+                logger.debug(
+                    "Claude auth refresh: read_claude_credentials failed", exc_info=True
+                )
+                continue
+
+            oauth = creds.get("claudeAiOauth", {})
+            if not isinstance(oauth, dict):
+                continue
+
+            refresh_token = oauth.get("refreshToken")
+            expires_at_ms = oauth.get("expiresAt")
+
+            if not refresh_token or not expires_at_ms:
+                continue  # nothing to refresh without these
+
+            now_ms = int(time.time() * 1000)
+            if expires_at_ms - now_ms > CLAUDE_AUTH_REFRESH_BEFORE_SECONDS * 1000:
+                continue  # not close enough to expiry
+
+            # --- Perform the refresh --------------------------------------
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    resp = await client.post(
+                        CLAUDE_AUTH_TOKEN_URL,
+                        json={
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                            "client_id": CLAUDE_AUTH_CLIENT_ID,
+                        },
+                        headers={"User-Agent": CLAUDE_AUTH_USER_AGENT},
+                    )
+                except Exception as exc:
+                    _claude_auth_refresh_state = {
+                        "last_refresh": time.monotonic(),
+                        "last_error": f"Token endpoint unreachable: {exc}",
+                    }
+                    logger.warning("Claude auth refresh: request failed: %s", exc)
+                    continue
+
+            if resp.status_code != 200:
+                error_detail = resp.text[:500]
+                try:
+                    error_detail = (
+                        resp.json().get("error", {}).get("message", error_detail)
+                    )
+                except Exception:  # noqa: S110 — non-JSON body is fine
+                    pass
+                _claude_auth_refresh_state = {
+                    "last_refresh": time.monotonic(),
+                    "last_error": f"Refresh failed ({resp.status_code}): {error_detail}",
+                }
+                logger.warning("Claude auth refresh: %s", error_detail)
+                continue
+
+            try:
+                payload: dict[str, Any] = resp.json()
+            except Exception as exc:
+                _claude_auth_refresh_state = {
+                    "last_refresh": time.monotonic(),
+                    "last_error": f"Invalid JSON in refresh response: {exc}",
+                }
+                logger.warning("Claude auth refresh: bad response JSON: %s", exc)
+                continue
+
+            access_token = payload.get("access_token")
+            new_refresh_token = payload.get("refresh_token", refresh_token)
+            expires_in = payload.get("expires_in", 0)
+
+            if not access_token:
+                _claude_auth_refresh_state = {
+                    "last_refresh": time.monotonic(),
+                    "last_error": "No access_token in refresh response",
+                }
+                logger.warning("Claude auth refresh: no access_token in response")
+                continue
+
+            # Build new credentials blob — always persist the rotated
+            # refresh token from the server (the ticket gotcha).
+            new_creds: dict[str, Any] = {
+                "claudeAiOauth": {
+                    "accessToken": access_token,
+                    "refreshToken": new_refresh_token,
+                    "expiresAt": int((time.time() + float(expires_in)) * 1000),
+                    "scopes": oauth.get("scopes", ["user:inference"]),
+                }
+            }
+            # Preserve optional fields from the original credential blob.
+            for key in ("subscriptionType", "rateLimitTier"):
+                if key in oauth:
+                    new_creds["claudeAiOauth"][key] = oauth[key]
+
+            try:
+                await backend.write_claude_credentials(
+                    CLAUDE_AUTH_VOLUME, json.dumps(new_creds, indent=2)
+                )
+            except Exception as exc:
+                _claude_auth_refresh_state = {
+                    "last_refresh": time.monotonic(),
+                    "last_error": f"Failed to write refreshed credentials: {exc}",
+                }
+                logger.warning("Claude auth refresh: write failed: %s", exc)
+                continue
+
+            _claude_auth_refresh_state = {
+                "last_refresh": time.monotonic(),
+                "last_error": None,
+            }
+            logger.info("Claude auth credentials refreshed successfully")
+
     except asyncio.CancelledError:
         pass
 
@@ -344,6 +526,7 @@ async def _init_settings(app: FastAPI) -> None:
                 gateway_base_domain=_config.gateway_base_domain,
                 caretaker_enabled=_config.caretaker_enabled,
                 caretaker_interval_hours=_config.caretaker_interval_hours,
+                claude_auth_refresh_interval=_config.claude_auth_refresh_interval,
             )
         )
 
@@ -401,6 +584,17 @@ async def _init_background_tasks(app: FastAPI) -> None:
             )
         )
     app.state._bg_task = bg_task
+
+    # -- Claude auth credential refresh ----------------------------------
+    claude_auth_task = None
+    if _config.claude_auth_refresh_interval > 0:
+        claude_auth_task = asyncio.create_task(
+            _claude_auth_refresh_loop(
+                _backend,
+                _config.claude_auth_refresh_interval,
+            )
+        )
+    app.state._claude_auth_task = claude_auth_task
 
     logger.info(
         "lifecycle server starting — store=%s backend=%s auth=%s",
@@ -532,6 +726,13 @@ async def _teardown(app: FastAPI) -> None:
     if bg_task:
         bg_task.cancel()
         await asyncio.gather(bg_task, return_exceptions=True)
+
+    claude_auth_task: asyncio.Task[Any] | None = getattr(
+        app.state, "_claude_auth_task", None
+    )
+    if claude_auth_task:
+        claude_auth_task.cancel()
+        await asyncio.gather(claude_auth_task, return_exceptions=True)
 
     await _http_client.aclose()
     logger.info("lifecycle server shutting down")

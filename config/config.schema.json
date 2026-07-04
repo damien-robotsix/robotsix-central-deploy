@@ -247,6 +247,12 @@
       "description": "Fleet-global mapping from llmio capability level (level1-4) to provider and model. Overridden by the System Settings store.",
       "title": "Llmio Tier Config",
       "type": "object"
+    },
+    "claude_auth_refresh_interval": {
+      "default": 1800,
+      "description": "Interval (seconds) between Claude auth credential refresh attempts; 0 disables background refresh.",
+      "title": "Claude Auth Refresh Interval",
+      "type": "integer"
     }
   },
   "title": "LifecycleConfig",

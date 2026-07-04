@@ -33,6 +33,7 @@ class SystemSettings(BaseModel):
     mill_component_id: str = "mill"  # component id the caretaker reports to
     image_auto_prune: bool = False  # prune dangling images after updates
     llmio_tier_config: dict[str, Any] = {}
+    claude_auth_refresh_interval: int = 1800  # seconds; 0 = disabled
 
     @field_validator("log_level")
     @classmethod
@@ -138,5 +139,6 @@ class SystemSettingsStore:
                 "mill_component_id": stored.mill_component_id,
                 "image_auto_prune": stored.image_auto_prune,
                 "llmio_tier_config": stored.llmio_tier_config,
+                "claude_auth_refresh_interval": stored.claude_auth_refresh_interval,
             }
         )
