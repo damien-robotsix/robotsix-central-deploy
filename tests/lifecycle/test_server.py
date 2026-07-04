@@ -7,6 +7,7 @@ full request/response pipeline including middleware, auth, and error handlers.
 from __future__ import annotations
 
 import asyncio
+import time
 
 from httpx import AsyncClient
 
@@ -4184,6 +4185,43 @@ class TestChatComponents:
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json() == []
+
+    async def test_serves_stale_skill_when_probe_fails(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="stale-ok",
+            image="stale-ok:latest",
+            container_name="stale-ok",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Probe raises, but an expired cache entry holds a last-known-good
+        # skill — the component must stay in the roster with that body.
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(side_effect=Exception("boom"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+        expired_at = time.monotonic() - chat_mod._SKILL_CACHE_TTL - 1
+        chat_mod._skill_cache["stale-ok"] = (expired_at, "# Stale Skill")
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "stale-ok"
+        assert data[0]["skill"] == "# Stale Skill"
+        # The stale timestamp is preserved so the next request re-probes.
+        assert chat_mod._skill_cache["stale-ok"][0] == expired_at
 
     async def test_skips_component_with_non_200_probe(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
