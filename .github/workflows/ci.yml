@@ -8,11 +8,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   docs-dedup:
+    name: Verify DEPLOY_CONTRACT.md symlink
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - name: Verify DEPLOY_CONTRACT.md is a symlink (not a stale copy)
         run: |
           set -euo pipefail
@@ -35,6 +42,7 @@ jobs:
           diff docs/DEPLOY_CONTRACT.md src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md
 
   tests:
+    name: Tests (lint, typecheck, SAST, pytest)
     # Inlined from the reusable python-ci.yml to avoid astral-sh/setup-uv
     # manifest-fetch timeouts (the action fetches raw.githubusercontent.com
     # and sometimes hits a 5-second Node.js fetch timeout in CI).  Using
@@ -100,11 +108,14 @@ jobs:
           uv run --with pytest-xdist --with pytest-cov pytest tests/ -n auto --dist loadscope -x -m "not docker" --tb=long --cov="robotsix_central_deploy" --cov-fail-under="80" --cov-report=term-missing
 
   docs:
+    name: Build docs
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.14"
@@ -114,11 +125,14 @@ jobs:
         run: uv run --group docs mkdocs build --strict
 
   audit:
+    name: Dependency audit
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.14"
@@ -128,14 +142,16 @@ jobs:
         run: uv audit --frozen
 
   gitleaks:
+    name: Gitleaks secrets scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read  # Gitleaks needs PR read to post annotations
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -143,12 +159,15 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
 
   trivy:
+    name: Trivy container vulnerability scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # SARIF upload
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - name: Build Docker image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
@@ -173,11 +192,14 @@ jobs:
           sarif_file: trivy-results.sarif
 
   grep-lint:
+    name: Pre-commit hooks + enum-string policy
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.14"
@@ -241,12 +263,15 @@ jobs:
           echo "All grep-lint checks passed."
 
   codeql:
+    name: CodeQL analysis
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # SARIF upload
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4
         with:
           languages: python
@@ -255,11 +280,14 @@ jobs:
       - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4
 
   config-schema-drift:
+    name: Config schema drift check
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.14"
@@ -281,6 +309,7 @@ jobs:
           EOF
 
   dependency-review:
+    name: Dependency review
     # dependency-review-action diffs base..head and only supports
     # pull_request events; on push to main it fails unconditionally.
     if: github.event_name == 'pull_request'
@@ -289,6 +318,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48  # v4
         with:
           fail-on-severity: high
