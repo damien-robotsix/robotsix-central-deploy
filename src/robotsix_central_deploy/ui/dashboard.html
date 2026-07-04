@@ -3447,7 +3447,17 @@ function renderClaudeAuthStatus(data) {
   };
   const info = statusMap[data.status] || { cls: 'badge-unknown', text: data.status };
   badge.innerHTML = `<span class="badge ${info.cls}">${info.text}</span>`;
-  detail.textContent = data.detail || '';
+
+  let detailText = data.detail || '';
+  if (data.refresh_status === 'ok') {
+    detailText += (detailText ? ' — ' : '') + '✓ Auto-refresh active';
+  } else if (data.refresh_status === 'failed') {
+    detailText += (detailText ? ' — ' : '') + '⚠ Refresh failed';
+    if (data.last_refresh_error) {
+      detailText += ': ' + data.last_refresh_error;
+    }
+  }
+  detail.textContent = detailText;
 
   if (data.status === 'authenticated') {
     loginBtn.style.display = '';

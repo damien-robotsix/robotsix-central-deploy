@@ -247,6 +247,14 @@ class LifecycleConfig(BaseModel):
         ),
     )
 
+    claude_auth_refresh_interval: int = Field(
+        1800,
+        description=(
+            "Interval (seconds) between Claude auth credential refresh "
+            "attempts; 0 disables background refresh."
+        ),
+    )
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

@@ -245,6 +245,8 @@ class ConfigAssistResponse(BaseModel):
 class ClaudeAuthStatusResponse(BaseModel):
     status: str  # "authenticated" | "not-authenticated" | "expiring" | "error"
     detail: str = ""
+    refresh_status: str = ""  # "ok" | "failed" | "never" | ""
+    last_refresh_error: str = ""
 
 
 class ClaudeAuthLoginResponse(BaseModel):

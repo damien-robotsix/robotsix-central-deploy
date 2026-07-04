@@ -219,3 +219,12 @@ class ExecutionBackend(ABC):
         Returns a dict with ``status``.
         """
         pass
+
+    @abstractmethod
+    async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
+        """Read and return the parsed ``.credentials.json`` from *volume_name*.
+
+        Returns the parsed JSON dict.  Raises ``ValueError`` when the file
+        is missing or unparseable.
+        """
+        pass

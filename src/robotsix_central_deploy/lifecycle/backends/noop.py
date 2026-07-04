@@ -134,3 +134,13 @@ class NoopBackend(ExecutionBackend):
         self, volume_name: str, credentials_json: str
     ) -> dict[str, Any]:
         return {"status": "authenticated"}
+
+    async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
+        return {
+            "claudeAiOauth": {
+                "accessToken": "noop",
+                "refreshToken": "noop",
+                "expiresAt": 9999999999999,
+                "scopes": ["user:inference"],
+            }
+        }
