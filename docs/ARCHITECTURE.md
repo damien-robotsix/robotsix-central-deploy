@@ -66,7 +66,7 @@ Docker volume growth over time.
 | File | Role |
 |------|------|
 | `app.py` | FastAPI application factory. Wires routers, middleware, background tasks. |
-| `models.py` | **Service state machine** — `ServiceState` enum, `TRANSITIONS` dict, `can_transition()`, plus all API Pydantic schemas (`ServiceStatus`, `ServiceListItem`, `DeployResponse`, …). |
+| `models.py` | **Service state machine** — `ServiceState` enum, `TRANSITIONS` dict, `can_transition()`, plus all API Pydantic schemas (`ServiceStatus`, `ServiceListItem`, …). |
 | `backend.py` | **Execution backends** — `DockerSdkBackend` (default, full-featured), `DockerBackend` (CLI subprocess, limited), `NoopBackend` (testing). Each implements the same abstract interface (`start`, `stop`, `restart`, `deploy`, `rollback`, `status`). |
 | `store.py` | **Service store** — `InMemoryStore` and `FileStore` backends that persist `ServiceRecord` state. Selected via `STORE_BACKEND` config. |
 | `auth.py` | Authentication — API key + HTTP Basic Auth via FastAPI dependencies. |

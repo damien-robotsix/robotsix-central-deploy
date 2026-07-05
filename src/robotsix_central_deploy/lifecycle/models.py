@@ -259,17 +259,6 @@ class DeployRequest(BaseModel):
     )
 
 
-class DeployResponse(BaseModel):
-    """API response for ``POST /services/{name}/deploy``."""
-
-    name: str
-    action: str = "deploy"
-    deployed_digest: str
-    previous_digest: str
-    current_state: ServiceState
-    warnings: list[str] = []
-
-
 class RollbackRequest(BaseModel):
     """Optional body for ``POST /services/{name}/rollback``.
 
