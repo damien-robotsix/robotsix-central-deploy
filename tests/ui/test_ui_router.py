@@ -17,6 +17,7 @@ from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
 )
+from robotsix_central_deploy.lifecycle.rate_limiter import RateLimitStore
 from robotsix_central_deploy.lifecycle.session import SessionStore
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.lifecycle import server as server_mod
@@ -57,6 +58,7 @@ def _wire(cfg: LifecycleConfig) -> None:
     server_mod.app.state.session_store = session_store
     server_mod.app.state.registry = registry
     server_mod.app.state.component_config_store = component_config_store
+    server_mod.app.state.rate_limit_store = RateLimitStore()
 
 
 @pytest.fixture
@@ -204,3 +206,81 @@ class TestUiRouter:
         # With valid Basic Auth → 200
         resp = await client.get("/services", headers=_basic_header(self.API_KEY))
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# TestRateLimiting
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiting:
+    API_KEY = "test-key"
+
+    @pytest.fixture(autouse=True)
+    async def _setup(self, monkeypatch):
+        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_REQUIRED", "true")
+        cfg = LifecycleConfig(  # type: ignore[call-arg]
+            store_backend="memory",
+            execution_backend=ExecutionBackendType.NOOP,
+            api_key=self.API_KEY,
+            rate_limit_login_per_minute=3,
+            rate_limit_login_max_attempts=3,
+            rate_limit_login_lockout_seconds=600,
+            rate_limit_api_per_hour=3,
+        )
+        _wire(cfg)
+        await _seed_store()
+
+    async def test_login_rate_limit_returns_429(self, client: AsyncClient):
+        """After exceeding the per-minute login limit, further POSTs get 429."""
+        for _ in range(3):
+            resp = await client.post(
+                "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+            )
+            # First 3 should succeed (correct password → 303 redirect)
+            assert resp.status_code == 303
+
+        # 4th request within the same window should be rate-limited
+        resp = await client.post(
+            "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+        )
+        assert resp.status_code == 429
+
+    async def test_login_lockout_after_failures(self, client: AsyncClient):
+        """After N failed logins the IP is locked out."""
+        for _ in range(3):
+            resp = await client.post(
+                "/login",
+                data={"username": "", "password": "wrong", "next": "/ui"},
+            )
+            assert resp.status_code == 401
+
+        # Next attempt, even with correct password, should be locked out
+        resp = await client.post(
+            "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+        )
+        assert resp.status_code == 429
+        assert "Too many login attempts" in resp.json()["detail"]
+
+    async def test_api_rate_limit_returns_429(self, client: AsyncClient):
+        """After exceeding the per-hour API limit, further requests get 429."""
+        for _ in range(3):
+            resp = await client.get("/services", headers={"X-API-Key": self.API_KEY})
+            assert resp.status_code == 200
+
+        # 4th request within the same window should be rate-limited
+        resp = await client.get("/services", headers={"X-API-Key": self.API_KEY})
+        assert resp.status_code == 429
+
+    async def test_non_api_paths_are_not_rate_limited(self, client: AsyncClient):
+        """Paths like /health and /ui pass through without rate limiting."""
+        # Many requests should all succeed
+        for _ in range(7):
+            resp = await client.get("/health")
+            assert resp.status_code == 200
+
+    async def test_login_get_not_rate_limited(self, client: AsyncClient):
+        """GET /login is not subject to the POST rate limit."""
+        for _ in range(7):
+            resp = await client.get("/login", follow_redirects=False)
+            assert resp.status_code in (200, 303)

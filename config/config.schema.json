@@ -259,6 +259,30 @@
       "description": "Interval (seconds) between Claude auth credential refresh attempts; 0 disables background refresh.",
       "title": "Claude Auth Refresh Interval",
       "type": "integer"
+    },
+    "rate_limit_login_per_minute": {
+      "default": 10,
+      "description": "Max POST /login requests per IP per minute.",
+      "title": "Rate Limit Login Per Minute",
+      "type": "integer"
+    },
+    "rate_limit_api_per_hour": {
+      "default": 1000,
+      "description": "Max API requests per IP per hour.",
+      "title": "Rate Limit Api Per Hour",
+      "type": "integer"
+    },
+    "rate_limit_login_max_attempts": {
+      "default": 20,
+      "description": "Failed login attempts before IP lockout.",
+      "title": "Rate Limit Login Max Attempts",
+      "type": "integer"
+    },
+    "rate_limit_login_lockout_seconds": {
+      "default": 300,
+      "description": "Lockout duration (seconds) after too many failed logins.",
+      "title": "Rate Limit Login Lockout Seconds",
+      "type": "integer"
     }
   },
   "title": "LifecycleConfig",

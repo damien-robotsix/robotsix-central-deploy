@@ -618,6 +618,11 @@ async def _init_settings(app: FastAPI) -> None:
     app.state.session_store = SessionStore()
     app.state.job_registry = JobRegistry()
 
+    # -- Rate limiter (in-memory, no I/O) -------------------------------
+    from .rate_limiter import RateLimitStore
+
+    app.state.rate_limit_store = RateLimitStore()
+
     # Apply log_level from (possibly overlaid) config
     logging.getLogger().setLevel(_config.log_level)
 

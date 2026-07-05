@@ -34,6 +34,10 @@ class SystemSettings(BaseModel):
     image_auto_prune: bool = False  # prune dangling images after updates
     llmio_tier_config: dict[str, Any] = {}
     claude_auth_refresh_interval: int = 1800  # seconds; 0 = disabled
+    rate_limit_login_per_minute: int = 10
+    rate_limit_api_per_hour: int = 1000
+    rate_limit_login_max_attempts: int = 20
+    rate_limit_login_lockout_seconds: int = 300
 
     @field_validator("log_level")
     @classmethod
@@ -140,5 +144,9 @@ class SystemSettingsStore:
                 "image_auto_prune": stored.image_auto_prune,
                 "llmio_tier_config": stored.llmio_tier_config,
                 "claude_auth_refresh_interval": stored.claude_auth_refresh_interval,
+                "rate_limit_login_per_minute": stored.rate_limit_login_per_minute,
+                "rate_limit_api_per_hour": stored.rate_limit_api_per_hour,
+                "rate_limit_login_max_attempts": stored.rate_limit_login_max_attempts,
+                "rate_limit_login_lockout_seconds": stored.rate_limit_login_lockout_seconds,
             }
         )

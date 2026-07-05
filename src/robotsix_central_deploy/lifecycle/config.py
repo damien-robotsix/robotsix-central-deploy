@@ -260,6 +260,24 @@ class LifecycleConfig(BaseModel):
         ),
     )
 
+    # Rate limiting
+    rate_limit_login_per_minute: int = Field(
+        10,
+        description="Max POST /login requests per IP per minute.",
+    )
+    rate_limit_api_per_hour: int = Field(
+        1000,
+        description="Max API requests per IP per hour.",
+    )
+    rate_limit_login_max_attempts: int = Field(
+        20,
+        description="Failed login attempts before IP lockout.",
+    )
+    rate_limit_login_lockout_seconds: int = Field(
+        300,
+        description="Lockout duration (seconds) after too many failed logins.",
+    )
+
     @property
     def effective_store_path(self) -> Path:
         return Path(self.store_path)

@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from .deps import lifespan
 from .error_handlers import register_error_handlers
 from .models import ErrorDetail
+from .rate_limiter import RateLimitMiddleware
 from .routers.health import router as health_router
 from .routers.services import router as services_router
 from .routers.services_deploy import router as services_deploy_router
@@ -43,6 +44,8 @@ app = FastAPI(
 )
 
 register_error_handlers(app)
+
+app.add_middleware(RateLimitMiddleware)
 
 app.include_router(ui_router)
 app.include_router(settings_router)
