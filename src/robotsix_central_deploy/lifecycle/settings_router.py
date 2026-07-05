@@ -53,6 +53,10 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         image_auto_prune=settings.image_auto_prune,
         llmio_tier_config=settings.llmio_tier_config,
         claude_auth_refresh_interval=settings.claude_auth_refresh_interval,
+        rate_limit_login_per_minute=settings.rate_limit_login_per_minute,
+        rate_limit_api_per_hour=settings.rate_limit_api_per_hour,
+        rate_limit_login_max_attempts=settings.rate_limit_login_max_attempts,
+        rate_limit_login_lockout_seconds=settings.rate_limit_login_lockout_seconds,
     )
 
 
@@ -93,6 +97,10 @@ async def get_settings(
         image_auto_prune=effective_config.image_auto_prune,
         llmio_tier_config=getattr(effective_config, "llmio_tier_config", {}),
         claude_auth_refresh_interval=effective_config.claude_auth_refresh_interval,
+        rate_limit_login_per_minute=effective_config.rate_limit_login_per_minute,
+        rate_limit_api_per_hour=effective_config.rate_limit_api_per_hour,
+        rate_limit_login_max_attempts=effective_config.rate_limit_login_max_attempts,
+        rate_limit_login_lockout_seconds=effective_config.rate_limit_login_lockout_seconds,
     )
     return _mask_response(effective)
 
@@ -149,6 +157,10 @@ async def put_settings(
         image_auto_prune=body.image_auto_prune,
         llmio_tier_config=body.llmio_tier_config,
         claude_auth_refresh_interval=body.claude_auth_refresh_interval,
+        rate_limit_login_per_minute=body.rate_limit_login_per_minute,
+        rate_limit_api_per_hour=body.rate_limit_api_per_hour,
+        rate_limit_login_max_attempts=body.rate_limit_login_max_attempts,
+        rate_limit_login_lockout_seconds=body.rate_limit_login_lockout_seconds,
     )
 
     await settings_store.put(new)
