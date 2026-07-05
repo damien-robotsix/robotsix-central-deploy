@@ -26,6 +26,9 @@ modules:
       - POST /chat/services/{name}/restart
       - POST /chat/services/{name}/update
       - GET /chat/audit-log
+      - GET /chat/credentials/{component_id}
+      - PUT /chat/credentials/{component_id}
+      - GET /chat/proxy/{component_id}/{path}
       - GET /services
       - GET /services/{name}
       - GET /services/{name}/health

@@ -71,8 +71,10 @@ Docker volume growth over time.
 | `store.py` | **Service store** — `InMemoryStore` and `FileStore` backends that persist `ServiceRecord` state. Selected via `STORE_BACKEND` config. |
 | `auth.py` | Authentication — API key + HTTP Basic Auth via FastAPI dependencies. |
 | `disk.py` | Host disk usage + `docker system df` breakdown (`GET /disk`). |
+| `routers/chat.py` | Chat agent component roster (`GET /chat/components`), external component credential management (`PUT/GET /chat/credentials/{component_id}`), server-side auth-injecting proxy (`GET /chat/proxy/{component_id}/{path}`), and scoped write-surface endpoints for allowlisted services. |
+| `schemas.py` | Pydantic request/response models shared across lifecycle routers, including chat agent schemas (`ChatAgentCredentialsUpdate`, `ChatAgentCredentialsResponse`). |
 
-**Public API surface**: `GET /services`, `GET /services/{name}`, `GET /services/{name}/health`, `GET /services/{name}/logs`, `POST /services/{name}/start`, `POST /services/{name}/stop`, `POST /services/{name}/restart`, `POST /services/{name}/deploy`, `POST /services/{name}/rollback`, `DELETE /services/{name}`, `GET /services/{name}/config`, `PUT /services/{name}/config`, `GET /services/{name}/env`, `PUT /services/{name}/env`, `DELETE /services/{name}/env/{key}`.
+**Public API surface**: `GET /services`, `GET /services/{name}`, `GET /services/{name}/health`, `GET /services/{name}/logs`, `POST /services/{name}/start`, `POST /services/{name}/stop`, `POST /services/{name}/restart`, `POST /services/{name}/deploy`, `POST /services/{name}/rollback`, `DELETE /services/{name}`, `GET /services/{name}/config`, `PUT /services/{name}/config`, `GET /services/{name}/env`, `PUT /services/{name}/env`, `DELETE /services/{name}/env/{key}`, `GET /chat/components`, `GET/PUT /chat/credentials/{component_id}`, `GET /chat/proxy/{component_id}/{path}`.
 
 ### `gateway/` — Reverse proxy
 
@@ -100,6 +102,12 @@ Docker volume growth over time.
 | `config_yaml_store.py` | `ConfigYamlStore` | JSON store for per-component `config.yaml` templates and user-saved values. |
 | `settings_store.py` | `SystemSettingsStore` | JSON store for system-wide operator settings (auth, disk warn %, registry check interval, log level, gateway base domain). |
 | `secret_key.py` | `SecretKeyManager` | Fernet encryption/decryption wrapper. **Key loss is irrecoverable** — secrets must be re-entered if `secrets.key` is deleted. |
+
+### `chat_skills/` — Skill documents for external components
+
+| File | Role |
+|------|------|
+| `langfuse.md` | Markdown skill document describing the Langfuse read-only public API endpoints, pagination, safety rules, and proxy routing pattern.  Seeded into the component registry at startup by `_seed_external_components()`. |
 
 ### `registry_check/` — Background registry polling
 
