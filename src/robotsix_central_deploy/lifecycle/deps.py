@@ -696,9 +696,15 @@ async def _seed_component_registry(
     a ``ServiceRecord`` — that would surface them as permanently
     "unknown"-status rows in the dashboard. Any ``ServiceRecord`` that
     already exists for one (e.g. leaked in by a previous restart before
-    this guard existed) is deleted here so the fix self-heals.
+    this guard existed) is deleted here so the fix self-heals. Configs
+    persisted before ``is_virtual`` existed are backfilled by matching
+    against the current ``virtual_components`` ids.
     """
+    virtual_ids = {ventry.id for ventry in virtual_components}
     for dyn_config in component_config_store.all():
+        if dyn_config.id in virtual_ids and not dyn_config.is_virtual:
+            dyn_config = dyn_config.model_copy(update={"is_virtual": True})
+            component_config_store.register(dyn_config)
         registry.register(dyn_config)
         if dyn_config.is_virtual:
             await store.delete(dyn_config.id)
