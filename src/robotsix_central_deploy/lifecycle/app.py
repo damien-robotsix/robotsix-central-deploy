@@ -15,6 +15,9 @@ from .error_handlers import register_error_handlers
 from .models import ErrorDetail
 from .routers.health import router as health_router
 from .routers.services import router as services_router
+from .routers.services_deploy import router as services_deploy_router
+from .routers.services_config import router as services_config_router
+from .routers.services_env import router as services_env_router
 from .routers.system import router as system_router
 from .routers.volumes import router as volumes_router
 from .routers.caretaker import router as caretaker_router
@@ -47,6 +50,9 @@ app.include_router(health_router)
 app.include_router(system_router)
 app.include_router(volumes_router)
 app.include_router(services_router)
+app.include_router(services_deploy_router)
+app.include_router(services_config_router)
+app.include_router(services_env_router)
 app.include_router(caretaker_router)
 app.include_router(onboard_router)
 app.include_router(claude_auth_router)
