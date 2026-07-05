@@ -266,8 +266,12 @@ class LifecycleConfig(BaseModel):
         description="Max POST /login requests per IP per minute.",
     )
     rate_limit_api_per_hour: int = Field(
-        1000,
-        description="Max API requests per IP per hour.",
+        20000,
+        description=(
+            "Max API requests per IP per hour. Must accommodate the "
+            "dashboard UI, which polls several endpoints every few "
+            "seconds from one IP (~5000/h per open tab)."
+        ),
     )
     rate_limit_login_max_attempts: int = Field(
         20,

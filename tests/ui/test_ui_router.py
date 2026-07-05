@@ -227,6 +227,7 @@ class TestRateLimiting:
             rate_limit_login_max_attempts=3,
             rate_limit_login_lockout_seconds=600,
             rate_limit_api_per_hour=3,
+            gateway_base_domain="deploy.test",
         )
         _wire(cfg)
         await _seed_store()
@@ -284,3 +285,34 @@ class TestRateLimiting:
         for _ in range(7):
             resp = await client.get("/login", follow_redirects=False)
             assert resp.status_code in (200, 303)
+
+    async def test_gateway_host_traffic_not_rate_limited(self, client: AsyncClient):
+        """Requests to a component subdomain bypass the limiter entirely.
+
+        A component's own paths may collide with the limited prefixes
+        (chat's ``POST /chat``, a component's ``/login``) — proxied traffic
+        must neither consume central-deploy's budget nor be throttled.
+        """
+        headers = {"host": "chat.deploy.test"}
+        for _ in range(7):
+            resp = await client.get("/chat", headers=headers)
+            assert resp.status_code != 429
+
+        # The gateway traffic above must not have consumed the API budget
+        # of the direct-host client either.
+        for _ in range(3):
+            resp = await client.get("/services", headers={"X-API-Key": self.API_KEY})
+            assert resp.status_code == 200
+
+    async def test_gateway_host_login_no_lockout(self, client: AsyncClient):
+        """A component's own /login endpoint never feeds the lockout counter."""
+        gw = {"host": "mail.deploy.test"}
+        for _ in range(7):
+            resp = await client.post("/login", data={"password": "wrong"}, headers=gw)
+            assert resp.status_code != 429
+
+        # Direct-host login still works: no lockout was recorded.
+        resp = await client.post(
+            "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+        )
+        assert resp.status_code == 303
