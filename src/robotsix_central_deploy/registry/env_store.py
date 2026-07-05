@@ -5,13 +5,12 @@ Secrets are stored as Fernet ciphertext tokens; plaintext never touches disk.
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
-from ._store_utils import async_read_json, async_write_json
+from ._store_utils import JsonFileStore
 from .secret_key import SecretKeyManager
 
 
@@ -22,7 +21,7 @@ class ComponentEnvConfig(BaseModel):
     secret_tokens: dict[str, str] = {}
 
 
-class EnvStore:
+class EnvStore(JsonFileStore):
     """Persist user-supplied env overrides and encrypted secrets to a JSON file.
 
     Uses a read-modify-write pattern with an ``asyncio.Lock`` for writes,
@@ -30,15 +29,8 @@ class EnvStore:
     """
 
     def __init__(self, store_path: Path, key_manager: SecretKeyManager) -> None:
-        self._path = store_path
+        super().__init__(store_path)
         self._key_manager = key_manager
-        self._lock = asyncio.Lock()
-
-    async def _load(self) -> dict[str, Any]:
-        return await async_read_json(self._path)
-
-    async def _save(self, data: dict[str, Any]) -> None:
-        await async_write_json(self._path, data)
 
     async def get(self, name: str) -> ComponentEnvConfig:
         data = await self._load()
@@ -55,8 +47,8 @@ class EnvStore:
         Overwrites matching keys; does not wipe keys not mentioned.
         Encrypts each secret value before storing.
         """
-        async with self._lock:
-            data = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
             current = data.get(name, {"env": {}, "secret_tokens": {}})
             current_env: dict[str, str] = dict(current.get("env", {}))
             current_tokens: dict[str, str] = dict(current.get("secret_tokens", {}))
@@ -66,16 +58,18 @@ class EnvStore:
                 current_tokens[key] = self._key_manager.encrypt(plaintext)
 
             data[name] = {"env": current_env, "secret_tokens": current_tokens}
-            await self._save(data)
+
+        await self._update(_mutate)
 
     async def delete_key(self, name: str, key: str) -> bool:
         """Remove *key* from env or secret_tokens.  Return True if found."""
-        async with self._lock:
-            data = await self._load()
+        found = False
+
+        def _mutate(data: dict[str, Any]) -> None:
+            nonlocal found
             entry = data.get(name)
             if entry is None:
-                return False
-            found = False
+                return
             if key in entry.get("env", {}):
                 del entry["env"][key]
                 found = True
@@ -86,15 +80,17 @@ class EnvStore:
                 # Remove the component entry entirely if both dicts are empty
                 if not entry.get("env") and not entry.get("secret_tokens"):
                     del data[name]
-                await self._save(data)
-            return found
+
+        await self._update(_mutate)
+        return found
 
     async def delete(self, name: str) -> None:
         """Remove all env and secrets for *name*. No-op if absent."""
-        async with self._lock:
-            store = await self._load()
-            store.pop(name, None)
-            await self._save(store)
+
+        def _mutate(data: dict[str, Any]) -> None:
+            data.pop(name, None)
+
+        await self._update(_mutate)
 
     async def get_merged_env(
         self, name: str, base_env: dict[str, str]
