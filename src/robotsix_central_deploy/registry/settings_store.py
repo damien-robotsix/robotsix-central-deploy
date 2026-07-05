@@ -35,7 +35,12 @@ class SystemSettings(BaseModel):
     llmio_tier_config: dict[str, Any] = {}
     claude_auth_refresh_interval: int = 1800  # seconds; 0 = disabled
     rate_limit_login_per_minute: int = 10
-    rate_limit_api_per_hour: int = 1000
+    # Keep in sync with LifecycleConfig.rate_limit_api_per_hour: the settings
+    # overlay stamps this value over app.state.config, so a lower default
+    # here silently overrides the config-class default (bit us 2026-07-05:
+    # 1000 was below the dashboard's own polling rate and 429-locked the
+    # operator even after the config default was raised).
+    rate_limit_api_per_hour: int = 20000
     rate_limit_login_max_attempts: int = 20
     rate_limit_login_lockout_seconds: int = 300
 
