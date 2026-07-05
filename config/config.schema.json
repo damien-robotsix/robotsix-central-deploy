@@ -267,8 +267,8 @@
       "type": "integer"
     },
     "rate_limit_api_per_hour": {
-      "default": 1000,
-      "description": "Max API requests per IP per hour.",
+      "default": 20000,
+      "description": "Max API requests per IP per hour. Must accommodate the dashboard UI, which polls several endpoints every few seconds from one IP (~5000/h per open tab).",
       "title": "Rate Limit Api Per Hour",
       "type": "integer"
     },

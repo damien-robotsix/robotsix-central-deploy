@@ -37,6 +37,26 @@ def _is_api_path(path: str) -> bool:
     return path.startswith(_API_PATH_PREFIXES)
 
 
+def _is_gateway_host(request: Request) -> bool:
+    """Return True when the request targets a component subdomain.
+
+    Gateway-proxied traffic (``<name>.<gateway_base_domain>``) belongs to
+    the target component, not to central-deploy's own API — a component's
+    ``POST /chat`` or ``/services`` must not consume (or be blocked by)
+    central-deploy's rate budget. Mirrors the subdomain matching in
+    ``gateway.router._extract_subdomain_name``.
+    """
+    base_domain: str = getattr(
+        getattr(getattr(request.app, "state", None), "config", None),
+        "gateway_base_domain",
+        "",
+    )
+    if not base_domain:
+        return False
+    host = request.headers.get("host", "").split(":")[0].lower()
+    return host.endswith("." + base_domain.lower())
+
+
 def _client_ip(request: Request) -> str:
     """Best-effort client IP — respects reverse-proxy headers."""
     forwarded = request.headers.get("x-forwarded-for")
@@ -157,6 +177,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: object) -> Response:
+        # Gateway-proxied component traffic is out of scope: the limiter
+        # protects central-deploy's own login/API, and a component's
+        # ``/login`` or ``/chat`` path colliding with these prefixes must
+        # not be throttled (or feed the lockout counter).
+        if _is_gateway_host(request):
+            return await call_next(request)  # type: ignore[no-any-return, operator]
+
         path = request.url.path
         method = request.method
         ip = _client_ip(request)

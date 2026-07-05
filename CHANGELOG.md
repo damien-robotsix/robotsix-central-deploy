@@ -6,6 +6,14 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Rate limiter (#318 follow-up): gateway-proxied component traffic
+  (`<name>.<gateway_base_domain>` hosts) now bypasses the login/API rate
+  limits — a component's own `/chat` or `/login` paths were being counted
+  against and blocked by central-deploy's per-IP budget (2026-07-05: 429s
+  on the dashboard AND on chat for the same client). Raised the default
+  `rate_limit_api_per_hour` 1000 → 20000: the dashboard UI alone polls
+  ~5000 requests/hour per open tab, so the old default locked out an
+  operator within minutes.
 - Update `docs/ARCHITECTURE.md` to reflect the `claude-auth` named volume (managed by central-deploy) instead of the old `~/.claude` host bind-mount.
 - docs: update DEPLOY_CONTRACT.md §5, §9, and §10 to reflect managed `claude-auth` named volume instead of host bind-mount; fix dashboard.html claude-mount label to show correct volume name and container path
 - Register the previously uncovered `src/robotsix_central_deploy/__init__.py` under the lifecycle module in `docs/modules.yaml`.
