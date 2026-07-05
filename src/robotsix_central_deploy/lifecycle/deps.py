@@ -735,6 +735,23 @@ async def _init_component_registry(app: FastAPI) -> None:
                 )
         logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
 
+    # -- Seed virtual (non-Docker) components from config --------------------
+    for ventry in _config.virtual_components:
+        if component_config_store.get(ventry.id) is not None:
+            continue  # already registered; don't overwrite
+        virtual_cfg = ComponentConfig(
+            id=ventry.id,
+            image="",
+            container_name=ventry.id,
+            allow_chat_access=True,
+            chat_base_url=ventry.chat_base_url or None,
+            chat_skill_endpoint=ventry.chat_skill_endpoint,
+            chat_skill=ventry.chat_skill,
+        )
+        component_config_store.register(virtual_cfg)
+        registry.register(virtual_cfg)
+        logger.info("Seeded virtual component '%s'", ventry.id)
+
     # --- Volume audit subsystem ---
     _volume_audit_task: asyncio.Task[Any] | None = None
     if _config.volume_audit_enabled:

@@ -1,0 +1,1 @@
+Wire new components into the robotsix-chat agent runtime: roster config + redeploy

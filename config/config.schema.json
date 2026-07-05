@@ -18,6 +18,37 @@
       ],
       "title": "StoreBackend",
       "type": "string"
+    },
+    "VirtualComponentEntry": {
+      "description": "Minimal spec for a virtual (non-Docker) chat-accessible component.",
+      "properties": {
+        "id": {
+          "description": "Stable component slug matching ^[a-z0-9][a-z0-9-]*$.",
+          "title": "Id",
+          "type": "string"
+        },
+        "chat_base_url": {
+          "default": "",
+          "description": "Base URL the chat agent uses to reach this component.",
+          "title": "Chat Base Url",
+          "type": "string"
+        },
+        "chat_skill_endpoint": {
+          "default": "/chat-skill",
+          "description": "Endpoint the roster endpoint probes for the skill body.",
+          "title": "Chat Skill Endpoint",
+          "type": "string"
+        },
+        "chat_skill": {
+          "default": "",
+          "description": "Static skill body; when non-empty, used directly without probing.",
+          "title": "Chat Skill",
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "title": "VirtualComponentEntry",
+      "type": "object"
     }
   },
   "description": "Configuration for the lifecycle server.",
@@ -283,6 +314,15 @@
       "description": "Lockout duration (seconds) after too many failed logins.",
       "title": "Rate Limit Login Lockout Seconds",
       "type": "integer"
+    },
+    "virtual_components": {
+      "default": [],
+      "description": "Virtual (non-Docker) components to register in the chat-agent component roster alongside onboarded Docker services.",
+      "items": {
+        "$ref": "#/$defs/VirtualComponentEntry"
+      },
+      "title": "Virtual Components",
+      "type": "array"
     }
   },
   "title": "LifecycleConfig",

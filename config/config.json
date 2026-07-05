@@ -34,5 +34,19 @@
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
   "mill_component_id": "mill",
-  "image_auto_prune": false
+  "image_auto_prune": false,
+  "virtual_components": [
+    {
+      "id": "langfuse",
+      "chat_base_url": "https://langfuse.robotsix.net",
+      "chat_skill_endpoint": "/chat-skill",
+      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /api/public/traces` — list traces (supports `?limit=`, `?page=`, `?tags=`)\n- `GET /api/public/traces/{traceId}` — single trace detail\n- `GET /api/public/observations` — list observations\n- `GET /api/public/observations/{observationId}` — single observation detail\n\nAuthentication: HTTP Basic Auth with public/secret key pair per project."
+    },
+    {
+      "id": "deploy",
+      "chat_base_url": "http://localhost:8100",
+      "chat_skill_endpoint": "/chat-skill",
+      "chat_skill": ""
+    }
+  ]
 }

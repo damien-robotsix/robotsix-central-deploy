@@ -4439,3 +4439,42 @@ class TestChatComponents:
         data = resp.json()
         assert len(data) == 1
         assert data[0]["id"] == "alpha"
+
+    async def test_virtual_component_with_static_skill(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A virtual (non-Docker) component with chat_base_url + chat_skill
+        appears in the roster without probing."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="langfuse",
+            image="",
+            container_name="langfuse",
+            ports=[],
+        )
+        cfg.allow_chat_access = True
+        cfg.chat_base_url = "https://langfuse.robotsix.net"
+        cfg.chat_skill = "# Langfuse\n\nObservability platform."
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Mock httpx so we can assert it is NOT called for the virtual component.
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=MagicMock())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "langfuse"
+        assert data[0]["base_url"] == "https://langfuse.robotsix.net"
+        assert data[0]["skill"] == "# Langfuse\n\nObservability platform."
+        # The static-skill path must NOT call httpx at all.
+        mock_client.get.assert_not_called()

@@ -98,3 +98,12 @@ class ComponentConfig(BaseModel):
     allow_chat_access: bool = (
         False  # true = component exposes GET /chat-skill for the chat agent
     )
+    chat_base_url: str | None = (
+        None  # override base URL for virtual (non-Docker) components; None → derived from container:port
+    )
+    chat_skill_endpoint: str = (
+        "/chat-skill"  # endpoint the roster endpoint probes for the skill body
+    )
+    chat_skill: str = (
+        ""  # static skill body; when non-empty, used directly without probing
+    )

@@ -60,6 +60,45 @@ _skill_cache: dict[str, tuple[float, str]] = {}
 _SKILL_CACHE_TTL: float = 60.0
 
 # ---------------------------------------------------------------------------
+# GET /chat-skill — the deploy server's own skill, so the chat agent can
+# discover the deploy component itself.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat-skill",
+    summary="Deploy server's own chat-agent skill description",
+    responses={200: {"description": "Markdown skill body"}},
+)
+async def deploy_chat_skill() -> str:
+    """Return the Markdown skill description for the deploy server itself.
+
+    This lets the deploy server register as a virtual component with
+    ``chat_base_url`` pointing at itself, and the roster endpoint's
+    probe succeeds against this handler.
+    """
+    return (
+        "# Deploy Lifecycle Server\n"
+        "Manages the robotsix Docker fleet: start, stop, restart, deploy, "
+        "rollback, and inspect every managed component.\n\n"
+        "## Read-only endpoints\n"
+        "- `GET /services` — list all managed services\n"
+        "- `GET /services/{name}` — full status (state, image, health, digests)\n"
+        "- `GET /services/{name}/health` — health status string\n"
+        "- `GET /services/{name}/logs` — stream container logs\n"
+        "- `GET /health` — liveness probe\n"
+        "- `GET /disk` — host disk usage + Docker storage breakdown\n"
+        "- `GET /chat/components` — list components reachable by the chat agent\n"
+        "- `GET /chat/audit-log` — read recent audit entries\n\n"
+        "## Scoped write endpoints (chat-agent allowlisted)\n"
+        "- `PUT /chat/config/{name}` — update non-secret config keys\n"
+        "- `POST /chat/config/{name}/rollback` — restore previous config version\n"
+        "- `POST /chat/services/{name}/restart` — restart a service\n"
+        "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Server-side allowlists
 # ---------------------------------------------------------------------------
 
@@ -176,10 +215,22 @@ async def list_chat_components(
     for comp_cfg in component_config_store.all():
         if not comp_cfg.allow_chat_access:
             continue
-        if not comp_cfg.ports:
+        # Virtual components (with chat_base_url set) don't need ports;
+        # Docker components do.
+        if not comp_cfg.chat_base_url and not comp_cfg.ports:
             continue
 
-        base_url = f"http://{comp_cfg.container_name}:{comp_cfg.ports[0].container}"
+        base_url = comp_cfg.chat_base_url or (
+            f"http://{comp_cfg.container_name}:{comp_cfg.ports[0].container}"
+        )
+        skill_endpoint = comp_cfg.chat_skill_endpoint
+
+        # Static skill body — no probing needed.
+        if comp_cfg.chat_skill:
+            results.append(
+                {"id": comp_cfg.id, "base_url": base_url, "skill": comp_cfg.chat_skill}
+            )
+            continue
 
         # Check cache first
         cached = _skill_cache.get(comp_cfg.id)
@@ -195,7 +246,7 @@ async def list_chat_components(
         skill_body: str | None = None
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{base_url}/chat-skill")
+                resp = await client.get(f"{base_url}{skill_endpoint}")
             if resp.status_code == 200 and resp.text.strip():
                 skill_body = resp.text
                 _skill_cache[comp_cfg.id] = (now, skill_body)
