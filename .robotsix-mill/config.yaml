@@ -1,1 +1,3 @@
-test_command: bash scripts/run_tests.sh
+languages: [python]
+test_command: pytest -q
+extra_sandbox_packages: [pip:pytest, pip:pytest-asyncio]
