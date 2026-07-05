@@ -15,7 +15,7 @@ Langfuse.
   previously deployed digest.
 - **Onboarding pipeline** — add new services from a docker-compose repo
   (preflight parse + confirm deploy) against the
-  [deploy contract](DEPLOY_CONTRACT.md).
+  [deploy contract](ui/DEPLOY_CONTRACT.md).
 - **Reverse-proxy gateway** — each component reachable at a well-known URL
   under the deploy domain (HTTP + WebSocket).
 - **Dashboard UI** — live status, logs, env/secrets and config management at

@@ -1,0 +1,1 @@
+../../../docs/ui/DEPLOY_CONTRACT.md

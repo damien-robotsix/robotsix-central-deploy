@@ -65,5 +65,5 @@ nav:
   - Deployment: deployment.md
   - Configuration: configuration.md
   - API Reference: api.md
-  - Deploy Contract: DEPLOY_CONTRACT.md
+  - Deploy Contract: ui/DEPLOY_CONTRACT.md
   - Changelog: changelog.md

@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           target=$(readlink src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md)
-          expected="../../../docs/DEPLOY_CONTRACT.md"
+          expected="../../../docs/ui/DEPLOY_CONTRACT.md"
           if [ "$target" != "$expected" ]; then
             echo "::error::src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md symlink target is '$target', expected '$expected'"
             exit 1
@@ -34,7 +34,7 @@ jobs:
       - name: Verify symlink resolves and content matches
         run: |
           set -euo pipefail
-          diff docs/DEPLOY_CONTRACT.md src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md
+          diff docs/ui/DEPLOY_CONTRACT.md src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md
 
   tests:
     # Inlined from the reusable python-ci.yml to avoid astral-sh/setup-uv

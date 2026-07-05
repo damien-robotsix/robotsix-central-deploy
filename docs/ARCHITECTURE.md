@@ -297,7 +297,7 @@ are synchronous. The async pattern exists to:
 
 ### Deploy contract philosophy
 
-The deploy contract (`docs/DEPLOY_CONTRACT.md`) enforces a strict
+The deploy contract (`docs/ui/DEPLOY_CONTRACT.md`) enforces a strict
 separation between **development** and **deployment**:
 
 - The repo-root `docker-compose.yml` is for **local development** and
