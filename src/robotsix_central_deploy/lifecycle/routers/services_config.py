@@ -370,7 +370,11 @@ async def put_service_config(
             try:
                 await backend.restart(record)
             except Exception as exc:
-                logger.warning("config saved for %s but restart failed: %s", _sanitize_log(name), exc)
+                logger.warning(
+                    "config saved for %s but restart failed: %s",
+                    _sanitize_log(name),
+                    exc,
+                )
         # Fan out to siblings that share the same config volume
         config = registry.get(name) if registry else None
         if config and config.siblings:
@@ -599,7 +603,9 @@ async def run_config_assist(
                 }
             )
             await component_config_store.put(comp_cfg)
-            logger.info("Refreshed config-assist fields for %s from repo", _sanitize_log(name))
+            logger.info(
+                "Refreshed config-assist fields for %s from repo", _sanitize_log(name)
+            )
     except Exception as exc:
         logger.warning(
             "Could not refresh config-assist fields for %s from repo (%s); "
@@ -716,9 +722,7 @@ async def run_config_assist(
             {k: v for k, v in filled.items() if k != "accounts"},
         )
         if current_raw is None:  # pragma: no cover
-            raise RuntimeError(
-                "add_new mode reached without current_raw"
-            )
+            raise RuntimeError("add_new mode reached without current_raw")
         merged["accounts"] = list(current_raw.get("accounts", [])) + [merged_new_acct]
     else:
         merged = _deep_merge(dict(partial), filled)
