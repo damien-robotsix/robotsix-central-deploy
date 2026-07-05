@@ -16,9 +16,7 @@ from ..lifecycle.session import SessionStore
 router = APIRouter()
 
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
-_CONTRACT = (
-    Path(__file__).parent.parent.parent.parent / "docs" / "ui" / "DEPLOY_CONTRACT.md"
-).read_text(encoding="utf-8")
+_CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
 _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 
 

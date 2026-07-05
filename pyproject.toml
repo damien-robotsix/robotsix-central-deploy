@@ -54,6 +54,13 @@ backend-path = ["."]
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_central_deploy"]
 
+# The symlink src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md points
+# outside the packages directory (→ docs/ui/DEPLOY_CONTRACT.md).  Hatchling
+# does not follow out-of-tree symlinks when building wheels, so we force-
+# include the canonical file to ensure the content is available at runtime.
+[tool.hatch.build.targets.wheel.force-include]
+"docs/ui/DEPLOY_CONTRACT.md" = "robotsix_central_deploy/ui/DEPLOY_CONTRACT.md"
+
 # The robotsix-* first-party dependencies are git-pinned direct references.
 [tool.hatch.metadata]
 allow-direct-references = true
