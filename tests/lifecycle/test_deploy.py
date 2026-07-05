@@ -215,9 +215,9 @@ class TestDeployEndpoint:
         async def _fake_try_acquire(_name: str) -> bool:
             return False
 
-        import robotsix_central_deploy.lifecycle.routers.services as svc_mod
+        import robotsix_central_deploy.lifecycle.routers.services_deploy as svc_deploy
 
-        monkeypatch.setattr(svc_mod, "try_acquire_deploy_lock", _fake_try_acquire)
+        monkeypatch.setattr(svc_deploy, "try_acquire_deploy_lock", _fake_try_acquire)
 
         resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
         assert resp.status_code == 409
