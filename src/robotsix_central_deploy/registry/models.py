@@ -98,3 +98,18 @@ class ComponentConfig(BaseModel):
     allow_chat_access: bool = (
         False  # true = component exposes GET /chat-skill for the chat agent
     )
+    chat_base_url: str | None = (
+        None  # override base URL for virtual (non-Docker) components; None → derived from container:port
+    )
+    chat_skill_endpoint: str = (
+        "/chat-skill"  # endpoint the roster endpoint probes for the skill body
+    )
+    chat_skill: str = (
+        ""  # static skill body; when non-empty, used directly without probing
+    )
+    # --- Auth metadata for the chat agent ---
+    auth_type: str = ""  # "basic" | "header" | ""
+    auth_header_name: str = ""  # header name when auth_type="header"
+    auth_username_env: str = ""  # env var holding Basic-Auth username
+    auth_password_env: str = ""  # env var holding Basic-Auth password
+    auth_token_env: str = ""  # env var holding a bearer/header token

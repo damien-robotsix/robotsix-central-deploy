@@ -18,6 +18,61 @@
       ],
       "title": "StoreBackend",
       "type": "string"
+    },
+    "VirtualComponentEntry": {
+      "description": "Minimal spec for a virtual (non-Docker) chat-accessible component.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "chat_base_url": {
+          "default": "",
+          "title": "Chat Base Url",
+          "type": "string"
+        },
+        "chat_skill_endpoint": {
+          "default": "/chat-skill",
+          "title": "Chat Skill Endpoint",
+          "type": "string"
+        },
+        "chat_skill": {
+          "default": "",
+          "title": "Chat Skill",
+          "type": "string"
+        },
+        "auth_type": {
+          "default": "",
+          "title": "Auth Type",
+          "type": "string"
+        },
+        "auth_header_name": {
+          "default": "",
+          "title": "Auth Header Name",
+          "type": "string"
+        },
+        "auth_username_env": {
+          "default": "",
+          "title": "Auth Username Env",
+          "type": "string"
+        },
+        "auth_password_env": {
+          "default": "",
+          "title": "Auth Password Env",
+          "type": "string"
+        },
+        "auth_token_env": {
+          "default": "",
+          "title": "Auth Token Env",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "VirtualComponentEntry",
+      "type": "object"
     }
   },
   "description": "Configuration for the lifecycle server.",
@@ -283,6 +338,14 @@
       "description": "Lockout duration (seconds) after too many failed logins.",
       "title": "Rate Limit Login Lockout Seconds",
       "type": "integer"
+    },
+    "virtual_components": {
+      "description": "Virtual (non-Docker) components to register in the chat-agent component roster alongside onboarded Docker services.",
+      "items": {
+        "$ref": "#/$defs/VirtualComponentEntry"
+      },
+      "title": "Virtual Components",
+      "type": "array"
     }
   },
   "title": "LifecycleConfig",

@@ -18,6 +18,23 @@ from pydantic import BaseModel, Field
 from .models import ExecutionBackendType, StoreBackend
 
 
+class VirtualComponentEntry(BaseModel):
+    """Minimal spec for a virtual (non-Docker) chat-accessible component."""
+
+    id: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]*$")
+    chat_base_url: str = ""
+    chat_skill_endpoint: str = "/chat-skill"
+    chat_skill: str = ""  # static skill body; when non-empty, used without probing
+    # --- Auth metadata for the chat agent ---
+    # "basic" → HTTP Basic Auth (username_env / password_env)
+    # "header" → custom header (header_name + token_env)
+    auth_type: str = ""  # "basic" | "header" | ""
+    auth_header_name: str = ""  # header name when auth_type="header"
+    auth_username_env: str = ""  # env var holding Basic-Auth username
+    auth_password_env: str = ""  # env var holding Basic-Auth password
+    auth_token_env: str = ""  # env var holding a bearer/header token
+
+
 class LifecycleConfig(BaseModel):
     """Configuration for the lifecycle server."""
 
@@ -280,6 +297,15 @@ class LifecycleConfig(BaseModel):
     rate_limit_login_lockout_seconds: int = Field(
         300,
         description="Lockout duration (seconds) after too many failed logins.",
+    )
+
+    # Virtual chat components
+    virtual_components: list[VirtualComponentEntry] = Field(
+        default_factory=list,
+        description=(
+            "Virtual (non-Docker) components to register in the chat-agent "
+            "component roster alongside onboarded Docker services."
+        ),
     )
 
     @property
