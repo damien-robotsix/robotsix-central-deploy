@@ -370,3 +370,30 @@ class ChatAgentAuditLogResponse(BaseModel):
     """Response body for GET /chat/audit-log."""
 
     entries: list[ChatAgentAuditEntryResponse] = []
+
+
+# ---------------------------------------------------------------------------
+# Chat agent — external component credentials & proxy
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentCredentialsUpdate(BaseModel):
+    """Request body for PUT /chat/credentials/{component_id}.
+
+    Stores credentials in the EnvStore so the proxy can inject them
+    server-side.  *secret_key* is encrypted at rest.
+    """
+
+    project: str = "chat"
+    public_key: str
+    secret_key: str
+
+
+class ChatAgentCredentialsResponse(BaseModel):
+    """Response body for GET /chat/credentials/{component_id}.
+
+    Secret keys are always masked.
+    """
+
+    component_id: str
+    projects: dict[str, dict[str, str]]  # project → {public_key, secret_key: "***"}

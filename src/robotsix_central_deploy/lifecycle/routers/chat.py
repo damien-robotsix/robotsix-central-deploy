@@ -15,8 +15,11 @@ import logging
 import time
 from typing import Any
 
+from urllib.parse import quote, urlparse
+
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from starlette.responses import Response as StarletteResponse
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -41,6 +44,8 @@ from ..schemas import (
     ChatAgentAuditLogResponse,
     ChatAgentConfigRollbackResponse,
     ChatAgentConfigUpdate,
+    ChatAgentCredentialsResponse,
+    ChatAgentCredentialsUpdate,
     ChatAgentRestartResponse,
     ChatAgentUpdateResponse,
 )
@@ -49,6 +54,7 @@ from ...deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 
@@ -256,6 +262,18 @@ async def list_chat_components(
     for comp_cfg in component_config_store.all():
         if not comp_cfg.allow_chat_access:
             continue
+        # -- External component (non-Docker) ---------------------------------
+        if comp_cfg.external_url:
+            if comp_cfg.external_chat_skill.strip():
+                results.append(
+                    {
+                        "id": comp_cfg.id,
+                        "base_url": comp_cfg.external_url,
+                        "skill": comp_cfg.external_chat_skill,
+                    }
+                )
+            continue
+
         # Virtual components (with chat_base_url set) don't need ports;
         # Docker components do.
         if not comp_cfg.chat_base_url and not comp_cfg.ports:
@@ -759,4 +777,268 @@ async def chat_audit_log(
             )
             for e in entries
         ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# External component credential management
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/chat/credentials/{component_id}",
+    response_model=ChatAgentCredentialsResponse,
+    summary="Store credentials for an external chat-agent component",
+    responses={
+        404: {"description": "Component not found or not external"},
+        403: {"description": "Chat access not enabled"},
+    },
+)
+async def chat_put_credentials(
+    component_id: str,
+    body: ChatAgentCredentialsUpdate,
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentCredentialsResponse:
+    """Store public/secret key credentials for an external component.
+
+    The secret key is encrypted at rest in the EnvStore.  Credentials
+    are keyed by *project* (default ``"chat"``) so that a single
+    component can serve multiple Langfuse projects.
+    """
+    comp_cfg = component_config_store.get(component_id)
+    if comp_cfg is None or not comp_cfg.external_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"External component '{component_id}' not found",
+        )
+    if not comp_cfg.allow_chat_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Chat access not enabled for '{component_id}'",
+        )
+
+    project_key = body.project.upper()
+    await env_store.upsert(
+        component_id,
+        env={f"LANGFUSE_{project_key}_PUBLIC_KEY": body.public_key},
+        secrets={f"LANGFUSE_{project_key}_SECRET_KEY": body.secret_key},
+    )
+
+    # Return current state of all projects for this component.
+    return await _build_credentials_response(component_id, env_store)
+
+
+async def _build_credentials_response(
+    component_id: str, env_store: EnvStore
+) -> ChatAgentCredentialsResponse:
+    """Read stored credentials and return a masked response."""
+    config = await env_store.get(component_id)
+    projects: dict[str, dict[str, str]] = {}
+
+    # Scan env keys for LANGFUSE_*_PUBLIC_KEY entries.
+    for key, value in config.env.items():
+        if not key.startswith("LANGFUSE_") or not key.endswith("_PUBLIC_KEY"):
+            continue
+        project = key[len("LANGFUSE_") : -len("_PUBLIC_KEY")].lower()
+        secret_key_name = f"LANGFUSE_{project.upper()}_SECRET_KEY"
+        has_secret = secret_key_name in config.secret_tokens
+        projects[project] = {
+            "public_key": value,
+            "secret_key": "***" if has_secret else "",
+        }
+
+    return ChatAgentCredentialsResponse(
+        component_id=component_id,
+        projects=projects,
+    )
+
+
+@router.get(
+    "/chat/credentials/{component_id}",
+    response_model=ChatAgentCredentialsResponse,
+    summary="Read masked credentials for an external component",
+    responses={
+        404: {"description": "Component not found or not external"},
+    },
+)
+async def chat_get_credentials(
+    component_id: str,
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentCredentialsResponse:
+    """Return stored credentials for an external component.
+
+    Secret keys are always masked as ``"***"``.
+    """
+    comp_cfg = component_config_store.get(component_id)
+    if comp_cfg is None or not comp_cfg.external_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"External component '{component_id}' not found",
+        )
+    return await _build_credentials_response(component_id, env_store)
+
+
+# ---------------------------------------------------------------------------
+# External component proxy (server-side auth injection)
+# ---------------------------------------------------------------------------
+
+
+def _validate_proxy_path(path: str) -> None:
+    """Reject proxy paths that could inject URL authority, query, or fragment.
+
+    The *path* is a user-supplied URL-path suffix forwarded to an upstream
+    component.  Characters that would change the structure of the final URL
+    (``@``, ``://``, ``#``, ``?``, and control characters) are rejected to
+    prevent SSRF / request-smuggling.
+    """
+    dangerous = {"@", "://", "#", "?"}
+    if any(c in path for c in dangerous) or "\n" in path or "\r" in path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid proxy path",
+        )
+
+
+def _validate_upstream_url(upstream_url: str, expected_base: str) -> None:
+    """Ensure the constructed upstream URL still targets the expected host.
+
+    Parses the final URL and compares its scheme + netloc against the
+    expected base URL.  This is a defence-in-depth check that catches any
+    edge case the path-level validation might have missed.
+    """
+    parsed_upstream = urlparse(upstream_url)
+    parsed_base = urlparse(expected_base)
+
+    if (
+        parsed_upstream.scheme != parsed_base.scheme
+        or parsed_upstream.hostname != parsed_base.hostname
+        or parsed_upstream.port != parsed_base.port
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid proxy path",
+        )
+
+
+@router.api_route(
+    "/chat/proxy/{component_id}/{path:path}",
+    methods=["GET"],
+    summary="Proxy a read-only request to an external component with injected auth",
+    responses={
+        404: {"description": "Component not found or not external"},
+        403: {"description": "Chat access not enabled"},
+        502: {"description": "Credentials not configured or upstream unreachable"},
+    },
+)
+async def chat_proxy_external(
+    component_id: str,
+    path: str,
+    request: Request,
+    project: str = Query("chat", description="Which credential project to use"),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    _auth: None = Depends(verify_auth),
+) -> StarletteResponse:
+    """Forward a GET request to an external component's API, injecting
+    HTTP Basic Auth credentials from the EnvStore.
+
+    The ``project`` query parameter selects which credential set to use
+    (stored as ``LANGFUSE_{PROJECT}_PUBLIC_KEY`` /
+    ``LANGFUSE_{PROJECT}_SECRET_KEY`` in the EnvStore).  Defaults to
+    ``chat`` (robotsix-chat traces project).
+
+    Only GET requests are permitted — this proxy is read-only.
+    """
+    # --- Validate component -------------------------------------------------
+    comp_cfg = component_config_store.get(component_id)
+    if comp_cfg is None or not comp_cfg.external_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"External component '{component_id}' not found",
+        )
+    if not comp_cfg.allow_chat_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Chat access not enabled for '{component_id}'",
+        )
+
+    # --- Read credentials ---------------------------------------------------
+    env_config = await env_store.get(component_id)
+    project_key = project.upper()
+
+    public_key = env_config.env.get(f"LANGFUSE_{project_key}_PUBLIC_KEY", "")
+    secret_token = env_config.secret_tokens.get(
+        f"LANGFUSE_{project_key}_SECRET_KEY", ""
+    )
+
+    if not public_key or not secret_token:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"No credentials configured for project '{project}' "
+                f"on component '{component_id}'.  "
+                f"Use PUT /chat/credentials/{component_id} to set them."
+            ),
+        )
+
+    try:
+        secret_key = env_store._key_manager.decrypt(secret_token)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to decrypt credentials: {exc}",
+        )
+
+    # --- Build upstream URL (strip proxy-only query params) -----------------
+    # Validate path to prevent URL-injection (SSRF), then percent-encode it:
+    # after quote() the user-controlled suffix cannot introduce a new
+    # authority, query, or fragment — only path segments under the fixed,
+    # operator-configured base URL are reachable.
+    _validate_proxy_path(path)
+    base = comp_cfg.external_url.rstrip("/")
+    safe_path = quote(path.lstrip("/"), safe="/")
+    upstream_url = f"{base}/{safe_path}"
+
+    # Forward all query params except 'project' (consumed by the proxy).
+    upstream_params: dict[str, str] = {}
+    for key, values in request.query_params.multi_items():
+        if key == "project":
+            continue
+        upstream_params[key] = values
+
+    # Validate that the constructed URL still points to the expected host.
+    _validate_upstream_url(upstream_url, base)
+
+    # --- Forward the request ------------------------------------------------
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            upstream_resp = await client.get(
+                upstream_url,
+                params=upstream_params or None,
+                auth=(public_key, secret_key),
+                headers={"Accept": "application/json"},
+            )
+        except httpx.RequestError as exc:
+            logger.warning(
+                "chat proxy: upstream request failed for %s: %s",
+                component_id.replace("\n", " ").replace("\r", " "),
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Upstream request failed: {exc}",
+            )
+
+    return StarletteResponse(
+        content=upstream_resp.content,
+        status_code=upstream_resp.status_code,
+        headers={
+            "Content-Type": upstream_resp.headers.get(
+                "Content-Type", "application/json"
+            )
+        },
     )

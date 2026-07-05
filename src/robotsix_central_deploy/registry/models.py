@@ -113,3 +113,5 @@ class ComponentConfig(BaseModel):
     auth_username_env: str = ""  # env var holding Basic-Auth username
     auth_password_env: str = ""  # env var holding Basic-Auth password
     auth_token_env: str = ""  # env var holding a bearer/header token
+    external_url: str = ""  # non-empty for components not managed by Docker
+    external_chat_skill: str = ""  # skill document body for external components (used when external_url is set)

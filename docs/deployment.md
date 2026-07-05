@@ -200,21 +200,69 @@ operator can detect the issue before end users report it.
 ## Chat access
 
 Components can opt in to being reachable by the chat agent by setting the
-`allow_chat_access` flag.  When enabled, the component must expose a
-`GET /chat-skill` endpoint that returns a Markdown body describing how the
-chat agent should interact with it (the *skill*).
+`allow_chat_access` flag.  Two types of components are supported:
 
-The chat agent discovers reachable components by calling the lifecycle API
-at `GET /chat/components` (authentication required).  The response is a JSON
-array of `{id, base_url, skill}` objects — one per component that has
-`allow_chat_access = true` **and** whose skill probe returned 200.  Skill
-bodies are cached for 60 seconds; a component whose probe fails is silently
-omitted from the roster (sibling resilience — one failing component does not
-block the whole list).
+### Docker components
+
+When enabled, a Docker component must expose a `GET /chat-skill` endpoint
+that returns a Markdown body describing how the chat agent should interact
+with it (the *skill*).  The chat agent discovers reachable components by
+calling the lifecycle API at `GET /chat/components` (authentication
+required).  The response is a JSON array of `{id, base_url, skill}` objects
+— one per component that has `allow_chat_access = true` **and** whose skill
+probe returned 200.  Skill bodies are cached for 60 seconds; a component
+whose probe fails is silently omitted from the roster (sibling resilience
+— one failing component does not block the whole list).
 
 `base_url` is derived from the component's container name and first
-container port (`http://<container_name>:<container_port>`), which is the
-same derivation used by the caretaker's mill client.
+container port (`http://<container_name>:<container_port>`), the same
+derivation used by the caretaker's mill client.
+
+### External (non-Docker) components
+
+External components are services not managed by Docker (e.g. SaaS platforms
+or self-hosted services running outside the fleet).  They are registered by
+seeding a `ComponentConfig` with an `external_url` and an
+`external_chat_skill` (a Markdown skill document).  No HTTP probe is needed
+— the skill body is served directly from the component config store.
+
+Currently registered external components:
+
+| id | external_url | Purpose |
+|----|-------------|---------|
+| `langfuse` | `https://langfuse.robotsix.net` | Trace & observation API |
+
+#### Credential management
+
+External components that require authentication store their credentials in
+the deploy EnvStore via two endpoints (both require operator auth):
+
+- `PUT /chat/credentials/{component_id}` — stores a `public_key` and
+  `secret_key` for a given *project* (defaults to `"chat"`).  The secret
+  key is Fernet-encrypted at rest.
+- `GET /chat/credentials/{component_id}` — returns the stored projects
+  with public keys in plaintext and secret keys masked as `"***"`.
+
+Projects allow a single external component to serve multiple credential
+sets.  For example, Langfuse uses `"chat"` for the robotsix-chat traces
+project and `"cognee"` for the cognee traces project.
+
+#### Server-side proxy
+
+The lifecycle server provides a read-only proxy that injects credentials
+server-side, so the chat agent never sees raw API keys:
+
+```
+GET /chat/proxy/{component_id}/{path}?project={project}&...other params...
+```
+
+- `component_id` — the external component id (e.g. `langfuse`).
+- `path` — the upstream API path (e.g. `api/public/traces`).
+- `project` — which credential set to use (default `"chat"`).
+
+Only `GET` requests are permitted.  The proxy resolves the upstream URL
+from `ComponentConfig.external_url`, adds HTTP Basic Auth from the stored
+credentials, and forwards all remaining query parameters to the upstream.
 
 ### Enabling chat access
 

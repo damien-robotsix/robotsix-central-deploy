@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "robotsix-central-deploy Lifecycle API",
-    "description": "Start, stop, restart, and inspect suite services.",
+    "description": "Start, stop, restart, and inspect suite services.\n\n⚠️ This file is a stale snapshot — it does not include the `/chat/`\nendpoints (components, credentials, proxy) added in the Langfuse\nintegration.  Regenerate by running the server with `--noop-backend`\nand visiting `/openapi.json`.",
     "version": "0.1.0"
   },
   "paths": {

@@ -6,6 +6,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.services
 
+::: robotsix_central_deploy.lifecycle.routers.chat
+
 ::: robotsix_central_deploy.lifecycle.routers.health
 
 ::: robotsix_central_deploy.lifecycle.routers.volumes
@@ -21,6 +23,8 @@
 ::: robotsix_central_deploy.lifecycle.config
 
 ::: robotsix_central_deploy.lifecycle.store
+
+::: robotsix_central_deploy.lifecycle.schemas
 
 ## Dashboard UI
 

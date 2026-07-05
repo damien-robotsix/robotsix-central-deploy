@@ -682,6 +682,58 @@ async def _init_background_tasks(app: FastAPI) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# External component seeding
+# ---------------------------------------------------------------------------
+
+_EXTERNAL_SKILL_DIR = Path(__file__).resolve().parent.parent / "chat_skills"
+
+
+async def _seed_external_components(
+    component_config_store: ComponentConfigStore,
+    registry: ComponentRegistry,
+) -> None:
+    """Idempotently seed external (non-Docker) components into the registry.
+
+    Reads ``chat_skills/<id>.md`` for each known external component and
+    persists a ``ComponentConfig`` with ``external_url`` and
+    ``external_chat_skill`` set.  Skips components that already exist in
+    *component_config_store* so operator edits are preserved across
+    restarts.
+    """
+    _EXTERNAL_COMPONENTS: dict[str, str] = {
+        "langfuse": "https://langfuse.robotsix.net",
+    }
+
+    for comp_id, url in _EXTERNAL_COMPONENTS.items():
+        # Idempotent: only seed when not already in persistent store.
+        if component_config_store.get(comp_id) is not None:
+            continue
+
+        skill_path = _EXTERNAL_SKILL_DIR / f"{comp_id}.md"
+        skill_body = ""
+        try:
+            skill_body = skill_path.read_text(encoding="utf-8")
+        except OSError:
+            logger.warning(
+                "_seed_external_components: skill file not found: %s", skill_path
+            )
+            # Still register the component without a skill; the chat endpoint
+            # omits it when the skill body is empty.
+
+        cfg = ComponentConfig(
+            id=comp_id,
+            image="",  # not a Docker component
+            container_name="",
+            allow_chat_access=True,
+            external_url=url,
+            external_chat_skill=skill_body,
+        )
+        await component_config_store.put(cfg)
+        registry.register(cfg)
+        logger.info("Seeded external component '%s'", comp_id)
+
+
 async def _init_component_registry(app: FastAPI) -> None:
     """Load persisted component configs into the in-memory registry, seed
     sibling service records, and start the volume-audit and caretaker
@@ -708,9 +760,14 @@ async def _init_component_registry(app: FastAPI) -> None:
     component_config_store = ComponentConfigStore(store_path)
     app.state.component_config_store = component_config_store
 
-    # Merge dynamic store into in-memory registry (unchanged logic)
+    # Seed external (non-Docker) components before the dynamic-store loop
+    await _seed_external_components(component_config_store, registry)
+
+    # Merge dynamic store into in-memory registry
     for dyn_config in component_config_store.all():
         registry.register(dyn_config)
+        if dyn_config.external_url:
+            continue  # external components have no Docker container → no ServiceRecord
         existing = await _store.get(dyn_config.id)
         if existing is None:
             await _store.put(
