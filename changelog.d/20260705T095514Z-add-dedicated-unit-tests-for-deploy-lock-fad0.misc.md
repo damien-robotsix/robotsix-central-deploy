@@ -1,0 +1,1 @@
+Add dedicated unit tests for deploy_lock.py
