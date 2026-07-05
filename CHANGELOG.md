@@ -6,6 +6,13 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fixed chat agent config rollback: first update now snapshots template defaults instead of the raw JSON Schema, and `release_deploy_lock` is no longer incorrectly awaited. Added `ComponentConfigStore.register()` synchronous helper for test fixtures.
+- Chat agent scoped write-surface: new endpoints for allowlisted service
+  mutation — update non-secret config keys, rollback config, restart
+  services, and pull+recreate (deploy). Every mutation is audit-logged
+  with who/what/when/old→new value. Includes server-side allowlist
+  enforcement (403 on disallowed services/keys) and per-service
+  per-action rate limiting.
 - When central-deploy creates a named volume for the first time, chown its root to the container's uid:gid (mode 0755, or 0700 for claude-auth). This fixes PermissionError on data persistence for components running as a non-root user. The claude-auth special-case volume helper is retired in favour of the general mechanism.
 - Add docstrings to caretaker models: ``FindingKind``, ``CaretakerFinding``, and ``CaretakerReport``.
 - Register `docs/architecture/registry_check.md` under the `registry_check` module in `docs/modules.yaml`.

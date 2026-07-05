@@ -247,6 +247,11 @@ class LifecycleConfig(BaseModel):
         ),
     )
 
+    chat_agent_audit_store_path: str = Field(
+        "data/chat_agent_audit.json",
+        description="Path of the chat-agent mutation audit log.",
+    )
+
     claude_auth_refresh_interval: int = Field(
         1800,
         description=(
@@ -270,6 +275,10 @@ class LifecycleConfig(BaseModel):
     @property
     def effective_deploy_history_store_path(self) -> Path:
         return Path(self.deploy_history_store_path)
+
+    @property
+    def effective_chat_agent_audit_store_path(self) -> Path:
+        return Path(self.chat_agent_audit_store_path)
 
     @property
     def auth_required(self) -> bool:

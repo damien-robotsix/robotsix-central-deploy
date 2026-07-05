@@ -85,6 +85,24 @@ class ConfigYamlStore:
             data[name] = entry
             await self._save(data)
 
+    async def get_previous(self, name: str) -> dict[str, Any] | None:
+        """Return the previous (pre-rollback) config snapshot for *name*, or None."""
+        data = await self._load()
+        entry: dict[str, Any] | None = data.get(name)
+        if entry is None:
+            return None
+        previous: dict[str, Any] | None = entry.get("previous")
+        return previous
+
+    async def save_previous(self, name: str, previous: dict[str, Any]) -> None:
+        """Store a previous-config snapshot for *name* (rollback target)."""
+        async with self._lock:
+            data = await self._load()
+            entry = data.get(name, {})
+            entry["previous"] = previous
+            data[name] = entry
+            await self._save(data)
+
     async def delete(self, name: str) -> None:
         """Remove the entire entry for *name*. No-op if absent."""
         async with self._lock:

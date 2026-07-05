@@ -69,6 +69,16 @@ class ComponentConfigStore:
             configs[config.id] = config
             self._save(configs)
 
+    def register(self, config: ComponentConfig) -> None:
+        """Synchronous register — for test fixtures and bootstrap before the event loop.
+
+        Skips the asyncio lock because it's only safe before the loop starts.
+        For normal async context use ``put`` instead.
+        """
+        configs = self._load()
+        configs[config.id] = config
+        self._save(configs)
+
     async def delete(self, id: str) -> bool:
         async with self._lock:
             configs = self._load()

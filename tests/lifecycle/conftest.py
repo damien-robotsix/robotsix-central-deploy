@@ -12,6 +12,7 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.registry.chat_agent_audit_store import ChatAgentAuditStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
@@ -49,6 +50,7 @@ def _reset_globals(monkeypatch, tmp_path):
     config_store = ComponentConfigStore(state_dir / "config_store.json")
     config_yaml_store = ConfigYamlStore(state_dir / "config_yaml.json")
     deploy_history_store = DeployHistoryStore(state_dir / "deploy_history.json")
+    chat_agent_audit_store = ChatAgentAuditStore(state_dir / "chat_agent_audit.json")
     registry = ComponentRegistry([])
 
     # Set both the module-level globals and app.state so all code paths work.
@@ -64,6 +66,8 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.env_store = env_store
     server_mod.app.state.config_yaml_store = config_yaml_store
     server_mod.app.state.deploy_history_store = deploy_history_store
+    server_mod.app.state.chat_agent_audit_store = chat_agent_audit_store
+    server_mod.app.state.chat_agent_rate_limits = {}
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
     server_mod.app.state.job_registry = JobRegistry()

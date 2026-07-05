@@ -32,6 +32,7 @@ from .schemas import DeployJobPhase, OnboardJobPhase
 from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
 from ..registry.deploy_history_store import DeployHistoryStore
+from ..registry.chat_agent_audit_store import ChatAgentAuditStore
 from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig, ServiceConfig
@@ -556,12 +557,17 @@ async def _init_config(app: FastAPI) -> None:
     _deploy_history_store = DeployHistoryStore(
         _config.effective_deploy_history_store_path
     )
+    _chat_agent_audit_store = ChatAgentAuditStore(
+        _config.effective_chat_agent_audit_store_path
+    )
     app.state.config = _config
     app.state.store = _store
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
     app.state.config_yaml_store = _config_yaml_store
     app.state.deploy_history_store = _deploy_history_store
+    app.state.chat_agent_audit_store = _chat_agent_audit_store
+    app.state.chat_agent_rate_limits = {}
 
 
 async def _init_settings(app: FastAPI) -> None:
@@ -867,6 +873,10 @@ async def _get_deploy_history_store(request: Request) -> DeployHistoryStore:
     return request.app.state.deploy_history_store  # type: ignore[no-any-return]
 
 
+async def _get_chat_agent_audit_store(request: Request) -> ChatAgentAuditStore:
+    return request.app.state.chat_agent_audit_store  # type: ignore[no-any-return]
+
+
 async def _get_job_registry(request: Request) -> JobRegistry:
     return request.app.state.job_registry  # type: ignore[no-any-return]
 
@@ -895,7 +905,10 @@ async def _get_sibling_pairs(
         sib_name = f"{name}-{sib.service_key}"
         sib_record = await store.get(sib_name)
         if sib_record is None:
-            logger.warning("sibling record '%s' not found; skipping", sib_name)
+            logger.warning(
+                "sibling record '%s' not found; skipping",
+                sib_name.replace("\n", "\\n"),
+            )
             continue
         pairs.append((sib, sib_record))
     return pairs
