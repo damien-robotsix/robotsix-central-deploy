@@ -20,7 +20,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 
 from .backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
-from .config import LifecycleConfig
+from .config import LifecycleConfig, VirtualComponentEntry
 from .models import (
     ExecutionBackendType,
     HealthStatus,
@@ -682,6 +682,82 @@ async def _init_background_tasks(app: FastAPI) -> None:
     )
 
 
+async def _seed_component_registry(
+    store: ServiceStore,
+    component_config_store: ComponentConfigStore,
+    registry: ComponentRegistry,
+    virtual_components: list[VirtualComponentEntry],
+) -> None:
+    """Merge persisted component configs into the in-memory registry and
+    ServiceStore, then seed any virtual (non-Docker) components not yet
+    registered.
+
+    Virtual components are never Docker containers, so they must never get
+    a ``ServiceRecord`` — that would surface them as permanently
+    "unknown"-status rows in the dashboard. Any ``ServiceRecord`` that
+    already exists for one (e.g. leaked in by a previous restart before
+    this guard existed) is deleted here so the fix self-heals.
+    """
+    for dyn_config in component_config_store.all():
+        registry.register(dyn_config)
+        if dyn_config.is_virtual:
+            await store.delete(dyn_config.id)
+            continue
+        existing = await store.get(dyn_config.id)
+        if existing is None:
+            await store.put(
+                ServiceRecord(
+                    name=dyn_config.id,
+                    container_name=dyn_config.container_name,
+                    image=dyn_config.image,
+                )
+            )
+        # Seed sibling records
+        for sib in dyn_config.siblings:
+            sib_name = f"{dyn_config.id}-{sib.service_key}"
+            existing_sib = await store.get(sib_name)
+            if existing_sib is None:
+                await store.put(
+                    ServiceRecord(
+                        name=sib_name,
+                        container_name=sib.container_name,
+                        image=sib.image,
+                        component_id=dyn_config.id,
+                    )
+                )
+        logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
+
+    # -- Seed virtual (non-Docker) components from config --------------------
+    for ventry in virtual_components:
+        if component_config_store.get(ventry.id) is not None:
+            continue  # already registered; don't overwrite
+        virtual_cfg = ComponentConfig(
+            id=ventry.id,
+            image="",
+            container_name=ventry.id,
+            is_virtual=True,
+            allow_chat_access=True,
+            chat_base_url=ventry.chat_base_url or None,
+            chat_skill_endpoint=ventry.chat_skill_endpoint,
+            chat_skill=ventry.chat_skill,
+            auth_type=ventry.auth_type,
+            auth_header_name=ventry.auth_header_name,
+            auth_username_env=ventry.auth_username_env,
+            auth_password_env=ventry.auth_password_env,
+            auth_token_env=ventry.auth_token_env,
+        )
+        component_config_store.register(virtual_cfg)
+        registry.register(virtual_cfg)
+        logger.info("Seeded virtual component '%s'", ventry.id)
+
+    if virtual_components:
+        logger.info(
+            "Virtual components seeded into the chat-agent roster. "
+            "The robotsix-chat agent must be restarted to pick up the "
+            "updated roster (POST /chat/services/robotsix-chat/restart)."
+        )
+
+
 async def _init_component_registry(app: FastAPI) -> None:
     """Load persisted component configs into the in-memory registry, seed
     sibling service records, and start the volume-audit and caretaker
@@ -708,61 +784,9 @@ async def _init_component_registry(app: FastAPI) -> None:
     component_config_store = ComponentConfigStore(store_path)
     app.state.component_config_store = component_config_store
 
-    # Merge dynamic store into in-memory registry (unchanged logic)
-    for dyn_config in component_config_store.all():
-        registry.register(dyn_config)
-        existing = await _store.get(dyn_config.id)
-        if existing is None:
-            await _store.put(
-                ServiceRecord(
-                    name=dyn_config.id,
-                    container_name=dyn_config.container_name,
-                    image=dyn_config.image,
-                )
-            )
-        # Seed sibling records
-        for sib in dyn_config.siblings:
-            sib_name = f"{dyn_config.id}-{sib.service_key}"
-            existing_sib = await _store.get(sib_name)
-            if existing_sib is None:
-                await _store.put(
-                    ServiceRecord(
-                        name=sib_name,
-                        container_name=sib.container_name,
-                        image=sib.image,
-                        component_id=dyn_config.id,
-                    )
-                )
-        logger.info("Loaded dynamic component config for '%s'", dyn_config.id)
-
-    # -- Seed virtual (non-Docker) components from config --------------------
-    for ventry in _config.virtual_components:
-        if component_config_store.get(ventry.id) is not None:
-            continue  # already registered; don't overwrite
-        virtual_cfg = ComponentConfig(
-            id=ventry.id,
-            image="",
-            container_name=ventry.id,
-            allow_chat_access=True,
-            chat_base_url=ventry.chat_base_url or None,
-            chat_skill_endpoint=ventry.chat_skill_endpoint,
-            chat_skill=ventry.chat_skill,
-            auth_type=ventry.auth_type,
-            auth_header_name=ventry.auth_header_name,
-            auth_username_env=ventry.auth_username_env,
-            auth_password_env=ventry.auth_password_env,
-            auth_token_env=ventry.auth_token_env,
-        )
-        component_config_store.register(virtual_cfg)
-        registry.register(virtual_cfg)
-        logger.info("Seeded virtual component '%s'", ventry.id)
-
-    if _config.virtual_components:
-        logger.info(
-            "Virtual components seeded into the chat-agent roster. "
-            "The robotsix-chat agent must be restarted to pick up the "
-            "updated roster (POST /chat/services/robotsix-chat/restart)."
-        )
+    await _seed_component_registry(
+        _store, component_config_store, registry, _config.virtual_components
+    )
 
     # --- Volume audit subsystem ---
     _volume_audit_task: asyncio.Task[Any] | None = None
