@@ -9,6 +9,7 @@ All notable changes to robotsix-central-deploy.
 - Move `volume_audit` module from `src/robotsix_central_deploy/lifecycle/volume_audit/` to `src/robotsix_central_deploy/volume_audit/` as a top-level peer package, and tests from `tests/lifecycle/volume_audit/` to `tests/volume_audit/`.
 - Add `lint-actions` CI job with actionlint (structural workflow validation) and zizmor (supply-chain vulnerability detection) for all GitHub Actions workflow files
 - Extract shared test fixtures (``app``, ``_reset_globals``, ``client``) into a root ``tests/conftest.py``, deduplicating ~155 lines of boilerplate across five test locations.
+- Move `DEPLOY_CONTRACT.md` from `src/robotsix_central_deploy/ui/` and `docs/` to `docs/ui/DEPLOY_CONTRACT.md`, aligning the ui module docs with the per-module layout convention (`docs/<module>/`)
 - Skip-Changelog: boilerplate triage template, no code change
 - Dashboard: fallback state after fetch failure now renders `unknown` (valid `ServiceState`) instead of `error` (non-canonical), with `badge-unknown` CSS class instead of removed `badge-error`.
 - Split `lifecycle/routers/services.py` (~2450 lines) into focused router modules under `routers/`: `services_deploy.py` (deploy, rollback, history), `services_config.py` (config CRUD, assist, schema refresh), and `services_env.py` (env/secrets CRUD). The core `services.py` retains listing, status, health, logs, start/stop/restart, refresh-contract, and delete.

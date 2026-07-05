@@ -120,6 +120,7 @@ modules:
       - GET /help/deploy-contract
     paths:
       - src/robotsix_central_deploy/ui/**/*
+      - docs/ui/**/*
     tests: tests/ui/
 
   - id: registry_check

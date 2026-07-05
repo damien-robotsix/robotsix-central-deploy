@@ -17,9 +17,9 @@ RUN apt-get update && apt-get upgrade -y \
 COPY pyproject.toml uv.lock _mill_build.py ./
 COPY src/ ./src/
 # src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md is a symlink to
-# ../../../docs/DEPLOY_CONTRACT.md; the canonical file must exist in the
+# ../../../docs/ui/DEPLOY_CONTRACT.md; the canonical file must exist in the
 # build stage or hatchling fails to resolve it when building the wheel.
-COPY docs/DEPLOY_CONTRACT.md ./docs/DEPLOY_CONTRACT.md
+COPY docs/ui/DEPLOY_CONTRACT.md ./docs/ui/DEPLOY_CONTRACT.md
 
 RUN --mount=type=secret,id=github_token,required=false \
     if [ -f /run/secrets/github_token ]; then \
