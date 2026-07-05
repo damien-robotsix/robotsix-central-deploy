@@ -1,0 +1,1 @@
+Add actionlint and zizmor workflow linting to CI

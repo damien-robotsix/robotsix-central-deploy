@@ -241,6 +241,21 @@ jobs:
           fi
           echo "All grep-lint checks passed."
 
+  lint-actions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Run actionlint
+        run: "$(go env GOPATH)/bin/actionlint"
+      - name: Install uv
+        run: pip install uv
+      - name: Run zizmor
+        run: uv tool run --from zizmor zizmor .github/workflows/
+
   codeql:
     runs-on: ubuntu-latest
     permissions:
