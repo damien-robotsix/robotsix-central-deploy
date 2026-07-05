@@ -15,6 +15,11 @@ All notable changes to robotsix-central-deploy.
   `rate_limit_api_per_hour` 1000 → 20000: the dashboard UI alone polls
   ~5000 requests/hour per open tab, so the old default locked out an
   operator within minutes.
+- Register the lifecycle server as a chat-agent component (`_lifecycle`) so the chat
+  agent can discover and call read-only fleet-inspection endpoints.  Adds
+  `GET /chat-skill` returning a skill document that describes the available
+  read-only operations (service list, status, health, env, config — all with
+  secrets masked) and safety rules.
 - Update `docs/ARCHITECTURE.md` to reflect the `claude-auth` named volume (managed by central-deploy) instead of the old `~/.claude` host bind-mount.
 - docs: update DEPLOY_CONTRACT.md §5, §9, and §10 to reflect managed `claude-auth` named volume instead of host bind-mount; fix dashboard.html claude-mount label to show correct volume name and container path
 - Register the previously uncovered `src/robotsix_central_deploy/__init__.py` under the lifecycle module in `docs/modules.yaml`.

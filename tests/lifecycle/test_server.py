@@ -4437,8 +4437,10 @@ class TestChatComponents:
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["id"] == "alpha"
+        # Self-entry + alpha only (beta skipped for no chat access, gamma skipped for probe failure).
+        assert len(data) == 2
+        assert data[0]["id"] == "_lifecycle"
+        assert data[1]["id"] == "alpha"
 
     async def test_virtual_component_with_static_skill(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -4676,3 +4678,62 @@ class TestChatComponents:
         assert dp_entry["auth"]["token_env"] == "DEPLOY_API_KEY"
 
         mock_client.get.assert_not_called()
+
+    # -- /chat-skill endpoint -----------------------------------------------
+
+    async def test_chat_skill_returns_skill_document(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get("/chat-skill", headers=auth_headers)
+        assert resp.status_code == 200
+        body = resp.text
+        assert "Lifecycle API" in body
+        assert "GET /services" in body
+        assert "GET /services/{name}/env" in body
+        assert "GET /services/{name}/config" in body
+        assert "Read-only" in body
+        assert "ROBOTSIX_LIFECYCLE_API_KEY" in body
+
+    async def test_chat_skill_unauthorized_returns_401(
+        self, client: AsyncClient
+    ):
+        resp = await client.get("/chat-skill")
+        assert resp.status_code == 401
+
+    # -- Self-entry content -------------------------------------------------
+
+    async def test_self_entry_has_correct_skill_content(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 1
+        self_entry = data[0]
+        assert self_entry["id"] == "_lifecycle"
+        assert self_entry["base_url"].startswith("http")
+        assert "Lifecycle API" in self_entry["skill"]
+        assert "Read-only" in self_entry["skill"]
+
+    async def test_self_entry_always_present_when_components_exist(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Self-entry is always first, even when managed components are present."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="managed",
+            image="managed:latest",
+            container_name="managed",
+            ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = False
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        # Self-entry always first.
+        assert len(data) >= 1
+        assert data[0]["id"] == "_lifecycle"
+        assert data[0]["base_url"].startswith("http")

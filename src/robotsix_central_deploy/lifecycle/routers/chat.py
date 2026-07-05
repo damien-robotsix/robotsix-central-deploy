@@ -60,6 +60,53 @@ router = APIRouter(tags=["chat"])
 _skill_cache: dict[str, tuple[float, str]] = {}
 _SKILL_CACHE_TTL: float = 60.0
 
+#: Self-entry id used in /chat/components to represent the lifecycle server.
+_SELF_COMPONENT_ID: str = "_lifecycle"
+
+_LIFECYCLE_CHAT_SKILL: str = """\
+# Lifecycle API (robotsix-central-deploy)
+
+Read-only operations for inspecting the deploy fleet.
+
+## Authentication
+
+Include the `X-API-Key` header with the `ROBOTSIX_LIFECYCLE_API_KEY`
+value on every request.  The API also accepts HTTP Basic Auth where the
+password equals the API key (username is ignored).
+
+## Available Endpoints
+
+### `GET /services`
+List all managed services with their current state.  Returns an array
+of `{name, state, update_available, has_config_yaml, component_id}`.
+
+### `GET /services/{name}`
+Full status for a single service — state, image, health digest, ports,
+mounts, siblings, update availability, and deploy history summary.
+
+### `GET /services/{name}/health`
+Health status string: `healthy`, `unhealthy`, `starting`, or empty when
+no Docker healthcheck is configured.
+
+### `GET /services/{name}/env`
+Environment variables and secrets.  Secret values are **always** masked
+as `***` — the plaintext never leaves the server.
+
+### `GET /services/{name}/config`
+Config JSON Schema and current values.  Secret fields (marked
+`"format": "password"` + `"writeOnly": true`) are **always** masked as
+`***`.
+
+## Safety Rules
+
+- **Read-only.**  Never call mutating endpoints (`POST`, `PUT`,
+  `DELETE`, `PATCH`).  The chat agent is only authorised for `GET`.
+- **Secrets stay secret.**  The API masks all secret values as `***`;
+  do not attempt to unmask or infer them.
+- **No side effects.**  Inspecting services, config, env, and health is
+  safe and does not alter any running state.  Even repeated polling is
+  harmless.
+"""
 
 # ---------------------------------------------------------------------------
 # Auth metadata injection helper
@@ -92,51 +139,22 @@ def _inject_auth(entry: dict[str, Any], comp_cfg: ComponentConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /chat-skill — the deploy server's own skill, so the chat agent can
-# discover the deploy component itself.
+# GET /chat-skill
 # ---------------------------------------------------------------------------
 
 
 @router.get(
     "/chat-skill",
-    summary="Deploy server's own chat-agent skill description",
-    responses={200: {"description": "Markdown skill body"}},
+    summary="Lifecycle server skill document for the chat agent",
+    response_class=PlainTextResponse,
+    responses={401: {"description": "Unauthorized"}},
 )
-async def deploy_chat_skill() -> str:
-    """Return the Markdown skill description for the deploy server itself.
-
-    This lets the deploy server register as a virtual component with
-    ``chat_base_url`` pointing at itself, and the roster endpoint's
-    probe succeeds against this handler.
-    """
-    return (
-        "# Deploy Lifecycle Server\n"
-        "Manages the robotsix Docker fleet: start, stop, restart, deploy, "
-        "rollback, and inspect every managed component.\n\n"
-        "## Authentication\n"
-        "All requests require an `X-API-Key` header.  The chat agent reads "
-        "this key from the `DEPLOY_API_KEY` environment variable (injected "
-        "by the deploy server itself at container start).\n\n"
-        "## Read-only endpoints\n"
-        "- `GET /services` — list all managed services\n"
-        "- `GET /services/{name}` — full status (state, image, health, digests)\n"
-        "- `GET /services/{name}/health` — health status string\n"
-        "- `GET /services/{name}/logs` — stream container logs\n"
-        "- `GET /health` — liveness probe\n"
-        "- `GET /disk` — host disk usage + Docker storage breakdown\n"
-        "- `GET /chat/components` — list components reachable by the chat agent\n"
-        "- `GET /chat/audit-log` — read recent audit entries\n\n"
-        "## Scoped write endpoints (chat-agent allowlisted)\n"
-        "- `PUT /chat/config/{name}` — update non-secret config keys\n"
-        "- `POST /chat/config/{name}/rollback` — restore previous config version\n"
-        "- `POST /chat/services/{name}/restart` — restart a service\n"
-        "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n\n"
-        "## Agent self-restart\n"
-        "The robotsix-chat agent can restart itself via:\n"
-        "`POST /chat/services/robotsix-chat/restart`\n"
-        "This is needed after the component roster is updated so the agent "
-        "picks up newly registered virtual components."
-    )
+async def chat_skill(
+    _auth: None = Depends(verify_auth),
+) -> str:
+    """Return the Markdown skill document describing read-only lifecycle
+    operations available to the chat agent."""
+    return _LIFECYCLE_CHAT_SKILL
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +269,16 @@ async def list_chat_components(
     entry has expired is re-probed on the next request.
     """
     results: list[dict[str, Any]] = []
+
+    # -- Self entry: the lifecycle server itself ---------------------------
+    base_url = str(request.base_url).rstrip("/")
+    results.append(
+        {
+            "id": _SELF_COMPONENT_ID,
+            "base_url": base_url,
+            "skill": _LIFECYCLE_CHAT_SKILL,
+        }
+    )
     now = time.monotonic()
 
     for comp_cfg in component_config_store.all():
