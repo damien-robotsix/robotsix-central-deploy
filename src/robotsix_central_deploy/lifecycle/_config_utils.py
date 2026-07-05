@@ -121,7 +121,9 @@ def _coerce_by_schema(prop_schema: dict[str, Any], sval: Any) -> Any:
     """
     schema_type = prop_schema.get("type")
     if schema_type == "integer":
-        if isinstance(sval, bool) or not isinstance(sval, (int, float)):
+        if isinstance(sval, bool):
+            raise ValueError(f"expected integer, got bool: {sval!r}")
+        if not isinstance(sval, (int, float)):
             try:
                 return int(sval)
             except (ValueError, TypeError) as exc:
