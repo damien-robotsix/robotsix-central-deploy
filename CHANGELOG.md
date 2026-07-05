@@ -15,6 +15,7 @@ All notable changes to robotsix-central-deploy.
 - Add unit tests for onboard `port_utils` module (host-port collision helpers).
 - PUT /settings now supports partial updates: only fields explicitly present in the request body are changed; unmentioned fields keep their current stored values. This prevents a partial payload from silently resetting fields like ``gateway_base_domain`` or ``caretaker_enabled`` to their class defaults.
 - Extract duplicated Docker-status-to-ServiceState mapping into shared `docker_status_to_service_state` helper in `lifecycle/backends/_util.py`.
+- Refactor `ChatAgentAuditStore` to inherit from `JsonFileStore`, replacing hand-rolled `_load`/`_save`/lock with the inherited `_update()` pattern used by other JSON-file-backed stores (`ConfigYamlStore`, `EnvStore`, `DeployHistoryStore`).
 - Added `docs/volume_audit/overview.md` documenting the volume audit subsystem: architecture (scheduler → growth → reporter pipeline), threshold model, configuration env vars, API endpoint, and reporting behaviour.
 - Remove dead ``DeployResponse`` model from ``lifecycle/models.py`` (gap-003). The deploy endpoint was converted from synchronous to asynchronous (202 + polling), making this legacy response model unused by any router, test, or import.
 - Rate limiter: raise the duplicated `SystemSettings.rate_limit_api_per_hour`

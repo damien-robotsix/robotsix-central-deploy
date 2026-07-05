@@ -5,14 +5,12 @@ Follows the same tmp-file-rename pattern as ``DeployHistoryStore``.
 
 from __future__ import annotations
 
-import asyncio
 import time
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ._store_utils import async_read_json, async_write_json
+from ._store_utils import JsonFileStore
 
 MAX_AUDIT_ENTRIES: int = 200
 """Maximum retained audit entries. Oldest entries are dropped beyond this cap."""
@@ -31,33 +29,24 @@ class ChatAgentAuditEntry(BaseModel):
     detail: str = ""  # additional context (e.g. rollback destination snapshot)
 
 
-class ChatAgentAuditStore:
+class ChatAgentAuditStore(JsonFileStore):
     """Persist chat-agent mutation audit entries to a JSON file.
 
     Uses a read-modify-write pattern with an ``asyncio.Lock`` for writes,
     matching the pattern of ``DeployHistoryStore``.
     """
 
-    def __init__(self, store_path: Path) -> None:
-        self._path = store_path
-        self._lock = asyncio.Lock()
-
-    async def _load(self) -> list[dict[str, Any]]:
-        data = await async_read_json(self._path)
-        entries: list[dict[str, Any]] = data.get("entries", [])
-        return entries
-
-    async def _save(self, entries: list[dict[str, Any]]) -> None:
-        await async_write_json(self._path, {"entries": entries})
-
     async def append(self, entry: ChatAgentAuditEntry) -> None:
         """Prepend *entry* to the audit log, capping at ``MAX_AUDIT_ENTRIES``."""
-        async with self._lock:
-            entries = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
+            entries: list[dict[str, Any]] = data.get("entries", [])
             entries.insert(0, entry.model_dump())
             if len(entries) > MAX_AUDIT_ENTRIES:
                 entries = entries[:MAX_AUDIT_ENTRIES]
-            await self._save(entries)
+            data["entries"] = entries
+
+        await self._update(_mutate)
 
     async def list(
         self, limit: int = 50, component: str | None = None
@@ -66,7 +55,8 @@ class ChatAgentAuditStore:
 
         Most-recent-first.  *limit* caps the result set.
         """
-        entries = await self._load()
+        data = await self._load()
+        entries: list[dict[str, Any]] = data.get("entries", [])
         if component is not None:
             entries = [e for e in entries if e.get("component") == component]
         return [ChatAgentAuditEntry.model_validate(e) for e in entries[:limit]]
