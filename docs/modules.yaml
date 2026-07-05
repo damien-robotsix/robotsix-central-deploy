@@ -184,4 +184,5 @@ modules:
       - GET /volumes/audit
     paths:
       - src/robotsix_central_deploy/volume_audit/**/*
+      - docs/volume_audit/overview.md
     tests: tests/volume_audit/
