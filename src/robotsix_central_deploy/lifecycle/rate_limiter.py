@@ -186,7 +186,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     {"detail": "Login rate limit exceeded — slow down."},
                     status_code=429,
                 )
-            response: Response = await call_next(request)  # type: ignore[no-any-return, operator]
+            response: Response = await call_next(request)  # type: ignore[operator]
             # Record failures post-response so lockout works
             if response.status_code == 401:
                 await store.record_login_failure(
