@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from robotsix_central_deploy.lifecycle.volume_audit.models import AuditFinding
-from robotsix_central_deploy.lifecycle.volume_audit.reporter import report_finding
+from robotsix_central_deploy.volume_audit.models import AuditFinding
+from robotsix_central_deploy.volume_audit.reporter import report_finding
 
 
 def _make_finding(**overrides) -> AuditFinding:
@@ -111,7 +111,7 @@ class TestReportFinding:
     async def test_truncates_at_max_findings(self, tmp_path: Path, monkeypatch):
         """When existing findings exceed _MAX_FINDINGS, oldest are dropped."""
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.volume_audit.reporter._MAX_FINDINGS", 5
+            "robotsix_central_deploy.volume_audit.reporter._MAX_FINDINGS", 5
         )
 
         findings_path = tmp_path / "findings.json"

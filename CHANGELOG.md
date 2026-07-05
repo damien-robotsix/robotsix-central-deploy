@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Move `volume_audit` module from `src/robotsix_central_deploy/lifecycle/volume_audit/` to `src/robotsix_central_deploy/volume_audit/` as a top-level peer package, and tests from `tests/lifecycle/volume_audit/` to `tests/volume_audit/`.
 - Add `lint-actions` CI job with actionlint (structural workflow validation) and zizmor (supply-chain vulnerability detection) for all GitHub Actions workflow files
 - Skip-Changelog: boilerplate triage template, no code change
 - Dashboard: fallback state after fetch failure now renders `unknown` (valid `ServiceState`) instead of `error` (non-canonical), with `badge-unknown` CSS class instead of removed `badge-error`.

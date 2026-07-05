@@ -26,8 +26,8 @@ from ..schemas import (
     VolumeFileResponse,
     VolumeListResponse,
 )
-from ..volume_audit.models import VolumeAuditResponse
-from ..volume_audit.scheduler import VolumeAuditScheduler
+from ...volume_audit.models import VolumeAuditResponse
+from ...volume_audit.scheduler import VolumeAuditScheduler
 
 router = APIRouter(tags=["volumes"])
 

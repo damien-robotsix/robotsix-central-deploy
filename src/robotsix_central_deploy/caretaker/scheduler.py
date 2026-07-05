@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.loader import ComponentRegistry
     from ..registry.settings_store import SystemSettingsStore
-    from ..lifecycle.volume_audit.scheduler import VolumeAuditScheduler
+    from ..volume_audit.scheduler import VolumeAuditScheduler
 
 logger = logging.getLogger(__name__)
 

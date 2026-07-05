@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from robotsix_board_agent.client import BoardClient
 
-    from ..backends import ExecutionBackend
-    from ..config import LifecycleConfig
+    from ..lifecycle.backends import ExecutionBackend
+    from ..lifecycle.config import LifecycleConfig
 
-from ...registry.config_store import ComponentConfigStore
+from ..registry.config_store import ComponentConfigStore
 from .growth import compute_growth_records
 from .models import (
     AuditFinding,
