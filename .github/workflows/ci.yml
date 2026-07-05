@@ -250,7 +250,7 @@ jobs:
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Run actionlint
-        run: "$(go env GOPATH)/bin/actionlint"
+        run: '"$(go env GOPATH)/bin/actionlint"'
       - name: Install uv
         run: pip install uv
       - name: Run zizmor
