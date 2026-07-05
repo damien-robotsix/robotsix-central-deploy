@@ -2393,11 +2393,34 @@ class TestConfigAssist:
         )
         await config_store.put(cfg)
 
-        # Patch _fetch_fresh_config_assist to return fresh values synchronously
-        def _fresh(git_url: str, name: str) -> tuple[str | None, list[str]]:
-            return ("new-detect --new", ["new_host"])
+        # Patch onboard fetcher/parser so the endpoint sees fresh values
+        def _fake_fetch_compose_bytes(git_url: str) -> bytes:
+            return b"fake compose content"
 
-        monkeypatch.setattr(server_mod, "_fetch_fresh_config_assist", _fresh)
+        def _fake_parse_compose(
+            compose_bytes: bytes, name: str, git_url: str
+        ) -> DerivedSpec:
+            return DerivedSpec(
+                name=name,
+                git_url=git_url,
+                image="auto-mail:latest",
+                ports=[],
+                volume_mounts=[],
+                env={},
+                claude_mount=False,
+                host_docker_sock=False,
+                config_assist_command="new-detect --new",
+                config_assist_seeds=[ConfigAssistSeed(key="new_host")],
+            )
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.onboard.fetcher.fetch_compose_bytes",
+            _fake_fetch_compose_bytes,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            _fake_parse_compose,
+        )
 
         # Capture the command that run_config_assist receives
         captured_command: list[str] = []
@@ -2442,7 +2465,7 @@ class TestConfigAssist:
     async def test_fetch_failure_falls_back_to_stored_command(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        """When _fetch_fresh_config_assist raises, the stored command is used."""
+        """When the repo fetch raises, the stored command is used."""
         await _seed_store("auto-mail")
         store: ConfigYamlStore = server_mod.app.state.config_yaml_store
         template = {
@@ -2466,12 +2489,13 @@ class TestConfigAssist:
         )
         await config_store.put(cfg)
 
-        # Patch _fetch_fresh_config_assist to raise
-        def _raise_network_error(git_url: str, name: str):
+        # Patch onboard fetcher to simulate a network error
+        def _raise_network_error(git_url: str):
             raise Exception("simulated network error")
 
         monkeypatch.setattr(
-            server_mod, "_fetch_fresh_config_assist", _raise_network_error
+            "robotsix_central_deploy.onboard.fetcher.fetch_compose_bytes",
+            _raise_network_error,
         )
 
         captured_command: list[str] = []
