@@ -6,32 +6,20 @@ after onboard) and ``current`` (user-saved merged dict) for each component.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from pathlib import Path
 from typing import Any
 
-from ._store_utils import async_read_json, async_write_json
+from ._store_utils import JsonFileStore
 
 logger = logging.getLogger(__name__)
 
 
-class ConfigYamlStore:
+class ConfigYamlStore(JsonFileStore):
     """Persist per-component config.json template and current values to a JSON file.
 
     Uses a read-modify-write pattern with an ``asyncio.Lock`` for writes,
     matching the pattern of ``EnvStore`` in ``registry/env_store.py``.
     """
-
-    def __init__(self, store_path: Path) -> None:
-        self._path = store_path
-        self._lock = asyncio.Lock()
-
-    async def _load(self) -> dict[str, Any]:
-        return await async_read_json(self._path)
-
-    async def _save(self, data: dict[str, Any]) -> None:
-        await async_write_json(self._path, data)
 
     async def get_template(self, name: str) -> dict[str, Any] | None:
         data = await self._load()
@@ -51,21 +39,23 @@ class ConfigYamlStore:
 
     async def save_template(self, name: str, template: dict[str, Any]) -> None:
         """Store/overwrite *template*; preserve existing *current* if present."""
-        async with self._lock:
-            data = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
             existing = data.get(name, {})
             existing["template"] = template
             data[name] = existing
-            await self._save(data)
+
+        await self._update(_mutate)
 
     async def update_current(self, name: str, current: dict[str, Any]) -> None:
         """Update only the *current* dict for *name*."""
-        async with self._lock:
-            data = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
             entry = data.get(name, {})
             entry["current"] = current
             data[name] = entry
-            await self._save(data)
+
+        await self._update(_mutate)
 
     async def get_volume_hash(self, name: str) -> str | None:
         """Return the stored volume hash for *name*, or None if absent."""
@@ -77,13 +67,14 @@ class ConfigYamlStore:
         self, name: str, current: dict[str, Any], volume_hash: str
     ) -> None:
         """Atomically update *current* and *volume_hash* in one JSON write."""
-        async with self._lock:
-            data = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
             entry = data.get(name, {})
             entry["current"] = current
             entry["volume_hash"] = volume_hash
             data[name] = entry
-            await self._save(data)
+
+        await self._update(_mutate)
 
     async def get_previous(self, name: str) -> dict[str, Any] | None:
         """Return the previous (pre-rollback) config snapshot for *name*, or None."""
@@ -96,16 +87,18 @@ class ConfigYamlStore:
 
     async def save_previous(self, name: str, previous: dict[str, Any]) -> None:
         """Store a previous-config snapshot for *name* (rollback target)."""
-        async with self._lock:
-            data = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
             entry = data.get(name, {})
             entry["previous"] = previous
             data[name] = entry
-            await self._save(data)
+
+        await self._update(_mutate)
 
     async def delete(self, name: str) -> None:
         """Remove the entire entry for *name*. No-op if absent."""
-        async with self._lock:
-            data = await self._load()
+
+        def _mutate(data: dict[str, Any]) -> None:
             data.pop(name, None)
-            await self._save(data)
+
+        await self._update(_mutate)
