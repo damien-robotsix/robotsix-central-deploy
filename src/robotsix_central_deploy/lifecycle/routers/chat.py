@@ -50,6 +50,7 @@ from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAud
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.loader import ComponentRegistry
+from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ _SKILL_CACHE_TTL: float = 60.0
 # ---------------------------------------------------------------------------
 
 
-def _inject_auth(entry: dict[str, Any], comp_cfg: "ComponentConfig") -> None:
+def _inject_auth(entry: dict[str, Any], comp_cfg: ComponentConfig) -> None:
     """Attach an ``auth`` sub-dict to *entry* when the component carries
     auth metadata the chat agent can use to authenticate requests.
 
