@@ -10,12 +10,10 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
 from ._util import docker_status_to_service_state
+from ._claude_auth import ClaudeAuthVolumeHelper, CLAUDE_AUTH_VOLUME
+from ._config_volume import ConfigVolumeHelper
 from .base import ExecutionBackend
 from ...gateway.proxy import PROXY_NETWORK
-from robotsix_central_deploy._yaml_utils import (
-    InvalidConfigStructureError,
-    YamlParseError,
-)
 from ..models import (
     ComponentInspect,
     DeployOutcome,
@@ -33,8 +31,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_AUTH_VOLUME = "claude-auth"
-
 
 class DockerSdkBackend(ExecutionBackend):
     """Executes lifecycle actions via the Docker Python SDK against the local socket."""
@@ -47,6 +43,8 @@ class DockerSdkBackend(ExecutionBackend):
         import docker
 
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
+        self._claude_auth = ClaudeAuthVolumeHelper(self._client)
+        self._config_volume = ConfigVolumeHelper(self._client)
 
     # -- helpers ------------------------------------------------------------
 
@@ -332,7 +330,7 @@ class DockerSdkBackend(ExecutionBackend):
             pass
         container.remove(force=True)
 
-    # -- volume ownership helpers -------------------------------------------
+    # -- volume ownership helper (kept for deploy path) ---------------------
 
     @staticmethod
     def _resolve_user_to_uid_gid(user_str: str) -> tuple[int, int]:
@@ -364,246 +362,23 @@ class DockerSdkBackend(ExecutionBackend):
 
         return _resolve_uid(u_part), _resolve_gid(g_part)
 
-    def _ensure_volume_ownership(
-        self, vol_name: str, uid: int, gid: int, mode: int
-    ) -> None:
-        """Chown the root of a newly-created named volume to *uid:gid*
-        and set its permissions to *mode* (e.g. ``0o755``).
-
-        Runs synchronously — callers must wrap in an executor.
-        """
-        self._client.containers.run(
-            "busybox",
-            command=[
-                "sh",
-                "-c",
-                f"chown {uid}:{gid} /mnt && chmod {mode:03o} /mnt",
-            ],
-            volumes={vol_name: {"bind": "/mnt", "mode": "rw"}},
-            remove=True,
-        )
-
-    def _check_claude_credentials(self) -> list[str]:
-        """Validate that the ``claude-auth`` volume contains a readable
-        ``.credentials.json``. Returns a list of warning strings (empty
-        if credentials are valid).
-        """
-        import docker
-
-        warnings: list[str] = []
-        try:
-            self._client.volumes.get(CLAUDE_AUTH_VOLUME)
-        except docker.errors.NotFound:
-            return [
-                f"Claude auth volume '{CLAUDE_AUTH_VOLUME}' does not exist. "
-                f"Your component requests a Claude mount but no credentials "
-                f"are available. Use the dashboard 'Claude auth' panel to "
-                f"provision credentials, then redeploy."
-            ]
-
-        # Check if .credentials.json exists and is a regular file.
-        try:
-            self._client.containers.run(
-                "busybox",
-                command=[
-                    "sh",
-                    "-c",
-                    "test -f /mnt/.credentials.json && test -r /mnt/.credentials.json",
-                ],
-                volumes={CLAUDE_AUTH_VOLUME: {"bind": "/mnt", "mode": "ro"}},
-                remove=True,
-            )
-        except docker.errors.ContainerError:
-            warnings.append(
-                f"Claude auth volume '{CLAUDE_AUTH_VOLUME}' exists but does not "
-                f"contain a readable .credentials.json. Your component requests "
-                f"a Claude mount but has no valid credentials. Use the dashboard "
-                f"'Claude auth' panel to provision credentials, then redeploy."
-            )
-
-        return warnings
-
-    # -- claude-auth API (dashboard panel) ----------------------------------
+    # -- claude-auth API (delegates to helper) ------------------------------
 
     async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:
         """Check whether *volume_name* holds valid Claude credentials."""
-        import docker
-        import json as _json
-
-        loop = asyncio.get_running_loop()
-
-        def _check() -> dict[str, Any]:
-            # Ensure the volume exists.
-            try:
-                self._client.volumes.get(volume_name)
-            except docker.errors.NotFound:
-                return {
-                    "status": "not-authenticated",
-                    "detail": f"Volume '{volume_name}' does not exist.",
-                }
-
-            # Check for .credentials.json existence and parse it.
-            try:
-                result = self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
-                    ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
-                    remove=True,
-                )
-                content = result.decode("utf-8", errors="replace").strip()
-            except docker.errors.ContainerError:
-                return {
-                    "status": "not-authenticated",
-                    "detail": "Failed to read credentials from volume.",
-                }
-
-            if content == "MISSING" or not content:
-                return {
-                    "status": "not-authenticated",
-                    "detail": "No credentials file found.",
-                }
-
-            try:
-                creds = _json.loads(content)
-            except _json.JSONDecodeError:
-                return {
-                    "status": "error",
-                    "detail": "Credentials file exists but is not valid JSON.",
-                }
-
-            # Check for expiry information. Claude Code stores OAuth tokens
-            # under "claudeAiOauth" with "expiresAt" as a ms epoch; older
-            # formats used a top-level ISO "expires_at".
-            oauth = creds.get("claudeAiOauth") or {}
-            has_refresh = bool(oauth.get("refreshToken"))
-            expires_at = (
-                oauth.get("expiresAt")
-                or creds.get("expires_at")
-                or creds.get("expiresAt")
-            )
-            if expires_at:
-                try:
-                    from datetime import datetime, timezone
-
-                    if isinstance(expires_at, (int, float)):
-                        expire_dt = datetime.fromtimestamp(
-                            expires_at / 1000.0, tz=timezone.utc
-                        )
-                    else:
-                        expire_dt = datetime.fromisoformat(
-                            str(expires_at).replace("Z", "+00:00")
-                        )
-                    now = datetime.now(timezone.utc)
-                    if expire_dt < now:
-                        if has_refresh:
-                            return {
-                                "status": "authenticated",
-                                "detail": "Access token expired; refreshes on next use.",
-                            }
-                        return {
-                            "status": "not-authenticated",
-                            "detail": "Credentials have expired.",
-                        }
-                    remaining = (expire_dt - now).total_seconds()
-                    if remaining < 86400 and not has_refresh:  # less than 1 day
-                        return {
-                            "status": "expiring",
-                            "detail": f"Credentials expire in {remaining / 3600:.1f} hours.",
-                        }
-                except ValueError, TypeError, OSError, OverflowError:
-                    pass  # unparseable expiry → treat as valid
-
-            return {"status": "authenticated"}
-
-        return await loop.run_in_executor(None, _check)
+        return await self._claude_auth.check_claude_auth(volume_name)
 
     async def write_claude_credentials(
         self, volume_name: str, credentials_json: str
     ) -> dict[str, Any]:
         """Write *credentials_json* into *volume_name* as ``.credentials.json``."""
-        import docker
-        import json as _json
-
-        # Validate that it's at least parseable JSON.
-        try:
-            _json.loads(credentials_json)
-        except _json.JSONDecodeError as exc:
-            return {"status": "error", "error": f"Invalid JSON: {exc}"}
-
-        loop = asyncio.get_running_loop()
-
-        def _write() -> dict[str, Any]:
-            # Ensure the volume exists (create + chown on first use).
-            try:
-                self._client.volumes.get(volume_name)
-            except docker.errors.NotFound:
-                self._client.volumes.create(volume_name)
-                self._ensure_volume_ownership(volume_name, 1000, 1000, 0o700)
-
-            encoded = credentials_json.encode("utf-8")
-            import base64
-
-            b64 = base64.b64encode(encoded).decode("ascii")
-
-            self._client.containers.run(
-                "busybox",
-                command=[
-                    "sh",
-                    "-c",
-                    'echo "$B64" | base64 -d > /mnt/.credentials.json && chown 1000:1000 /mnt/.credentials.json && chmod 600 /mnt/.credentials.json',
-                ],
-                environment={"B64": b64},
-                volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
-                remove=True,
-            )
-            return {"status": "authenticated"}
-
-        return await loop.run_in_executor(None, _write)
+        return await self._claude_auth.write_claude_credentials(
+            volume_name, credentials_json
+        )
 
     async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
         """Read and return the parsed ``.credentials.json`` from *volume_name*."""
-        import docker
-        import json as _json
-
-        loop = asyncio.get_running_loop()
-
-        def _read() -> dict[str, Any]:
-            try:
-                self._client.volumes.get(volume_name)
-            except docker.errors.NotFound:
-                raise ValueError(f"Volume '{volume_name}' does not exist.")
-
-            try:
-                raw = self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
-                    ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
-                    remove=True,
-                )
-                content = raw.decode("utf-8", errors="replace").strip()
-            except docker.errors.ContainerError:
-                raise ValueError("Failed to read credentials from volume.")
-
-            if content == "MISSING" or not content:
-                raise ValueError("No credentials file found.")
-
-            try:
-                result: Any = _json.loads(content)
-                if not isinstance(result, dict):
-                    raise ValueError("Credentials file is not a JSON object.")
-                return result
-            except _json.JSONDecodeError as exc:
-                raise ValueError(f"Credentials file is not valid JSON: {exc}")
-
-        return await loop.run_in_executor(None, _read)
+        return await self._claude_auth.read_claude_credentials(volume_name)
 
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
@@ -694,7 +469,7 @@ class DockerSdkBackend(ExecutionBackend):
                 vol_mode = 0o700 if vol_name == CLAUDE_AUTH_VOLUME else 0o755
                 await loop.run_in_executor(
                     None,
-                    self._ensure_volume_ownership,
+                    self._claude_auth._ensure_volume_ownership,
                     vol_name,
                     chown_uid,
                     chown_gid,
@@ -705,7 +480,7 @@ class DockerSdkBackend(ExecutionBackend):
             if config.claude_mount:
                 try:
                     cred_warnings = await loop.run_in_executor(
-                        None, self._check_claude_credentials
+                        None, self._claude_auth._check_claude_credentials
                     )
                     if cred_warnings:
                         deploy_warnings.extend(cred_warnings)
@@ -783,7 +558,7 @@ class DockerSdkBackend(ExecutionBackend):
             if config.claude_mount:
                 try:
                     cred_warnings = await loop.run_in_executor(
-                        None, self._check_claude_credentials
+                        None, self._claude_auth._check_claude_credentials
                     )
                     if cred_warnings:
                         rollback_warnings.extend(cred_warnings)
@@ -813,257 +588,51 @@ class DockerSdkBackend(ExecutionBackend):
             warnings=rollback_warnings,
         )
 
-    # -- config volume helpers ----------------------------------------------
+    # -- config volume helpers (delegate to helper) -------------------------
 
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
-        """Write *config_dict* as JSON into a Docker named volume via a
-        temporary busybox container.
-
-        The volume **must** already exist; this method only writes to it.
-        """
-        import base64
-        import json
-
-        import docker
-
-        json_content = json.dumps(config_dict, indent=2, sort_keys=True)
-        encoded = base64.b64encode(json_content.encode()).decode()
-        # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
-        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.json && chmod 777 /config && chmod 666 /config/config.json"
-        loop = asyncio.get_running_loop()
-
-        def _run() -> None:
-            try:
-                self._client.containers.run(
-                    "busybox",
-                    command=["sh", "-c", cmd],
-                    volumes={volume_name: {"bind": "/config", "mode": "rw"}},
-                    remove=True,
-                )
-            except docker.errors.APIError as exc:
-                raise RuntimeError(
-                    f"write_config_to_volume failed for {volume_name}: {exc}"
-                ) from exc
-
-        await loop.run_in_executor(None, _run)
+        """Write *config_dict* as JSON into a Docker named volume."""
+        return await self._config_volume.write_config_to_volume(
+            volume_name, config_dict
+        )
 
     async def write_llmio_tier_config_to_volume(
         self, volume_name: str, tier_config: dict[str, Any]
     ) -> None:
-        """Write *tier_config* as ``llmio_tier_config.json`` into a Docker named
-        volume via a temporary busybox container.
-
-        The volume **must** already exist; this method only writes to it.
-        """
-        import base64
-        import json
-
-        import docker
-
-        json_content = json.dumps(tier_config, indent=2, sort_keys=True)
-        encoded = base64.b64encode(json_content.encode()).decode()
-        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/llmio_tier_config.json && chmod 777 /config && chmod 666 /config/llmio_tier_config.json"
-        loop = asyncio.get_running_loop()
-
-        def _run() -> None:
-            try:
-                self._client.containers.run(
-                    "busybox",
-                    command=["sh", "-c", cmd],
-                    volumes={volume_name: {"bind": "/config", "mode": "rw"}},
-                    remove=True,
-                )
-            except docker.errors.APIError as exc:
-                raise RuntimeError(
-                    f"write_llmio_tier_config_to_volume failed for {volume_name}: {exc}"
-                ) from exc
-
-        await loop.run_in_executor(None, _run)
+        """Write *tier_config* as ``llmio_tier_config.json`` into a Docker named volume."""
+        return await self._config_volume.write_llmio_tier_config_to_volume(
+            volume_name, tier_config
+        )
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
-        """Read /config/config.json from a named volume via a temporary busybox container."""
-        import json
+        """Read /config/config.json from a named volume."""
+        return await self._config_volume.read_config_from_volume(volume_name)
 
-        loop = asyncio.get_running_loop()
-
-        def _run() -> dict[str, Any]:
-            import docker
-
-            try:
-                raw = self._client.containers.run(
-                    "busybox",
-                    command=["sh", "-c", "cat /config/config.json 2>/dev/null || true"],
-                    volumes={volume_name: {"bind": "/config", "mode": "ro"}},
-                    remove=True,
-                )
-                text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
-
-                if not text.strip():
-                    return {}
-                data = json.loads(text)
-                if not isinstance(data, dict):
-                    raise InvalidConfigStructureError(
-                        f"Expected a mapping in Docker volume {volume_name}, "
-                        f"got {type(data).__name__}"
-                    )
-                return data
-            except (json.JSONDecodeError, ValueError) as exc:
-                raise YamlParseError(
-                    f"JSON parse error in Docker volume {volume_name}: {exc}"
-                ) from exc
-            except docker.errors.APIError as exc:
-                raise RuntimeError(
-                    f"read_config_from_volume failed for {volume_name}: {exc}"
-                ) from exc
-
-        return await loop.run_in_executor(None, _run)
-
-    # -- volume inspection helpers ------------------------------------------
+    # -- volume inspection helpers (delegate to helper) ---------------------
 
     async def measure_volume_bytes(self, volume_name: str) -> int:
-        """Return effective total bytes for *volume_name*, excluding SQLite transient sidecars (*.db-wal, *.db-shm, *.db-journal). Returns 0 on error or when the volume is inaccessible."""
-        loop = asyncio.get_running_loop()
-        cmd = (
-            "find /vol -type f "
-            "! -name '*.db-wal' ! -name '*.db-shm' ! -name '*.db-journal' "
-            "-exec du -b {} + 2>/dev/null "
-            "| awk '{s+=$1}END{print s+0}'"
-        )
-        try:
-            raw: bytes = await loop.run_in_executor(
-                None,
-                lambda: self._client.containers.run(
-                    "busybox",
-                    command=["sh", "-c", cmd],
-                    volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                    remove=True,
-                ),
-            )
-            return int(raw.strip() or b"0")
-        except Exception as exc:
-            logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
-            return 0
+        """Return effective total bytes for *volume_name*."""
+        return await self._config_volume.measure_volume_bytes(volume_name)
 
     async def list_volume_dir(
         self, volume_name: str, rel_path: str
     ) -> list[dict[str, Any]]:
-        """List immediate children of /vol/<rel_path> via busybox.
-
-        Uses ``find`` with ``-maxdepth 1`` for consistency.
-        """
-        loop = asyncio.get_running_loop()
-        script = (
-            'cd /vol && for f in "$1"/* "$1"/.*; do\n'
-            '  [ -e "$f" ] || continue\n'
-            '  bn="${f##*/}"\n'
-            '  [ "$bn" = . ] && continue\n'
-            '  [ "$bn" = .. ] && continue\n'
-            '  if [ -d "$f" ]; then\n'
-            '    printf "dir\\t0\\t%s\\n" "$bn"\n'
-            "  else\n"
-            '    sz=$(stat -c "%s" "$f" 2>/dev/null || echo 0)\n'
-            '    printf "file\\t%s\\t%s\\n" "$sz" "$bn"\n'
-            "  fi\n"
-            "done\n"
-        )
-        raw: bytes = await loop.run_in_executor(
-            None,
-            lambda: self._client.containers.run(
-                "busybox",
-                command=["sh", "-c", script, "sh", rel_path],
-                volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                remove=True,
-            ),
-        )
-        entries: list[dict[str, Any]] = []
-        for line in raw.decode(errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split("\t", 2)
-            if len(parts) != 3:
-                continue
-            typ, size_str, name = parts
-            try:
-                size_bytes = int(size_str)
-            except ValueError:
-                size_bytes = 0
-            entries.append({"name": name, "type": typ, "size_bytes": size_bytes})
-        return entries
+        """List immediate children of /vol/<rel_path> via busybox."""
+        return await self._config_volume.list_volume_dir(volume_name, rel_path)
 
     async def read_volume_file(
         self, volume_name: str, rel_path: str, max_bytes: int
     ) -> dict[str, Any]:
-        """Read ``/vol/<rel_path>`` via a one-shot busybox container.
-
-        Returns size, content (or None for binary), binary flag, truncated flag.
-        """
-        loop = asyncio.get_running_loop()
-        # $1 = rel_path, $2 = max_bytes+1 (head limit)
-        script = (
-            'target="/vol/$1"\n'
-            "maxp1=$2\n"
-            'stat -c "%s" "$target" 2>/dev/null || echo 0\n'
-            'head -c "$maxp1" "$target" 2>/dev/null || true\n'
+        """Read ``/vol/<rel_path>`` via a one-shot busybox container."""
+        return await self._config_volume.read_volume_file(
+            volume_name, rel_path, max_bytes
         )
-        raw: bytes = await loop.run_in_executor(
-            None,
-            lambda: self._client.containers.run(
-                "busybox",
-                command=["sh", "-c", script, "sh", rel_path, str(max_bytes + 1)],
-                volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                remove=True,
-            ),
-        )
-        # First line is the file size; the rest is the file content.
-        lines = raw.split(b"\n", 1)
-        try:
-            size_bytes = int(lines[0].strip())
-        except ValueError, IndexError:
-            size_bytes = 0
-        body = lines[1] if len(lines) > 1 else b""
-
-        truncated = len(body) > max_bytes
-        if truncated:
-            body = body[:max_bytes]
-
-        binary = b"\x00" in body
-        content: str | None = None
-        if not binary:
-            try:
-                content = body.decode("utf-8")
-            except UnicodeDecodeError:
-                binary = True
-
-        return {
-            "size_bytes": size_bytes,
-            "content": content,
-            "binary": binary,
-            "truncated": truncated,
-        }
 
     async def remove_volume(self, volume_name: str) -> None:
-        """Remove the Docker named volume *volume_name* (best-effort).
-
-        Swallows ``docker.errors.NotFound`` (already gone) and logs a
-        warning on any other error — never raises, so a failed volume
-        removal cannot abort a component delete.
-        """
-        import docker
-
-        loop = asyncio.get_running_loop()
-
-        def _remove() -> None:
-            self._client.volumes.get(volume_name).remove(force=True)
-
-        try:
-            await loop.run_in_executor(None, _remove)
-        except docker.errors.NotFound:  # Volume already removed
-            pass
-        except Exception as exc:
-            logger.warning("remove_volume %s: %s", volume_name, exc)
+        """Remove the Docker named volume *volume_name* (best-effort)."""
+        return await self._config_volume.remove_volume(volume_name)
 
     async def run_config_assist(
         self,
