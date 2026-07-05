@@ -88,6 +88,15 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_GROWTH_THRESHOLD_PCT` | `10.0` | Growth percentage threshold — a finding is emitted when a volume grows more than this percentage between scans. |
 | `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES` | `10485760` (10 MiB) | Minimum absolute growth in bytes before a finding is emitted. |
 
+### Rate Limiting
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_PER_MINUTE` | `10` | Max `POST /login` requests per IP per minute. Exceeding this returns HTTP 429. |
+| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_API_PER_HOUR` | `1000` | Max authenticated API requests (e.g. `/services`, `/settings`, `/volumes`, `/onboard`, `/chat`) per IP per hour. Exceeding this returns HTTP 429. |
+| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_MAX_ATTEMPTS` | `20` | Consecutive failed login attempts before the IP is temporarily locked out. Successful login resets the counter. |
+| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_LOCKOUT_SECONDS` | `300` | Duration in seconds an IP remains locked out after exceeding the max login attempts. |
+
 ### Board Integration
 
 | Variable | Default | Description |
