@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added `docs/volume_audit/overview.md` documenting the volume audit subsystem: architecture (scheduler → growth → reporter pipeline), threshold model, configuration env vars, API endpoint, and reporting behaviour.
 - Remove dead ``DeployResponse`` model from ``lifecycle/models.py`` (gap-003). The deploy endpoint was converted from synchronous to asynchronous (202 + polling), making this legacy response model unused by any router, test, or import.
 - Rate limiter: raise the duplicated `SystemSettings.rate_limit_api_per_hour`
   default (registry/settings_store.py) 1000 -> 20000. The settings overlay
