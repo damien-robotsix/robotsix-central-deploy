@@ -42,8 +42,6 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig
-
 from .._config_utils import (  # noqa: E402
     _canonical_hash,
     _deep_merge,
@@ -309,7 +307,8 @@ async def put_service_config(
             )
             drifted = _canonical_hash(live_dict_for_conflict) != stored_hash
     if drifted and not body.force_overwrite:
-        assert live_dict_for_conflict is not None
+        if live_dict_for_conflict is None:  # pragma: no cover
+            raise RuntimeError("drifted but live_dict_for_conflict is None")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=ConfigDriftConflict(
@@ -365,7 +364,7 @@ async def put_service_config(
             try:
                 await backend.restart(record)
             except Exception as exc:
-                logger.warning("config saved for %s but restart failed: %s", name, exc)
+                logger.warning("config saved for %s but restart failed: %s", repr(name), exc)
         # Fan out to siblings that share the same config volume
         config = registry.get(name) if registry else None
         if config and config.siblings:
@@ -377,15 +376,15 @@ async def put_service_config(
                 except Exception as exc:
                     logger.warning(
                         "config saved for %s but sibling '%s' restart failed: %s",
-                        name,
-                        sib_record.name,
+                        repr(name),
+                        repr(sib_record.name),
                         exc,
                     )
     else:
         await config_yaml_store.update_current(name, merged)
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only",
-            name,
+            repr(name),
         )
 
 
@@ -519,7 +518,7 @@ async def refresh_config_schema(
         ) from exc
 
     await config_yaml_store.save_template(name, schema)
-    logger.info("Refreshed config schema for %s from repo", name)
+    logger.info("Refreshed config schema for %s from repo", repr(name))
     return ConfigSchemaRefreshResponse(config_schema=schema)
 
 
@@ -569,7 +568,7 @@ async def run_config_assist(
     # GET /config and future assist calls also see the fresh values.
     try:
         loop = asyncio.get_running_loop()
-        from ..server import _fetch_fresh_config_assist  # noqa: PLC0415
+        from ..deps import _fetch_fresh_config_assist  # noqa: PLC0415
 
         fresh_cmd, fresh_seeds = await loop.run_in_executor(
             None, _fetch_fresh_config_assist, comp_cfg.git_url, name
@@ -585,12 +584,12 @@ async def run_config_assist(
                 }
             )
             await component_config_store.put(comp_cfg)
-            logger.info("Refreshed config-assist fields for %s from repo", name)
+            logger.info("Refreshed config-assist fields for %s from repo", repr(name))
     except Exception as exc:
         logger.warning(
             "Could not refresh config-assist fields for %s from repo (%s); "
             "using stored values",
-            name,
+            repr(name),
             exc,
         )
 
@@ -701,9 +700,10 @@ async def run_config_assist(
             dict({k: v for k, v in partial.items() if k != "accounts"}),
             {k: v for k, v in filled.items() if k != "accounts"},
         )
-        assert (
-            current_raw is not None
-        )  # add_new mode only reachable when current_raw is set
+        if current_raw is None:  # pragma: no cover
+            raise RuntimeError(
+                "add_new mode reached without current_raw"
+            )
         merged["accounts"] = list(current_raw.get("accounts", [])) + [merged_new_acct]
     else:
         merged = _deep_merge(dict(partial), filled)

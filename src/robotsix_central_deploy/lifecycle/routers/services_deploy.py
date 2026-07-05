@@ -136,7 +136,7 @@ async def _fanout_rollback_siblings(
         if not sib_record.previous_image_digest:
             logger.warning(
                 "rollback sibling '%s-%s': no prior digest — skipping",
-                name,
+                repr(name),
                 sib_config.service_key,
             )
             continue
@@ -171,7 +171,7 @@ async def _fanout_rollback_siblings(
         except Exception:
             logger.warning(
                 "rollback sibling '%s-%s' failed",
-                name,
+                repr(name),
                 sib_config.service_key,
             )
 
@@ -415,7 +415,7 @@ async def _run_deploy_job(
             warnings=outcome.warnings,
         )
     except Exception as exc:
-        logger.exception("deploy %s failed", name)
+        logger.exception("deploy %s failed", repr(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -597,7 +597,7 @@ async def rollback_service(
     try:
         outcome = await backend.rollback(record, config)
     except Exception as exc:
-        logger.exception("rollback %s failed", name)
+        logger.exception("rollback %s failed", repr(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
