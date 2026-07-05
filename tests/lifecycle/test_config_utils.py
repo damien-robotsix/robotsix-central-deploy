@@ -472,7 +472,9 @@ class TestStripSecretValues:
         assert result == {"key": "unchanged"}
 
     def test_non_dict_values_returns_empty(self):
-        result = _strip_secret_values({"type": "object", "properties": {}}, "not_a_dict")
+        result = _strip_secret_values(
+            {"type": "object", "properties": {}}, "not_a_dict"
+        )
         assert result == {}
 
     def test_resolves_ref_for_nested_secrets(self):
