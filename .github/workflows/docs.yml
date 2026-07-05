@@ -11,6 +11,10 @@ concurrency:
 jobs:
   deploy:
     permissions:
+      # A caller-job permissions map zeroes everything unlisted; the called
+      # workflow's build job needs contents:read (checkout), and requesting
+      # more than the caller grants fails the whole run at startup.
+      contents: read
       pages: write
       id-token: write
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-docs.yml@4c25a782556a8811d7aeed635b91fd9f790df203  # main
