@@ -50,6 +50,12 @@ from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_log(s: str) -> str:
+    """Replace newlines so user input cannot inject fake log entries."""
+    return s.replace("\n", "\\n").replace("\r", "\\r")
+
+
 router = APIRouter(tags=["services"])
 
 
@@ -114,11 +120,11 @@ async def _fanout_deploy_siblings(
             except Exception:
                 logger.warning(
                     "deploy sibling '%s': failed to record history",
-                    repr(sib_name),
+                    _sanitize_log(sib_name),
                     exc_info=True,
                 )
         except Exception:
-            logger.warning("deploy sibling '%s' failed", repr(sib_name))
+            logger.warning("deploy sibling '%s' failed", _sanitize_log(sib_name))
 
 
 async def _fanout_rollback_siblings(
@@ -136,8 +142,8 @@ async def _fanout_rollback_siblings(
         if not sib_record.previous_image_digest:
             logger.warning(
                 "rollback sibling '%s-%s': no prior digest — skipping",
-                repr(name),
-                sib_config.service_key,
+                _sanitize_log(name),
+                _sanitize_log(sib_config.service_key),
             )
             continue
         sib_name = f"{name}-{sib_config.service_key}"
@@ -171,8 +177,8 @@ async def _fanout_rollback_siblings(
         except Exception:
             logger.warning(
                 "rollback sibling '%s-%s' failed",
-                repr(name),
-                sib_config.service_key,
+                _sanitize_log(name),
+                _sanitize_log(sib_config.service_key),
             )
 
 
@@ -317,8 +323,8 @@ async def _run_deploy_job(
                 except Exception as exc:
                     logger.warning(
                         "deploy %s: could not write config.json to volume %s: %s",
-                        repr(name),
-                        repr(config.config_volume),
+                        _sanitize_log(name),
+                        _sanitize_log(config.config_volume),
                         exc,
                     )
                     # non-fatal: container may still start if config was written earlier
@@ -338,8 +344,8 @@ async def _run_deploy_job(
             except Exception as exc:
                 logger.warning(
                     "deploy %s: could not write llmio tier config to volume %s: %s",
-                    name.replace("\n", "\\n"),
-                    config.config_volume.replace("\n", "\\n"),
+                    _sanitize_log(name),
+                    _sanitize_log(config.config_volume),
                     exc,
                 )
                 # non-fatal
@@ -373,7 +379,7 @@ async def _run_deploy_job(
         except Exception:
             logger.warning(
                 "deploy %s: failed to record history entry",
-                repr(name),
+                _sanitize_log(name),
                 exc_info=True,
             )
 
@@ -397,13 +403,13 @@ async def _run_deploy_job(
                 if reclaimed:
                     logger.info(
                         "deploy %s: image auto-prune reclaimed %d bytes",
-                        name.replace("\n", "\\n"),
+                        _sanitize_log(name),
                         reclaimed,
                     )
         except Exception:
             logger.warning(
                 "deploy %s: image auto-prune failed",
-                repr(name),
+                _sanitize_log(name),
                 exc_info=True,
             )
 
@@ -415,7 +421,7 @@ async def _run_deploy_job(
             warnings=outcome.warnings,
         )
     except Exception as exc:
-        logger.exception("deploy %s failed", repr(name))
+        logger.exception("deploy %s failed", _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -541,7 +547,7 @@ async def rollback_service(
         try:
             deploy_outcome = await backend.deploy(record, config, image_ref)
         except Exception as exc:
-            logger.exception("rollback %s failed", repr(name))
+            logger.exception("rollback %s failed", _sanitize_log(name))
             record.state = ServiceState.FAILED
             record.last_error = str(exc)
             await store.put(record)
@@ -570,7 +576,7 @@ async def rollback_service(
             )
         except Exception:
             logger.warning(
-                "rollback %s: failed to record history entry", repr(name), exc_info=True
+                "rollback %s: failed to record history entry", _sanitize_log(name), exc_info=True
             )
 
         # Fan out siblings (one-step; current behaviour)
@@ -597,7 +603,7 @@ async def rollback_service(
     try:
         outcome = await backend.rollback(record, config)
     except Exception as exc:
-        logger.exception("rollback %s failed", repr(name))
+        logger.exception("rollback %s failed", _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)

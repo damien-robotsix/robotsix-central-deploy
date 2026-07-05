@@ -51,6 +51,12 @@ from .._config_utils import (  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_log(s: str) -> str:
+    """Replace newlines so user input cannot inject fake log entries."""
+    return s.replace("\n", "\\n").replace("\r", "\\r")
+
+
 router = APIRouter(tags=["services"])
 
 
@@ -349,8 +355,8 @@ async def put_service_config(
             except Exception as exc:
                 logger.warning(
                     "config %s: could not write llmio tier config to volume %s: %s",
-                    name.replace("\n", "\\n"),
-                    comp_cfg.config_volume.replace("\n", "\\n"),
+                    _sanitize_log(name),
+                    _sanitize_log(comp_cfg.config_volume),
                     exc,
                 )
         new_hash = _canonical_hash(merged)
@@ -364,7 +370,7 @@ async def put_service_config(
             try:
                 await backend.restart(record)
             except Exception as exc:
-                logger.warning("config saved for %s but restart failed: %s", repr(name), exc)
+                logger.warning("config saved for %s but restart failed: %s", _sanitize_log(name), exc)
         # Fan out to siblings that share the same config volume
         config = registry.get(name) if registry else None
         if config and config.siblings:
@@ -376,15 +382,15 @@ async def put_service_config(
                 except Exception as exc:
                     logger.warning(
                         "config saved for %s but sibling '%s' restart failed: %s",
-                        repr(name),
-                        repr(sib_record.name),
+                        _sanitize_log(name),
+                        _sanitize_log(sib_record.name),
                         exc,
                     )
     else:
         await config_yaml_store.update_current(name, merged)
         logger.warning(
             "put_service_config: no config_volume for %s — config written to store only",
-            repr(name),
+            _sanitize_log(name),
         )
 
 
@@ -518,7 +524,7 @@ async def refresh_config_schema(
         ) from exc
 
     await config_yaml_store.save_template(name, schema)
-    logger.info("Refreshed config schema for %s from repo", repr(name))
+    logger.info("Refreshed config schema for %s from repo", _sanitize_log(name))
     return ConfigSchemaRefreshResponse(config_schema=schema)
 
 
@@ -568,11 +574,20 @@ async def run_config_assist(
     # GET /config and future assist calls also see the fresh values.
     try:
         loop = asyncio.get_running_loop()
-        from ..deps import _fetch_fresh_config_assist  # noqa: PLC0415
-
-        fresh_cmd, fresh_seeds = await loop.run_in_executor(
-            None, _fetch_fresh_config_assist, comp_cfg.git_url, name
+        from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
+            fetch_compose_bytes,
         )
+        from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
+            parse_compose,
+        )
+
+        compose_bytes = await loop.run_in_executor(
+            None, fetch_compose_bytes, comp_cfg.git_url
+        )
+        spec = await loop.run_in_executor(
+            None, parse_compose, compose_bytes, name, comp_cfg.git_url
+        )
+        fresh_cmd, fresh_seeds = spec.config_assist_command, spec.config_assist_seeds
         if (
             fresh_cmd != comp_cfg.config_assist_command
             or fresh_seeds != comp_cfg.config_assist_seeds
@@ -584,12 +599,12 @@ async def run_config_assist(
                 }
             )
             await component_config_store.put(comp_cfg)
-            logger.info("Refreshed config-assist fields for %s from repo", repr(name))
+            logger.info("Refreshed config-assist fields for %s from repo", _sanitize_log(name))
     except Exception as exc:
         logger.warning(
             "Could not refresh config-assist fields for %s from repo (%s); "
             "using stored values",
-            repr(name),
+            _sanitize_log(name),
             exc,
         )
 
