@@ -59,6 +59,37 @@ router = APIRouter(tags=["chat"])
 _skill_cache: dict[str, tuple[float, str]] = {}
 _SKILL_CACHE_TTL: float = 60.0
 
+
+# ---------------------------------------------------------------------------
+# Auth metadata injection helper
+# ---------------------------------------------------------------------------
+
+
+def _inject_auth(entry: dict[str, Any], comp_cfg: "ComponentConfig") -> None:
+    """Attach an ``auth`` sub-dict to *entry* when the component carries
+    auth metadata the chat agent can use to authenticate requests.
+
+    The auth dict references **environment variable names** — the chat
+    agent resolves them at runtime from its own container environment
+    (which the deploy server populates via the EnvStore at deploy time).
+    Actual credential values are never embedded in the roster response.
+    """
+    if not comp_cfg.auth_type:
+        return
+    auth: dict[str, str] = {"type": comp_cfg.auth_type}
+    if comp_cfg.auth_type == "basic":
+        if comp_cfg.auth_username_env:
+            auth["username_env"] = comp_cfg.auth_username_env
+        if comp_cfg.auth_password_env:
+            auth["password_env"] = comp_cfg.auth_password_env
+    elif comp_cfg.auth_type == "header":
+        if comp_cfg.auth_header_name:
+            auth["header_name"] = comp_cfg.auth_header_name
+        if comp_cfg.auth_token_env:
+            auth["token_env"] = comp_cfg.auth_token_env
+    entry["auth"] = auth
+
+
 # ---------------------------------------------------------------------------
 # GET /chat-skill — the deploy server's own skill, so the chat agent can
 # discover the deploy component itself.
@@ -81,6 +112,10 @@ async def deploy_chat_skill() -> str:
         "# Deploy Lifecycle Server\n"
         "Manages the robotsix Docker fleet: start, stop, restart, deploy, "
         "rollback, and inspect every managed component.\n\n"
+        "## Authentication\n"
+        "All requests require an `X-API-Key` header.  The chat agent reads "
+        "this key from the `DEPLOY_API_KEY` environment variable (injected "
+        "by the deploy server itself at container start).\n\n"
         "## Read-only endpoints\n"
         "- `GET /services` — list all managed services\n"
         "- `GET /services/{name}` — full status (state, image, health, digests)\n"
@@ -94,7 +129,12 @@ async def deploy_chat_skill() -> str:
         "- `PUT /chat/config/{name}` — update non-secret config keys\n"
         "- `POST /chat/config/{name}/rollback` — restore previous config version\n"
         "- `POST /chat/services/{name}/restart` — restart a service\n"
-        "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n"
+        "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n\n"
+        "## Agent self-restart\n"
+        "The robotsix-chat agent can restart itself via:\n"
+        "`POST /chat/services/robotsix-chat/restart`\n"
+        "This is needed after the component roster is updated so the agent "
+        "picks up newly registered virtual components."
     )
 
 
@@ -195,7 +235,7 @@ async def list_chat_components(
     request: Request,
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Return a roster of components the chat agent can interact with.
 
     Each entry has ``id``, ``base_url``, and ``skill`` (the Markdown body
@@ -209,7 +249,7 @@ async def list_chat_components(
     Skill bodies are cached for 60 seconds; a component whose cached
     entry has expired is re-probed on the next request.
     """
-    results: list[dict[str, str]] = []
+    results: list[dict[str, Any]] = []
     now = time.monotonic()
 
     for comp_cfg in component_config_store.all():
@@ -227,9 +267,13 @@ async def list_chat_components(
 
         # Static skill body — no probing needed.
         if comp_cfg.chat_skill:
-            results.append(
-                {"id": comp_cfg.id, "base_url": base_url, "skill": comp_cfg.chat_skill}
-            )
+            entry: dict[str, Any] = {
+                "id": comp_cfg.id,
+                "base_url": base_url,
+                "skill": comp_cfg.chat_skill,
+            }
+            _inject_auth(entry, comp_cfg)
+            results.append(entry)
             continue
 
         # Check cache first
@@ -237,9 +281,13 @@ async def list_chat_components(
         if cached is not None:
             cached_at, cached_body = cached
             if now - cached_at < _SKILL_CACHE_TTL:
-                results.append(
-                    {"id": comp_cfg.id, "base_url": base_url, "skill": cached_body}
-                )
+                entry = {
+                    "id": comp_cfg.id,
+                    "base_url": base_url,
+                    "skill": cached_body,
+                }
+                _inject_auth(entry, comp_cfg)
+                results.append(entry)
                 continue
 
         # Probe the component's chat-skill endpoint
@@ -272,9 +320,13 @@ async def list_chat_components(
             skill_body = cached[1]
 
         if skill_body is not None:
-            results.append(
-                {"id": comp_cfg.id, "base_url": base_url, "skill": skill_body}
-            )
+            entry = {
+                "id": comp_cfg.id,
+                "base_url": base_url,
+                "skill": skill_body,
+            }
+            _inject_auth(entry, comp_cfg)
+            results.append(entry)
 
     return results
 

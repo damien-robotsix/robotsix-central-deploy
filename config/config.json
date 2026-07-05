@@ -40,13 +40,19 @@
       "id": "langfuse",
       "chat_base_url": "https://langfuse.robotsix.net",
       "chat_skill_endpoint": "/chat-skill",
-      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /api/public/traces` — list traces (supports `?limit=`, `?page=`, `?tags=`)\n- `GET /api/public/traces/{traceId}` — single trace detail\n- `GET /api/public/observations` — list observations\n- `GET /api/public/observations/{observationId}` — single observation detail\n\nAuthentication: HTTP Basic Auth with public/secret key pair per project."
+      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /api/public/traces` — list traces (supports `?limit=`, `?page=`, `?tags=`)\n- `GET /api/public/traces/{traceId}` — single trace detail\n- `GET /api/public/observations` — list observations\n- `GET /api/public/observations/{observationId}` — single observation detail\n\n## Authentication\n\nHTTP Basic Auth.  Credentials are read from the agent's environment:\n- `LANGFUSE_PUBLIC_KEY` — public key (username)\n- `LANGFUSE_SECRET_KEY` — secret key (password)\n\nSeparate key pairs exist for the `robotsix-chat` and `cognee` Langfuse\nprojects; which pair is used depends on which project's traces are being\nqueried.  Both pairs should be provisioned via the EnvStore under the\n`robotsix-chat` component so they are available as container environment\nvariables at deploy time.",
+      "auth_type": "basic",
+      "auth_username_env": "LANGFUSE_PUBLIC_KEY",
+      "auth_password_env": "LANGFUSE_SECRET_KEY"
     },
     {
       "id": "deploy",
       "chat_base_url": "http://localhost:8100",
       "chat_skill_endpoint": "/chat-skill",
-      "chat_skill": ""
+      "chat_skill": "",
+      "auth_type": "header",
+      "auth_header_name": "X-API-Key",
+      "auth_token_env": "DEPLOY_API_KEY"
     }
   ]
 }

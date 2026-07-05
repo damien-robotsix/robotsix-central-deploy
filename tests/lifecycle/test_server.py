@@ -4478,3 +4478,201 @@ class TestChatComponents:
         assert data[0]["skill"] == "# Langfuse\n\nObservability platform."
         # The static-skill path must NOT call httpx at all.
         mock_client.get.assert_not_called()
+
+    async def test_virtual_component_with_basic_auth(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A virtual component with auth_type='basic' includes auth metadata
+        referencing environment variable names — never the actual values."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="langfuse",
+            image="",
+            container_name="langfuse",
+            ports=[],
+        )
+        cfg.allow_chat_access = True
+        cfg.chat_base_url = "https://langfuse.robotsix.net"
+        cfg.chat_skill = "# Langfuse\n\nObservability platform."
+        cfg.auth_type = "basic"
+        cfg.auth_username_env = "LF_PUBLIC"
+        cfg.auth_password_env = "LF_SECRET"
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=MagicMock())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        entry = data[0]
+        assert entry["id"] == "langfuse"
+        assert "auth" in entry
+        assert entry["auth"]["type"] == "basic"
+        assert entry["auth"]["username_env"] == "LF_PUBLIC"
+        assert entry["auth"]["password_env"] == "LF_SECRET"
+        # No actual credential values in the response.
+        assert "LF_PUBLIC" not in str(entry["auth"]).replace("LF_PUBLIC", "")
+        # httpx must NOT be called — static skill path.
+        mock_client.get.assert_not_called()
+
+    async def test_virtual_component_with_header_auth(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A virtual component with auth_type='header' includes auth metadata
+        with the header name and token env var."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="deploy",
+            image="",
+            container_name="deploy",
+            ports=[],
+        )
+        cfg.allow_chat_access = True
+        cfg.chat_base_url = "http://localhost:8100"
+        cfg.chat_skill = "# Deploy\n\nLifecycle server."
+        cfg.auth_type = "header"
+        cfg.auth_header_name = "X-API-Key"
+        cfg.auth_token_env = "DEPLOY_API_KEY"
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=MagicMock())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        entry = data[0]
+        assert entry["id"] == "deploy"
+        assert "auth" in entry
+        assert entry["auth"]["type"] == "header"
+        assert entry["auth"]["header_name"] == "X-API-Key"
+        assert entry["auth"]["token_env"] == "DEPLOY_API_KEY"
+        mock_client.get.assert_not_called()
+
+    async def test_component_without_auth_omits_auth_key(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A component with empty auth_type does not include an auth key."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="noauth",
+            image="",
+            container_name="noauth",
+            ports=[],
+        )
+        cfg.allow_chat_access = True
+        cfg.chat_base_url = "http://noauth.local"
+        cfg.chat_skill = "# NoAuth\n\nPublic component."
+        # auth_type left as empty string (default)
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=MagicMock())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert "auth" not in data[0]
+
+    async def test_roster_includes_both_langfuse_and_deploy_with_auth(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """The complete roster includes both langfuse (basic auth) and deploy
+        (header auth) with their respective auth metadata, matching the
+        ticket's verification criterion shape."""
+        config_store = server_mod.app.state.component_config_store
+
+        # langfuse — basic auth
+        lf = ComponentConfig(
+            id="langfuse",
+            image="",
+            container_name="langfuse",
+            ports=[],
+        )
+        lf.allow_chat_access = True
+        lf.chat_base_url = "https://langfuse.robotsix.net"
+        lf.chat_skill = "# Langfuse\n\nObservability platform."
+        lf.auth_type = "basic"
+        lf.auth_username_env = "LANGFUSE_PUBLIC_KEY"
+        lf.auth_password_env = "LANGFUSE_SECRET_KEY"
+        await config_store.put(lf)
+        server_mod.app.state.registry.register(lf)
+
+        # deploy — header auth
+        dp = ComponentConfig(
+            id="deploy",
+            image="",
+            container_name="deploy",
+            ports=[],
+        )
+        dp.allow_chat_access = True
+        dp.chat_base_url = "http://localhost:8100"
+        dp.chat_skill = "# Deploy\n\nLifecycle server."
+        dp.auth_type = "header"
+        dp.auth_header_name = "X-API-Key"
+        dp.auth_token_env = "DEPLOY_API_KEY"
+        await config_store.put(dp)
+        server_mod.app.state.registry.register(dp)
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=MagicMock())
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+
+        by_id = {e["id"]: e for e in data}
+
+        # langfuse entry
+        assert "langfuse" in by_id
+        lf_entry = by_id["langfuse"]
+        assert lf_entry["base_url"] == "https://langfuse.robotsix.net"
+        assert lf_entry["auth"]["type"] == "basic"
+        assert lf_entry["auth"]["username_env"] == "LANGFUSE_PUBLIC_KEY"
+        assert lf_entry["auth"]["password_env"] == "LANGFUSE_SECRET_KEY"
+
+        # deploy entry
+        assert "deploy" in by_id
+        dp_entry = by_id["deploy"]
+        assert dp_entry["base_url"] == "http://localhost:8100"
+        assert dp_entry["auth"]["type"] == "header"
+        assert dp_entry["auth"]["header_name"] == "X-API-Key"
+        assert dp_entry["auth"]["token_env"] == "DEPLOY_API_KEY"
+
+        mock_client.get.assert_not_called()

@@ -25,6 +25,14 @@ class VirtualComponentEntry(BaseModel):
     chat_base_url: str = ""
     chat_skill_endpoint: str = "/chat-skill"
     chat_skill: str = ""  # static skill body; when non-empty, used without probing
+    # --- Auth metadata for the chat agent ---
+    # "basic" → HTTP Basic Auth (username_env / password_env)
+    # "header" → custom header (header_name + token_env)
+    auth_type: str = ""  # "basic" | "header" | ""
+    auth_header_name: str = ""  # header name when auth_type="header"
+    auth_username_env: str = ""  # env var holding Basic-Auth username
+    auth_password_env: str = ""  # env var holding Basic-Auth password
+    auth_token_env: str = ""  # env var holding a bearer/header token
 
 
 class LifecycleConfig(BaseModel):

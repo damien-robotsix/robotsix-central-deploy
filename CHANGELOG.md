@@ -6,7 +6,8 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
-- Add virtual (non-Docker) component support to the chat-agent component roster: `chat_base_url`, `chat_skill_endpoint`, and `chat_skill` fields on `ComponentConfig`, plus a `virtual_components` config list in `config.json`. The deploy server now exposes its own `GET /chat-skill` endpoint and seeds `langfuse` and `deploy` as virtual components so the chat agent can discover them alongside Docker-managed services.
+- Add auth-metadata fields (`auth_type`, `auth_header_name`, `auth_username_env`, `auth_password_env`, `auth_token_env`) to `VirtualComponentEntry` and `ComponentConfig`, and include them in the `GET /chat/components` roster response so the chat agent can resolve credentials from its own environment without plaintext values. Default config provisions langfuse (basic-auth via `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`) and deploy (header-auth via `X-API-Key`/`DEPLOY_API_KEY`).
+- Add virtual (non-Docker) component support to the chat-agent component roster: `chat_base_url`, `chat_skill_endpoint`, `chat_skill`, and auth-metadata fields (`auth_type`, `auth_header_name`, `auth_username_env`, `auth_password_env`, `auth_token_env`) on `ComponentConfig` and `VirtualComponentEntry`. The deploy server exposes `GET /chat-skill`, seeds `langfuse` (basic-auth) and `deploy` (X-API-Key header) as virtual components from `config.json`, and includes auth env-var references in the roster response so the chat agent can authenticate without plaintext credentials. A startup log message reminds operators to restart `robotsix-chat` after roster changes.
 - Rate limiter (#318 follow-up): gateway-proxied component traffic
   (`<name>.<gateway_base_domain>` hosts) now bypasses the login/API rate
   limits — a component's own `/chat` or `/login` paths were being counted

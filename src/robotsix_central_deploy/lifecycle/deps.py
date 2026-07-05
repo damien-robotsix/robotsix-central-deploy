@@ -747,10 +747,22 @@ async def _init_component_registry(app: FastAPI) -> None:
             chat_base_url=ventry.chat_base_url or None,
             chat_skill_endpoint=ventry.chat_skill_endpoint,
             chat_skill=ventry.chat_skill,
+            auth_type=ventry.auth_type,
+            auth_header_name=ventry.auth_header_name,
+            auth_username_env=ventry.auth_username_env,
+            auth_password_env=ventry.auth_password_env,
+            auth_token_env=ventry.auth_token_env,
         )
         component_config_store.register(virtual_cfg)
         registry.register(virtual_cfg)
         logger.info("Seeded virtual component '%s'", ventry.id)
+
+    if _config.virtual_components:
+        logger.info(
+            "Virtual components seeded into the chat-agent roster. "
+            "The robotsix-chat agent must be restarted to pick up the "
+            "updated roster (POST /chat/services/robotsix-chat/restart)."
+        )
 
     # --- Volume audit subsystem ---
     _volume_audit_task: asyncio.Task[Any] | None = None
