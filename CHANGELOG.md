@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Dashboard: fallback state after fetch failure now renders `unknown` (valid `ServiceState`) instead of `error` (non-canonical), with `badge-unknown` CSS class instead of removed `badge-error`.
 - Split `lifecycle/routers/services.py` (~2450 lines) into focused router modules under `routers/`: `services_deploy.py` (deploy, rollback, history), `services_config.py` (config CRUD, assist, schema refresh), and `services_env.py` (env/secrets CRUD). The core `services.py` retains listing, status, health, logs, start/stop/restart, refresh-contract, and delete.
 - Fixed chat agent config rollback: first update now snapshots template defaults instead of the raw JSON Schema, and `release_deploy_lock` is no longer incorrectly awaited. Added `ComponentConfigStore.register()` synchronous helper for test fixtures.
 - Chat agent scoped write-surface: new endpoints for allowlisted service
