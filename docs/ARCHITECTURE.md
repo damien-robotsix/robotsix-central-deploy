@@ -306,7 +306,7 @@ separation between **development** and **deployment**:
   the central-deploy server reads. It must start with
   `# central-deploy-contract-version: 1`.
 - Bind-mounts are **prohibited** — only named volumes are allowed
-  (with one exception: `claude-mount`, which mounts `~/.claude` and
+  (with one exception: `claude-mount`, which mounts the managed `claude-auth` named volume at `/home/app/.claude` and
   requires an explicit label).
 - `build:` is **prohibited** — only pre-built images are allowed.
 
