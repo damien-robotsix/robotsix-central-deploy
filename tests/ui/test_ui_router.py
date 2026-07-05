@@ -265,9 +265,7 @@ class TestRateLimiting:
     async def test_api_rate_limit_returns_429(self, client: AsyncClient):
         """After exceeding the per-hour API limit, further requests get 429."""
         for _ in range(3):
-            resp = await client.get(
-                "/services", headers={"X-API-Key": self.API_KEY}
-            )
+            resp = await client.get("/services", headers={"X-API-Key": self.API_KEY})
             assert resp.status_code == 200
 
         # 4th request within the same window should be rate-limited

@@ -80,9 +80,7 @@ class RateLimitStore:
 
     # -- Public API ------------------------------------------------------
 
-    async def check_login_rate(
-        self, ip: str, limit: int, window: float
-    ) -> bool:
+    async def check_login_rate(self, ip: str, limit: int, window: float) -> bool:
         """Return True when the request is within the login rate limit."""
         now = time.time()
         async with self._lock:
@@ -93,9 +91,7 @@ class RateLimitStore:
             timestamps.append(now)
             return True
 
-    async def check_api_rate(
-        self, ip: str, limit: int, window: float
-    ) -> bool:
+    async def check_api_rate(self, ip: str, limit: int, window: float) -> bool:
         """Return True when the request is within the API rate limit."""
         now = time.time()
         async with self._lock:
@@ -160,7 +156,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     - All other paths pass through untouched.
     """
 
-    async def dispatch(  # type: ignore[override]
+    async def dispatch(
         self, request: Request, call_next: object
     ) -> Response:
         path = request.url.path
@@ -171,16 +167,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             request.app.state, "rate_limit_store", None
         )
         if store is None:
-            return await call_next(request)  # type: ignore[arg-type]
+            return await call_next(request)  # type: ignore[no-any-return, operator]
 
         cfg = request.app.state.config
 
         # -- Login POST: strict limit + lockout --------------------------
         if path == "/login" and method == "POST":
             # Lockout check first — more severe than rate-limit
-            if await store.is_locked_out(
-                ip, cfg.rate_limit_login_max_attempts
-            ):
+            if await store.is_locked_out(ip, cfg.rate_limit_login_max_attempts):
                 return JSONResponse(
                     {"detail": "Too many login attempts — try again later."},
                     status_code=429,
@@ -194,7 +188,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     {"detail": "Login rate limit exceeded — slow down."},
                     status_code=429,
                 )
-            response: Response = await call_next(request)  # type: ignore[arg-type]
+            response: Response = await call_next(request)  # type: ignore[no-any-return, operator]
             # Record failures post-response so lockout works
             if response.status_code == 401:
                 await store.record_login_failure(
@@ -219,4 +213,4 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     status_code=429,
                 )
 
-        return await call_next(request)  # type: ignore[arg-type]
+        return await call_next(request)  # type: ignore[no-any-return, operator]
