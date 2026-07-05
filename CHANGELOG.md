@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Update `docs/ARCHITECTURE.md` to reflect the `claude-auth` named volume (managed by central-deploy) instead of the old `~/.claude` host bind-mount.
 - docs: update DEPLOY_CONTRACT.md §5, §9, and §10 to reflect managed `claude-auth` named volume instead of host bind-mount; fix dashboard.html claude-mount label to show correct volume name and container path
 - Register the previously uncovered `src/robotsix_central_deploy/__init__.py` under the lifecycle module in `docs/modules.yaml`.
 - Move `volume_audit` module from `src/robotsix_central_deploy/lifecycle/volume_audit/` to `src/robotsix_central_deploy/volume_audit/` as a top-level peer package, and tests from `tests/lifecycle/volume_audit/` to `tests/volume_audit/`.
