@@ -215,6 +215,41 @@ class TestPutSettings:
         mock_set_level.assert_called_once_with("ERROR")
 
     @pytest.mark.asyncio
+    async def test_partial_update_preserves_unmentioned_fields(
+        self, client, monkeypatch
+    ):
+        """Sending only one field leaves all other stored fields unchanged."""
+        mock_store = MagicMock()
+        mock_store.get = AsyncMock(
+            return_value=SystemSettings(
+                gateway_base_domain="deploy.robotsix.net",
+                caretaker_enabled=True,
+                llmio_tier_config={"tier1": {"model": "gpt-4"}},
+                rate_limit_api_per_hour=1000,
+            )
+        )
+        mock_store.put = AsyncMock()
+        mock_store.overlay.return_value = server_mod.app.state.config.model_copy(
+            update={"rate_limit_api_per_hour": 20000}
+        )
+        server_mod.app.state.__setattr__("settings_store", mock_store)
+
+        resp = await client.put(
+            "/settings",
+            json={"rate_limit_api_per_hour": 20000},
+            headers={"X-API-Key": "test-key"},
+        )
+
+        assert resp.status_code == 200
+        put_arg: SystemSettings = mock_store.put.call_args[0][0]
+        # Only the submitted field changed
+        assert put_arg.rate_limit_api_per_hour == 20000
+        # Everything else retains its stored value
+        assert put_arg.gateway_base_domain == "deploy.robotsix.net"
+        assert put_arg.caretaker_enabled is True
+        assert put_arg.llmio_tier_config == {"tier1": {"model": "gpt-4"}}
+
+    @pytest.mark.asyncio
     async def test_hot_applies_config_to_app_state(self, client, monkeypatch):
         """PUT /settings updates request.app.state.config with the overlaid config."""
         mock_store = MagicMock()

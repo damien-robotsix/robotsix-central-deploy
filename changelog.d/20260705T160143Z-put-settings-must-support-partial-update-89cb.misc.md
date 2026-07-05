@@ -1,0 +1,1 @@
+PUT /settings must support partial updates (full-replace resets unspecified fields to defaults)
