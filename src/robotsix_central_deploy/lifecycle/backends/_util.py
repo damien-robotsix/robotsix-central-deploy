@@ -4,6 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..models import ServiceState
+
+
+def docker_status_to_service_state(status: str) -> ServiceState:
+    """Map a Docker container status string to a ``ServiceState`` enum value."""
+    mapping: dict[str, ServiceState] = {
+        "running": ServiceState.RUNNING,
+        "paused": ServiceState.RUNNING,
+        "restarting": ServiceState.RESTARTING,
+        "created": ServiceState.STOPPED,
+        "exited": ServiceState.STOPPED,
+        "dead": ServiceState.FAILED,
+        "removing": ServiceState.STOPPING,
+    }
+    return mapping.get(status.lower(), ServiceState.UNKNOWN)
+
 
 async def collect_protected_image_refs(store: Any) -> set[str]:
     """Image ids/digests that must survive an image prune.
