@@ -1,0 +1,1 @@
+Update DEPLOY_CONTRACT.md to reflect managed claude-auth named volume (remove stale host bind-mount docs)
