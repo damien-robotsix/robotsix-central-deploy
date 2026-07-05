@@ -60,6 +60,7 @@ modules:
     docs: /docs
     openapi: /openapi.json
     paths:
+      - src/robotsix_central_deploy/__init__.py
       - src/robotsix_central_deploy/lifecycle/**/*
       - src/robotsix_central_deploy/_yaml_utils.py
       - src/robotsix_central_deploy/deploy_lock.py

@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Adopt `robotsix-modules` as a dev dependency and add a `module-registration` CI job that validates `docs/modules.yaml` on every push and PR. Registered the previously uncovered `src/robotsix_central_deploy/__init__.py` under the lifecycle module.
 - Move `volume_audit` module from `src/robotsix_central_deploy/lifecycle/volume_audit/` to `src/robotsix_central_deploy/volume_audit/` as a top-level peer package, and tests from `tests/lifecycle/volume_audit/` to `tests/volume_audit/`.
 - Add `lint-actions` CI job with actionlint (structural workflow validation) and zizmor (supply-chain vulnerability detection) for all GitHub Actions workflow files
 - Extract shared test fixtures (``app``, ``_reset_globals``, ``client``) into a root ``tests/conftest.py``, deduplicating ~155 lines of boilerplate across five test locations.
