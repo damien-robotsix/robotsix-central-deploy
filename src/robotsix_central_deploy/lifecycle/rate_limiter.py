@@ -156,9 +156,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     - All other paths pass through untouched.
     """
 
-    async def dispatch(
-        self, request: Request, call_next: object
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: object) -> Response:
         path = request.url.path
         method = request.method
         ip = _client_ip(request)
