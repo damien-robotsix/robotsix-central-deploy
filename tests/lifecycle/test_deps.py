@@ -9,6 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import robotsix_central_deploy.lifecycle.deps as deps_mod
+from robotsix_central_deploy.lifecycle.config import VirtualComponentEntry
+from robotsix_central_deploy.lifecycle.models import ServiceRecord
+from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.loader import ComponentRegistry
+from robotsix_central_deploy.registry.models import ComponentConfig
 
 
 class TestClaudeAuthRefreshState:
@@ -121,3 +127,69 @@ class TestClaudeAuthRefreshLoop:
         assert state["last_refresh"] is not None
         assert state["last_error"] is None
         backend.write_claude_credentials.assert_awaited_once()
+
+
+class TestSeedComponentRegistry:
+    """Tests for ``_seed_component_registry`` — virtual (non-Docker)
+    components must never surface as tracked ``ServiceRecord``s."""
+
+    async def test_virtual_component_gets_no_service_record(self, tmp_path) -> None:
+        """A newly-seeded virtual component is registered but has no
+        ServiceRecord, so it never shows up as a tracked dashboard row."""
+        store = InMemoryStore()
+        config_store = ComponentConfigStore(tmp_path / "config_store.json")
+        registry = ComponentRegistry([])
+        virtual_components = [
+            VirtualComponentEntry(
+                id="langfuse", chat_base_url="https://langfuse.example"
+            )
+        ]
+
+        await deps_mod._seed_component_registry(
+            store, config_store, registry, virtual_components
+        )
+
+        assert config_store.get("langfuse") is not None
+        assert registry.get("langfuse") is not None
+        assert await store.get("langfuse") is None
+
+    async def test_real_component_still_gets_service_record(self, tmp_path) -> None:
+        """A regular Docker-backed component config still gets a
+        ServiceRecord seeded, as before."""
+        store = InMemoryStore()
+        config_store = ComponentConfigStore(tmp_path / "config_store.json")
+        registry = ComponentRegistry([])
+        config_store.register(
+            ComponentConfig(id="mail", image="mail:latest", container_name="mail")
+        )
+
+        await deps_mod._seed_component_registry(store, config_store, registry, [])
+
+        record = await store.get("mail")
+        assert record is not None
+        assert record.container_name == "mail"
+
+    async def test_stale_service_record_for_virtual_component_is_removed(
+        self, tmp_path
+    ) -> None:
+        """Regression test: on a restart after a virtual component was
+        already persisted to the config store, a bogus ServiceRecord that
+        leaked in (e.g. from before this guard existed) must be deleted —
+        not left to render as an 'unknown'-status dashboard row."""
+        store = InMemoryStore()
+        config_store = ComponentConfigStore(tmp_path / "config_store.json")
+        registry = ComponentRegistry([])
+
+        # Simulate the config store already holding a previously-seeded
+        # virtual component (as it would after one prior restart)...
+        config_store.register(
+            ComponentConfig(
+                id="deploy", image="", container_name="deploy", is_virtual=True
+            )
+        )
+        # ...and a bogus ServiceRecord that leaked in for it.
+        await store.put(ServiceRecord(name="deploy", container_name="deploy", image=""))
+
+        await deps_mod._seed_component_registry(store, config_store, registry, [])
+
+        assert await store.get("deploy") is None
