@@ -37,7 +37,7 @@ async def phase_update(
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
-    Only processes ``ServiceRecord``\s where ``component_id == ""``
+    Only processes ``ServiceRecord``\\s where ``component_id == ""``
     (primary), ``update_available == True``, and the component config does
     NOT have ``caretaker_auto_update == False``.  Sibling records are
     excluded — they are managed by the main deploy path.
