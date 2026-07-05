@@ -193,3 +193,35 @@ class TestSeedComponentRegistry:
         await deps_mod._seed_component_registry(store, config_store, registry, [])
 
         assert await store.get("deploy") is None
+
+    async def test_pre_is_virtual_persisted_config_is_backfilled(
+        self, tmp_path
+    ) -> None:
+        """Regression test: a config persisted by the original (buggy)
+        virtual-component seeding — before ``is_virtual`` existed, so it
+        loads back with ``is_virtual=False`` — must still be recognised as
+        virtual by matching its id against the current
+        ``virtual_components`` config, both backfilling the stored flag
+        and deleting its stale ServiceRecord."""
+        store = InMemoryStore()
+        config_store = ComponentConfigStore(tmp_path / "config_store.json")
+        registry = ComponentRegistry([])
+
+        config_store.register(
+            ComponentConfig(id="langfuse", image="", container_name="langfuse")
+        )
+        await store.put(
+            ServiceRecord(name="langfuse", container_name="langfuse", image="")
+        )
+        virtual_components = [
+            VirtualComponentEntry(
+                id="langfuse", chat_base_url="https://langfuse.example"
+            )
+        ]
+
+        await deps_mod._seed_component_registry(
+            store, config_store, registry, virtual_components
+        )
+
+        assert config_store.get("langfuse").is_virtual is True
+        assert await store.get("langfuse") is None
