@@ -7,6 +7,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
+from ._util import docker_status_to_service_state
 from .base import ExecutionBackend
 from ..models import (
     ComponentInspect,
@@ -263,13 +264,4 @@ class DockerBackend(ExecutionBackend):
             return None  # Container not found → treat as unknown.
 
         status = stdout.strip().lower()
-        mapping: dict[str, ServiceState] = {
-            "running": ServiceState.RUNNING,
-            "paused": ServiceState.RUNNING,
-            "restarting": ServiceState.RESTARTING,
-            "created": ServiceState.STOPPED,
-            "exited": ServiceState.STOPPED,
-            "dead": ServiceState.FAILED,
-            "removing": ServiceState.STOPPING,
-        }
-        return mapping.get(status, ServiceState.UNKNOWN)
+        return docker_status_to_service_state(status)

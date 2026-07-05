@@ -9,6 +9,7 @@ import shlex
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
+from ._util import docker_status_to_service_state
 from .base import ExecutionBackend
 from ...gateway.proxy import PROXY_NETWORK
 from robotsix_central_deploy._yaml_utils import (
@@ -54,17 +55,7 @@ class DockerSdkBackend(ExecutionBackend):
 
     @staticmethod
     def _state_from_docker(status: str) -> ServiceState:
-        status = status.lower()
-        mapping: dict[str, ServiceState] = {
-            "running": ServiceState.RUNNING,
-            "paused": ServiceState.RUNNING,
-            "restarting": ServiceState.RESTARTING,
-            "created": ServiceState.STOPPED,
-            "exited": ServiceState.STOPPED,
-            "dead": ServiceState.FAILED,
-            "removing": ServiceState.STOPPING,
-        }
-        return mapping.get(status, ServiceState.UNKNOWN)
+        return docker_status_to_service_state(status)
 
     async def _get_container(self, name: str) -> Any:
         """Run ``containers.get`` in the default executor and map known errors."""
