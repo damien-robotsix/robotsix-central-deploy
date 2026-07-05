@@ -36,6 +36,26 @@
   "caretaker_interval_hours": 24,
   "mill_component_id": "mill",
   "image_auto_prune": false,
+  "virtual_components": [
+    {
+      "id": "langfuse",
+      "chat_base_url": "https://langfuse.robotsix.net",
+      "chat_skill_endpoint": "/chat-skill",
+      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /api/public/traces` — list traces\n- `GET /api/public/traces/{traceId}` — single trace detail\n\n## Authentication\n\nHTTP Basic Auth using LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY from the agent's environment.",
+      "auth_type": "basic",
+      "auth_username_env": "LANGFUSE_PUBLIC_KEY",
+      "auth_password_env": "LANGFUSE_SECRET_KEY"
+    },
+    {
+      "id": "deploy",
+      "chat_base_url": "http://central-deploy:8100",
+      "chat_skill_endpoint": "/chat-skill",
+      "chat_skill": "",
+      "auth_type": "header",
+      "auth_header_name": "X-API-Key",
+      "auth_token_env": "DEPLOY_API_KEY"
+    }
+  ],
   "llmio_tier_config": {
     "level1": {"provider": "openai", "model": "gpt-4o-mini"},
     "level2": {"provider": "openai", "model": "gpt-4o"},

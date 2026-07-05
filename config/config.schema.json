@@ -44,6 +44,36 @@
           "description": "Static skill body; when non-empty, used directly without probing.",
           "title": "Chat Skill",
           "type": "string"
+        },
+        "auth_type": {
+          "default": "",
+          "description": "Authentication type: 'basic' (HTTP Basic Auth), 'header' (custom header), or '' (none).",
+          "title": "Auth Type",
+          "type": "string"
+        },
+        "auth_header_name": {
+          "default": "",
+          "description": "Header name when auth_type='header' (e.g. 'X-API-Key').",
+          "title": "Auth Header Name",
+          "type": "string"
+        },
+        "auth_username_env": {
+          "default": "",
+          "description": "Environment variable holding the Basic-Auth username when auth_type='basic'.",
+          "title": "Auth Username Env",
+          "type": "string"
+        },
+        "auth_password_env": {
+          "default": "",
+          "description": "Environment variable holding the Basic-Auth password when auth_type='basic'.",
+          "title": "Auth Password Env",
+          "type": "string"
+        },
+        "auth_token_env": {
+          "default": "",
+          "description": "Environment variable holding the bearer/header token.",
+          "title": "Auth Token Env",
+          "type": "string"
         }
       },
       "required": ["id"],

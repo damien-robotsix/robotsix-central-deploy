@@ -47,7 +47,7 @@
     },
     {
       "id": "deploy",
-      "chat_base_url": "http://localhost:8100",
+      "chat_base_url": "http://central-deploy:8100",
       "chat_skill_endpoint": "/chat-skill",
       "chat_skill": "",
       "auth_type": "header",
