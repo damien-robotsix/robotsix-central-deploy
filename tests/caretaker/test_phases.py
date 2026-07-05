@@ -22,7 +22,7 @@ from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
-from robotsix_central_deploy.lifecycle.volume_audit.models import (
+from robotsix_central_deploy.volume_audit.models import (
     AuditFinding,
     VolumeAuditResponse,
 )

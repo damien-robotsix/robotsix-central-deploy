@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from robotsix_central_deploy.registry.models import ComponentConfig
-import robotsix_central_deploy.lifecycle.volume_audit.scheduler as sched_mod
+import robotsix_central_deploy.volume_audit.scheduler as sched_mod
 
 
 def _make_scheduler(
