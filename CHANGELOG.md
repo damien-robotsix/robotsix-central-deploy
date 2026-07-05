@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Skip-Changelog: boilerplate triage template, no code change
 - Dashboard: fallback state after fetch failure now renders `unknown` (valid `ServiceState`) instead of `error` (non-canonical), with `badge-unknown` CSS class instead of removed `badge-error`.
 - Split `lifecycle/routers/services.py` (~2450 lines) into focused router modules under `routers/`: `services_deploy.py` (deploy, rollback, history), `services_config.py` (config CRUD, assist, schema refresh), and `services_env.py` (env/secrets CRUD). The core `services.py` retains listing, status, health, logs, start/stop/restart, refresh-contract, and delete.
 - Extract ``JsonFileStore`` base class into ``registry._store_utils``, consolidating the duplicated ``asyncio.Lock`` + ``_load``/``_save`` boilerplate from ``ConfigYamlStore``, ``EnvStore``, and ``DeployHistoryStore``.  Adds an ``_update(mutator)`` convenience helper for the common read-modify-write pattern.
