@@ -1,4 +1,9 @@
-"""Shared fixtures for lifecycle integration tests."""
+"""Shared fixtures for lifecycle integration tests.
+
+Test files in subdirectories (routers/, backends/) automatically
+inherit these fixtures via pytest's conftest discovery — no extra
+imports needed.
+"""
 
 from __future__ import annotations
 
