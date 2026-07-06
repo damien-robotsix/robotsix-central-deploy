@@ -119,6 +119,10 @@ async def put_settings(
 ) -> SystemSettingsResponse:
     """Update system settings, persist to disk, and hot-apply where possible.
 
+    Only fields explicitly present in the request body are changed
+    (PATCH semantics); unmentioned fields keep their current stored values.
+    To explicitly clear a field, send its zero value (e.g. ``""`` or ``0``).
+
     - Secret fields sent as ``"***"`` preserve the existing stored value.
     - ``log_level`` is validated via Pydantic; an invalid value returns 422.
     - All settings *except* ``registry_check_interval`` take effect immediately
@@ -141,27 +145,19 @@ async def put_settings(
     SECRET = SECRET_MASK
     current = await settings_store.get()
 
+    # Start from current values, overlay only fields the caller
+    # explicitly sent (PATCH semantics).  This prevents a partial
+    # payload from silently resetting unmentioned fields to their
+    # class defaults.
+    merged = current.model_dump()
+    update_data = body.model_dump(exclude_unset=True)
+
     # Preserve secrets when masked value sent
-    new = SystemSettings(
-        auth_username=body.auth_username,
-        auth_password=body.auth_password
-        if body.auth_password != SECRET
-        else current.auth_password,
-        disk_warn_pct=body.disk_warn_pct,
-        registry_check_interval=body.registry_check_interval,
-        log_level=body.log_level,
-        gateway_base_domain=body.gateway_base_domain,
-        caretaker_enabled=body.caretaker_enabled,
-        caretaker_interval_hours=body.caretaker_interval_hours,
-        mill_component_id=body.mill_component_id,
-        image_auto_prune=body.image_auto_prune,
-        llmio_tier_config=body.llmio_tier_config,
-        claude_auth_refresh_interval=body.claude_auth_refresh_interval,
-        rate_limit_login_per_minute=body.rate_limit_login_per_minute,
-        rate_limit_api_per_hour=body.rate_limit_api_per_hour,
-        rate_limit_login_max_attempts=body.rate_limit_login_max_attempts,
-        rate_limit_login_lockout_seconds=body.rate_limit_login_lockout_seconds,
-    )
+    if update_data.get("auth_password") == SECRET:
+        update_data["auth_password"] = current.auth_password
+
+    merged.update(update_data)
+    new = SystemSettings(**merged)
 
     await settings_store.put(new)
 
