@@ -575,9 +575,13 @@
     </div>
     <div id="config-modal-error" class="env-modal-error"></div>
     <div id="config-form-body"></div>
+    <textarea id="config-raw-body" style="display:none;width:100%;height:300px;font-family:monospace;font-size:0.82rem;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:10px;resize:vertical;" spellcheck="false" placeholder="Paste or edit raw JSON config here..."></textarea>
     <div class="env-footer">
       <button class="btn-primary" onclick="saveConfigValues()">Save</button>
       <button class="btn-secondary" onclick="closeConfigModal()">Close</button>
+      <button id="config-raw-toggle-btn" class="btn-secondary" onclick="toggleConfigMode()"
+              title="Toggle between field-by-field form and raw JSON editing"
+              style="margin-left:auto;">{ } Raw</button>
       <button id="config-refresh-schema-btn" class="btn-secondary" onclick="refreshConfigSchema()"
               title="Refetch config/config.schema.json from the component's repo — picks up new fields, types, and descriptions without re-onboarding. Stored values are kept."
               style="margin-left:auto;">↻ Refresh schema</button>
@@ -989,7 +993,7 @@ function renderRow(svc) {
       <button onclick="openHistoryModal('${escAttr(svc.name)}')" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
       ${svc.has_config_yaml
         ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>
-           <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Deploy</button>`
+           <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Env &amp; Secrets</button>`
         : `<button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>`
       }
       <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
@@ -1809,6 +1813,7 @@ let _configSchema = null;
 let _configAssistCommand = null;   // string|null
 let _configAssistSeeds = [];       // {key, label}[]
 let _componentSuggestions = [];    // [{id, container_name, container_port}]
+let _configRawMode = false;
 
 function openConfigModal(name) {
   _configComponent = name;
@@ -1816,9 +1821,14 @@ function openConfigModal(name) {
   _configAssistCommand = null;
   _configAssistSeeds = [];
   _componentSuggestions = [];
+  _configRawMode = false;
   document.getElementById('config-modal-component').textContent = name;
   document.getElementById('config-modal-error').style.display = 'none';
   document.getElementById('config-form-body').innerHTML = '';
+  document.getElementById('config-raw-body').style.display = 'none';
+  document.getElementById('config-raw-body').value = '';
+  document.getElementById('config-form-body').style.display = '';
+  document.getElementById('config-raw-toggle-btn').textContent = '{ } Raw';
   // Remove any stale drift banner / conflict panel
   const driftBanner = document.getElementById('config-drift-banner');
   if (driftBanner) driftBanner.remove();
@@ -1849,6 +1859,49 @@ function closeConfigModal() {
   const formBody = document.getElementById('config-form-body');
   if (formBody) {
     formBody.querySelectorAll('input, select').forEach(el => { el.disabled = false; });
+  }
+}
+
+function toggleConfigMode() {
+  _configRawMode = !_configRawMode;
+  const formBody = document.getElementById('config-form-body');
+  const rawBody = document.getElementById('config-raw-body');
+  const toggleBtn = document.getElementById('config-raw-toggle-btn');
+  const saveBtn = document.querySelector('#config-modal .btn-primary');
+  const driftBanner = document.getElementById('config-drift-banner');
+  const conflictPanel = document.getElementById('config-drift-conflict');
+
+  if (_configRawMode) {
+    // Switch to raw JSON mode: collect current form values and show as JSON
+    const currentValues = collectConfigValues(_configSchema);
+    rawBody.value = JSON.stringify(currentValues, null, 2);
+    formBody.style.display = 'none';
+    rawBody.style.display = '';
+    toggleBtn.textContent = '📋 Form';
+    saveBtn.disabled = false;
+    // Hide drift UI in raw mode
+    if (driftBanner) driftBanner.style.display = 'none';
+    if (conflictPanel) conflictPanel.style.display = 'none';
+  } else {
+    // Switch back to form mode: parse raw JSON and regenerate form
+    let parsed = {};
+    try {
+      parsed = JSON.parse(rawBody.value.trim() || '{}');
+    } catch (_) {
+      showConfigModalError('Invalid JSON — fix syntax errors before switching to Form view.');
+      _configRawMode = true;  // stay in raw mode
+      return;
+    }
+    hideConfigModalError();
+    generateConfigForm(_configSchema, parsed);
+    _injectConfigAssistUI();
+    rawBody.style.display = 'none';
+    formBody.style.display = '';
+    toggleBtn.textContent = '{ } Raw';
+    saveBtn.disabled = false;
+    // Restore drift UI if applicable
+    if (driftBanner) driftBanner.style.display = '';
+    if (conflictPanel) conflictPanel.style.display = '';
   }
 }
 
@@ -2389,10 +2442,36 @@ async function saveConfigValues() {
   hideConfigModalError();
   if (!_configComponent || !_configSchema) return;
 
-  const values = collectConfigValues(_configSchema);
-  // ^ uses the default container (#config-form-body)
+  let values;
+  if (_configRawMode) {
+    // Raw JSON mode: parse from textarea, validate against schema
+    const rawText = document.getElementById('config-raw-body').value.trim();
+    if (!rawText) {
+      showConfigModalError('Config cannot be empty.');
+      return;
+    }
+    try {
+      values = JSON.parse(rawText);
+    } catch (err) {
+      showConfigModalError('Invalid JSON: ' + err.message);
+      return;
+    }
+    // Validate required properties exist
+    const schema = _ensureJsonSchema(_configSchema);
+    if (schema && schema.properties) {
+      const missing = (schema.required || []).filter(k => !(k in values));
+      if (missing.length) {
+        showConfigModalError('Missing required fields: ' + missing.join(', '));
+        return;
+      }
+    }
+  } else {
+    values = collectConfigValues(_configSchema);
+    // ^ uses the default container (#config-form-body)
+  }
 
-  // Bug 2: validate account id slugs before sending
+  // validate account id slugs before sending (form mode only; backend validates in raw mode)
+  if (!_configRawMode) {
   const accountIdInputs = (document.getElementById('config-form-body')
     .querySelectorAll('[data-key]'));
   for (const input of accountIdInputs) {
@@ -2406,6 +2485,7 @@ async function saveConfigValues() {
         return;
       }
     }
+  }
   }
 
   try {

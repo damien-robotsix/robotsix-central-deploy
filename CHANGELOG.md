@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Dashboard UX: rename "Deploy" button to "Env &amp; Secrets" to reflect that it edits env/secrets, not deploy config. Add raw-JSON toggle in the Configure modal so users can paste/edit the full config document as JSON alongside the generated form.
 - Add unit tests for onboard `port_utils` module (host-port collision helpers).
 - PUT /settings now supports partial updates: only fields explicitly present in the request body are changed; unmentioned fields keep their current stored values. This prevents a partial payload from silently resetting fields like ``gateway_base_domain`` or ``caretaker_enabled`` to their class defaults.
 - Extract duplicated Docker-status-to-ServiceState mapping into shared `docker_status_to_service_state` helper in `lifecycle/backends/_util.py`.
