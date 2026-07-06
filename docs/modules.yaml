@@ -70,6 +70,14 @@ modules:
       - tests/deploy_lock/test_deploy_lock.py
       - tests/yaml_utils/__init__.py
       - tests/yaml_utils/test_yaml_utils.py
+      - docs/ARCHITECTURE.md
+      - docs/api.md
+      - docs/changelog.md
+      - docs/configuration.md
+      - docs/deployment.md
+      - docs/index.md
+      - docs/nginx-deploy.conf
+      - docs/openapi.json
     tests: tests/lifecycle/
 
   - id: gateway
