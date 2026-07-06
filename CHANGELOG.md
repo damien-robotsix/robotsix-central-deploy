@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Expose volume-audit tuning knobs (`volume_audit_enabled`, `volume_audit_interval_seconds`, `volume_audit_growth_threshold_pct`, `volume_audit_min_delta_bytes`) in ``SystemSettings`` and the ``GET/PUT /settings`` endpoints so operators can configure them without restarting the server.
 - Moved `docs/architecture/registry_check.md` to `docs/registry_check/overview.md` to align registry_check with the per-module docs pattern.
 - Classify `tests/__init__.py` and `tests/deploy_lock/__init__.py` under the lifecycle module in `docs/modules.yaml`
 - Register top-level `docs/` files (`ARCHITECTURE.md`, `api.md`, `changelog.md`, `configuration.md`, `deployment.md`, `index.md`, `nginx-deploy.conf`, `openapi.json`) under the `lifecycle` module in `docs/modules.yaml`.

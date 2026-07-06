@@ -43,6 +43,17 @@ class SystemSettings(BaseModel):
     rate_limit_api_per_hour: int = 20000
     rate_limit_login_max_attempts: int = 20
     rate_limit_login_lockout_seconds: int = 300
+    volume_audit_enabled: bool = False
+    volume_audit_interval_seconds: int = 3600
+    volume_audit_growth_threshold_pct: float = 10.0
+    volume_audit_min_delta_bytes: int = 10_485_760
+
+    @field_validator("volume_audit_interval_seconds")
+    @classmethod
+    def _validate_volume_audit_interval(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("volume_audit_interval_seconds must be >= 1")
+        return v
 
     @field_validator("log_level")
     @classmethod
@@ -153,5 +164,9 @@ class SystemSettingsStore:
                 "rate_limit_api_per_hour": stored.rate_limit_api_per_hour,
                 "rate_limit_login_max_attempts": stored.rate_limit_login_max_attempts,
                 "rate_limit_login_lockout_seconds": stored.rate_limit_login_lockout_seconds,
+                "volume_audit_enabled": stored.volume_audit_enabled,
+                "volume_audit_interval_seconds": stored.volume_audit_interval_seconds,
+                "volume_audit_growth_threshold_pct": stored.volume_audit_growth_threshold_pct,
+                "volume_audit_min_delta_bytes": stored.volume_audit_min_delta_bytes,
             }
         )
