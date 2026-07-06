@@ -55,7 +55,7 @@ LOGGING_CONFIG: dict[str, object] = {
         },
         "robotsix_central_deploy": {
             "handlers": ["structured"],
-            "level": "INFO",
+            "level": "NOTSET",
             "propagate": False,
         },
     },
