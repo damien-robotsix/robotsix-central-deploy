@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Moved `docs/architecture/registry_check.md` to `docs/registry_check/overview.md` to align registry_check with the per-module docs pattern.
 - Classify `tests/__init__.py` and `tests/deploy_lock/__init__.py` under the lifecycle module in `docs/modules.yaml`
 - Dashboard UX: rename "Deploy" button to "Env &amp; Secrets" to reflect that it edits env/secrets, not deploy config. Add raw-JSON toggle in the Configure modal so users can paste/edit the full config document as JSON alongside the generated form.
 - Fix: the `robotsix_central_deploy` logger no longer hard-codes `INFO` level, so `PUT /settings` with a new `log_level` now correctly hot-applies to application log messages (logger level set to `NOTSET` to inherit from root).
