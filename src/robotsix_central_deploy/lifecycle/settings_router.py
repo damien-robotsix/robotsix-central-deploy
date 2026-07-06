@@ -57,6 +57,10 @@ def _mask_response(settings: SystemSettings) -> SystemSettingsResponse:
         rate_limit_api_per_hour=settings.rate_limit_api_per_hour,
         rate_limit_login_max_attempts=settings.rate_limit_login_max_attempts,
         rate_limit_login_lockout_seconds=settings.rate_limit_login_lockout_seconds,
+        volume_audit_enabled=settings.volume_audit_enabled,
+        volume_audit_interval_seconds=settings.volume_audit_interval_seconds,
+        volume_audit_growth_threshold_pct=settings.volume_audit_growth_threshold_pct,
+        volume_audit_min_delta_bytes=settings.volume_audit_min_delta_bytes,
     )
 
 
@@ -101,6 +105,10 @@ async def get_settings(
         rate_limit_api_per_hour=effective_config.rate_limit_api_per_hour,
         rate_limit_login_max_attempts=effective_config.rate_limit_login_max_attempts,
         rate_limit_login_lockout_seconds=effective_config.rate_limit_login_lockout_seconds,
+        volume_audit_enabled=effective_config.volume_audit_enabled,
+        volume_audit_interval_seconds=effective_config.volume_audit_interval_seconds,
+        volume_audit_growth_threshold_pct=effective_config.volume_audit_growth_threshold_pct,
+        volume_audit_min_delta_bytes=effective_config.volume_audit_min_delta_bytes,
     )
     return _mask_response(effective)
 
@@ -134,6 +142,14 @@ async def put_settings(
       the config alone does **not** alter the running task's sleep period.
       A full service restart is required for an interval change to take
       effect on the background loop.
+
+    # NOTE: Volume-audit settings (``volume_audit_enabled``,
+      ``volume_audit_interval_seconds``, ``volume_audit_growth_threshold_pct``,
+      ``volume_audit_min_delta_bytes``) are persisted and reflected in
+      ``app.state.config``, but the ``VolumeAuditScheduler.loop()`` captures
+      its interval at startup via a positional argument.  A full service
+      restart is required for interval/threshold changes to take effect on
+      the running background task.
 
     # NOTE: Backend-consumed settings (e.g. ``docker_socket_url``,
       ``docker_sdk_timeout``) are captured by
