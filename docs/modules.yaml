@@ -149,7 +149,7 @@ modules:
       - httpx
     paths:
       - src/robotsix_central_deploy/registry_check/**/*
-      - docs/architecture/registry_check.md
+      - docs/registry_check/**/*
     tests: tests/registry_check/
 
   - id: caretaker
