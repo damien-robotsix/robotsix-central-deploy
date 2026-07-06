@@ -1,0 +1,1 @@
+Classify top-level docs files (ARCHITECTURE.md, api.md, etc.): assign to existing module lifecycle
