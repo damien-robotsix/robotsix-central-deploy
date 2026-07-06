@@ -81,9 +81,12 @@ if __name__ == "__main__":
     from .config import LifecycleConfig
 
     cfg = robotsix_config.load_config(LifecycleConfig)
+    from ._logging import LOGGING_CONFIG
+
     uvicorn.run(
         "robotsix_central_deploy.lifecycle.app:app",
         host=cfg.host,
         port=cfg.port,
         reload=False,
+        log_config=LOGGING_CONFIG,
     )

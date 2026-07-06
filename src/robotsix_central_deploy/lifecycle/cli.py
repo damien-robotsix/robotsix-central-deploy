@@ -49,11 +49,14 @@ def main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
+    from ._logging import LOGGING_CONFIG
+
     uvicorn.run(
         "robotsix_central_deploy.lifecycle.server:app",
         host=cfg.host,
         port=cfg.port,
         reload=False,
+        log_config=LOGGING_CONFIG,
     )
 
 
