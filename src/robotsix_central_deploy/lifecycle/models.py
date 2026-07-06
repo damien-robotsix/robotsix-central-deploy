@@ -66,6 +66,44 @@ class VolumeEntryType(str, Enum):
     DIR = "dir"
 
 
+class ActionType(str, Enum):
+    """Action type for start / stop / restart / rollback requests."""
+
+    START = "start"
+    STOP = "stop"
+    RESTART = "restart"
+    ROLLBACK = "rollback"
+
+
+class DeploySource(str, Enum):
+    """Source of a deploy: manual operator action, caretaker auto-update, or rollback."""
+
+    MANUAL = "manual"
+    CARETAKER = "caretaker"
+    ROLLBACK = "rollback"
+
+
+class OnboardJobPhase(str, Enum):
+    """Phases of a background onboard deploy job."""
+
+    WRITING_CONFIG = "writing_config"
+    DEPLOYING_PRIMARY = "deploying_primary"
+    WAITING_HEALTH = "waiting_health"
+    DEPLOYING_SIBLINGS = "deploying_siblings"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class DeployJobPhase(str, Enum):
+    """Phases of a background deploy job."""
+
+    DEPLOYING = "deploying"
+    WAITING_HEALTH = "waiting_health"
+    DEPLOYING_SIBLINGS = "deploying_siblings"
+    DONE = "done"
+    FAILED = "failed"
+
+
 #: Allowed transitions: state → set of reachable next states.
 TRANSITIONS: dict[ServiceState, set[ServiceState]] = {
     ServiceState.STOPPED: {ServiceState.STARTING},
@@ -207,7 +245,7 @@ class ActionResponse(BaseModel):
     """Generic response for start / stop / restart requests."""
 
     name: str
-    action: str  # "start" | "stop" | "restart"
+    action: ActionType
     previous_state: ServiceState
     current_state: ServiceState
     detail: str = ""
@@ -273,7 +311,7 @@ class RollbackResponse(BaseModel):
     """API response for ``POST /services/{name}/rollback``."""
 
     name: str
-    action: str = "rollback"
+    action: ActionType = ActionType.ROLLBACK
     rolled_back_to_digest: str
     current_state: ServiceState
     warnings: list[str] = []
@@ -288,7 +326,7 @@ class DeployHistoryEntry(BaseModel):
     digest: str  # resolved sha256:... of the deployed image
     image_ref: str  # the ref actually deployed (tag or digest pin)
     timestamp: float  # unix seconds (time.time())
-    source: str  # "manual" | "caretaker" | "rollback"
+    source: DeploySource
     previous_digest: str = ""  # sha256 that was running before this deploy
 
 

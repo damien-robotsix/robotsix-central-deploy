@@ -30,7 +30,9 @@ from ...deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..models import (
     DeployHistoryEntry,
     DeployHistoryResponse,
+    DeployJobPhase,
     DeployRequest,
+    DeploySource,
     ErrorDetail,
     RollbackRequest,
     RollbackResponse,
@@ -114,7 +116,7 @@ async def _fanout_deploy_siblings(
                         digest=sib_outcome.deployed_digest,
                         image_ref=sib_config.image,
                         timestamp=time.time(),
-                        source="manual",
+                        source=DeploySource.MANUAL,
                         previous_digest=sib_outcome.previous_digest,
                     ),
                 )
@@ -339,7 +341,7 @@ async def _run_deploy_job(
 
         # Deploy — update job phase for health-wait visibility.
         if config.health_check is not None:
-            job_registry.update_deploy_phase(job_id, "waiting_health")
+            job_registry.update_deploy_phase(job_id, DeployJobPhase.WAITING_HEALTH)
 
         outcome = await backend.deploy(record, config, image_ref)
 
@@ -359,7 +361,7 @@ async def _run_deploy_job(
                     digest=outcome.deployed_digest,
                     image_ref=image_ref,
                     timestamp=time.time(),
-                    source="manual",
+                    source=DeploySource.MANUAL,
                     previous_digest=outcome.previous_digest,
                 ),
             )
@@ -371,7 +373,7 @@ async def _run_deploy_job(
             )
 
         # Deploy siblings
-        job_registry.update_deploy_phase(job_id, "deploying_siblings")
+        job_registry.update_deploy_phase(job_id, DeployJobPhase.DEPLOYING_SIBLINGS)
         await _fanout_deploy_siblings(
             name, store, backend, registry, env_store, deploy_history_store
         )
@@ -557,7 +559,7 @@ async def rollback_service(
                     digest=deploy_outcome.deployed_digest,
                     image_ref=image_ref,
                     timestamp=time.time(),
-                    source="rollback",
+                    source=DeploySource.ROLLBACK,
                     previous_digest=deploy_outcome.previous_digest,
                 ),
             )

@@ -12,7 +12,7 @@ import time
 from typing import TYPE_CHECKING
 
 from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
-from ..lifecycle.models import DeployHistoryEntry, ServiceState
+from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
@@ -99,7 +99,7 @@ async def phase_update(
                         digest=outcome.deployed_digest,
                         image_ref=record.latest_registry_digest,
                         timestamp=time.time(),
-                        source="caretaker",
+                        source=DeploySource.CARETAKER,
                         previous_digest=outcome.previous_digest,
                     ),
                 )

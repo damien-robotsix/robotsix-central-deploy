@@ -27,6 +27,7 @@ from ..deps import (
 )
 from ..models import (
     ActionResponse,
+    ActionType,
     ContainerHealthSummary,
     ErrorDetail,
     ServiceHealthResponse,
@@ -368,7 +369,7 @@ async def start_service(
     if record.state == ServiceState.RUNNING:
         return ActionResponse(
             name=name,
-            action="start",
+            action=ActionType.START,
             previous_state=previous,
             current_state=ServiceState.RUNNING,
             detail="Service is already running",
@@ -376,7 +377,7 @@ async def start_service(
     if record.state == ServiceState.STARTING:
         return ActionResponse(
             name=name,
-            action="start",
+            action=ActionType.START,
             previous_state=previous,
             current_state=ServiceState.STARTING,
             detail="Start already in progress",
@@ -424,7 +425,7 @@ async def start_service(
 
     return ActionResponse(
         name=name,
-        action="start",
+        action=ActionType.START,
         previous_state=previous,
         current_state=record.state,
     )
@@ -465,7 +466,7 @@ async def stop_service(
     if record.state == ServiceState.STOPPED:
         return ActionResponse(
             name=name,
-            action="stop",
+            action=ActionType.STOP,
             previous_state=previous,
             current_state=ServiceState.STOPPED,
             detail="Service is already stopped",
@@ -473,7 +474,7 @@ async def stop_service(
     if record.state == ServiceState.STOPPING:
         return ActionResponse(
             name=name,
-            action="stop",
+            action=ActionType.STOP,
             previous_state=previous,
             current_state=ServiceState.STOPPING,
             detail="Stop already in progress",
@@ -519,7 +520,7 @@ async def stop_service(
 
     return ActionResponse(
         name=name,
-        action="stop",
+        action=ActionType.STOP,
         previous_state=previous,
         current_state=record.state,
     )
@@ -560,7 +561,7 @@ async def restart_service(
     if record.state == ServiceState.RESTARTING:
         return ActionResponse(
             name=name,
-            action="restart",
+            action=ActionType.RESTART,
             previous_state=previous,
             current_state=ServiceState.RESTARTING,
             detail="Restart already in progress",
@@ -606,7 +607,7 @@ async def restart_service(
 
     return ActionResponse(
         name=name,
-        action="restart",
+        action=ActionType.RESTART,
         previous_state=previous,
         current_state=record.state,
     )

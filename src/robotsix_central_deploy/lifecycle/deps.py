@@ -22,13 +22,14 @@ from fastapi import FastAPI, HTTPException, Request, status
 from .backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from .config import LifecycleConfig, VirtualComponentEntry
 from .models import (
+    DeployJobPhase,
     ExecutionBackendType,
     HealthStatus,
+    OnboardJobPhase,
     ServiceRecord,
     VolumeStat,
     StoreBackend,
 )
-from .schemas import DeployJobPhase, OnboardJobPhase
 from ..registry.config_store import ComponentConfigStore
 from ..registry.config_yaml_store import ConfigYamlStore
 from ..registry.deploy_history_store import DeployHistoryStore
@@ -401,7 +402,7 @@ class OnboardJob:
     def __init__(self, job_id: str, component: str) -> None:
         self.job_id: str = job_id
         self.component: str = component
-        self.phase: OnboardJobPhase = "writing_config"
+        self.phase: OnboardJobPhase = OnboardJobPhase.WRITING_CONFIG
         self.error: str | None = None
         self.name: str | None = None
         self.image: str | None = None
@@ -426,7 +427,7 @@ class DeployJob:
     def __init__(self, job_id: str, component: str) -> None:
         self.job_id: str = job_id
         self.component: str = component
-        self.phase: DeployJobPhase = "deploying"
+        self.phase: DeployJobPhase = DeployJobPhase.DEPLOYING
         self.error: str | None = None
         self.name: str | None = None
         self.image: str | None = None
@@ -469,7 +470,7 @@ class JobRegistry:
         """Mark an onboard job as failed with an error string."""
         job = self._jobs.get(job_id)
         if job is not None:
-            job.phase = "failed"
+            job.phase = OnboardJobPhase.FAILED
             job.error = error
 
     def mark_done(
@@ -483,7 +484,7 @@ class JobRegistry:
         """Mark an onboard job as done with terminal fields."""
         job = self._jobs.get(job_id)
         if job is not None:
-            job.phase = "done"
+            job.phase = OnboardJobPhase.DONE
             job.name = name
             job.image = image
             job.state = state
@@ -492,7 +493,8 @@ class JobRegistry:
     def has_active_job_for(self, component: str) -> bool:
         """Return True when an onboard job for *component* is still in flight."""
         return any(
-            j.component == component and j.phase not in ("done", "failed")
+            j.component == component
+            and j.phase not in (OnboardJobPhase.DONE, OnboardJobPhase.FAILED)
             for j in self._jobs.values()
         )
 
@@ -519,7 +521,7 @@ class JobRegistry:
         """Mark a deploy job as failed with an error string."""
         job = self._deploy_jobs.get(job_id)
         if job is not None:
-            job.phase = "failed"
+            job.phase = DeployJobPhase.FAILED
             job.error = error
 
     def mark_deploy_done(
@@ -533,7 +535,7 @@ class JobRegistry:
         """Mark a deploy job as done with terminal fields."""
         job = self._deploy_jobs.get(job_id)
         if job is not None:
-            job.phase = "done"
+            job.phase = DeployJobPhase.DONE
             job.name = name
             job.image = image
             job.state = state
@@ -542,7 +544,10 @@ class JobRegistry:
     def active_deploy_job_id_for(self, component: str) -> str | None:
         """Return the job_id of an active deploy job for *component*, or None."""
         for job in self._deploy_jobs.values():
-            if job.component == component and job.phase not in ("done", "failed"):
+            if job.component == component and job.phase not in (
+                DeployJobPhase.DONE,
+                DeployJobPhase.FAILED,
+            ):
                 return job.job_id
         return None
 
