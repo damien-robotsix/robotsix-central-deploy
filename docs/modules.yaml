@@ -66,6 +66,8 @@ modules:
       - src/robotsix_central_deploy/deploy_lock.py
       - tests/conftest.py
       - tests/deploy_lock/test_deploy_lock.py
+      - tests/yaml_utils/__init__.py
+      - tests/yaml_utils/test_yaml_utils.py
     tests: tests/lifecycle/
 
   - id: gateway
