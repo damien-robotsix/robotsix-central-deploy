@@ -33,7 +33,9 @@ def test_read_yaml_file_malformed_yaml_raises_yaml_parse_error(tmp_path: Path) -
     assert "YAML parse error" in str(exc_info.value)
 
 
-def test_read_yaml_file_non_dict_raises_invalid_config_structure_error(tmp_path: Path) -> None:
+def test_read_yaml_file_non_dict_raises_invalid_config_structure_error(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "list.yaml"
     path.write_text("- item1\n- item2\n")
     with pytest.raises(InvalidConfigStructureError) as exc_info:
