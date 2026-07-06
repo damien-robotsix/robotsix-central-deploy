@@ -7,9 +7,16 @@ so the config-merge logic is independently testable.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, cast
+import logging
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
+
+if TYPE_CHECKING:
+    from .backends import ExecutionBackend
+    from ..registry.models import ComponentConfig
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -348,3 +355,48 @@ def _merge_config_flat(
         return result
 
     return _recursive(template, existing, submitted)
+
+
+# ---------------------------------------------------------------------------
+# llmio tier config writer (shared by services_config, services_deploy)
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_log(s: str) -> str:
+    """Replace newlines so user input cannot inject fake log entries."""
+    return s.replace("\n", "\\n").replace("\r", "\\r")
+
+
+async def _write_llmio_tier_config(
+    backend: ExecutionBackend,
+    component_config: ComponentConfig,
+    settings_store: Any,
+    component_name: str,
+    log_context: str = "config",
+) -> None:
+    """Write fleet-global llmio tier config into a component's config volume.
+
+    No-op when the component has no ``llmio_tier_level`` or ``config_volume``,
+    or the system settings lack ``llmio_tier_config``.  Logs a warning on
+    failure but never raises — callers treat this as best-effort.
+
+    *settings_store* may be ``None`` (e.g. when not yet attached to app state
+    in early-startup paths).
+    """
+    if not component_config.llmio_tier_level or not component_config.config_volume:
+        return
+
+    try:
+        settings = await settings_store.get() if settings_store is not None else None
+        if settings and settings.llmio_tier_config:
+            await backend.write_llmio_tier_config_to_volume(
+                component_config.config_volume, settings.llmio_tier_config
+            )
+    except Exception as exc:
+        logger.warning(
+            "%s %s: could not write llmio tier config to volume %s: %s",
+            log_context,
+            _sanitize_log(component_name),
+            _sanitize_log(component_config.config_volume),
+            exc,
+        )

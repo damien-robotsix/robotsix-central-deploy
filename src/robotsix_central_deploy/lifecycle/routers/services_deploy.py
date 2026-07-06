@@ -12,6 +12,7 @@ from fastapi.params import Body
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
+from .._config_utils import _write_llmio_tier_config
 from ..deps import (
     JobRegistry,
     _get_backend,
@@ -332,23 +333,9 @@ async def _run_deploy_job(
         # Write the fleet-global llmio tier config mapping (all four levels)
         # into the component's config volume so robotsix-llmio's
         # TierConfig.for_level() can resolve any capability level.
-        if config.llmio_tier_level and config.config_volume:
-            try:
-                settings = (
-                    await settings_store.get() if settings_store is not None else None
-                )
-                if settings and settings.llmio_tier_config:
-                    await backend.write_llmio_tier_config_to_volume(
-                        config.config_volume, settings.llmio_tier_config
-                    )
-            except Exception as exc:
-                logger.warning(
-                    "deploy %s: could not write llmio tier config to volume %s: %s",
-                    _sanitize_log(name),
-                    _sanitize_log(config.config_volume),
-                    exc,
-                )
-                # non-fatal
+        await _write_llmio_tier_config(
+            backend, config, settings_store, name, log_context="deploy"
+        )
 
         # Deploy — update job phase for health-wait visibility.
         if config.health_check is not None:

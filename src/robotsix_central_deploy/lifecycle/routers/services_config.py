@@ -47,6 +47,7 @@ from .._config_utils import (  # noqa: E402
     _deep_merge,
     _mask_secrets,
     _merge_config,
+    _write_llmio_tier_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -342,23 +343,10 @@ async def put_service_config(
         # alongside config.json when the component declares an llmio
         # capability level, so robotsix-llmio's TierConfig.for_level() can
         # resolve any capability level.
-        if comp_cfg.llmio_tier_level:
-            try:
-                settings_store = getattr(request.app.state, "settings_store", None)
-                settings = (
-                    await settings_store.get() if settings_store is not None else None
-                )
-                if settings and settings.llmio_tier_config:
-                    await backend.write_llmio_tier_config_to_volume(
-                        comp_cfg.config_volume, settings.llmio_tier_config
-                    )
-            except Exception as exc:
-                logger.warning(
-                    "config %s: could not write llmio tier config to volume %s: %s",
-                    _sanitize_log(name),
-                    _sanitize_log(comp_cfg.config_volume),
-                    exc,
-                )
+        settings_store = getattr(request.app.state, "settings_store", None)
+        await _write_llmio_tier_config(
+            backend, comp_cfg, settings_store, name, log_context="config"
+        )
         new_hash = _canonical_hash(merged)
         await config_yaml_store.update_current_and_hash(name, merged, new_hash)
         # Restart primary + siblings sharing the same config volume so the
