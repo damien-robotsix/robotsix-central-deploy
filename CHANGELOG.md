@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Refactor deeply-nested functions in `lifecycle/deps.py`: extract `_check_and_update_record`, `_refresh_claude_credentials`, and `_seed_list_item` helpers to reduce nesting depth in `_registry_check_loop`, `_claude_auth_refresh_loop`, and `_seed_for_detect`.
 - Expose volume-audit tuning knobs (`volume_audit_enabled`, `volume_audit_interval_seconds`, `volume_audit_growth_threshold_pct`, `volume_audit_min_delta_bytes`) in ``SystemSettings`` and the ``GET/PUT /settings`` endpoints so operators can configure them without restarting the server.
 - Mirror lifecycle source-tree structure in tests: move router tests to `tests/lifecycle/routers/` and backend tests to `tests/lifecycle/backends/`
 - Moved `docs/architecture/registry_check.md` to `docs/registry_check/overview.md` to align registry_check with the per-module docs pattern.

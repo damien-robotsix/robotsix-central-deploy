@@ -149,6 +149,39 @@ async def _compute_orphan_volumes(
 # ---------------------------------------------------------------------------
 
 
+async def _check_and_update_record(
+    record: ServiceRecord,
+    store: ServiceStore,
+    checker: RegistryChecker,
+    backend: ExecutionBackend,
+) -> None:
+    """Refresh a single service record's digest and update-availability from the registry."""
+    if record.image and not record.deployed_image_digest:
+        try:
+            ins = await backend.status(record)
+            if ins.running_digest:
+                record.deployed_image_digest = ins.running_digest
+                await store.put(record)
+        except Exception:
+            pass
+
+    if not record.image or not record.deployed_image_digest:
+        return
+    try:
+        latest = await checker.get_latest_digest(record.image)
+        if latest is not None:
+            new_ua = latest != record.deployed_image_digest
+            if (
+                record.update_available != new_ua
+                or record.latest_registry_digest != latest
+            ):
+                record.update_available = new_ua
+                record.latest_registry_digest = latest
+                await store.put(record)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def _registry_check_loop(
     store: ServiceStore,
     checker: RegistryChecker,
@@ -162,31 +195,7 @@ async def _registry_check_loop(
             await asyncio.sleep(interval_sec)
             records = await store.list_all()
             for record in records:
-                # Refresh running_digest from Docker if unknown
-                if record.image and not record.deployed_image_digest:
-                    try:
-                        ins = await backend.status(record)
-                        if ins.running_digest:
-                            record.deployed_image_digest = ins.running_digest
-                            await store.put(record)
-                    except Exception:
-                        pass
-
-                if not record.image or not record.deployed_image_digest:
-                    continue
-                try:
-                    latest = await checker.get_latest_digest(record.image)
-                    if latest is not None:
-                        new_ua = latest != record.deployed_image_digest
-                        if (
-                            record.update_available != new_ua
-                            or record.latest_registry_digest != latest
-                        ):
-                            record.update_available = new_ua
-                            record.latest_registry_digest = latest
-                            await store.put(record)
-                except Exception:  # noqa: BLE001
-                    pass
+                await _check_and_update_record(record, store, checker, backend)
     except asyncio.CancelledError:
         pass
 
@@ -194,6 +203,87 @@ async def _registry_check_loop(
 # ---------------------------------------------------------------------------
 # Background Claude auth credential refresh loop
 # ---------------------------------------------------------------------------
+
+
+async def _refresh_claude_credentials(
+    backend: ExecutionBackend,
+    oauth: dict[str, Any],
+) -> tuple[bool, str | None]:
+    """POST a refresh_token grant to the Anthropic OAuth token endpoint,
+    build updated credentials, and persist them via *backend*.
+
+    Returns ``(True, None)`` on success, ``(False, error_message)`` on failure.
+    The caller is responsible for updating the module-level refresh state.
+    """
+    refresh_token = oauth.get("refreshToken")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            resp = await client.post(
+                CLAUDE_AUTH_TOKEN_URL,
+                json={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": CLAUDE_AUTH_CLIENT_ID,
+                },
+                headers={"User-Agent": CLAUDE_AUTH_USER_AGENT},
+            )
+        except Exception as exc:
+            error_msg = f"Token endpoint unreachable: {exc}"
+            logger.warning("Claude auth refresh: request failed: %s", exc)
+            return False, error_msg
+
+    if resp.status_code != 200:
+        error_detail = resp.text[:500]
+        try:
+            error_detail = resp.json().get("error", {}).get("message", error_detail)
+        except Exception:  # noqa: S110 — non-JSON body is fine
+            pass
+        error_msg = f"Refresh failed ({resp.status_code}): {error_detail}"
+        logger.warning("Claude auth refresh: %s", error_detail)
+        return False, error_msg
+
+    try:
+        payload: dict[str, Any] = resp.json()
+    except Exception as exc:
+        error_msg = f"Invalid JSON in refresh response: {exc}"
+        logger.warning("Claude auth refresh: bad response JSON: %s", exc)
+        return False, error_msg
+
+    access_token = payload.get("access_token")
+    new_refresh_token = payload.get("refresh_token", refresh_token)
+    expires_in = payload.get("expires_in", 0)
+
+    if not access_token:
+        error_msg = "No access_token in refresh response"
+        logger.warning("Claude auth refresh: no access_token in response")
+        return False, error_msg
+
+    # Build new credentials blob — always persist the rotated
+    # refresh token from the server (the ticket gotcha).
+    new_creds: dict[str, Any] = {
+        "claudeAiOauth": {
+            "accessToken": access_token,
+            "refreshToken": new_refresh_token,
+            "expiresAt": int((time.time() + float(expires_in)) * 1000),
+            "scopes": oauth.get("scopes", ["user:inference"]),
+        }
+    }
+    # Preserve optional fields from the original credential blob.
+    for key in ("subscriptionType", "rateLimitTier"):
+        if key in oauth:
+            new_creds["claudeAiOauth"][key] = oauth[key]
+
+    try:
+        await backend.write_claude_credentials(
+            CLAUDE_AUTH_VOLUME, json.dumps(new_creds, indent=2)
+        )
+    except Exception as exc:
+        error_msg = f"Failed to write refreshed credentials: {exc}"
+        logger.warning("Claude auth refresh: write failed: %s", exc)
+        return False, error_msg
+
+    return True, None
 
 
 async def _claude_auth_refresh_loop(
@@ -250,95 +340,18 @@ async def _claude_auth_refresh_loop(
             if expires_at_ms - now_ms > CLAUDE_AUTH_REFRESH_BEFORE_SECONDS * 1000:
                 continue  # not close enough to expiry
 
-            # --- Perform the refresh --------------------------------------
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                try:
-                    resp = await client.post(
-                        CLAUDE_AUTH_TOKEN_URL,
-                        json={
-                            "grant_type": "refresh_token",
-                            "refresh_token": refresh_token,
-                            "client_id": CLAUDE_AUTH_CLIENT_ID,
-                        },
-                        headers={"User-Agent": CLAUDE_AUTH_USER_AGENT},
-                    )
-                except Exception as exc:
-                    _claude_auth_refresh_state = {
-                        "last_refresh": time.monotonic(),
-                        "last_error": f"Token endpoint unreachable: {exc}",
-                    }
-                    logger.warning("Claude auth refresh: request failed: %s", exc)
-                    continue
-
-            if resp.status_code != 200:
-                error_detail = resp.text[:500]
-                try:
-                    error_detail = (
-                        resp.json().get("error", {}).get("message", error_detail)
-                    )
-                except Exception:  # noqa: S110 — non-JSON body is fine
-                    pass
+            success, error = await _refresh_claude_credentials(backend, oauth)
+            if success:
                 _claude_auth_refresh_state = {
                     "last_refresh": time.monotonic(),
-                    "last_error": f"Refresh failed ({resp.status_code}): {error_detail}",
+                    "last_error": None,
                 }
-                logger.warning("Claude auth refresh: %s", error_detail)
-                continue
-
-            try:
-                payload: dict[str, Any] = resp.json()
-            except Exception as exc:
+                logger.info("Claude auth credentials refreshed successfully")
+            else:
                 _claude_auth_refresh_state = {
                     "last_refresh": time.monotonic(),
-                    "last_error": f"Invalid JSON in refresh response: {exc}",
+                    "last_error": error,
                 }
-                logger.warning("Claude auth refresh: bad response JSON: %s", exc)
-                continue
-
-            access_token = payload.get("access_token")
-            new_refresh_token = payload.get("refresh_token", refresh_token)
-            expires_in = payload.get("expires_in", 0)
-
-            if not access_token:
-                _claude_auth_refresh_state = {
-                    "last_refresh": time.monotonic(),
-                    "last_error": "No access_token in refresh response",
-                }
-                logger.warning("Claude auth refresh: no access_token in response")
-                continue
-
-            # Build new credentials blob — always persist the rotated
-            # refresh token from the server (the ticket gotcha).
-            new_creds: dict[str, Any] = {
-                "claudeAiOauth": {
-                    "accessToken": access_token,
-                    "refreshToken": new_refresh_token,
-                    "expiresAt": int((time.time() + float(expires_in)) * 1000),
-                    "scopes": oauth.get("scopes", ["user:inference"]),
-                }
-            }
-            # Preserve optional fields from the original credential blob.
-            for key in ("subscriptionType", "rateLimitTier"):
-                if key in oauth:
-                    new_creds["claudeAiOauth"][key] = oauth[key]
-
-            try:
-                await backend.write_claude_credentials(
-                    CLAUDE_AUTH_VOLUME, json.dumps(new_creds, indent=2)
-                )
-            except Exception as exc:
-                _claude_auth_refresh_state = {
-                    "last_refresh": time.monotonic(),
-                    "last_error": f"Failed to write refreshed credentials: {exc}",
-                }
-                logger.warning("Claude auth refresh: write failed: %s", exc)
-                continue
-
-            _claude_auth_refresh_state = {
-                "last_refresh": time.monotonic(),
-                "last_error": None,
-            }
-            logger.info("Claude auth credentials refreshed successfully")
 
     except asyncio.CancelledError:
         pass
@@ -1147,6 +1160,45 @@ def _prune_unset(merged: dict[str, Any], existing: dict[str, Any]) -> dict[str, 
     return result
 
 
+_SEED_LIST_NO_MATCH = object()
+
+
+def _seed_list_item(
+    tval: Any,
+    val: list[Any],
+    ex_val: Any,
+) -> list[Any]:
+    """Handle the list-item branch of ``_seed_for_detect``.
+
+    When *tval* is a non-empty list of dicts, recursively seeds each
+    item in *val* using the first template element and the corresponding
+    *ex_val* element (when available).  Returns the resolved list (may be
+    empty).
+
+    When *tval* does **not** match the dict-list pattern, returns
+    ``_SEED_LIST_NO_MATCH`` to signal that the caller should use *val*
+    as-is.
+    """
+    if not (isinstance(tval, list) and tval and isinstance(tval[0], dict)):
+        return _SEED_LIST_NO_MATCH  # type: ignore[return-value]
+
+    item_template = tval[0]
+    ex_list = ex_val if isinstance(ex_val, list) else []
+    items: list[dict[str, Any]] = []
+    for i, item in enumerate(val):
+        if isinstance(item, dict):
+            sub = _seed_for_detect(
+                item_template,
+                ex_list[i] if i < len(ex_list) and isinstance(ex_list[i], dict) else {},
+                item,
+            )
+            if sub:
+                items.append(sub)
+        else:
+            items.append(item)
+    return items
+
+
 def _seed_for_detect(
     template: dict[str, Any],
     existing: dict[str, Any],
@@ -1183,27 +1235,11 @@ def _seed_for_detect(
             if sub:
                 result[key] = sub
         elif isinstance(val, list):
-            if isinstance(tval, list) and tval and isinstance(tval[0], dict):
-                item_template = tval[0]
-                ex_list = ex_val if isinstance(ex_val, list) else []
-                items: list[dict[str, Any]] = []
-                for i, item in enumerate(val):
-                    if isinstance(item, dict):
-                        sub = _seed_for_detect(
-                            item_template,
-                            ex_list[i]
-                            if i < len(ex_list) and isinstance(ex_list[i], dict)
-                            else {},
-                            item,
-                        )
-                        if sub:
-                            items.append(sub)
-                    else:
-                        items.append(item)
-                if items:
-                    result[key] = items
-            else:
+            items = _seed_list_item(tval, val, ex_val)
+            if items is _SEED_LIST_NO_MATCH:
                 result[key] = val
+            elif items:
+                result[key] = items
         else:
             # Any other type (bool, int, float): include as-is.
             result[key] = val
