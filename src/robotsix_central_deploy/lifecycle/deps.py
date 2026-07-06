@@ -163,7 +163,7 @@ async def _check_and_update_record(
                 record.deployed_image_digest = ins.running_digest
                 await store.put(record)
         except Exception:
-            pass
+            pass  # Status check may fail if the container isn't running; proceed without digest
 
     if not record.image or not record.deployed_image_digest:
         return
