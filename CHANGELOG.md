@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add unit tests for onboard `port_utils` module (host-port collision helpers).
 - PUT /settings now supports partial updates: only fields explicitly present in the request body are changed; unmentioned fields keep their current stored values. This prevents a partial payload from silently resetting fields like ``gateway_base_domain`` or ``caretaker_enabled`` to their class defaults.
 - Extract duplicated Docker-status-to-ServiceState mapping into shared `docker_status_to_service_state` helper in `lifecycle/backends/_util.py`.
 - Added `docs/volume_audit/overview.md` documenting the volume audit subsystem: architecture (scheduler → growth → reporter pipeline), threshold model, configuration env vars, API endpoint, and reporting behaviour.
