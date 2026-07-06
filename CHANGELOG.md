@@ -14,6 +14,7 @@ All notable changes to robotsix-central-deploy.
 - Add structured JSON logging via structlog: uvicorn access logs and application logs now emit JSON to stdout, while the uvicorn startup banner remains human-readable. Configured through a shared `LOGGING_CONFIG` dict in `lifecycle/_logging.py`.
 - Add unit tests for onboard `port_utils` module (host-port collision helpers).
 - PUT /settings now supports partial updates: only fields explicitly present in the request body are changed; unmentioned fields keep their current stored values. This prevents a partial payload from silently resetting fields like ``gateway_base_domain`` or ``caretaker_enabled`` to their class defaults.
+- Document `caretaker/` subpackage in ARCHITECTURE.md (FindingKind enum, CaretakerFinding + CaretakerReport models, phase functions, scheduler).
 - Extract duplicated Docker-status-to-ServiceState mapping into shared `docker_status_to_service_state` helper in `lifecycle/backends/_util.py`.
 - Refactor `ChatAgentAuditStore` to inherit from `JsonFileStore`, replacing hand-rolled `_load`/`_save`/lock with the inherited `_update()` pattern used by other JSON-file-backed stores (`ConfigYamlStore`, `EnvStore`, `DeployHistoryStore`).
 - Added `docs/volume_audit/overview.md` documenting the volume audit subsystem: architecture (scheduler → growth → reporter pipeline), threshold model, configuration env vars, API endpoint, and reporting behaviour.
