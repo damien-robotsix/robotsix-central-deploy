@@ -113,6 +113,7 @@ modules:
       - pyyaml
     paths:
       - src/robotsix_central_deploy/registry/**/*
+      - tests/registry/**/*
     tests: tests/registry/
 
   - id: ui
