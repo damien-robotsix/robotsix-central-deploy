@@ -33,6 +33,7 @@ from ..deps import (
 )
 from .._config_utils import _mask_secrets, _merge_config, _canonical_hash
 from ..models import (
+    ActionType,
     ServiceState,
     can_transition,
 )
@@ -544,7 +545,7 @@ async def chat_restart_service(
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
-                action="restart",
+                action=ActionType.RESTART,
                 detail="Restart already in progress.",
             )
         )
@@ -574,7 +575,7 @@ async def chat_restart_service(
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
-                action="restart",
+                action=ActionType.RESTART,
                 detail=f"Restart failed: {exc}",
             )
         )
@@ -609,7 +610,7 @@ async def chat_restart_service(
     await audit_store.append(
         ChatAgentAuditEntry(
             component=name,
-            action="restart",
+            action=ActionType.RESTART,
             detail=f"Restarted: {previous.value} → {final_state.value}",
         )
     )

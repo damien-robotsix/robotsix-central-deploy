@@ -2799,7 +2799,7 @@ function renderHistoryRows(entries, runningDigest) {
       : '\u2014';
     const source = entry.source || '';
     const sourceBadge = source
-      ? `<span class="badge badge-${source === 'deploy' ? 'update-ok' : source === 'rollback' ? 'update-avail' : 'update-unknown'}">${escHtml(source)}</span>`
+      ? `<span class="badge badge-${source === 'manual' ? 'update-ok' : source === 'rollback' ? 'update-avail' : 'update-unknown'}">${escHtml(source)}</span>`
       : '\u2014';
     const imageRef = entry.image_ref || '\u2014';
     const rollbackBtn = isCurrent

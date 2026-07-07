@@ -26,7 +26,10 @@ from ..deps import (
 )
 from .._config_utils import _canonical_hash, _merge_config, _strip_secret_values
 from ..config import LifecycleConfig
-from ..models import ServiceRecord
+from ..models import (
+    OnboardJobPhase,
+    ServiceRecord,
+)
 from ..schemas import (
     OnboardPreflightRequest,
     OnboardPreflightResponse,
@@ -377,9 +380,9 @@ async def _run_onboard_deploy_job(
     try:
         # Deploy primary
         if config.health_check is not None:
-            job_registry.update_phase(job_id, "waiting_health")
+            job_registry.update_phase(job_id, OnboardJobPhase.WAITING_HEALTH)
         else:
-            job_registry.update_phase(job_id, "deploying_primary")
+            job_registry.update_phase(job_id, OnboardJobPhase.DEPLOYING_PRIMARY)
 
         outcome = await backend.deploy(record, config, config.image)
 
@@ -441,7 +444,7 @@ async def _run_onboard_deploy_job(
                     )
 
         # Deploy siblings
-        job_registry.update_phase(job_id, "deploying_siblings")
+        job_registry.update_phase(job_id, OnboardJobPhase.DEPLOYING_SIBLINGS)
         sibling_records_created: list[ServiceRecord] = []
         try:
             await _deploy_onboard_siblings(

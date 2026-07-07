@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Standardize pseudo-enums as ``StrEnum`` classes in ``lifecycle/models.py``: ``ActionType``, ``DeploySource``, ``OnboardJobPhase``, ``DeployJobPhase``. Replace raw string literals across services, chat, onboard, deploy, deps, and caretaker modules with enum member references. Fix dashboard deploy-history source badge to match ``"manual"`` instead of ``"deploy"``.
 - Extract duplicated llmio tier config write pattern into ``_write_llmio_tier_config`` helper in ``lifecycle/_config_utils.py``, replacing the two inlined copies in ``put_service_config`` and ``_run_deploy_job``.
 - Refactor deeply-nested functions in `lifecycle/deps.py`: extract `_check_and_update_record`, `_refresh_claude_credentials`, and `_seed_list_item` helpers to reduce nesting depth in `_registry_check_loop`, `_claude_auth_refresh_loop`, and `_seed_for_detect`.
 - Expose volume-audit tuning knobs (`volume_audit_enabled`, `volume_audit_interval_seconds`, `volume_audit_growth_threshold_pct`, `volume_audit_min_delta_bytes`) in ``SystemSettings`` and the ``GET/PUT /settings`` endpoints so operators can configure them without restarting the server.

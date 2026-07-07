@@ -10,7 +10,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from robotsix_central_deploy.lifecycle.models import VolumeEntryType
+from robotsix_central_deploy.lifecycle.models import (
+    ActionType,
+    DeployJobPhase,
+    OnboardJobPhase,
+    VolumeEntryType,
+)
 from robotsix_central_deploy.onboard.models import DerivedSpec  # noqa: TCH001
 from robotsix_central_deploy.registry.models import ConfigAssistSeed  # noqa: TCH001
 
@@ -48,17 +53,6 @@ class OnboardConfirmRequest(BaseModel):
     ] = []  # echoed from preflight; used only for ticket filing
 
 
-# Phase literal type for onboard background deploy jobs.
-OnboardJobPhase = Literal[
-    "writing_config",
-    "deploying_primary",
-    "waiting_health",
-    "deploying_siblings",
-    "done",
-    "failed",
-]
-
-
 class OnboardConfirmAcceptedResponse(BaseModel):
     """Returned by POST /onboard/confirm (202) when the job is queued."""
 
@@ -84,14 +78,6 @@ class OnboardJobStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Deploy job models (async deploy pattern)
 # ---------------------------------------------------------------------------
-
-DeployJobPhase = Literal[
-    "deploying",
-    "waiting_health",
-    "deploying_siblings",
-    "done",
-    "failed",
-]
 
 
 class DeployAcceptedResponse(BaseModel):
@@ -336,7 +322,7 @@ class ChatAgentRestartResponse(BaseModel):
     """Response body for POST /chat/services/{name}/restart."""
 
     name: str
-    action: str = "restart"
+    action: ActionType = ActionType.RESTART
     previous_state: str
     current_state: str
     detail: str = ""
