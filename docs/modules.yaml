@@ -170,6 +170,7 @@ modules:
       - pydantic
     paths:
       - src/robotsix_central_deploy/caretaker/**/*
+      - tests/caretaker/**/*
     tests: tests/caretaker/
 
   - id: onboard
