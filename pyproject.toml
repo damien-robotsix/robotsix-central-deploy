@@ -69,6 +69,10 @@ allow-direct-references = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "docker: marks tests that require a real Docker daemon (skipped by default in CI)",
+]
 
 [tool.ruff.lint]
 extend-select = ["S"]
