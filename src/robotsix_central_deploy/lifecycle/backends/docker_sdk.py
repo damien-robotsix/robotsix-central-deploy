@@ -605,6 +605,110 @@ class DockerSdkBackend(ExecutionBackend):
 
         return await loop.run_in_executor(None, _read)
 
+    async def _remove_old_container(self, name: str, existing: Any) -> str:
+        """Stop + remove *existing* container, returning its prior image digest."""
+        import docker
+
+        loop = asyncio.get_running_loop()
+        prior_digest = ""
+        try:
+            prior_digest = await loop.run_in_executor(None, lambda: existing.image.id)
+        except Exception:  # Gracefully degrade; prior_digest stays empty
+            pass
+
+        try:
+            await loop.run_in_executor(None, lambda: self._stop_and_remove(existing))
+        except docker.errors.APIError as exc:
+            raise RuntimeError(
+                f"Failed to remove existing container {name!r}: {exc}"
+            ) from exc
+        return prior_digest
+
+    async def _prepare_volumes(self, config: "ComponentConfig") -> list[str]:
+        """Pre-create named volumes and validate claude credentials.
+
+        Returns deploy warnings collected during credential validation.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+        deploy_warnings: list[str] = []
+
+        # Determine container user for volume ownership
+        container_user = config.user or f"{os.getuid()}:{os.getgid()}"
+        chown_uid, chown_gid = self._resolve_user_to_uid_gid(container_user)
+
+        # Pre-create named volumes (including claude-auth when needed)
+        volumes_to_create: list[str] = list(config.named_volumes)
+        if config.claude_mount:
+            volumes_to_create.append(CLAUDE_AUTH_VOLUME)
+
+        for vol_name in volumes_to_create:
+            try:
+                await loop.run_in_executor(None, self._client.volumes.create, vol_name)
+            except docker.errors.APIError as exc:
+                if exc.status_code == 409:
+                    logger.info("Volume %s already exists, skipping creation", vol_name)
+                    continue
+                raise RuntimeError(
+                    f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
+                ) from exc
+            except docker.errors.DockerException as exc:
+                raise RuntimeError(
+                    f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
+                ) from exc
+
+            # Freshly-created volume — fix ownership so the container
+            # user can write to it.
+            vol_mode = 0o700 if vol_name == CLAUDE_AUTH_VOLUME else 0o755
+            await loop.run_in_executor(
+                None,
+                self._ensure_volume_ownership,
+                vol_name,
+                chown_uid,
+                chown_gid,
+                vol_mode,
+            )
+
+        # Validate claude credentials (non-fatal)
+        if config.claude_mount:
+            try:
+                cred_warnings = await loop.run_in_executor(
+                    None, self._check_claude_credentials
+                )
+                if cred_warnings:
+                    deploy_warnings.extend(cred_warnings)
+                    for w in cred_warnings:
+                        logger.warning(w)
+            except Exception as exc:
+                logger.warning(
+                    "claude-auth credential check failed (non-fatal): %s", exc
+                )
+
+        return deploy_warnings
+
+    async def _try_restore(
+        self, name: str, config: "ComponentConfig", prior_digest: str
+    ) -> None:
+        """Best-effort restore of a container from *prior_digest* after a failed deploy."""
+        if not prior_digest:
+            return
+
+        loop = asyncio.get_running_loop()
+        logger.error(
+            "deploy %s failed after container removal — attempting restore from %s",
+            name,
+            prior_digest,
+        )
+        try:
+            restore = await loop.run_in_executor(
+                None, lambda: self._create_container(config, prior_digest)
+            )
+            await loop.run_in_executor(None, restore.start)
+            logger.info("Restored %s from prior digest %s", name, prior_digest)
+        except Exception as restore_exc:
+            logger.error("Restore of %s also failed: %s", name, restore_exc)
+
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
     ) -> DeployOutcome:
@@ -636,111 +740,28 @@ class DockerSdkBackend(ExecutionBackend):
             image.id or "",
         )
 
-        # Step 2 — snapshot current container's image digest (for rollback)
+        # Step 2 — snapshot + remove old container (if present)
         prior_digest = ""
         existing = await self._get_container(name)
         if existing is not None:
-            try:
-                prior_digest = await loop.run_in_executor(
-                    None, lambda: existing.image.id
-                )
-            except Exception:  # Gracefully degrade; prior_digest stays empty
-                pass
+            prior_digest = await self._remove_old_container(name, existing)
 
-        # Step 3 — stop + remove old container (if present)
-        if existing is not None:
-            try:
-                await loop.run_in_executor(
-                    None, lambda: self._stop_and_remove(existing)
-                )
-            except docker.errors.APIError as exc:
-                raise RuntimeError(
-                    f"Failed to remove existing container {name!r}: {exc}"
-                ) from exc
-
-        # Step 4 — create + start new container
+        # Step 3 — create + start new container
         deploy_warnings: list[str] = []
         try:
-            # Determine container user for volume ownership
-            container_user = config.user or f"{os.getuid()}:{os.getgid()}"
-            chown_uid, chown_gid = self._resolve_user_to_uid_gid(container_user)
-
-            # Pre-create named volumes (including claude-auth when needed)
-            volumes_to_create: list[str] = list(config.named_volumes)
-            if config.claude_mount:
-                volumes_to_create.append(CLAUDE_AUTH_VOLUME)
-
-            for vol_name in volumes_to_create:
-                try:
-                    await loop.run_in_executor(
-                        None, self._client.volumes.create, vol_name
-                    )
-                except docker.errors.APIError as exc:
-                    if exc.status_code == 409:
-                        logger.info(
-                            "Volume %s already exists, skipping creation", vol_name
-                        )
-                        continue
-                    raise RuntimeError(
-                        f"Failed to create volume {vol_name!r}: {exc.explanation or exc}"
-                    ) from exc
-                except docker.errors.DockerException as exc:
-                    raise RuntimeError(
-                        f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
-                    ) from exc
-
-                # Freshly-created volume — fix ownership so the container
-                # user can write to it.
-                vol_mode = 0o700 if vol_name == CLAUDE_AUTH_VOLUME else 0o755
-                await loop.run_in_executor(
-                    None,
-                    self._ensure_volume_ownership,
-                    vol_name,
-                    chown_uid,
-                    chown_gid,
-                    vol_mode,
-                )
-
-            # Validate claude credentials (non-fatal)
-            if config.claude_mount:
-                try:
-                    cred_warnings = await loop.run_in_executor(
-                        None, self._check_claude_credentials
-                    )
-                    if cred_warnings:
-                        deploy_warnings.extend(cred_warnings)
-                        for w in cred_warnings:
-                            logger.warning(w)
-                except Exception as exc:
-                    logger.warning(
-                        "claude-auth credential check failed (non-fatal): %s", exc
-                    )
+            deploy_warnings = await self._prepare_volumes(config)
 
             new_container = await loop.run_in_executor(
                 None, lambda: self._create_container(config, image_ref)
             )
             await loop.run_in_executor(None, new_container.start)
         except Exception as exc:
-            # Best-effort restore: if we have a prior digest, try to recreate it
-            if prior_digest:
-                logger.error(
-                    "deploy %s failed after container removal — attempting restore from %s",
-                    name,
-                    prior_digest,
-                )
-                try:
-                    restore = await loop.run_in_executor(
-                        None, lambda: self._create_container(config, prior_digest)
-                    )
-                    await loop.run_in_executor(None, restore.start)
-                    logger.info("Restored %s from prior digest %s", name, prior_digest)
-                except Exception as restore_exc:
-                    logger.error("Restore of %s also failed: %s", name, restore_exc)
+            await self._try_restore(name, config, prior_digest)
             raise RuntimeError(
                 f"Container create/start failed for {name!r}: {exc}"
             ) from exc
 
-        # Step 5 — health wait (if configured)
+        # Step 4 — health wait (if configured)
         if config.health_check:
             await self._wait_healthy(name, timeout=60.0)
 
