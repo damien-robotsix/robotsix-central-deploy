@@ -70,6 +70,7 @@ modules:
       - tests/deploy_lock/test_deploy_lock.py
       - tests/yaml_utils/__init__.py
       - tests/yaml_utils/test_yaml_utils.py
+      - tests/lifecycle/**/*
       - docs/ARCHITECTURE.md
       - docs/api.md
       - docs/changelog.md

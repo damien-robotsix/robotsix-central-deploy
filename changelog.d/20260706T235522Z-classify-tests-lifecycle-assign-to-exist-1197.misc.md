@@ -1,0 +1,1 @@
+Classify tests/lifecycle/*: assign to existing module lifecycle
