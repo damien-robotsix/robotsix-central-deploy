@@ -262,6 +262,204 @@ class TestGetWorkflowRun:
         assert resp.status_code == 404
 
 
+class _FakeRepo:
+    """Stand-in for a PyGithub ``Repository``."""
+
+    def __init__(
+        self,
+        *,
+        full_name: str = "acme/widget",
+        private: bool = False,
+        description: str = "A widget",
+        homepage: str = "",
+        has_issues: bool = True,
+        has_wiki: bool = True,
+        default_branch: str = "main",
+        archived: bool = False,
+    ) -> None:
+        self.full_name = full_name
+        self.html_url = f"https://github.com/{full_name}"
+        self.clone_url = f"https://github.com/{full_name}.git"
+        self.private = private
+        self.description = description
+        self.homepage = homepage
+        self.has_issues = has_issues
+        self.has_wiki = has_wiki
+        self.default_branch = default_branch
+        self.archived = archived
+        self.edit = MagicMock()
+
+
+class TestGetRepo:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get("/chat/github/repos/acme/widget", headers=auth_headers)
+        assert resp.status_code == 503
+
+    async def test_gets_repo(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get("/chat/github/repos/acme/widget", headers=auth_headers)
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "full_name": "acme/widget",
+            "html_url": "https://github.com/acme/widget",
+            "clone_url": "https://github.com/acme/widget.git",
+            "private": False,
+            "description": "A widget",
+            "homepage": "",
+            "has_issues": True,
+            "has_wiki": True,
+            "default_branch": "main",
+            "archived": False,
+        }
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get("/chat/github/repos/acme/ghost", headers=auth_headers)
+        assert resp.status_code == 404
+
+
+class TestUpdateRepo:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget", json={"description": "new"}
+        )
+        assert resp.status_code == 401
+
+    async def test_no_fields_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget", json={}, headers=auth_headers
+        )
+        assert resp.status_code == 422
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"description": "new"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_updates_repo(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo(description="old")
+        fake_repo_after = _FakeRepo(description="new")
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = [fake_repo, fake_repo_after]
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"description": "new"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["description"] == "new"
+        fake_repo.edit.assert_called_once()
+        _, kwargs = fake_repo.edit.call_args
+        assert kwargs["description"] == "new"
+
+    async def test_records_audit_entry(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = [fake_repo, fake_repo]
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"private": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "update_repo"
+        assert entries[0].key == "acme/widget"
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.patch(
+            "/chat/github/repos/acme/ghost",
+            json={"description": "new"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+
 @pytest.fixture
 def enable_repo_create_token():
     """Configure github_repo_create_token so create_repo doesn't 503."""

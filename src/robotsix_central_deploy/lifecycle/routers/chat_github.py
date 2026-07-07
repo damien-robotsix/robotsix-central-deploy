@@ -1,24 +1,27 @@
-"""Chat-agent GitHub Actions status (read-only) and repo creation (write).
+"""Chat-agent GitHub component: Actions status, repo read/create/update.
 
 Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs`` — list recent runs
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}`` — a single run
+- ``GET /chat/github/repos/{owner}/{repo}`` — read repo details
+- ``PATCH /chat/github/repos/{owner}/{repo}`` — update repo settings
 - ``POST /chat/github/repos`` — create a new repository
 
-The Actions-status endpoints mint a GitHub App installation token server-side
-(:mod:`..github_app`) so the chat container never holds GitHub credentials —
-the same GitHub App installation as robotsix-mill powers both. They are
-read-only, so neither needs the chat-agent audit log or a confirmation gate
-(those guard mutations elsewhere in :mod:`.chat`).
+This is the sole implementation of GitHub access for the chat agent — the
+chat container never holds a GitHub credential of its own. Actions-status
+and repo-read/update mint a GitHub App installation token server-side
+(:mod:`..github_app`), the same App installation as robotsix-mill. Repo
+creation alone uses a separate PAT (``github_repo_create_token``): GitHub
+App installation tokens cannot create repositories under a personal
+account.
 
-Repo creation is a genuine mutation, so it's both audit-logged (mirroring
-:mod:`.chat`'s config/restart/update endpoints) and — per the ``github``
-skill's documented safety rule — expected to only be called after the chat
-agent has obtained explicit user confirmation in-conversation (a server-side
+Reads need no audit/confirmation gate. Repo update/create are genuine
+mutations, so both are audit-logged (mirroring :mod:`.chat`'s
+config/restart/update endpoints) and — per the ``github`` skill's
+documented safety rule — expected to only be called after the chat agent
+has obtained explicit user confirmation in-conversation (a server-side
 confirmation gate isn't possible here; the skill text is the enforcement
-point, same as the config/restart/update endpoints in :mod:`.chat`). It uses
-a separate PAT (``github_repo_create_token``), not the App installation
-token: GitHub Apps cannot create repositories under a personal account.
+point, same as the config/restart/update endpoints in :mod:`.chat`).
 """
 
 from __future__ import annotations
@@ -91,6 +94,26 @@ def _get_run_sync(client: Any, owner: str, repo: str, run_id: int) -> dict[str, 
     repo_obj = client.get_repo(f"{owner}/{repo}")
     run = repo_obj.get_workflow_run(run_id)
     return _run_to_dict(run)
+
+
+def _repo_to_dict(repo: Any) -> dict[str, Any]:
+    """Flatten a PyGithub ``Repository`` to the fields the chat agent needs."""
+    return {
+        "full_name": repo.full_name,
+        "html_url": repo.html_url,
+        "clone_url": repo.clone_url,
+        "private": repo.private,
+        "description": repo.description,
+        "homepage": repo.homepage,
+        "has_issues": repo.has_issues,
+        "has_wiki": repo.has_wiki,
+        "default_branch": repo.default_branch,
+        "archived": repo.archived,
+    }
+
+
+def _get_repo_sync(client: Any, owner: str, repo: str) -> dict[str, Any]:
+    return _repo_to_dict(client.get_repo(f"{owner}/{repo}"))
 
 
 def _reraise_github_errors(exc: Exception, owner: str, repo: str) -> None:
@@ -167,6 +190,113 @@ async def get_workflow_run(
     except Exception as exc:
         _reraise_github_errors(exc, owner, repo)
         raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}",
+    summary="Get GitHub repository details",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def get_repo(
+    owner: str,
+    repo: str,
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Get *owner*/*repo*'s details (visibility, description, settings)."""
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        return await asyncio.to_thread(_get_repo_sync, client, owner, repo)
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+# ---------------------------------------------------------------------------
+# PATCH /chat/github/repos/{owner}/{repo} — update repo settings (write;
+# App installation token — unlike creation, editing an existing repo the
+# App is already installed on does not hit GitHub's personal-account
+# restriction, so no separate PAT is needed here)
+# ---------------------------------------------------------------------------
+
+
+class UpdateRepoRequest(BaseModel):
+    """Body for ``PATCH /chat/github/repos/{owner}/{repo}``.
+
+    All fields are optional; only the ones provided are changed.
+    """
+
+    description: str | None = Field(None, description="New description.")
+    private: bool | None = Field(None, description="New visibility.")
+    has_issues: bool | None = Field(None, description="Enable/disable Issues.")
+    has_wiki: bool | None = Field(None, description="Enable/disable the Wiki.")
+
+
+def _update_repo_sync(
+    client: Any, owner: str, repo: str, body: UpdateRepoRequest
+) -> dict[str, Any]:
+    from github import GithubObject
+
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    repo_obj.edit(
+        description=body.description
+        if body.description is not None
+        else GithubObject.NotSet,
+        private=body.private if body.private is not None else GithubObject.NotSet,
+        has_issues=body.has_issues
+        if body.has_issues is not None
+        else GithubObject.NotSet,
+        has_wiki=body.has_wiki if body.has_wiki is not None else GithubObject.NotSet,
+    )
+    repo_obj = client.get_repo(f"{owner}/{repo}")  # re-fetch to return the new state
+    return _repo_to_dict(repo_obj)
+
+
+@router.patch(
+    "/chat/github/repos/{owner}/{repo}",
+    summary="Update GitHub repository settings",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        422: {"description": "No fields provided, or GitHub rejected the request"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def update_repo(
+    owner: str,
+    repo: str,
+    body: UpdateRepoRequest,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Update *owner*/*repo*'s settings — only provided fields are changed."""
+    if body.model_dump(exclude_none=True) == {}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one field to update must be provided",
+        )
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(_update_repo_sync, client, owner, repo, body)
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="update_repo",
+            key=f"{owner}/{repo}",
+            new_value=body.model_dump(exclude_none=True),
+            detail=f"Updated repository {result['full_name']}",
+        )
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
