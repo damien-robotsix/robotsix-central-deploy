@@ -195,7 +195,7 @@ async def put_settings(
             component_store: ComponentConfigStore = (
                 request.app.state.component_config_store
             )
-            backend: object = request.app.state.execution_backend
+            backend: object = request.app.state.backend
             for comp_cfg in component_store.all():
                 if comp_cfg.llmio_tier_level and comp_cfg.config_volume:
                     try:
