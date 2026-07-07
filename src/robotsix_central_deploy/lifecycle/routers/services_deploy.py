@@ -49,7 +49,7 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig
+from ...registry.models import ComponentConfig, ServiceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,31 @@ router = APIRouter(tags=["services"])
 # ---------------------------------------------------------------------------
 
 
+def _build_sibling_config(
+    sib_config: ServiceConfig,
+    sib_name: str,
+    merged_env: dict[str, str],
+) -> ComponentConfig:
+    """Build a ComponentConfig for a sibling service from its ServiceConfig and merged env."""
+    return ComponentConfig(
+        id=sib_name,
+        image=sib_config.image,
+        container_name=sib_config.container_name,
+        ports=sib_config.ports,
+        mounts=sib_config.mounts,
+        env=merged_env,
+        health_check=sib_config.health_check,
+        claude_mount=sib_config.claude_mount,
+        host_docker_sock=sib_config.host_docker_sock,
+        named_volumes=[m.host for m in sib_config.mounts],
+        command=sib_config.command,
+        entrypoint=sib_config.entrypoint,
+        tmpfs=sib_config.tmpfs,
+        mem_limit=sib_config.mem_limit,
+        user=sib_config.user,
+    )
+
+
 async def _fanout_deploy_siblings(
     name: str,
     store: ServiceStore,
@@ -82,23 +107,7 @@ async def _fanout_deploy_siblings(
     for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
         sib_name = f"{name}-{sib_config.service_key}"
         merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
-        effective_sib = ComponentConfig(
-            id=sib_name,
-            image=sib_config.image,
-            container_name=sib_config.container_name,
-            ports=sib_config.ports,
-            mounts=sib_config.mounts,
-            env=merged_env,
-            health_check=sib_config.health_check,
-            claude_mount=sib_config.claude_mount,
-            host_docker_sock=sib_config.host_docker_sock,
-            named_volumes=[m.host for m in sib_config.mounts],
-            command=sib_config.command,
-            entrypoint=sib_config.entrypoint,
-            tmpfs=sib_config.tmpfs,
-            mem_limit=sib_config.mem_limit,
-            user=sib_config.user,
-        )
+        effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
             sib_outcome = await backend.deploy(
                 sib_record, effective_sib, sib_config.image
@@ -151,23 +160,7 @@ async def _fanout_rollback_siblings(
             continue
         sib_name = f"{name}-{sib_config.service_key}"
         merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
-        effective_sib = ComponentConfig(
-            id=sib_name,
-            image=sib_config.image,
-            container_name=sib_config.container_name,
-            ports=sib_config.ports,
-            mounts=sib_config.mounts,
-            env=merged_env,
-            health_check=sib_config.health_check,
-            claude_mount=sib_config.claude_mount,
-            host_docker_sock=sib_config.host_docker_sock,
-            named_volumes=[m.host for m in sib_config.mounts],
-            command=sib_config.command,
-            entrypoint=sib_config.entrypoint,
-            tmpfs=sib_config.tmpfs,
-            mem_limit=sib_config.mem_limit,
-            user=sib_config.user,
-        )
+        effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
             sib_outcome = await backend.rollback(sib_record, effective_sib)
             old_dep_sib = sib_record.deployed_image_digest
