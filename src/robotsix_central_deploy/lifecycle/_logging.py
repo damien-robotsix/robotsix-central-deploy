@@ -8,6 +8,15 @@ emitting access logs and application logs as JSON to stdout.
 
 from __future__ import annotations
 
+import structlog
+
+# ``dictConfig``'s "()" key resolves a dotted-path string to a class to
+# instantiate, but that resolution does NOT recurse into a formatter's other
+# keys — ``processors``/``foreign_pre_chain`` must be actual callables here,
+# not dotted-path strings. Passing strings makes ProcessorFormatter.format()
+# try to call the string itself as a processor, raising "TypeError: 'str'
+# object is not callable" on every single log record (silently swallowing
+# the real message — see structlog/stdlib.py's ProcessorFormatter.format).
 LOGGING_CONFIG: dict[str, object] = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -19,13 +28,13 @@ LOGGING_CONFIG: dict[str, object] = {
         "json": {
             "()": "structlog.stdlib.ProcessorFormatter",
             "processors": [
-                "structlog.stdlib.ProcessorFormatter.remove_processors_meta",
-                "structlog.processors.JSONRenderer",
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.JSONRenderer(),
             ],
             "foreign_pre_chain": [
-                "structlog.stdlib.add_log_level",
-                "structlog.stdlib.add_logger_name",
-                "structlog.processors.TimeStamper",
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.add_logger_name,
+                structlog.processors.TimeStamper(fmt="iso"),
             ],
         },
     },
