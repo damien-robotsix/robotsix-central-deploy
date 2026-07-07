@@ -98,6 +98,7 @@ modules:
       - WS /{path:path}            # WebSocket relay (subdomain only)
     paths:
       - src/robotsix_central_deploy/gateway/**/*
+      - tests/gateway/**/*
     tests: tests/gateway/
 
   - id: registry
