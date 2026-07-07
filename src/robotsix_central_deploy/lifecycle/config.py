@@ -234,6 +234,22 @@ class LifecycleConfig(BaseModel):
         description="Board repo id under which audit tickets are filed.",
     )
 
+    # GitHub App auth (chat-agent "github" virtual component — GitHub Actions
+    # workflow-run status). Shares the same GitHub App installation as
+    # robotsix-mill; the chat container never sees these credentials — the
+    # deploy server mints short-lived installation tokens server-side.
+    github_app_id: str = Field(
+        "",
+        description=(
+            "GitHub App ID used to mint installation tokens for the chat "
+            "agent's 'github' component. Empty disables the component."
+        ),
+    )
+    github_app_private_key: str = Field(
+        "",
+        description="GitHub App private key (PEM) paired with github_app_id.",
+    )
+
     # Caretaker
     caretaker_enabled: bool = Field(
         False,

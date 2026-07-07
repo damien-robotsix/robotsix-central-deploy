@@ -31,6 +31,8 @@
   "board_api_url": "",
   "board_api_token": "",
   "board_repo_id": "",
+  "github_app_id": "",
+  "github_app_private_key": "",
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
   "mill_component_id": "mill",
@@ -50,6 +52,15 @@
       "chat_base_url": "http://central-deploy:8100",
       "chat_skill_endpoint": "/chat-skill",
       "chat_skill": "",
+      "auth_type": "header",
+      "auth_header_name": "X-API-Key",
+      "auth_token_env": "DEPLOY_API_KEY"
+    },
+    {
+      "id": "github",
+      "chat_base_url": "http://central-deploy:8100",
+      "chat_skill_endpoint": "/chat-skill",
+      "chat_skill": "# GitHub Actions status\n\nRead-only GitHub Actions workflow-run status, for checking whether a merged PR's image build/deploy has finished. Powered by a GitHub App installation token minted server-side (shared with robotsix-mill's GitHub App) — the token is never exposed to the chat container.\n\n## Endpoints\n- `GET /chat/github/repos/{owner}/{repo}/actions/runs` — list recent workflow runs, most-recent-first. Optional query params: `branch`, `run_status` (GitHub's `status`: e.g. `in_progress`, `completed`, `queued`), `per_page` (default 10, capped at 100).\n- `GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}` — a single run's status/conclusion/URL.\n\nBoth return `id`, `name`, `status`, `conclusion`, `head_branch`, `head_sha`, `run_number`, `event`, `html_url`, `created_at`, `updated_at`.\n\n## Authentication\n\nSame as the `deploy` component: `X-API-Key` header from `DEPLOY_API_KEY`.\n\n## Safety\n\nRead-only — no confirmation gate needed. Scope is bounded by which repos the shared GitHub App is installed on; a repo it isn't installed on returns 404.",
       "auth_type": "header",
       "auth_header_name": "X-API-Key",
       "auth_token_env": "DEPLOY_API_KEY"
