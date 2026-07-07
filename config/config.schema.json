@@ -273,6 +273,18 @@
       "title": "Board Repo Id",
       "type": "string"
     },
+    "github_app_id": {
+      "default": "",
+      "description": "GitHub App ID used to mint installation tokens for the chat agent's 'github' component. Empty disables the component.",
+      "title": "Github App Id",
+      "type": "string"
+    },
+    "github_app_private_key": {
+      "default": "",
+      "description": "GitHub App private key (PEM) paired with github_app_id.",
+      "title": "Github App Private Key",
+      "type": "string"
+    },
     "caretaker_enabled": {
       "default": false,
       "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",

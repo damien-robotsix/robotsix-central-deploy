@@ -25,6 +25,7 @@ from .routers.caretaker import router as caretaker_router
 from .routers.onboard import router as onboard_router
 from .routers.claude_auth import router as claude_auth_router
 from .routers.chat import router as chat_router
+from .routers.chat_github import router as chat_github_router
 from .settings_router import settings_router
 from ..ui.router import router as ui_router
 
@@ -60,6 +61,7 @@ app.include_router(caretaker_router)
 app.include_router(onboard_router)
 app.include_router(claude_auth_router)
 app.include_router(chat_router)
+app.include_router(chat_github_router)
 
 # Gateway router — MUST be registered last so its catch-all routes only
 # match after every specific API route has been tried.
