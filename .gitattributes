@@ -1,0 +1,15 @@
+* text=auto
+
+# Python and shell scripts always use LF
+*.py eol=lf
+*.sh eol=lf
+
+# Lockfile is machine-generated — don't show in diffs
+uv.lock linguist-generated=true
+
+# Binary files
+*.whl binary
+*.tar.gz binary
+*.png binary
+*.svg binary
+*.ico binary

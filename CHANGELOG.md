@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added CONTRIBUTING.md, SECURITY.md, and .gitattributes as standard repository files (per robotsix-standards convention).
 - Refactor `DockerSdkBackend.deploy()`: extract `_remove_old_container`, `_prepare_volumes`, and `_try_restore` helpers to reduce nesting and improve readability.
 - Add ``pytest.importorskip("github")`` guards to ``tests/lifecycle/routers/test_chat_github.py`` and ``tests/lifecycle/test_github_app.py`` so the test suite skips gracefully when PyGithub is unavailable in the test environment.
 - Fixed ``AttributeError`` in ``PUT /settings`` when ``llmio_tier_config`` changes: corrected ``app.state.execution_backend`` to ``app.state.backend`` in the tier-config propagation block of ``settings_router.py``.
