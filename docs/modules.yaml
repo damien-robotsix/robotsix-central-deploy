@@ -138,6 +138,7 @@ modules:
     paths:
       - src/robotsix_central_deploy/ui/**/*
       - docs/ui/**/*
+      - tests/ui/**/*
     tests: tests/ui/
 
   - id: registry_check
