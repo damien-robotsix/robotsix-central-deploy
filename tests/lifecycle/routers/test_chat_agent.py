@@ -39,7 +39,7 @@ from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
 
 def _make_config(
-    component_id: str = "robotsix-chat",
+    component_id: str = "chat",
     image: str = "repo:v1",
 ) -> ComponentConfig:
     return ComponentConfig(
@@ -130,7 +130,7 @@ def audit_store(state_dir: Path) -> ChatAgentAuditStore:
 @pytest.fixture
 def component_config_store(state_dir: Path) -> ComponentConfigStore:
     store = ComponentConfigStore(state_dir / "component_configs.json")
-    store.register(_make_config("robotsix-chat", "ghcr.io/test/robotsix-chat:main"))
+    store.register(_make_config("chat", "ghcr.io/test/robotsix-chat:main"))
     store.register(_make_config("cognee", "ghcr.io/test/cognee:main"))
     store.register(_make_config("other-svc", "ghcr.io/test/other:main"))
     return store
@@ -206,20 +206,20 @@ async def test_chat_config_update_happy_path(
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
 ):
-    """PUT /chat/config/robotsix-chat with valid non-secret keys succeeds."""
+    """PUT /chat/config/chat with valid non-secret keys succeeds."""
     # Seed the config template
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     # Seed a service record
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.put(
-        "/chat/config/robotsix-chat",
+        "/chat/config/chat",
         json={"values": {"debug": True, "log_level": "debug"}},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["component"] == "robotsix-chat"
+    assert data["component"] == "chat"
     assert "restored" in data
     assert data["restored"]["debug"] is True
     assert data["restored"]["log_level"] == "debug"
@@ -235,11 +235,11 @@ async def test_chat_config_update_rejects_secret_keys(
     config_yaml_store: ConfigYamlStore,
 ):
     """PUT /chat/config with a secret key in the body returns 403."""
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.put(
-        "/chat/config/robotsix-chat",
+        "/chat/config/chat",
         json={"values": {"debug": True, "api_token": "leaked-secret"}},
         headers=auth_headers,
     )
@@ -255,11 +255,11 @@ async def test_chat_config_update_secret_in_nested_object(
     config_yaml_store: ConfigYamlStore,
 ):
     """Nested secret keys are also rejected with 403."""
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.put(
-        "/chat/config/robotsix-chat",
+        "/chat/config/chat",
         json={"values": {"nested": {"host": "newhost", "secret_key": "bad"}}},
         headers=auth_headers,
     )
@@ -292,11 +292,11 @@ async def test_chat_config_update_no_schema_returns_404(
     auth_headers: dict[str, str],
     store: InMemoryStore,
 ):
-    """PUT /chat/config/robotsix-chat with no stored template returns 404."""
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    """PUT /chat/config/chat with no stored template returns 404."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.put(
-        "/chat/config/robotsix-chat",
+        "/chat/config/chat",
         json={"values": {"debug": True}},
         headers=auth_headers,
     )
@@ -315,25 +315,25 @@ async def test_chat_config_rollback_happy_path(
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
 ):
-    """POST /chat/config/robotsix-chat/rollback restores previous snapshot."""
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    """POST /chat/config/chat/rollback restores previous snapshot."""
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     # First update to create a rollback snapshot.
     await client.put(
-        "/chat/config/robotsix-chat",
+        "/chat/config/chat",
         json={"values": {"debug": True, "log_level": "debug"}},
         headers=auth_headers,
     )
 
     # Then rollback.
     resp = await client.post(
-        "/chat/config/robotsix-chat/rollback",
+        "/chat/config/chat/rollback",
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["component"] == "robotsix-chat"
+    assert data["component"] == "chat"
     # Restored should have the template defaults (since the "previous" was the template).
     assert data["restored"]["debug"] is False
     assert data["restored"]["log_level"] == "info"
@@ -347,11 +347,11 @@ async def test_chat_config_rollback_no_previous(
     config_yaml_store: ConfigYamlStore,
 ):
     """POST /chat/config/rollback with no stored snapshot returns 404."""
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.post(
-        "/chat/config/robotsix-chat/rollback",
+        "/chat/config/chat/rollback",
         headers=auth_headers,
     )
     assert resp.status_code == 404
@@ -381,16 +381,16 @@ async def test_chat_restart_happy_path(
     auth_headers: dict[str, str],
     store: InMemoryStore,
 ):
-    """POST /chat/services/robotsix-chat/restart succeeds."""
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    """POST /chat/services/chat/restart succeeds."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.post(
-        "/chat/services/robotsix-chat/restart",
+        "/chat/services/chat/restart",
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["name"] == "robotsix-chat"
+    assert data["name"] == "chat"
     assert data["action"] == "restart"
     assert data["previous_state"] == "running"
     # NoopBackend restart transitions to RUNNING.
@@ -420,18 +420,18 @@ async def test_chat_restart_rate_limited(
     store: InMemoryStore,
 ):
     """Second restart within cooldown window returns 429."""
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     # First restart succeeds.
     resp1 = await client.post(
-        "/chat/services/robotsix-chat/restart",
+        "/chat/services/chat/restart",
         headers=auth_headers,
     )
     assert resp1.status_code == 200
 
     # Second restart within cooldown fails.
     resp2 = await client.post(
-        "/chat/services/robotsix-chat/restart",
+        "/chat/services/chat/restart",
         headers=auth_headers,
     )
     assert resp2.status_code == 429
@@ -450,16 +450,16 @@ async def test_chat_update_happy_path(
     store: InMemoryStore,
     backend: NoopBackend,
 ):
-    """POST /chat/services/robotsix-chat/update succeeds."""
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    """POST /chat/services/chat/update succeeds."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.post(
-        "/chat/services/robotsix-chat/update",
+        "/chat/services/chat/update",
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["name"] == "robotsix-chat"
+    assert data["name"] == "chat"
     assert data["action"] == "update"
     assert data["deployed_digest"] == "sha256:noop"
     assert data["current_state"] == "running"
@@ -488,18 +488,18 @@ async def test_chat_update_rate_limited(
     store: InMemoryStore,
 ):
     """Second update within cooldown window returns 429."""
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     # First update succeeds.
     resp1 = await client.post(
-        "/chat/services/robotsix-chat/update",
+        "/chat/services/chat/update",
         headers=auth_headers,
     )
     assert resp1.status_code == 200
 
     # Second update within cooldown fails.
     resp2 = await client.post(
-        "/chat/services/robotsix-chat/update",
+        "/chat/services/chat/update",
         headers=auth_headers,
     )
     assert resp2.status_code == 429
@@ -519,12 +519,12 @@ async def test_chat_audit_log(
     config_yaml_store: ConfigYamlStore,
 ):
     """GET /chat/audit-log returns recent audit entries."""
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     # Perform a config update to generate an audit entry.
     await client.put(
-        "/chat/config/robotsix-chat",
+        "/chat/config/chat",
         json={"values": {"debug": True}},
         headers=auth_headers,
     )
@@ -538,7 +538,7 @@ async def test_chat_audit_log(
     data = resp.json()
     assert len(data["entries"]) >= 1
     entry = data["entries"][0]
-    assert entry["component"] == "robotsix-chat"
+    assert entry["component"] == "chat"
     assert entry["action"] == "config_update"
     assert entry["key"] == "debug"
     assert entry["new_value"] is True
@@ -553,8 +553,8 @@ async def test_chat_audit_log_filtered(
 ):
     """GET /chat/audit-log?component=cognee filters by component."""
     await config_yaml_store.save_template("cognee", _CONFIG_TEMPLATE)
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
     await store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
 
     await client.put(
@@ -585,14 +585,14 @@ async def test_chat_endpoints_require_auth(
     config_yaml_store: ConfigYamlStore,
 ):
     """All chat write endpoints return 401 without auth."""
-    await config_yaml_store.save_template("robotsix-chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="robotsix-chat", state=ServiceState.RUNNING))
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     endpoints = [
-        ("PUT", "/chat/config/robotsix-chat", {"values": {"debug": True}}),
-        ("POST", "/chat/config/robotsix-chat/rollback", None),
-        ("POST", "/chat/services/robotsix-chat/restart", None),
-        ("POST", "/chat/services/robotsix-chat/update", None),
+        ("PUT", "/chat/config/chat", {"values": {"debug": True}}),
+        ("POST", "/chat/config/chat/rollback", None),
+        ("POST", "/chat/services/chat/restart", None),
+        ("POST", "/chat/services/chat/update", None),
     ]
     for method, path, body in endpoints:
         if body is not None:
