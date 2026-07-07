@@ -1065,22 +1065,6 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
     )
 
 
-def _fetch_fresh_config_assist(
-    git_url: str, name: str
-) -> tuple[str | None, list["ConfigAssistSeed"]]:
-    """Re-fetch config-assist fields from the repo's compose at HEAD.
-
-    Blocking (runs git clone). Call via run_in_executor.
-    Raises FetchError or ParseError on failure; callers must handle.
-    """
-    from robotsix_central_deploy.onboard.fetcher import fetch_compose_bytes
-    from robotsix_central_deploy.onboard.parser import parse_compose
-
-    compose_bytes = fetch_compose_bytes(git_url)
-    spec = parse_compose(compose_bytes, name, git_url)
-    return spec.config_assist_command, spec.config_assist_seeds
-
-
 def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> None:
     """Validate *values* against JSON Schema, raising HTTP 422 on failure."""
     import jsonschema

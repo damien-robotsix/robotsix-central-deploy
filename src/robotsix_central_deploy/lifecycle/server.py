@@ -29,7 +29,6 @@ from .deps import (  # noqa: F401
     _seed_for_detect as _seed_for_detect,
     _validate_account_ids as _validate_account_ids,
     _validate_config_or_422 as _validate_config_or_422,
-    _fetch_fresh_config_assist as _fetch_fresh_config_assist,
     _namespace_spec_volumes as _namespace_spec_volumes,
     VOLUME_CAT_MAX_BYTES as VOLUME_CAT_MAX_BYTES,
 )
@@ -46,7 +45,6 @@ __all__ = [
     "_seed_for_detect",
     "_validate_account_ids",
     "_validate_config_or_422",
-    "_fetch_fresh_config_assist",
     "_namespace_spec_volumes",
     "VOLUME_CAT_MAX_BYTES",
     "VolumeAuditResponse",
