@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Classify `tests/ui/` test files under the `ui` module in `docs/modules.yaml` with `tests/ui/**/*` path glob.
 - Add `tests/lifecycle/**/*` glob to lifecycle module paths in `docs/modules.yaml` to claim all lifecycle test files
 - Add `.badge-unknown` CSS class to dashboard for consistent grey styling on unknown-state badges
 - Remove dead code: ``_fetch_fresh_config_assist`` (zero call sites, no tests).
