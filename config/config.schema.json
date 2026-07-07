@@ -285,6 +285,12 @@
       "title": "Github App Private Key",
       "type": "string"
     },
+    "github_repo_create_token": {
+      "default": "",
+      "description": "A GitHub Personal Access Token (classic 'repo' scope, or fine-grained with Administration:read-and-write) used only for POST /chat/github/repos. GitHub App installation tokens cannot create repositories under a personal account ('Resource not accessible by integration'), so repo creation needs a separate PAT \u2014 shares the same token as robotsix-mill's forge_repo_create_token. Empty disables repo creation (the Actions-status endpoints are unaffected).",
+      "title": "Github Repo Create Token",
+      "type": "string"
+    },
     "caretaker_enabled": {
       "default": false,
       "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",
