@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `.badge-unknown` CSS class to dashboard for consistent grey styling on unknown-state badges
 - Remove dead code: ``_fetch_fresh_config_assist`` (zero call sites, no tests).
 - Standardize pseudo-enums as ``StrEnum`` classes in ``lifecycle/models.py``: ``ActionType``, ``DeploySource``, ``OnboardJobPhase``, ``DeployJobPhase``. Replace raw string literals across services, chat, onboard, deploy, deps, and caretaker modules with enum member references. Fix dashboard deploy-history source badge to match ``"manual"`` instead of ``"deploy"``.
 - Extract duplicated llmio tier config write pattern into ``_write_llmio_tier_config`` helper in ``lifecycle/_config_utils.py``, replacing the two inlined copies in ``put_service_config`` and ``_run_deploy_job``.
