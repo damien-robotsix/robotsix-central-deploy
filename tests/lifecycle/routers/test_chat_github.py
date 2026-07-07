@@ -260,6 +260,167 @@ class TestGetWorkflowRun:
         assert resp.status_code == 404
 
 
+@pytest.fixture
+def enable_repo_create_token():
+    """Configure github_repo_create_token so create_repo doesn't 503."""
+    server_mod.app.state.config.github_repo_create_token = "pat-token"
+    yield
+    server_mod.app.state.config.github_repo_create_token = ""
+
+
+class TestCreateRepo:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.post("/chat/github/repos", json={"name": "widget"})
+        assert resp.status_code == 401
+
+    async def test_503_when_token_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos", json={"name": "widget"}, headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_creates_repo(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_repo_create_token,
+    ):
+        fake_repo = MagicMock()
+        fake_repo.full_name = "damien-robotsix/widget"
+        fake_repo.html_url = "https://github.com/damien-robotsix/widget"
+        fake_repo.clone_url = "https://github.com/damien-robotsix/widget.git"
+        fake_repo.private = True
+        fake_repo.description = "A widget"
+
+        fake_user = MagicMock()
+        fake_user.create_repo.return_value = fake_repo
+        fake_client = MagicMock()
+        fake_client.get_user.return_value = fake_user
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: fake_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos",
+            json={
+                "name": "widget",
+                "description": "A widget",
+                "private": True,
+                "topics": ["robotics"],
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "full_name": "damien-robotsix/widget",
+            "html_url": "https://github.com/damien-robotsix/widget",
+            "clone_url": "https://github.com/damien-robotsix/widget.git",
+            "private": True,
+            "description": "A widget",
+        }
+        fake_user.create_repo.assert_called_once_with(
+            name="widget",
+            description="A widget",
+            homepage="",
+            private=True,
+            auto_init=False,
+        )
+        fake_repo.replace_topics.assert_called_once_with(["robotics"])
+
+    async def test_records_audit_entry(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_repo_create_token,
+    ):
+        fake_repo = MagicMock()
+        fake_repo.full_name = "damien-robotsix/widget"
+        fake_repo.html_url = "https://github.com/damien-robotsix/widget"
+        fake_repo.clone_url = "https://github.com/damien-robotsix/widget.git"
+        fake_repo.private = False
+        fake_repo.description = ""
+
+        fake_user = MagicMock()
+        fake_user.create_repo.return_value = fake_repo
+        fake_client = MagicMock()
+        fake_client.get_user.return_value = fake_user
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: fake_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos", json={"name": "widget"}, headers=auth_headers
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "create_repo"
+        assert entries[0].key == "widget"
+
+    async def test_name_conflict_returns_409(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_repo_create_token,
+    ):
+        from github import GithubException
+
+        fake_user = MagicMock()
+        fake_user.create_repo.side_effect = GithubException(
+            422, data={"message": "name already exists on this account"}
+        )
+        fake_client = MagicMock()
+        fake_client.get_user.return_value = fake_user
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: fake_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos", json={"name": "widget"}, headers=auth_headers
+        )
+        assert resp.status_code == 409
+
+    async def test_other_github_error_returns_422(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_repo_create_token,
+    ):
+        from github import GithubException
+
+        fake_user = MagicMock()
+        fake_user.create_repo.side_effect = GithubException(
+            422, data={"message": "invalid name"}
+        )
+        fake_client = MagicMock()
+        fake_client.get_user.return_value = fake_user
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: fake_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos", json={"name": "bad name"}, headers=auth_headers
+        )
+        assert resp.status_code == 422
+
+
 class TestGitHubAppNotConfiguredError:
     def test_message_mentions_both_fields(self):
         # Sanity check on the error message content raised by github_app.py,

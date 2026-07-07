@@ -29,6 +29,7 @@ modules:
       - GET /chat/audit-log
       - GET /chat/github/repos/{owner}/{repo}/actions/runs
       - GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}
+      - POST /chat/github/repos
       - GET /services
       - GET /services/{name}
       - GET /services/{name}/health

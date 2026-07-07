@@ -249,6 +249,19 @@ class LifecycleConfig(BaseModel):
         "",
         description="GitHub App private key (PEM) paired with github_app_id.",
     )
+    github_repo_create_token: str = Field(
+        "",
+        description=(
+            "A GitHub Personal Access Token (classic 'repo' scope, or "
+            "fine-grained with Administration:read-and-write) used only for "
+            "POST /chat/github/repos. GitHub App installation tokens cannot "
+            "create repositories under a personal account ('Resource not "
+            "accessible by integration'), so repo creation needs a separate "
+            "PAT — shares the same token as robotsix-mill's "
+            "forge_repo_create_token. Empty disables repo creation (the "
+            "Actions-status endpoints are unaffected)."
+        ),
+    )
 
     # Caretaker
     caretaker_enabled: bool = Field(

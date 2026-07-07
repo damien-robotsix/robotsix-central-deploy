@@ -32,6 +32,16 @@ class GitHubAppNotConfiguredError(RuntimeError):
     """Raised when ``github_app_id``/``github_app_private_key`` are unset."""
 
 
+class GitHubRepoCreateNotConfiguredError(RuntimeError):
+    """Raised when ``github_repo_create_token`` is unset.
+
+    GitHub App installation tokens cannot create repositories under a
+    personal account (GitHub returns 403 "Resource not accessible by
+    integration"), so repo creation needs a separate PAT — see
+    :data:`~robotsix_central_deploy.lifecycle.config.LifecycleConfig.github_repo_create_token`.
+    """
+
+
 def _build_client_sync(app_id: str, private_key: str, owner: str, repo: str) -> object:
     """Resolve *owner*/*repo*'s installation and return an authenticated client."""
     from github import Auth, GithubIntegration
@@ -64,4 +74,31 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
             repo,
         )
         _client_cache[key] = client
+    return client
+
+
+_repo_create_client_cache: dict[str, object] = {}
+
+
+def get_repo_create_client(config: LifecycleConfig) -> object:
+    """Return a cached (or freshly-built) PAT-authenticated ``Github`` client.
+
+    Used only for repo creation: a GitHub App installation token cannot
+    create repositories under a personal account, so this uses
+    ``github_repo_create_token`` (a plain PAT) instead of the App-based
+    client from :func:`get_github_client`. Synchronous and non-blocking —
+    ``Github(auth=...)`` does no network I/O at construction time.
+
+    Raises :class:`GitHubRepoCreateNotConfiguredError` when the token is unset.
+    """
+    if not config.github_repo_create_token:
+        raise GitHubRepoCreateNotConfiguredError(
+            "github_repo_create_token must be set to create repositories."
+        )
+    client = _repo_create_client_cache.get(config.github_repo_create_token)
+    if client is None:
+        from github import Auth, Github
+
+        client = Github(auth=Auth.Token(config.github_repo_create_token))
+        _repo_create_client_cache[config.github_repo_create_token] = client
     return client

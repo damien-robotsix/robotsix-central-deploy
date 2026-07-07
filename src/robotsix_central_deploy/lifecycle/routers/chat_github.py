@@ -1,14 +1,24 @@
-"""Chat-agent GitHub Actions workflow-run status (read-only).
+"""Chat-agent GitHub Actions status (read-only) and repo creation (write).
 
 Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs`` — list recent runs
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}`` — a single run
+- ``POST /chat/github/repos`` — create a new repository
 
-Both endpoints mint a GitHub App installation token server-side
+The Actions-status endpoints mint a GitHub App installation token server-side
 (:mod:`..github_app`) so the chat container never holds GitHub credentials —
-the same GitHub App installation as robotsix-mill powers both. Read-only, so
-neither endpoint needs the chat-agent audit log or a confirmation gate (those
-guard mutations elsewhere in :mod:`.chat`).
+the same GitHub App installation as robotsix-mill powers both. They are
+read-only, so neither needs the chat-agent audit log or a confirmation gate
+(those guard mutations elsewhere in :mod:`.chat`).
+
+Repo creation is a genuine mutation, so it's both audit-logged (mirroring
+:mod:`.chat`'s config/restart/update endpoints) and — per the ``github``
+skill's documented safety rule — expected to only be called after the chat
+agent has obtained explicit user confirmation in-conversation (a server-side
+confirmation gate isn't possible here; the skill text is the enforcement
+point, same as the config/restart/update endpoints in :mod:`.chat`). It uses
+a separate PAT (``github_repo_create_token``), not the App installation
+token: GitHub Apps cannot create repositories under a personal account.
 """
 
 from __future__ import annotations
@@ -17,11 +27,18 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
 from ..auth import verify_auth
 from ..config import LifecycleConfig
-from ..deps import _get_config
-from ..github_app import GitHubAppNotConfiguredError, get_github_client
+from ..deps import _get_chat_agent_audit_store, _get_config
+from ..github_app import (
+    GitHubAppNotConfiguredError,
+    GitHubRepoCreateNotConfiguredError,
+    get_github_client,
+    get_repo_create_client,
+)
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 
 router = APIRouter(tags=["chat-github"])
 
@@ -150,3 +167,100 @@ async def get_workflow_run(
     except Exception as exc:
         _reraise_github_errors(exc, owner, repo)
         raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos — repo creation (write; separate PAT auth)
+# ---------------------------------------------------------------------------
+
+
+class CreateRepoRequest(BaseModel):
+    """Body for ``POST /chat/github/repos``."""
+
+    name: str = Field(..., description="Repository name (no owner prefix).")
+    description: str = Field("", description="Repository description.")
+    private: bool = Field(False, description="Create as a private repository.")
+    homepage: str = Field("", description="Homepage URL.")
+    topics: list[str] = Field(
+        default_factory=list, description="Topics to attach after creation."
+    )
+
+
+def _create_repo_sync(client: Any, body: CreateRepoRequest) -> dict[str, Any]:
+    user = client.get_user()
+    repo = user.create_repo(
+        name=body.name,
+        description=body.description or "",
+        homepage=body.homepage or "",
+        private=body.private,
+        auto_init=False,
+    )
+    if body.topics:
+        repo.replace_topics(body.topics)
+    return {
+        "full_name": repo.full_name,
+        "html_url": repo.html_url,
+        "clone_url": repo.clone_url,
+        "private": repo.private,
+        "description": repo.description,
+    }
+
+
+@router.post(
+    "/chat/github/repos",
+    summary="Create a new GitHub repository",
+    responses={
+        401: {"description": "Unauthorized"},
+        409: {"description": "Repository already exists"},
+        422: {"description": "GitHub rejected the request (e.g. invalid name)"},
+        503: {"description": "Repo creation not configured"},
+    },
+)
+async def create_repo(
+    body: CreateRepoRequest,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Create a new repository under the configured account.
+
+    Uses ``github_repo_create_token`` (a PAT), not the GitHub App
+    installation token — GitHub Apps cannot create repositories under a
+    personal account. The repository is always created under that token's
+    own account; there is no way to target an arbitrary owner.
+    """
+    try:
+        client = get_repo_create_client(config)
+    except GitHubRepoCreateNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    try:
+        result = await asyncio.to_thread(_create_repo_sync, client, body)
+    except Exception as exc:
+        from github import GithubException
+
+        if isinstance(exc, GithubException):
+            detail = str(exc)
+            if exc.status == 422 and "name already exists" in detail.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Repository '{body.name}' already exists",
+                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"GitHub repo create failed: {detail}",
+            ) from exc
+        raise
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="create_repo",
+            key=body.name,
+            new_value=result["html_url"],
+            detail=f"Created repository {result['full_name']}",
+        )
+    )
+    return result
