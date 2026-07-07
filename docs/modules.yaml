@@ -185,6 +185,7 @@ modules:
       - pyyaml
     paths:
       - src/robotsix_central_deploy/onboard/**/*
+      - tests/onboard/**/*
       - tests/onboard/test_port_utils.py
     tests: tests/onboard/
 
