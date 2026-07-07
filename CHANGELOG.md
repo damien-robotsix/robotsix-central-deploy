@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Add `tests/lifecycle/**/*` glob to lifecycle module paths in `docs/modules.yaml` to claim all lifecycle test files
+- Classify `tests/registry/` test files under the `registry` module in `docs/modules.yaml`.
 - Add `.badge-unknown` CSS class to dashboard for consistent grey styling on unknown-state badges
 - Remove dead code: ``_fetch_fresh_config_assist`` (zero call sites, no tests).
 - Standardize pseudo-enums as ``StrEnum`` classes in ``lifecycle/models.py``: ``ActionType``, ``DeploySource``, ``OnboardJobPhase``, ``DeployJobPhase``. Replace raw string literals across services, chat, onboard, deploy, deps, and caretaker modules with enum member references. Fix dashboard deploy-history source badge to match ``"manual"`` instead of ``"deploy"``.
