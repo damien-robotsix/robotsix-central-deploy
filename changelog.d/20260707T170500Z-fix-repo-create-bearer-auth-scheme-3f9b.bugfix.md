@@ -1,0 +1,1 @@
+Fix `POST /chat/github/repos` returning 401 "Bad credentials" for every request: PyGithub's `Auth.Token` sends `Authorization: token <pat>`, but the fine-grained PAT used for repo creation (`github_repo_create_token`) only accepts `Authorization: Bearer <pat>` — matching robotsix-mill's own `forge/github.py`, which already used `Bearer`.

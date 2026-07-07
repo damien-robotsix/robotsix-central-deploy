@@ -89,6 +89,11 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
     client from :func:`get_github_client`. Synchronous and non-blocking —
     ``Github(auth=...)`` does no network I/O at construction time.
 
+    Sends ``Authorization: Bearer <token>`` (matching robotsix-mill's own
+    ``forge/github.py``), not PyGithub's ``Auth.Token`` default of
+    ``Authorization: token <token>`` — fine-grained PATs (as opposed to
+    classic PATs) reject the ``token`` scheme with a 401 "Bad credentials".
+
     Raises :class:`GitHubRepoCreateNotConfiguredError` when the token is unset.
     """
     if not config.github_repo_create_token:
@@ -99,6 +104,11 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
     if client is None:
         from github import Auth, Github
 
-        client = Github(auth=Auth.Token(config.github_repo_create_token))
+        class _BearerTokenAuth(Auth.Token):
+            @property
+            def token_type(self) -> str:
+                return "Bearer"
+
+        client = Github(auth=_BearerTokenAuth(config.github_repo_create_token))
         _repo_create_client_cache[config.github_repo_create_token] = client
     return client
