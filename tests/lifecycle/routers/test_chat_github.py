@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 import pytest
 from httpx import AsyncClient
 
+pytest.importorskip("github")
+
 from robotsix_central_deploy.lifecycle import server as server_mod
 from robotsix_central_deploy.lifecycle.github_app import GitHubAppNotConfiguredError
 
