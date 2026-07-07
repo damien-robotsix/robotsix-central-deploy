@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Register `tests/caretaker/` test files under the caretaker module in `docs/modules.yaml`.
 - Classify `tests/ui/` test files under the `ui` module in `docs/modules.yaml` with `tests/ui/**/*` path glob.
 - Add `tests/lifecycle/**/*` glob to lifecycle module paths in `docs/modules.yaml` to claim all lifecycle test files
 - Classify `tests/registry/` test files under the `registry` module in `docs/modules.yaml`.
