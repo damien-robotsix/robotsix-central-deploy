@@ -1,0 +1,1 @@
+Classify tests/onboard/*: assign to existing module onboard
