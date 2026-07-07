@@ -134,7 +134,7 @@ async def deploy_chat_skill() -> str:
         "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n\n"
         "## Agent self-restart\n"
         "The robotsix-chat agent can restart itself via:\n"
-        "`POST /chat/services/robotsix-chat/restart`\n"
+        "`POST /chat/services/chat/restart`\n"
         "This is needed after the component roster is updated so the agent "
         "picks up newly registered virtual components."
     )
@@ -144,8 +144,12 @@ async def deploy_chat_skill() -> str:
 # Server-side allowlists
 # ---------------------------------------------------------------------------
 
-# Services the chat agent is permitted to mutate.
-_CHAT_ALLOWED_SERVICES: frozenset[str] = frozenset({"robotsix-chat", "cognee"})
+# Services the chat agent is permitted to mutate. The chat service's real
+# registered name is "chat" (see GET /services), not "robotsix-chat" — using
+# the wrong name here silently 404'd the agent's own documented self-restart
+# path (POST /chat/services/robotsix-chat/restart) while the correct name
+# ("chat") was rejected as not-allowlisted (403), so neither ever worked.
+_CHAT_ALLOWED_SERVICES: frozenset[str] = frozenset({"chat", "cognee"})
 
 # Rate-limit cooldowns (seconds) per action type.
 _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
