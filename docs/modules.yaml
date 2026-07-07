@@ -153,6 +153,7 @@ modules:
     paths:
       - src/robotsix_central_deploy/registry_check/**/*
       - docs/registry_check/**/*
+      - tests/registry_check/**/*
     tests: tests/registry_check/
 
   - id: caretaker
