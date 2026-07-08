@@ -64,17 +64,6 @@ from robotsix_central_deploy.registry.settings_store import SystemSettingsStore
 
 from robotsix_central_deploy.lifecycle import server as server_mod
 
-
-def pytest_ignore_collect(collection_path, config):
-    """Skip ``test_logging_config.py`` when structlog is not installed."""
-    if collection_path.name == "test_logging_config.py":
-        try:
-            import structlog  # noqa: F401
-        except ImportError:
-            return True
-    return None
-
-
 @pytest.fixture(scope="session")
 def app():
     """Session-scoped FastAPI application."""
