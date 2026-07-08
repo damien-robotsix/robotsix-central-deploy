@@ -7,17 +7,29 @@ import html as _html
 import urllib.parse
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 from ..lifecycle.auth import verify_session, _safe_next
 from ..lifecycle.session import SessionStore
 
 router = APIRouter()
 
+_STATIC_DIR = Path(__file__).parent / "static"
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
 _CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
 _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
+
+
+@router.get("/ui/static/{filename:path}", include_in_schema=False)
+async def ui_static(filename: str) -> FileResponse:
+    # Prevent directory traversal
+    safe = _STATIC_DIR.joinpath(filename).resolve()
+    if not str(safe).startswith(str(_STATIC_DIR.resolve())):
+        raise HTTPException(status_code=404)
+    if not safe.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(safe)
 
 
 @router.get("/ui", response_class=HTMLResponse, include_in_schema=False)
