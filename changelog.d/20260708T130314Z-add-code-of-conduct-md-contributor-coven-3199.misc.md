@@ -1,0 +1,1 @@
+Add CODE_OF_CONDUCT.md (Contributor Covenant v2.1) to align with ecosystem norms
