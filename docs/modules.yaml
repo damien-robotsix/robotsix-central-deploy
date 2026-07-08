@@ -32,6 +32,8 @@ modules:
       - GET /chat/github/repos/{owner}/{repo}
       - PATCH /chat/github/repos/{owner}/{repo}
       - POST /chat/github/repos
+      - GET /chat/github/repos/{owner}/{repo}/pulls
+      - GET /chat/github/repos/{owner}/{repo}/pulls/{number}
       - GET /services
       - GET /services/{name}
       - GET /services/{name}/health

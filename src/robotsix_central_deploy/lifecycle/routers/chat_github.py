@@ -1,4 +1,4 @@
-"""Chat-agent GitHub component: Actions status, repo read/create/update.
+"""Chat-agent GitHub component: Actions status, repo read/create/update, PRs.
 
 Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs`` — list recent runs
@@ -6,6 +6,8 @@ Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}`` — read repo details
 - ``PATCH /chat/github/repos/{owner}/{repo}`` — update repo settings
 - ``POST /chat/github/repos`` — create a new repository
+- ``GET /chat/github/repos/{owner}/{repo}/pulls`` — list pull requests
+- ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}`` — a single pull request
 
 This is the sole implementation of GitHub access for the chat agent — the
 chat container never holds a GitHub credential of its own. Actions-status
@@ -116,6 +118,39 @@ def _get_repo_sync(client: Any, owner: str, repo: str) -> dict[str, Any]:
     return _repo_to_dict(client.get_repo(f"{owner}/{repo}"))
 
 
+def _pr_to_dict(pr: Any) -> dict[str, Any]:
+    """Flatten a PyGithub ``PullRequest`` to the fields the chat agent needs."""
+    return {
+        "number": pr.number,
+        "title": pr.title,
+        "state": pr.state,
+        "draft": pr.draft,
+        "user": pr.user.login if pr.user else None,
+        "html_url": pr.html_url,
+        "head_ref": pr.head.ref,
+        "base_ref": pr.base.ref,
+        "mergeable": pr.mergeable,
+        "merged": pr.merged,
+        "merged_at": pr.merged_at.isoformat() if pr.merged_at else None,
+        "created_at": pr.created_at.isoformat() if pr.created_at else None,
+        "updated_at": pr.updated_at.isoformat() if pr.updated_at else None,
+        "body": pr.body,
+    }
+
+
+def _list_pulls_sync(
+    client: Any, owner: str, repo: str, state: str, per_page: int
+) -> list[dict[str, Any]]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    paginated = repo_obj.get_pulls(state=state)
+    return [_pr_to_dict(pr) for pr in paginated[: min(per_page, 100)]]
+
+
+def _get_pull_sync(client: Any, owner: str, repo: str, number: int) -> dict[str, Any]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    return _pr_to_dict(repo_obj.get_pull(number))
+
+
 def _reraise_github_errors(exc: Exception, owner: str, repo: str) -> None:
     """Map PyGithub exceptions to the matching HTTP status, else re-raise."""
     from github import GithubException, UnknownObjectException
@@ -211,6 +246,63 @@ async def get_repo(
     client = await _get_client_or_503(config, owner, repo)
     try:
         return await asyncio.to_thread(_get_repo_sync, client, owner, repo)
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/pulls",
+    summary="List pull requests for a repository",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def list_pulls(
+    owner: str,
+    repo: str,
+    state: str = "open",
+    per_page: int = 10,
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> list[dict[str, Any]]:
+    """List *owner*/*repo*'s pull requests, most-recently-updated first.
+
+    *state* is one of ``"open"`` (default), ``"closed"``, or ``"all"``.
+    *per_page* is capped at 100 (GitHub's own page-size ceiling).
+    """
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        return await asyncio.to_thread(
+            _list_pulls_sync, client, owner, repo, state, per_page
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/pulls/{number}",
+    summary="Get a single pull request",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Pull request (or repository) not found"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def get_pull(
+    owner: str,
+    repo: str,
+    number: int,
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Get *owner*/*repo*'s pull request *number* (status, mergeable, URL)."""
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        return await asyncio.to_thread(_get_pull_sync, client, owner, repo, number)
     except Exception as exc:
         _reraise_github_errors(exc, owner, repo)
         raise  # pragma: no cover — _reraise_github_errors always raises
