@@ -30,8 +30,12 @@ except ImportError:
     _s.processors.JSONRenderer = MagicMock
     _s.processors.TimeStamper = MagicMock
     # Attributes referenced but not called at import time
-    _s.stdlib.ProcessorFormatter = MagicMock
-    _s.stdlib.ProcessorFormatter.remove_processors_meta = MagicMock()
+    # Use a dedicated local class so we don't mutate the global
+    # MagicMock class when setting remove_processors_meta below.
+    class _MockProcessorFormatter:
+        remove_processors_meta = MagicMock()
+
+    _s.stdlib.ProcessorFormatter = _MockProcessorFormatter
     _s.stdlib.add_log_level = MagicMock()
     _s.stdlib.add_logger_name = MagicMock()
     sys.modules["structlog"] = _s
@@ -142,10 +146,8 @@ async def client(app):
 
 
 def pytest_ignore_collect(collection_path, config):
-    print(f'IGNORE_CHECK: {collection_path!r} name={getattr(collection_path, "name", "???")} ', file=sys.stderr)
     if hasattr(collection_path, 'name') and collection_path.name == 'test_logging_config.py':
         if not _STRUCTLOG_REAL:
-            print('SKIPPING test_logging_config.py', file=sys.stderr)
             return True
     return False
 
