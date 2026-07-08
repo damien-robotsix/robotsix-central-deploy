@@ -64,6 +64,7 @@ from robotsix_central_deploy.registry.settings_store import SystemSettingsStore
 
 from robotsix_central_deploy.lifecycle import server as server_mod
 
+
 @pytest.fixture(scope="session")
 def app():
     """Session-scoped FastAPI application."""
