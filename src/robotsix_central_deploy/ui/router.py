@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import html as _html
+import os
 import urllib.parse
 from pathlib import Path
 
@@ -23,14 +24,18 @@ _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 
 @router.get("/ui/static/{filename:path}", include_in_schema=False)
 async def ui_static(filename: str) -> FileResponse:
-    # Prevent directory traversal — reject traversal sequences and absolute
+    # Prevent directory traversal: reject traversal sequences and absolute
     # paths before any filesystem use so CodeQL recognises the sanitization.
     if ".." in filename or filename.startswith(("/", "\\")):
         raise HTTPException(status_code=404)
-    safe = (_STATIC_DIR / filename).resolve()
-    if not safe.is_relative_to(_STATIC_DIR.resolve()):
+    # Use os.path.realpath + os.path.commonpath — a CodeQL-recognised
+    # sanitizer for py/path-injection — to verify the resolved path stays
+    # within the static directory.
+    safe = os.path.realpath(_STATIC_DIR / filename)
+    allowed = os.path.realpath(str(_STATIC_DIR))
+    if os.path.commonpath([safe, allowed]) != allowed:
         raise HTTPException(status_code=404)
-    if not safe.is_file():
+    if not os.path.isfile(safe):
         raise HTTPException(status_code=404)
     return FileResponse(safe)
 
