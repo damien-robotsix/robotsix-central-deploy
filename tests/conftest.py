@@ -20,8 +20,7 @@ from unittest.mock import MagicMock
 # can load without a ModuleNotFoundError.
 # ---------------------------------------------------------------------------
 try:
-    import structlog  # noqa: F401
-
+    __import__("structlog")
     _STRUCTLOG_REAL = True
 except ImportError:
     _STRUCTLOG_REAL = False
@@ -29,6 +28,7 @@ except ImportError:
     # Classes that LOGGING_CONFIG instantiates at module level
     _s.processors.JSONRenderer = MagicMock
     _s.processors.TimeStamper = MagicMock
+
     # Attributes referenced but not called at import time
     # Use a dedicated local class so we don't mutate the global
     # MagicMock class when setting remove_processors_meta below.
@@ -65,6 +65,7 @@ from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 from robotsix_central_deploy.registry.settings_store import SystemSettingsStore
 
 from robotsix_central_deploy.lifecycle import server as server_mod
+
 
 @pytest.fixture(scope="session")
 def app():
@@ -146,8 +147,10 @@ async def client(app):
 
 
 def pytest_ignore_collect(collection_path, config):
-    if hasattr(collection_path, 'name') and collection_path.name == 'test_logging_config.py':
+    if (
+        hasattr(collection_path, "name")
+        and collection_path.name == "test_logging_config.py"
+    ):
         if not _STRUCTLOG_REAL:
             return True
     return False
-
