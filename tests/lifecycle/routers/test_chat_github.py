@@ -621,6 +621,231 @@ class TestCreateRepo:
         assert resp.status_code == 422
 
 
+class _FakeUser:
+    def __init__(self, login: str) -> None:
+        self.login = login
+
+
+class _FakeRef:
+    def __init__(self, ref: str) -> None:
+        self.ref = ref
+
+
+class _FakePull:
+    """Stand-in for a PyGithub ``PullRequest``."""
+
+    def __init__(
+        self,
+        number: int,
+        *,
+        title: str = "Fix the thing",
+        state: str = "open",
+        draft: bool = False,
+        user_login: str | None = "octocat",
+        head_ref: str = "feature-branch",
+        base_ref: str = "main",
+        mergeable: bool | None = True,
+        merged: bool = False,
+        merged_at: datetime | None = None,
+        body: str | None = "Fixes the thing.",
+    ) -> None:
+        self.number = number
+        self.title = title
+        self.state = state
+        self.draft = draft
+        self.user = _FakeUser(user_login) if user_login else None
+        self.html_url = f"https://github.com/acme/widget/pull/{number}"
+        self.head = _FakeRef(head_ref)
+        self.base = _FakeRef(base_ref)
+        self.mergeable = mergeable
+        self.merged = merged
+        self.merged_at = merged_at
+        self.created_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=timezone.utc)
+        self.updated_at = datetime(2026, 7, 7, 12, 5, 0, tzinfo=timezone.utc)
+        self.body = body
+
+
+class TestListPulls:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget/pulls")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_lists_pulls(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        repo_obj.get_pulls.return_value = [_FakePull(1), _FakePull(2)]
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        assert body[0] == {
+            "number": 1,
+            "title": "Fix the thing",
+            "state": "open",
+            "draft": False,
+            "user": "octocat",
+            "html_url": "https://github.com/acme/widget/pull/1",
+            "head_ref": "feature-branch",
+            "base_ref": "main",
+            "mergeable": True,
+            "merged": False,
+            "merged_at": None,
+            "created_at": "2026-07-07T12:00:00+00:00",
+            "updated_at": "2026-07-07T12:05:00+00:00",
+            "body": "Fixes the thing.",
+        }
+        repo_obj.get_pulls.assert_called_once_with(state="open")
+
+    async def test_passes_state_filter(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        repo_obj.get_pulls.return_value = []
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls?state=all", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        repo_obj.get_pulls.assert_called_once_with(state="all")
+
+    async def test_per_page_capped_at_100(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        repo_obj.get_pulls.return_value = [_FakePull(i) for i in range(5)]
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls?per_page=999", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 5
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        repo_obj = MagicMock()
+        repo_obj.get_pulls.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/ghost/pulls", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+
+class TestGetPull:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget/pulls/1")
+        assert resp.status_code == 401
+
+    async def test_gets_single_pull(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = _FakePull(
+            42, state="closed", merged=True, mergeable=None
+        )
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/42", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["number"] == 42
+        assert body["state"] == "closed"
+        assert body["merged"] is True
+        assert body["mergeable"] is None
+        repo_obj.get_pull.assert_called_once_with(42)
+
+    async def test_pull_not_found_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        repo_obj = MagicMock()
+        repo_obj.get_pull.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/9999", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+
 class TestGitHubAppNotConfiguredError:
     def test_message_mentions_both_fields(self):
         # Sanity check on the error message content raised by github_app.py,
