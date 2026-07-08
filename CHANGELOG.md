@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Wire `mem_limit` through the docker-compose parser so sibling services respect the compose file's `mem_limit` field instead of always defaulting to `"2g"`.
 - Add `docs/registry/overview.md` documenting the component registry module (models, stores, secrets, and architecture).
 - Align `SiblingDerivedSpec` field names with `ServiceConfig`: rename `volume_mounts` → `mounts` and add `mem_limit: str = "2g"`
 - Added CONTRIBUTING.md, SECURITY.md, and .gitattributes as standard repository files (per robotsix-standards convention).
