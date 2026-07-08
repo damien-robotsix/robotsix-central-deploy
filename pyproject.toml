@@ -71,6 +71,7 @@ allow-direct-references = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--strict-markers"
+pythonpath = [".deps"]
 markers = [
     "docker: marks tests that require a real Docker daemon (skipped by default in CI)",
 ]

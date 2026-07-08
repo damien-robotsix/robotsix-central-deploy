@@ -21,7 +21,7 @@ class SiblingDerivedSpec(BaseModel):
     )
     image: str
     ports: list[PortMapping] = []
-    volume_mounts: list[VolumeMount] = []
+    mounts: list[VolumeMount] = []
     env: dict[str, str] = {}
     claude_mount: bool = False
     host_docker_sock: bool = False
@@ -29,6 +29,7 @@ class SiblingDerivedSpec(BaseModel):
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
     tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
+    mem_limit: str = "2g"
     user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
 
 

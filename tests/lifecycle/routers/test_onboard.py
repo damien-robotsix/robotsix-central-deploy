@@ -97,7 +97,7 @@ class TestNamespaceSpecVolumes:
                     service_key="worker",
                     container_name="worker",
                     image="ghcr.io/org/worker:main",
-                    volume_mounts=[
+                    mounts=[
                         VolumeMount(host="worker-data", container="/data"),
                     ],
                 ),
@@ -105,7 +105,7 @@ class TestNamespaceSpecVolumes:
                     service_key="cache",
                     container_name="cache",
                     image="ghcr.io/org/cache:main",
-                    volume_mounts=[
+                    mounts=[
                         VolumeMount(host="cache-data", container="/cache"),
                     ],
                 ),
@@ -114,8 +114,8 @@ class TestNamespaceSpecVolumes:
         result = server_mod._namespace_spec_volumes(spec, "zzztest")
 
         assert result.volume_mounts[0].host == "zzztest-shared-vol"
-        assert result.siblings[0].volume_mounts[0].host == "zzztest-worker-data"
-        assert result.siblings[1].volume_mounts[0].host == "zzztest-cache-data"
+        assert result.siblings[0].mounts[0].host == "zzztest-worker-data"
+        assert result.siblings[1].mounts[0].host == "zzztest-cache-data"
 
     def test_second_component_gets_different_names(self):
         """Same image onboarded twice produces disjoint volume names."""

@@ -255,7 +255,7 @@ def _parse_one_service(
 ) -> tuple[dict[str, Any], list[str]]:
     """Parse a single service dict (primary or sibling) into a result dict + violations.
 
-    The result dict has keys: image, env, ports, volume_mounts, health_check,
+    The result dict has keys: image, env, ports, mounts, health_check,
     claude_mount, host_docker_sock, container_name.
     """
     violations: list[str] = []
@@ -427,7 +427,7 @@ def _parse_one_service(
         "image": image,
         "env": env,
         "ports": ports,
-        "volume_mounts": volume_mounts,
+        "mounts": volume_mounts,
         "health_check": health_check,
         "claude_mount": claude_mount,
         "host_docker_sock": host_docker_sock,
@@ -533,7 +533,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 container_name=sib_parsed["container_name"],
                 image=sib_parsed["image"],
                 ports=sib_parsed["ports"],
-                volume_mounts=sib_parsed["volume_mounts"],
+                mounts=sib_parsed["mounts"],
                 env=sib_parsed["env"],
                 claude_mount=sib_parsed["claude_mount"],
                 host_docker_sock=sib_parsed["host_docker_sock"],
@@ -549,14 +549,14 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
     top_volumes = doc.get("volumes")
     if not isinstance(top_volumes, dict):
         top_volumes = {}
-    for vm in primary_parsed["volume_mounts"]:
+    for vm in primary_parsed["mounts"]:
         if vm.host not in top_volumes:
             violations.append(
                 f"volume {vm.host!r} referenced in service {primary_key!r} "
                 f"but not declared in top-level volumes:"
             )
     for sib in siblings_parsed:
-        for vm in sib.volume_mounts:
+        for vm in sib.mounts:
             if vm.host not in top_volumes:
                 violations.append(
                     f"[service {sib.service_key!r}] volume {vm.host!r} "
@@ -582,7 +582,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         git_url=git_url,
         image=primary_parsed["image"],
         ports=primary_parsed["ports"],
-        volume_mounts=primary_parsed["volume_mounts"],
+        volume_mounts=primary_parsed["mounts"],
         env=primary_parsed["env"],
         claude_mount=primary_parsed["claude_mount"],
         host_docker_sock=primary_parsed["host_docker_sock"],
