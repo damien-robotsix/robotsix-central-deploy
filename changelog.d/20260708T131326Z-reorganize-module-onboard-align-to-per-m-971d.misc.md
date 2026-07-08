@@ -1,0 +1,1 @@
+Reorganize module onboard: align to per-module layout (src/docs/tests)
