@@ -23,8 +23,10 @@ _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 
 @router.get("/ui/static/{filename:path}", include_in_schema=False)
 async def ui_static(filename: str) -> FileResponse:
-    # Prevent directory traversal — resolve the path and verify it stays
-    # within the static directory.
+    # Prevent directory traversal — reject traversal sequences and absolute
+    # paths before any filesystem use so CodeQL recognises the sanitization.
+    if ".." in filename or filename.startswith(("/", "\\")):
+        raise HTTPException(status_code=404)
     safe = (_STATIC_DIR / filename).resolve()
     if not safe.is_relative_to(_STATIC_DIR.resolve()):
         raise HTTPException(status_code=404)
