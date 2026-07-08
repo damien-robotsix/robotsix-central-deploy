@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `docs/registry/overview.md` documenting the component registry module (models, stores, secrets, and architecture).
 - Align `SiblingDerivedSpec` field names with `ServiceConfig`: rename `volume_mounts` → `mounts` and add `mem_limit: str = "2g"`
 - Added CONTRIBUTING.md, SECURITY.md, and .gitattributes as standard repository files (per robotsix-standards convention).
 - Refactor `DockerSdkBackend.deploy()`: extract `_remove_old_container`, `_prepare_volumes`, and `_try_restore` helpers to reduce nesting and improve readability.
