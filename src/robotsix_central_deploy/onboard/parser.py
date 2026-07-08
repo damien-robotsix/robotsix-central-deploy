@@ -256,7 +256,7 @@ def _parse_one_service(
     """Parse a single service dict (primary or sibling) into a result dict + violations.
 
     The result dict has keys: image, env, ports, mounts, health_check,
-    claude_mount, host_docker_sock, container_name.
+    claude_mount, host_docker_sock, container_name, mem_limit.
     """
     violations: list[str] = []
 
@@ -423,6 +423,11 @@ def _parse_one_service(
         )
         user = None
 
+    raw_mem_limit = svc.get("mem_limit", "2g")
+    mem_limit: str = (
+        raw_mem_limit if isinstance(raw_mem_limit, str) else str(raw_mem_limit)
+    )
+
     return {
         "image": image,
         "env": env,
@@ -436,6 +441,7 @@ def _parse_one_service(
         "entrypoint": entrypoint,
         "tmpfs": tmpfs,
         "user": user,
+        "mem_limit": mem_limit,
         "config_volume": config_volume,
         "config_assist_command": config_assist_command,
         "config_assist_seeds": config_assist_seeds,
@@ -542,6 +548,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 entrypoint=sib_parsed["entrypoint"],
                 tmpfs=sib_parsed["tmpfs"],
                 user=sib_parsed["user"],
+                mem_limit=sib_parsed["mem_limit"],
             )
         )
 
