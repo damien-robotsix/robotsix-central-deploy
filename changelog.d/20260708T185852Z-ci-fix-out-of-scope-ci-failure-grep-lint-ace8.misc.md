@@ -1,0 +1,1 @@
+ci_fix: out-of-scope CI failure — grep-lint / CVE-2026-7017 in Dockerfile or .trivyignore (to suppress the pre-existing CVE) — outside this ticket's diff
