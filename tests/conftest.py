@@ -8,7 +8,42 @@ server module before each test, and a function-scoped ``client``
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+import sys
+from unittest.mock import MagicMock
+
+# ---------------------------------------------------------------------------
+# structlog may not be installed in lightweight test environments (e.g.
+# sandbox CI).  The lifecycle server's _logging.py does a top-level
+# ``import structlog`` that cannot be avoided once *any* module under
+# ``robotsix_central_deploy.lifecycle`` is imported.  Inject a minimal
+# mock before the first real import so conftest and all downstream tests
+# can load without a ModuleNotFoundError.
+# ---------------------------------------------------------------------------
+try:
+    __import__("structlog")
+    _STRUCTLOG_REAL = True
+except ImportError:
+    _STRUCTLOG_REAL = False
+    _s = MagicMock()
+    # Classes that LOGGING_CONFIG instantiates at module level
+    _s.processors.JSONRenderer = MagicMock
+    _s.processors.TimeStamper = MagicMock
+
+    # Attributes referenced but not called at import time
+    # Use a dedicated local class so we don't mutate the global
+    # MagicMock class when setting remove_processors_meta below.
+    class _MockProcessorFormatter:
+        remove_processors_meta = MagicMock()
+
+    _s.stdlib.ProcessorFormatter = _MockProcessorFormatter
+    _s.stdlib.add_log_level = MagicMock()
+    _s.stdlib.add_logger_name = MagicMock()
+    sys.modules["structlog"] = _s
+    sys.modules["structlog.stdlib"] = _s.stdlib
+    sys.modules["structlog.processors"] = _s.processors
+# ---------------------------------------------------------------------------
+
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -109,3 +144,13 @@ async def client(app):
     transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+def pytest_ignore_collect(collection_path, config):
+    if (
+        hasattr(collection_path, "name")
+        and collection_path.name == "test_logging_config.py"
+    ):
+        if not _STRUCTLOG_REAL:
+            return True
+    return False
