@@ -74,15 +74,16 @@ async def _deploy_onboard_siblings(
             image=sib.image,
             container_name=sib.container_name,
             ports=sib.ports,
-            mounts=sib.volume_mounts,
+            mounts=sib.mounts,
             env=sib.env,
             health_check=sib.health_check,
             claude_mount=sib.claude_mount,
             host_docker_sock=sib.host_docker_sock,
-            named_volumes=[m.host for m in sib.volume_mounts],
+            named_volumes=[m.host for m in sib.mounts],
             command=sib.command,
             entrypoint=sib.entrypoint,
             tmpfs=sib.tmpfs,
+            mem_limit=sib.mem_limit,
             user=sib.user,
         )
         sib_record = ServiceRecord(
@@ -280,11 +281,7 @@ async def onboard_preflight(
     # do not collide with any existing component's named_volumes.
     candidate_volumes: set[str] = {
         f"{req.name}-{vm.host}" for vm in derived_spec.volume_mounts
-    } | {
-        f"{req.name}-{vm.host}"
-        for sib in derived_spec.siblings
-        for vm in sib.volume_mounts
-    }
+    } | {f"{req.name}-{vm.host}" for sib in derived_spec.siblings for vm in sib.mounts}
     if candidate_volumes:
         collisions: list[str] = []
         for existing_cfg in component_config_store.all():  # synchronous
@@ -570,14 +567,14 @@ async def onboard_confirm(
         claude_mount=spec.claude_mount,
         host_docker_sock=spec.host_docker_sock,
         named_volumes=[m.host for m in spec.volume_mounts]
-        + [m.host for sib in spec.siblings for m in sib.volume_mounts],
+        + [m.host for sib in spec.siblings for m in sib.mounts],
         siblings=[
             ServiceConfig(
                 service_key=sib.service_key,
                 container_name=sib.container_name,
                 image=sib.image,
                 ports=sib.ports,
-                mounts=sib.volume_mounts,
+                mounts=sib.mounts,
                 env=sib.env,
                 claude_mount=sib.claude_mount,
                 host_docker_sock=sib.host_docker_sock,
@@ -585,6 +582,7 @@ async def onboard_confirm(
                 command=sib.command,
                 entrypoint=sib.entrypoint,
                 tmpfs=sib.tmpfs,
+                mem_limit=sib.mem_limit,
                 user=sib.user,
             )
             for sib in spec.siblings

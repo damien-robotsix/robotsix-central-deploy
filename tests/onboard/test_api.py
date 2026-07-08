@@ -855,7 +855,7 @@ def _make_multi_service_derived_spec(name: str = "multi-svc") -> DerivedSpec:
                 container_name=f"{name}-worker",
                 image="ghcr.io/org/multi-svc-worker:v1",
                 ports=[],
-                volume_mounts=[],
+                mounts=[],
                 env={"WORKER_KEY": "worker-val"},
             )
         ],

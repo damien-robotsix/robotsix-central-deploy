@@ -563,7 +563,7 @@ class TestMultiServiceParse:
         assert sib.container_name == "auto-mail-ingester"
         assert sib.image == "ghcr.io/damien-robotsix/auto-mail-ingester:main"
         assert sib.env == {"BOARD_URL": "", "IMAP_PASSWORD": ""}
-        assert sib.volume_mounts == [
+        assert sib.mounts == [
             VolumeMount(host="mail-spool", container="/data", read_only=False)
         ]
         # Primary still has its own ports

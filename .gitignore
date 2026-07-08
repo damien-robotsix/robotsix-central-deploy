@@ -33,3 +33,4 @@ component_env.json
 
 # local pip installs
 .local/
+.deps/
