@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import html as _html
+import os
 import urllib.parse
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from ..lifecycle.session import SessionStore
 router = APIRouter()
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR_RESOLVED = os.path.realpath(str(_STATIC_DIR))
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
 _CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
 _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
@@ -23,11 +25,12 @@ _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 
 @router.get("/ui/static/{filename:path}", include_in_schema=False)
 async def ui_static(filename: str) -> FileResponse:
-    # Prevent directory traversal
-    safe = _STATIC_DIR.joinpath(filename).resolve()
-    if not str(safe).startswith(str(_STATIC_DIR.resolve())):
+    # Prevent directory traversal — use os.path.realpath + commonpath to
+    # safely resolve the user-provided filename relative to the static dir.
+    safe = os.path.realpath(os.path.join(str(_STATIC_DIR), filename))
+    if os.path.commonpath([safe, _STATIC_DIR_RESOLVED]) != _STATIC_DIR_RESOLVED:
         raise HTTPException(status_code=404)
-    if not safe.is_file():
+    if not os.path.isfile(safe):
         raise HTTPException(status_code=404)
     return FileResponse(safe)
 
