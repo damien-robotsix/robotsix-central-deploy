@@ -122,6 +122,7 @@ modules:
       - pyyaml
     paths:
       - src/robotsix_central_deploy/registry/**/*
+      - docs/registry/**/*
       - tests/registry/**/*
     tests: tests/registry/
 
