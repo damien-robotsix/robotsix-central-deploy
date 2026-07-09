@@ -107,6 +107,7 @@ modules:
     paths:
       - src/robotsix_central_deploy/gateway/**/*
       - tests/gateway/**/*
+      - docs/gateway/**/*
     tests: tests/gateway/
 
   - id: registry
