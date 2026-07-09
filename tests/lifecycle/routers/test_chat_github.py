@@ -462,9 +462,7 @@ class TestUpdateRepo:
 
 class TestEnableVulnerabilityAlerts:
     async def test_unauthorized_returns_401(self, client: AsyncClient):
-        resp = await client.put(
-            "/chat/github/repos/acme/widget/vulnerability-alerts"
-        )
+        resp = await client.put("/chat/github/repos/acme/widget/vulnerability-alerts")
         assert resp.status_code == 401
 
     async def test_503_when_app_not_configured(
