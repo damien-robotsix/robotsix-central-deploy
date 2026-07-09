@@ -10,6 +10,7 @@ All notable changes to robotsix-central-deploy.
 - Wire `mem_limit` through the docker-compose parser so sibling services respect the compose file's `mem_limit` field instead of always defaulting to `"2g"`.
 - Add `docs/registry/overview.md` documenting the component registry module (models, stores, secrets, and architecture).
 - Add `docs/gateway/overview.md` documenting the reverse-proxy gateway (subdomain routing, WebSocket relay, legacy path redirection, reserved names, and configuration).
+- Add `docs/caretaker/overview.md` documenting the caretaker background maintenance agent (architecture, phases, finding model, configuration, API, and reporting).
 - Align `SiblingDerivedSpec` field names with `ServiceConfig`: rename `volume_mounts` → `mounts` and add `mem_limit: str = "2g"`
 - Added CONTRIBUTING.md, SECURITY.md, and .gitattributes as standard repository files (per robotsix-standards convention).
 - Refactor `DockerSdkBackend.deploy()`: extract `_remove_old_container`, `_prepare_volumes`, and `_try_restore` helpers to reduce nesting and improve readability.
