@@ -40,7 +40,7 @@ class DerivedSpec(BaseModel):
     git_url: str
     image: str  # e.g. "ghcr.io/your-org/your-service:main"
     ports: list[PortMapping]
-    volume_mounts: list[VolumeMount]  # host=volume_name (named volumes only)
+    mounts: list[VolumeMount]  # host=volume_name (named volumes only)
     env: dict[str, str]  # keys from compose; "" for secrets, preset string for defaults
     claude_mount: bool
     host_docker_sock: bool

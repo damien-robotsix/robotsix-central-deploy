@@ -91,7 +91,7 @@ class TestParseComposeValid:
         assert spec.claude_mount is True
         assert spec.env == {"OPENAI_API_KEY": "", "DATABASE_URL": "", "DEBUG": "false"}
         assert spec.ports == [PortMapping(host=8200, container=8200, protocol="tcp")]
-        assert spec.volume_mounts == [
+        assert spec.mounts == [
             VolumeMount(host="cost-data", container="/data", read_only=False)
         ]
         assert spec.health_check is not None

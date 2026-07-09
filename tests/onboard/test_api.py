@@ -67,7 +67,7 @@ def _make_derived_spec(
         git_url="https://github.com/org/test-svc.git",
         image=image,
         ports=[PortMapping(host=8080, container=8080)],
-        volume_mounts=[VolumeMount(host="test_data", container="/data")],
+        mounts=[VolumeMount(host="test_data", container="/data")],
         env={"KEY": "val"},
         claude_mount=False,
         host_docker_sock=False,
@@ -287,7 +287,7 @@ class TestOnboardPreflight:
             git_url="https://github.com/org/auto-mail.git",
             image="ghcr.io/org/auto-mail:main",
             ports=[],
-            volume_mounts=[
+            mounts=[
                 VolumeMount(host="auto-mail-config", container="/config"),
                 VolumeMount(host="auto-mail-data", container="/data"),
                 VolumeMount(host="auto-mail-logs", container="/logs"),
@@ -845,7 +845,7 @@ def _make_multi_service_derived_spec(name: str = "multi-svc") -> DerivedSpec:
         git_url="https://github.com/org/multi-svc.git",
         image="ghcr.io/org/multi-svc:main",
         ports=[PortMapping(host=8080, container=8080)],
-        volume_mounts=[],
+        mounts=[],
         env={"PRIMARY_KEY": "val"},
         claude_mount=False,
         host_docker_sock=False,
@@ -1267,7 +1267,7 @@ class TestOnboardConfirmWithConfig:
         # Simulate a real compose: config-target label resolves to a volume
         # that's also declared as a named-volume mount.
         spec.config_volume = "cfg-svc-data"
-        spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
 
         # Track write_config_to_volume calls
         captured: list[tuple] = []
@@ -1306,7 +1306,7 @@ class TestOnboardConfirmWithConfig:
         assert captured[0][0] == "cfg-svc-cfg-svc-data"
         assert captured[0][1] == {"host": "", "password": ""}
 
-        # named_volumes includes the config volume (from spec.volume_mounts)
+        # named_volumes includes the config volume (from spec.mounts)
         registry_obj: ComponentRegistry = server_mod.app.state.registry
         in_memory_config = registry_obj.get("cfg-svc")
         assert in_memory_config is not None
@@ -1380,7 +1380,7 @@ class TestOnboardConfirmWithConfig:
             },
         }
         spec.config_volume = "cfg-svc-data"
-        spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
 
         # Track write_config_to_volume calls
         captured: list[tuple] = []
@@ -1439,7 +1439,7 @@ class TestOnboardConfirmWithConfig:
             },
         }
         spec.config_volume = "cfg-svc2-data"
-        spec.volume_mounts.append(VolumeMount(host="cfg-svc2-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="cfg-svc2-data", container="/cfg"))
 
         captured: list[tuple] = []
         original_write = server_mod.app.state.backend.write_config_to_volume
@@ -1536,7 +1536,7 @@ class TestOnboardConfigExampleValues:
             "api_key": "",  # empty placeholder secret
         }
         spec.config_volume = "ex-svc-data"
-        spec.volume_mounts.append(VolumeMount(host="ex-svc-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="ex-svc-data", container="/cfg"))
 
         captured = self._wire_capture(monkeypatch)
 
@@ -1566,7 +1566,7 @@ class TestOnboardConfigExampleValues:
         spec.config_schema = self._schema()
         spec.config_example_values = {"settings": {"api_host": "0.0.0.0"}}
         spec.config_volume = "ex-svc2-data"
-        spec.volume_mounts.append(VolumeMount(host="ex-svc2-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="ex-svc2-data", container="/cfg"))
 
         captured = self._wire_capture(monkeypatch)
 
@@ -1592,7 +1592,7 @@ class TestOnboardConfigExampleValues:
         spec.config_schema = self._schema()
         spec.config_example_values = None
         spec.config_volume = "ex-svc3-data"
-        spec.volume_mounts.append(VolumeMount(host="ex-svc3-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="ex-svc3-data", container="/cfg"))
 
         captured = self._wire_capture(monkeypatch)
 
@@ -1619,7 +1619,7 @@ class TestOnboardConfigExampleValues:
             "api_key": "REPLACE_ME",  # bogus placeholder that must be stripped
         }
         spec.config_volume = "ex-svc4-data"
-        spec.volume_mounts.append(VolumeMount(host="ex-svc4-data", container="/cfg"))
+        spec.mounts.append(VolumeMount(host="ex-svc4-data", container="/cfg"))
 
         captured = self._wire_capture(monkeypatch)
 
