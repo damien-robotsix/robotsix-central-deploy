@@ -4,20 +4,40 @@ from __future__ import annotations
 
 import hmac
 import html as _html
+import os
 import urllib.parse
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 from ..lifecycle.auth import verify_session, _safe_next
 from ..lifecycle.session import SessionStore
 
 router = APIRouter()
 
+_STATIC_DIR = Path(__file__).parent / "static"
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
 _CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
 _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
+
+
+@router.get("/ui/static/{filename:path}", include_in_schema=False)
+async def ui_static(filename: str) -> FileResponse:
+    """Serve a file from the static directory, with path-traversal protection.
+
+    Resolves the real path of the requested file and verifies it starts
+    with the resolved static root directory.  The os.path.realpath +
+    str.startswith pattern is the canonical CodeQL-recognised sanitizer
+    for py/path-injection (as used in Starlette's StaticFiles).
+    """
+    static_root = os.path.realpath(str(_STATIC_DIR))
+    safe = os.path.realpath(os.path.join(str(_STATIC_DIR), filename))
+    if not safe.startswith(static_root + os.sep):
+        raise HTTPException(status_code=404)
+    if not os.path.isfile(safe):
+        raise HTTPException(status_code=404)
+    return FileResponse(safe)
 
 
 @router.get("/ui", response_class=HTMLResponse, include_in_schema=False)
