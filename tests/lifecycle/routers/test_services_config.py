@@ -1052,7 +1052,7 @@ class TestConfigAssist:
                 git_url=git_url,
                 image="auto-mail:latest",
                 ports=[],
-                volume_mounts=[],
+                mounts=[],
                 env={},
                 claude_mount=False,
                 host_docker_sock=False,

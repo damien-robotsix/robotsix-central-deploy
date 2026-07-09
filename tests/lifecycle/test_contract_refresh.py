@@ -52,7 +52,7 @@ def _make_derived_spec(
     name: str = "test-comp",
     image: str = "ghcr.io/org/svc:v1",
     ports: list[PortMapping] | None = None,
-    volume_mounts: list[VolumeMount] | None = None,
+    mounts: list[VolumeMount] | None = None,
     command: list[str] | None = None,
 ) -> DerivedSpec:
     return DerivedSpec(
@@ -60,7 +60,7 @@ def _make_derived_spec(
         git_url="https://github.com/org/test.git",
         image=image,
         ports=ports or [PortMapping(host=8080, container=8080, protocol="tcp")],
-        volume_mounts=volume_mounts or [VolumeMount(host="data", container="/data")],
+        mounts=mounts or [VolumeMount(host="data", container="/data")],
         env={},
         claude_mount=False,
         host_docker_sock=False,

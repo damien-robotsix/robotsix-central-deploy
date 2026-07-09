@@ -589,7 +589,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         git_url=git_url,
         image=primary_parsed["image"],
         ports=primary_parsed["ports"],
-        volume_mounts=primary_parsed["mounts"],
+        mounts=primary_parsed["mounts"],
         env=primary_parsed["env"],
         claude_mount=primary_parsed["claude_mount"],
         host_docker_sock=primary_parsed["host_docker_sock"],

@@ -2189,7 +2189,7 @@ function populateStep2(spec, portShifts) {
   // No "starts EMPTY" badge here: onboarding creates a brand-new
   // component, so every volume legitimately starts empty. Backups are
   // the operator's responsibility.
-  volsEl.innerHTML = spec.volume_mounts.map(function(m) {
+  volsEl.innerHTML = spec.mounts.map(function(m) {
     return '<div>📦 <strong>' + escHtml(m.host) + '</strong> → ' + escHtml(m.container) + '</div>';
   }).join('');
 

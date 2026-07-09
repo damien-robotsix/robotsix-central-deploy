@@ -1041,7 +1041,7 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
         old_to_new[vm.host] = new_host
         return vm.model_copy(update={"host": new_host})
 
-    new_primary_mounts = [_rename(vm) for vm in spec.volume_mounts]
+    new_primary_mounts = [_rename(vm) for vm in spec.mounts]
 
     new_siblings: list[SiblingDerivedSpec] = [
         sib.model_copy(update={"mounts": [_rename(vm) for vm in sib.mounts]})
@@ -1056,7 +1056,7 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
 
     return spec.model_copy(
         update={
-            "volume_mounts": new_primary_mounts,
+            "mounts": new_primary_mounts,
             "siblings": new_siblings,
             "config_volume": new_config_vol,
         }

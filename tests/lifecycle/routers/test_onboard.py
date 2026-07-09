@@ -45,13 +45,13 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
 class TestNamespaceSpecVolumes:
     """Unit tests for the volume-namespacing helper."""
 
-    def test_renames_primary_volume_mounts(self):
+    def test_renames_primary_mounts(self):
         spec = DerivedSpec.model_construct(
             name="test-svc",
             git_url="https://github.com/org/test.git",
             image="ghcr.io/org/test:main",
             ports=[],
-            volume_mounts=[
+            mounts=[
                 VolumeMount(host="auto-mail-config", container="/config"),
                 VolumeMount(host="auto-mail-data", container="/data"),
             ],
@@ -62,10 +62,10 @@ class TestNamespaceSpecVolumes:
         )
         result = server_mod._namespace_spec_volumes(spec, "mail")
 
-        assert result.volume_mounts[0].host == "mail-auto-mail-config"
-        assert result.volume_mounts[0].container == "/config"
-        assert result.volume_mounts[1].host == "mail-auto-mail-data"
-        assert result.volume_mounts[1].container == "/data"
+        assert result.mounts[0].host == "mail-auto-mail-config"
+        assert result.mounts[0].container == "/config"
+        assert result.mounts[1].host == "mail-auto-mail-data"
+        assert result.mounts[1].container == "/data"
         assert result.config_volume == "mail-auto-mail-config"
 
     def test_config_volume_none_is_preserved(self):
@@ -74,7 +74,7 @@ class TestNamespaceSpecVolumes:
             git_url="https://github.com/org/test.git",
             image="ghcr.io/org/test:main",
             ports=[],
-            volume_mounts=[VolumeMount(host="vol1", container="/vol1")],
+            mounts=[VolumeMount(host="vol1", container="/vol1")],
             env={},
             claude_mount=False,
             config_volume=None,
@@ -83,13 +83,13 @@ class TestNamespaceSpecVolumes:
         result = server_mod._namespace_spec_volumes(spec, "mail")
         assert result.config_volume is None
 
-    def test_renames_sibling_volume_mounts(self):
+    def test_renames_sibling_mounts(self):
         spec = DerivedSpec.model_construct(
             name="test-svc",
             git_url="https://github.com/org/test.git",
             image="ghcr.io/org/test:main",
             ports=[],
-            volume_mounts=[VolumeMount(host="shared-vol", container="/shared")],
+            mounts=[VolumeMount(host="shared-vol", container="/shared")],
             env={},
             claude_mount=False,
             siblings=[
@@ -113,7 +113,7 @@ class TestNamespaceSpecVolumes:
         )
         result = server_mod._namespace_spec_volumes(spec, "zzztest")
 
-        assert result.volume_mounts[0].host == "zzztest-shared-vol"
+        assert result.mounts[0].host == "zzztest-shared-vol"
         assert result.siblings[0].mounts[0].host == "zzztest-worker-data"
         assert result.siblings[1].mounts[0].host == "zzztest-cache-data"
 
@@ -124,7 +124,7 @@ class TestNamespaceSpecVolumes:
             git_url="https://github.com/org/test.git",
             image="ghcr.io/org/test:main",
             ports=[],
-            volume_mounts=[
+            mounts=[
                 VolumeMount(host="auto-mail-config", container="/config"),
                 VolumeMount(host="auto-mail-data", container="/data"),
                 VolumeMount(host="auto-mail-logs", container="/logs"),
@@ -137,8 +137,8 @@ class TestNamespaceSpecVolumes:
         mail_result = server_mod._namespace_spec_volumes(spec, "mail")
         zzz_result = server_mod._namespace_spec_volumes(spec, "zzztest")
 
-        mail_hosts = {m.host for m in mail_result.volume_mounts}
-        zzz_hosts = {m.host for m in zzz_result.volume_mounts}
+        mail_hosts = {m.host for m in mail_result.mounts}
+        zzz_hosts = {m.host for m in zzz_result.mounts}
         assert mail_hosts == {
             "mail-auto-mail-config",
             "mail-auto-mail-data",

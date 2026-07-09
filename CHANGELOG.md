@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Rename `DerivedSpec.volume_mounts` → `DerivedSpec.mounts` for consistency with `ComponentConfig.mounts`, `ServiceConfig.mounts`, and `SiblingDerivedSpec.mounts`.
 - Split monolithic `dashboard.html` into separate CSS (`ui/static/dashboard.css`), JS (`ui/static/dashboard.js`), and a thin HTML shell that loads both via `<link>` and `<script>` tags. Added `/ui/static/{filename}` route to serve the extracted static assets.
 - Wire `mem_limit` through the docker-compose parser so sibling services respect the compose file's `mem_limit` field instead of always defaulting to `"2g"`.
 - Add `docs/registry/overview.md` documenting the component registry module (models, stores, secrets, and architecture).
