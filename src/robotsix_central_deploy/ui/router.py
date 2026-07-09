@@ -26,13 +26,14 @@ _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 async def ui_static(filename: str) -> FileResponse:
     """Serve a file from the static directory, with path-traversal protection.
 
-    Uses os.path.realpath + os.path.commonpath, the canonical CodeQL-
-    recognised sanitizer for py/path-injection, to verify the resolved
-    path stays within the static directory.
+    Resolves the real path of the requested file and verifies it starts
+    with the resolved static root directory.  The os.path.realpath +
+    str.startswith pattern is the canonical CodeQL-recognised sanitizer
+    for py/path-injection (as used in Starlette's StaticFiles).
     """
     static_root = os.path.realpath(str(_STATIC_DIR))
     safe = os.path.realpath(os.path.join(str(_STATIC_DIR), filename))
-    if os.path.commonpath([safe, static_root]) != static_root:
+    if not safe.startswith(static_root + os.sep):
         raise HTTPException(status_code=404)
     if not os.path.isfile(safe):
         raise HTTPException(status_code=404)
