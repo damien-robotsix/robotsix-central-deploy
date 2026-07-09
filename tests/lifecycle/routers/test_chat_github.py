@@ -460,6 +460,99 @@ class TestUpdateRepo:
         assert resp.status_code == 404
 
 
+class TestEnableVulnerabilityAlerts:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.put("/chat/github/repos/acme/widget/vulnerability-alerts")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/vulnerability-alerts",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_enables_alerts(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo.enable_vulnerability_alert = MagicMock(return_value=True)
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/vulnerability-alerts",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "full_name": "acme/widget",
+            "vulnerability_alerts_enabled": True,
+        }
+        fake_repo.enable_vulnerability_alert.assert_called_once()
+
+    async def test_records_audit_entry(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo.enable_vulnerability_alert = MagicMock(return_value=True)
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/vulnerability-alerts",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "enable_vulnerability_alerts"
+        assert entries[0].key == "acme/widget"
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/ghost/vulnerability-alerts",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+
 @pytest.fixture
 def enable_repo_create_token():
     """Configure github_repo_create_token so create_repo doesn't 503."""
@@ -532,6 +625,7 @@ class TestCreateRepo:
             auto_init=False,
         )
         fake_repo.replace_topics.assert_called_once_with(["robotics"])
+        fake_repo.enable_vulnerability_alert.assert_called_once()
 
     async def test_records_audit_entry(
         self,

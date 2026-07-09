@@ -5,7 +5,10 @@ Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}`` — a single run
 - ``GET /chat/github/repos/{owner}/{repo}`` — read repo details
 - ``PATCH /chat/github/repos/{owner}/{repo}`` — update repo settings
-- ``POST /chat/github/repos`` — create a new repository
+- ``PUT /chat/github/repos/{owner}/{repo}/vulnerability-alerts`` — enable the
+  Dependency graph / Dependabot alerts
+- ``POST /chat/github/repos`` — create a new repository (Dependency graph is
+  enabled automatically as part of creation)
 - ``GET /chat/github/repos/{owner}/{repo}/pulls`` — list pull requests
 - ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}`` — a single pull request
 
@@ -392,6 +395,66 @@ async def update_repo(
 
 
 # ---------------------------------------------------------------------------
+# PUT /chat/github/repos/{owner}/{repo}/vulnerability-alerts — enable the
+# Dependency graph / Dependabot alerts (write; App installation token, same
+# "Administration" permission PATCH already relies on)
+# ---------------------------------------------------------------------------
+
+
+def _enable_vulnerability_alerts_sync(
+    client: Any, owner: str, repo: str
+) -> dict[str, Any]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    enabled = repo_obj.enable_vulnerability_alert()
+    return {"full_name": repo_obj.full_name, "vulnerability_alerts_enabled": enabled}
+
+
+@router.put(
+    "/chat/github/repos/{owner}/{repo}/vulnerability-alerts",
+    summary="Enable the Dependency graph / Dependabot vulnerability alerts",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def enable_vulnerability_alerts(
+    owner: str,
+    repo: str,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Enable *owner*/*repo*'s Dependency graph and Dependabot alerts.
+
+    Without this, GitHub Actions checks that rely on the dependency graph
+    (e.g. ``dependency-review-action``) fail with "Dependency review is not
+    supported on this repository" until a human visits Settings > Security.
+    New repos get this automatically via :func:`create_repo`; this endpoint
+    covers repos that predate that, or ones created outside the chat agent.
+    """
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(
+            _enable_vulnerability_alerts_sync, client, owner, repo
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="enable_vulnerability_alerts",
+            key=f"{owner}/{repo}",
+            new_value=True,
+            detail=f"Enabled Dependency graph/vulnerability alerts on {result['full_name']}",
+        )
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # POST /chat/github/repos — repo creation (write; separate PAT auth)
 # ---------------------------------------------------------------------------
 
@@ -419,6 +482,7 @@ def _create_repo_sync(client: Any, body: CreateRepoRequest) -> dict[str, Any]:
     )
     if body.topics:
         repo.replace_topics(body.topics)
+    repo.enable_vulnerability_alert()
     return {
         "full_name": repo.full_name,
         "html_url": repo.html_url,
@@ -450,6 +514,10 @@ async def create_repo(
     installation token — GitHub Apps cannot create repositories under a
     personal account. The repository is always created under that token's
     own account; there is no way to target an arbitrary owner.
+
+    Also enables the Dependency graph / Dependabot alerts (see
+    :func:`enable_vulnerability_alerts`) so CI checks that depend on it
+    (e.g. ``dependency-review-action``) don't fail on day one.
     """
     try:
         client = get_repo_create_client(config)
