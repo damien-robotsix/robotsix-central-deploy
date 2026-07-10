@@ -88,7 +88,11 @@ extend-select = ["S"]
 # they encode invariants, not security issues.
 "src/robotsix_central_deploy/gateway/router.py" = ["S101"]
 # S101: assert that store/backend/config were initialised (app-startup guard).
-"src/robotsix_central_deploy/lifecycle/deps.py" = ["S101", "S105", "S110"]
+"src/robotsix_central_deploy/lifecycle/deps/dependencies.py" = ["S101"]
+"src/robotsix_central_deploy/lifecycle/deps/lifespan.py" = ["S101"]
+# S105: CLAUDE_AUTH_TOKEN_URL is a URL, not a password.
+# S110: best-effort inspection paths where failures are intentionally swallowed.
+"src/robotsix_central_deploy/lifecycle/deps/background.py" = ["S105", "S110"]
 # S110: best-effort inspection paths where failures are intentionally swallowed.
 "src/robotsix_central_deploy/lifecycle/backends/docker_sdk.py" = ["S110"]
 # S104: 0.0.0.0 bind is intentional for the containerised service.

@@ -1,0 +1,1 @@
+Split lifecycle/deps.py (1,379 lines) into logical sub-modules
