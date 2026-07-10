@@ -58,6 +58,19 @@ def _make_config(id="svc", caretaker_auto_update=True, repo_id="test-repo"):
     )
 
 
+def _make_env_store(overrides=None):
+    """Mock EnvStore whose get_merged_env overlays *overrides* onto base_env."""
+    env_store = MagicMock()
+
+    async def _merge(name, base_env):
+        merged = dict(base_env)
+        merged.update(overrides or {})
+        return merged
+
+    env_store.get_merged_env = AsyncMock(side_effect=_merge)
+    return env_store
+
+
 class TestPhaseUpdate:
     @pytest.mark.asyncio
     async def test_deploys_eligible(self):
@@ -81,7 +94,9 @@ class TestPhaseUpdate:
         dhs = MagicMock(spec=DeployHistoryStore)
         dhs.append = AsyncMock()
 
-        findings = await phase_update(registry, store, backend, ccs, dhs)
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
         assert len(findings) == 1
         assert findings[0].kind == FindingKind.UPDATE_APPLIED
         assert findings[0].repo_id == "test-repo"
@@ -97,6 +112,47 @@ class TestPhaseUpdate:
         assert args[0] == "svc"
         assert args[1].source == "caretaker"
         assert args[1].digest == "sha256:def"
+
+    @pytest.mark.asyncio
+    async def test_deploys_with_env_store_overrides(self):
+        """Auto-update must deploy with EnvStore vars merged into config.env.
+
+        Regression: phase_update used to deploy the raw registry config,
+        silently dropping EnvStore-provisioned variables (e.g. DEPLOY_API_KEY)
+        from the recreated container.
+        """
+        store = MagicMock()
+        record = _make_record()
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        cfg = _make_config()
+        cfg.env = {"STATIC": "yaml", "SHARED": "yaml"}
+        ccs.get = MagicMock(return_value=cfg)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+        env_store = _make_env_store({"DEPLOY_API_KEY": "sekrit", "SHARED": "override"})
+
+        await phase_update(registry, store, backend, ccs, dhs, env_store)
+
+        env_store.get_merged_env.assert_awaited_once_with("svc", cfg.env)
+        deployed_config = backend.deploy.call_args[0][1]
+        assert deployed_config.env == {
+            "STATIC": "yaml",
+            "SHARED": "override",
+            "DEPLOY_API_KEY": "sekrit",
+        }
+        # The registry's config object itself must not be mutated.
+        assert cfg.env == {"STATIC": "yaml", "SHARED": "yaml"}
 
     @pytest.mark.asyncio
     async def test_deploy_falls_back_to_tag_without_digest(self):
@@ -119,7 +175,7 @@ class TestPhaseUpdate:
         dhs = MagicMock(spec=DeployHistoryStore)
         dhs.append = AsyncMock()
 
-        await phase_update(registry, store, backend, ccs, dhs)
+        await phase_update(registry, store, backend, ccs, dhs, _make_env_store())
         assert backend.deploy.call_args[0][2] == "repo:v1"
 
     @pytest.mark.asyncio
@@ -134,7 +190,9 @@ class TestPhaseUpdate:
         ccs.get = MagicMock(return_value=_make_config(caretaker_auto_update=False))
         dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs, dhs)
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
@@ -150,7 +208,9 @@ class TestPhaseUpdate:
         ccs.get = MagicMock(return_value=_make_config())
         dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs, dhs)
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
@@ -166,7 +226,9 @@ class TestPhaseUpdate:
         ccs.get = MagicMock(return_value=_make_config())
         dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs, dhs)
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
         assert len(findings) == 1
         assert findings[0].kind == FindingKind.UPDATE_FAILED
         assert findings[0].severity == "error"
@@ -184,7 +246,9 @@ class TestPhaseUpdate:
         ccs = MagicMock(spec=ComponentConfigStore)
         dhs = MagicMock(spec=DeployHistoryStore)
 
-        findings = await phase_update(registry, store, backend, ccs, dhs)
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
@@ -209,7 +273,9 @@ class TestPhaseUpdate:
         phases_mod = sys.modules["robotsix_central_deploy.caretaker.phases"]
         monkeypatch.setattr(phases_mod, "try_acquire_deploy_lock", _fake_try_acquire)
 
-        findings = await phase_update(registry, store, backend, ccs, dhs)
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 

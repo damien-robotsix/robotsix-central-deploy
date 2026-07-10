@@ -75,6 +75,10 @@ def scheduler_fixtures(tmp_path):
 
     http_client = MagicMock(spec=httpx.AsyncClient)
     deploy_history_store = DeployHistoryStore(tmp_path / "deploy_history.json")
+    env_store = MagicMock()
+    env_store.get_merged_env = AsyncMock(
+        side_effect=lambda name, base: dict(base) if isinstance(base, dict) else {}
+    )
 
     scheduler = CaretakerScheduler(
         config=config,
@@ -86,6 +90,7 @@ def scheduler_fixtures(tmp_path):
         settings_store=settings_store,
         http_client=http_client,
         deploy_history_store=deploy_history_store,
+        env_store=env_store,
     )
     return scheduler, service_store, backend, component_config_store, http_client
 
