@@ -6,6 +6,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract volume ops (`_volume_ops.py`) and Claude-auth ops (`_auth_ops.py`) from
+  `lifecycle/backends/docker_sdk.py`, reducing the file from 1,416 to ~945 lines.
+  The new `VolumeOps` and `AuthOps` helper classes share the Docker client with
+  `DockerSdkBackend` via constructor injection.
 - Extract shared `_build_component_config_from_spec` factory in `lifecycle/deps/seed.py`, deduplicating the `ComponentConfig` construction from `DerivedSpec` that was copy-pasted between onboard-confirm and contract-refresh handlers.
 - Extract duplicated repo-fetch preamble from `services_config` and `services_env` routers into a shared `_fetch_component_repo_files` helper in `lifecycle/deps/seed.py`.
 - Split `lifecycle/deps.py` (1,379 lines) into a `lifecycle/deps/` sub-package with focused modules: `background.py` (Claude auth + registry check loops), `jobs.py` (OnboardJob, DeployJob, JobRegistry), `lifespan.py` (init/teardown), `dependencies.py` (FastAPI `_get_*` providers), `seed.py` (onboard-seed helpers), and `volume.py` (volume utilities). All existing imports from `lifecycle.deps` continue working unchanged.

@@ -748,7 +748,7 @@ class TestClaudeAuthCredentialCheck:
         import docker
 
         client.volumes.get.side_effect = docker.errors.NotFound("no such volume")
-        warnings = b._check_claude_credentials()
+        warnings = b._auth.check_claude_credentials()
         assert len(warnings) == 1
         assert "does not exist" in warnings[0]
         assert "claude-auth" in warnings[0]
@@ -763,7 +763,7 @@ class TestClaudeAuthCredentialCheck:
         # volumes.get succeeds (volume exists)
         # containers.run raises ContainerError (test -f fails)
         client.containers.run.side_effect = docker.errors.ContainerError()
-        warnings = b._check_claude_credentials()
+        warnings = b._auth.check_claude_credentials()
         assert len(warnings) == 1
         assert "does not contain a readable .credentials.json" in warnings[0]
         assert "claude-auth" in warnings[0]
@@ -773,7 +773,7 @@ class TestClaudeAuthCredentialCheck:
         """Returns empty list when .credentials.json is readable."""
         b, client = backend
         # containers.run succeeds (test -f exits 0)
-        warnings = b._check_claude_credentials()
+        warnings = b._auth.check_claude_credentials()
         assert warnings == []
 
 
