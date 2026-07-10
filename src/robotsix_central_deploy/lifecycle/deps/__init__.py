@@ -106,7 +106,6 @@ __all__ = [
     "httpx",
     # background
     "_claude_auth_refresh_loop",
-    "_claude_auth_refresh_state",
     "get_claude_auth_refresh_state",
     # dependencies
     "_compute_overall_health",
@@ -128,7 +127,6 @@ __all__ = [
     "JobRegistry",
     "OnboardJob",
     # lifespan
-    "_build_backend",
     "_seed_component_registry",
     "lifespan",
     # seed

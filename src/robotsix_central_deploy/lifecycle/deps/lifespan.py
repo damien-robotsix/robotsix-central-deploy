@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 _config: LifecycleConfig | None = None
 _store: ServiceStore | None = None
 _backend: ExecutionBackend | None = None
-_registry_checker: RegistryChecker | None = None
 _http_client: httpx.AsyncClient | None = None
 _volume_audit_scheduler: VolumeAuditScheduler | None = None
 
@@ -161,10 +160,9 @@ async def _init_background_tasks(app: FastAPI) -> None:
     check background loop when configured.
 
     Attaches ``registry_checker``, ``http_client``, and ``_bg_task`` to
-    ``app.state``.  Sets the module-level ``_registry_checker`` and
-    ``_http_client`` globals.
+    ``app.state``.  Sets the module-level ``_http_client`` global.
     """
-    global _registry_checker, _http_client
+    global _http_client
     assert _config is not None
     assert _store is not None
     assert _backend is not None
@@ -176,7 +174,6 @@ async def _init_background_tasks(app: FastAPI) -> None:
         ttl_seconds=_config.registry_check_ttl,
     )
     app.state.registry_checker = registry_checker
-    _registry_checker = registry_checker
     _http_client = http_client
     app.state.http_client = http_client
 
@@ -381,13 +378,13 @@ async def _teardown(app: FastAPI) -> None:
     _caretaker_task: asyncio.Task[Any] = app.state._caretaker_task
     _caretaker_task.cancel()
     with suppress(asyncio.CancelledError):
-        await _caretaker_task
+        _ = await _caretaker_task
 
     _volume_audit_task: asyncio.Task[Any] | None = app.state._volume_audit_task
     if _volume_audit_task and not _volume_audit_task.done():
         _volume_audit_task.cancel()
         with suppress(asyncio.CancelledError):
-            await _volume_audit_task
+            _ = await _volume_audit_task
 
     bg_task: asyncio.Task[Any] | None = app.state._bg_task
     if bg_task:
