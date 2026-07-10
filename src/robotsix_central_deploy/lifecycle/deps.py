@@ -838,6 +838,7 @@ async def _init_component_registry(app: FastAPI) -> None:
         settings_store=app.state.settings_store,
         http_client=_http_client,
         deploy_history_store=app.state.deploy_history_store,
+        env_store=app.state.env_store,
     )
     app.state.caretaker_scheduler = caretaker_scheduler
 

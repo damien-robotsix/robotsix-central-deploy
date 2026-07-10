@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
     from ..registry.deploy_history_store import DeployHistoryStore
+    from ..registry.env_store import EnvStore
     from ..registry.loader import ComponentRegistry
     from ..registry.settings_store import SystemSettings
     from ..volume_audit.scheduler import VolumeAuditScheduler
@@ -34,6 +35,7 @@ async def phase_update(
     backend: ExecutionBackend,
     component_config_store: ComponentConfigStore,
     deploy_history_store: DeployHistoryStore,
+    env_store: EnvStore,
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -84,7 +86,12 @@ async def phase_update(
             )
             continue
         try:
-            outcome = await backend.deploy(record, config, image_ref)
+            # Recreating the container with only the static registry env would
+            # silently drop EnvStore-provisioned variables (API keys, secrets),
+            # so merge them exactly like the manual deploy path does.
+            merged_env = await env_store.get_merged_env(record.name, config.env)
+            deploy_config = config.model_copy(update={"env": merged_env})
+            outcome = await backend.deploy(record, deploy_config, image_ref)
             record.state = outcome.state
             record.image_revision = outcome.deployed_digest
             record.deployed_image_digest = outcome.deployed_digest

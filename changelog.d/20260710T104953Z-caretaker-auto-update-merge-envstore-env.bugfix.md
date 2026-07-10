@@ -1,0 +1,1 @@
+Fix caretaker auto-update dropping EnvStore-provisioned environment variables: `phase_update` now merges the stored env/secrets via `EnvStore.get_merged_env` before recreating the container, matching the manual deploy path. Previously an auto-update silently recreated containers without their provisioned variables (e.g. the chat agent lost `DEPLOY_API_KEY` and its Langfuse keys).
