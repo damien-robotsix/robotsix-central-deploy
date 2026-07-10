@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Extract shared `_build_component_config_from_spec` factory in `lifecycle/deps.py`, deduplicating the `ComponentConfig` construction from `DerivedSpec` that was copy-pasted between onboard-confirm and contract-refresh handlers.
+- Extract duplicated repo-fetch preamble from `services_config` and `services_env` routers into a shared `_fetch_component_repo_files` helper in `deps.py`.
 - Split monolithic `dashboard.html` into separate CSS (`ui/static/dashboard.css`), JS (`ui/static/dashboard.js`), and a thin HTML shell that loads both via `<link>` and `<script>` tags. Added `/ui/static/{filename}` route to serve the extracted static assets.
 - Wire `mem_limit` through the docker-compose parser so sibling services respect the compose file's `mem_limit` field instead of always defaulting to `"2g"`.
 - Add `docs/registry/overview.md` documenting the component registry module (models, stores, secrets, and architecture).

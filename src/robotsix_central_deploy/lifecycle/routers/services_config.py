@@ -13,6 +13,7 @@ from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import (
     _derive_account_id,
+    _fetch_component_repo_files,
     _get_backend,
     _get_component_config_store,
     _get_config_yaml_store,
@@ -474,30 +475,9 @@ async def refresh_config_schema(
     """
     import json as _json  # noqa: PLC0415
 
-    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
-        FetchError,
-        fetch_repo_files,
+    comp_cfg, repo_files = await _fetch_component_repo_files(
+        name, component_config_store
     )
-
-    comp_cfg = component_config_store.get(name)
-    if comp_cfg is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component '{name}' not found",
-        )
-    if not comp_cfg.git_url:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Component '{name}' has no git_url — cannot fetch its repo",
-        )
-
-    loop = asyncio.get_running_loop()
-    try:
-        repo_files = await loop.run_in_executor(
-            None, fetch_repo_files, comp_cfg.git_url
-        )
-    except FetchError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     if repo_files.config_schema_json is None:
         raise HTTPException(
