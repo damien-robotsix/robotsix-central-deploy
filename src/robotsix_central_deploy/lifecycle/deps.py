@@ -1064,6 +1064,68 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
     )
 
 
+def _build_component_config_from_spec(
+    spec: "DerivedSpec", *, git_url: str, **overrides: Any
+) -> "ComponentConfig":
+    """Build a ``ComponentConfig`` from a parsed ``DerivedSpec``.
+
+    Shared factory for the onboard-confirm and contract-refresh paths so
+    that field additions to ``ComponentConfig`` only need to happen once.
+    *git_url* is required explicitly because the two callers source it
+    differently (onboard uses ``spec.git_url``; refresh preserves the
+    existing config's URL).  *overrides* lets the refresh path layer on
+    operator-set fields (``repo_id``, ``caretaker_auto_update``,
+    ``mem_limit``) without branching.
+    """
+    from robotsix_central_deploy.registry.models import ComponentConfig, ServiceConfig  # noqa: PLC0415
+
+    config = ComponentConfig(
+        id=spec.name,
+        image=spec.image,
+        container_name=spec.container_name or spec.name,
+        ports=spec.ports,
+        mounts=spec.volume_mounts,
+        env=spec.env,
+        health_check=spec.health_check,
+        command=spec.command,
+        entrypoint=spec.entrypoint,
+        tmpfs=spec.tmpfs,
+        claude_mount=spec.claude_mount,
+        host_docker_sock=spec.host_docker_sock,
+        named_volumes=[m.host for m in spec.volume_mounts]
+        + [m.host for sib in spec.siblings for m in sib.mounts],
+        siblings=[
+            ServiceConfig(
+                service_key=sib.service_key,
+                container_name=sib.container_name,
+                image=sib.image,
+                ports=sib.ports,
+                mounts=sib.mounts,
+                env=sib.env,
+                claude_mount=sib.claude_mount,
+                host_docker_sock=sib.host_docker_sock,
+                health_check=sib.health_check,
+                command=sib.command,
+                entrypoint=sib.entrypoint,
+                tmpfs=sib.tmpfs,
+                mem_limit=sib.mem_limit,
+                user=sib.user,
+            )
+            for sib in spec.siblings
+        ],
+        git_url=git_url,
+        has_config_yaml=(spec.config_schema is not None),
+        config_volume=spec.config_volume,
+        config_assist_command=spec.config_assist_command,
+        config_assist_seeds=spec.config_assist_seeds,
+        llmio_tier_level=spec.llmio_tier_level,
+        allow_chat_access=spec.allow_chat_access,
+        user=spec.user,
+        **overrides,
+    )
+    return config
+
+
 def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> None:
     """Validate *values* against JSON Schema, raising HTTP 422 on failure."""
     import jsonschema

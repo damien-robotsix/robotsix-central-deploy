@@ -24,6 +24,7 @@ from ..deps import (
     _get_sibling_pairs,
     _get_store,
     _namespace_spec_volumes,
+    _build_component_config_from_spec,
 )
 from ..models import (
     ActionResponse,
@@ -661,7 +662,6 @@ async def refresh_contract(
         ParseError,
         parse_compose,
     )
-    from robotsix_central_deploy.registry.models import ServiceConfig  # noqa: PLC0415
 
     comp_cfg = component_config_store.get(name)
     if comp_cfg is None:
@@ -707,53 +707,13 @@ async def refresh_contract(
 
     # Build the new ComponentConfig from the DerivedSpec (same logic as onboard confirm).
     # Preserve operator-set / system-set fields from the existing config.
-    new_config = ComponentConfig(
-        id=name,
-        image=spec.image,
-        container_name=spec.container_name or name,
-        ports=spec.ports,
-        mounts=spec.volume_mounts,
-        env=spec.env,
-        health_check=spec.health_check,
-        command=spec.command,
-        entrypoint=spec.entrypoint,
-        tmpfs=spec.tmpfs,
-        claude_mount=spec.claude_mount,
-        host_docker_sock=spec.host_docker_sock,
-        named_volumes=[m.host for m in spec.volume_mounts]
-        + [m.host for sib in spec.siblings for m in sib.mounts],
-        siblings=[
-            ServiceConfig(
-                service_key=sib.service_key,
-                container_name=sib.container_name,
-                image=sib.image,
-                ports=sib.ports,
-                mounts=sib.mounts,
-                env=sib.env,
-                claude_mount=sib.claude_mount,
-                host_docker_sock=sib.host_docker_sock,
-                health_check=sib.health_check,
-                command=sib.command,
-                entrypoint=sib.entrypoint,
-                tmpfs=sib.tmpfs,
-                mem_limit=sib.mem_limit,
-                user=sib.user,
-            )
-            for sib in spec.siblings
-        ],
+    new_config = _build_component_config_from_spec(
+        spec,
         git_url=comp_cfg.git_url,
-        has_config_yaml=(spec.config_schema is not None),
-        # Preserve operator-set fields
         repo_id=comp_cfg.repo_id,
         caretaker_auto_update=comp_cfg.caretaker_auto_update,
         mem_limit=comp_cfg.mem_limit,
-        user=spec.user,
     )
-    new_config.config_volume = spec.config_volume
-    new_config.config_assist_command = spec.config_assist_command
-    new_config.config_assist_seeds = spec.config_assist_seeds
-    new_config.llmio_tier_level = spec.llmio_tier_level
-    new_config.allow_chat_access = spec.allow_chat_access
 
     # Diff: collect which contract-derived fields changed.
     _CONTRACT_FIELDS = (

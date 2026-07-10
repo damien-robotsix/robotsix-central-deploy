@@ -1,0 +1,1 @@
+Extract duplicated DerivedSpec→ComponentConfig construction into shared factory function
