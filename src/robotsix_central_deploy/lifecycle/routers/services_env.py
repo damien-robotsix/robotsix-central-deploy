@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..auth import verify_auth
 from ..deps import (
+    _fetch_component_repo_files,
     _get_component_config_store,
     _get_env_store,
     _get_or_create_record,
@@ -142,34 +142,14 @@ async def sync_env_keys(
     are never modified, and keys the contract no longer declares are only
     reported, not deleted.
     """
-    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
-        FetchError,
-        fetch_repo_files,
-    )
     from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
         ParseError,
         parse_compose,
     )
 
-    comp_cfg = component_config_store.get(name)
-    if comp_cfg is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Component '{name}' not found",
-        )
-    if not comp_cfg.git_url:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Component '{name}' has no git_url — cannot fetch its repo",
-        )
-
-    loop = asyncio.get_running_loop()
-    try:
-        repo_files = await loop.run_in_executor(
-            None, fetch_repo_files, comp_cfg.git_url
-        )
-    except FetchError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    comp_cfg, repo_files = await _fetch_component_repo_files(
+        name, component_config_store
+    )
     try:
         spec = parse_compose(repo_files.compose_bytes, name, comp_cfg.git_url)
     except ParseError as exc:

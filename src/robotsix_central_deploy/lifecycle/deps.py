@@ -36,6 +36,7 @@ from ..registry.deploy_history_store import DeployHistoryStore
 from ..registry.chat_agent_audit_store import ChatAgentAuditStore
 from ..registry.env_store import EnvStore
 from ..registry.loader import ComponentRegistry
+from ..onboard.fetcher import RepoFiles
 from ..registry.models import ComponentConfig, ServiceConfig
 from ..registry.secret_key import SecretKeyManager
 from ..registry_check import RegistryChecker
@@ -1439,3 +1440,40 @@ def _resolve_placeholders(command_str: str, values: dict[str, Any]) -> str:
         return resolved if resolved is not None else m.group(0)
 
     return re.sub(r"\{([^{}]+)\}", _replacer, command_str)
+
+
+async def _fetch_component_repo_files(
+    name: str,
+    component_config_store: ComponentConfigStore,
+) -> tuple[ComponentConfig, RepoFiles]:
+    """Look up *name* in *component_config_store*, verify it has a git_url,
+    and fetch its repo files — raising the appropriate HTTPException at
+    each step (404, 400, 422).  Returns the ``ComponentConfig`` and the
+    fetched ``RepoFiles`` so callers can use whichever fields they need.
+    """
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Component '{name}' not found",
+        )
+    if not comp_cfg.git_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Component '{name}' has no git_url — cannot fetch its repo",
+        )
+
+    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
+        FetchError,
+        fetch_repo_files,
+    )
+
+    loop = asyncio.get_running_loop()
+    try:
+        repo_files = await loop.run_in_executor(
+            None, fetch_repo_files, comp_cfg.git_url
+        )
+    except FetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return comp_cfg, repo_files
