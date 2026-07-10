@@ -149,6 +149,10 @@ src/robotsix_central_deploy/
 
 **Rule:** Test files for module X belong under `tests/X/`, never at the `tests/` root. Every module already follows this convention (lifecycle, gateway, registry, ui, registry_check, volume_audit, onboard). Do not create new test files at the `tests/` root — place them in the corresponding `tests/<module>/` directory.
 
+## Documentation
+
+**Rule:** When adding a new public `.py` module (not private, not `__init__.py`), add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive to `docs/api.md` under the appropriate section. The section headers in `docs/api.md` mirror the `src/robotsix_central_deploy/` directory structure — new modules should be listed alongside their sibling modules in the matching section.
+
 ## Code Gotchas
 
 1. **Sibling fan-out is best-effort** — failures are logged but don't fail the primary operation.

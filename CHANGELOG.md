@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Document the rule for keeping `docs/api.md` up to date: when adding a new public `.py` module, add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive under the matching section.
 - Extract volume ops (`_volume_ops.py`) and Claude-auth ops (`_auth_ops.py`) from
   `lifecycle/backends/docker_sdk.py`, reducing the file from 1,416 to ~945 lines.
   The new `VolumeOps` and `AuthOps` helper classes share the Docker client with
