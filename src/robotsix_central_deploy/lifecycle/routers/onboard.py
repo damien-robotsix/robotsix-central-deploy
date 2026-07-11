@@ -67,7 +67,10 @@ async def _deploy_onboard_siblings(
 
     Appends created records to *out_records* before each deploy so rollback
     can clean up even when a sibling deploy fails partway through.
+
+    Raises RuntimeError if any sibling deploy fails (after attempting all).
     """
+    failures: list[str] = []
     for sib in spec.siblings:
         sib_name = f"{spec.name}-{sib.service_key}"
         sib_component_config = ComponentConfig(
@@ -96,12 +99,22 @@ async def _deploy_onboard_siblings(
         await store.put(sib_record)
         out_records.append(sib_record)
 
-        sib_outcome = await backend.deploy(sib_record, sib_component_config, sib.image)
-        sib_record.state = sib_outcome.state
-        sib_record.image = sib.image
-        sib_record.deployed_image_digest = sib_outcome.deployed_digest
-        sib_record.previous_image_digest = sib_outcome.previous_digest
-        await store.put(sib_record)
+        try:
+            sib_outcome = await backend.deploy(
+                sib_record, sib_component_config, sib.image
+            )
+            sib_record.state = sib_outcome.state
+            sib_record.image = sib.image
+            sib_record.deployed_image_digest = sib_outcome.deployed_digest
+            sib_record.previous_image_digest = sib_outcome.previous_digest
+            await store.put(sib_record)
+        except Exception as exc:
+            msg = f"deploy onboard sibling '{sib_name}' failed: {exc}"
+            logger.warning(msg)
+            failures.append(msg)
+
+    if failures:
+        raise RuntimeError("; ".join(failures))
 
 
 async def _rollback_onboard(
