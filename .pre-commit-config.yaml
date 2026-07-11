@@ -31,3 +31,11 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      - id: robotsix-modules-validate
+        name: Module taxonomy validation
+        entry: uv run robotsix-modules-validate docs/modules.yaml
+        language: system
+        types: [yaml]
+        files: ^docs/modules\.yaml$
+        pass_filenames: false

@@ -36,6 +36,7 @@ dev = [
     "types-docker>=7.1",
     "towncrier>=24.0",
     "hypothesis>=6.156.3",
+    "robotsix-modules>=0.2.0",
 ]
 docs = [
     "mkdocs-material>=9.5",
