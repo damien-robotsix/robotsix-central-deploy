@@ -1208,6 +1208,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "robotsix-modules" },
     { name = "ruff" },
     { name = "towncrier" },
     { name = "types-docker" },
@@ -1243,6 +1244,7 @@ dev = [
     { name = "pytest", specifier = ">=7.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.0" },
     { name = "pytest-cov", specifier = ">=4.0" },
+    { name = "robotsix-modules", git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=39a1d024f7656de661779c594c2b07bb84162023" },
     { name = "ruff", specifier = ">=0.1" },
     { name = "towncrier", specifier = ">=24.0" },
     { name = "types-docker", specifier = ">=7.1" },
@@ -1269,6 +1271,15 @@ dependencies = [
     { name = "httpx" },
     { name = "pydantic-ai-slim" },
     { name = "starlette" },
+]
+
+[[package]]
+name = "robotsix-modules"
+version = "0.2.0"
+source = { git = "https://github.com/damien-robotsix/robotsix-modules.git?rev=39a1d024f7656de661779c594c2b07bb84162023#39a1d024f7656de661779c594c2b07bb84162023" }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "pyyaml" },
 ]
 
 [[package]]
