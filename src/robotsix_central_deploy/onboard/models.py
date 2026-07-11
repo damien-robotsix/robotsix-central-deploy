@@ -48,6 +48,7 @@ class DerivedSpec(BaseModel):
     command: Optional[list[str]] = None
     entrypoint: Optional[list[str]] = None
     tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
+    mem_limit: str = "2g"
     container_name: str = ""  # override from compose; empty means "use spec.name"
     siblings: list[SiblingDerivedSpec] = []  # empty for single-service repos
     config_schema: dict[str, Any] | None = (

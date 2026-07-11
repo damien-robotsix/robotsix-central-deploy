@@ -712,7 +712,6 @@ async def refresh_contract(
         git_url=comp_cfg.git_url,
         repo_id=comp_cfg.repo_id,
         caretaker_auto_update=comp_cfg.caretaker_auto_update,
-        mem_limit=comp_cfg.mem_limit,
     )
 
     # Diff: collect which contract-derived fields changed.
@@ -726,6 +725,7 @@ async def refresh_contract(
         "command",
         "entrypoint",
         "tmpfs",
+        "mem_limit",
         "claude_mount",
         "host_docker_sock",
         "named_volumes",

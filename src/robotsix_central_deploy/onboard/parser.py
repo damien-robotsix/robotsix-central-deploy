@@ -597,6 +597,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         command=primary_parsed["command"],
         entrypoint=primary_parsed["entrypoint"],
         tmpfs=primary_parsed["tmpfs"],
+        mem_limit=primary_parsed["mem_limit"],
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
         config_volume=primary_parsed["config_volume"],

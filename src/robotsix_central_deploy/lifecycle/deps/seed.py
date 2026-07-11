@@ -66,8 +66,8 @@ def _build_component_config_from_spec(
     *git_url* is required explicitly because the two callers source it
     differently (onboard uses ``spec.git_url``; refresh preserves the
     existing config's URL).  *overrides* lets the refresh path layer on
-    operator-set fields (``repo_id``, ``caretaker_auto_update``,
-    ``mem_limit``) without branching.
+    operator-set fields (``repo_id``, ``caretaker_auto_update``)
+    without branching.
     """
     from robotsix_central_deploy.registry.models import ComponentConfig, ServiceConfig  # noqa: PLC0415
 
@@ -82,6 +82,7 @@ def _build_component_config_from_spec(
         command=spec.command,
         entrypoint=spec.entrypoint,
         tmpfs=spec.tmpfs,
+        mem_limit=spec.mem_limit,
         claude_mount=spec.claude_mount,
         host_docker_sock=spec.host_docker_sock,
         named_volumes=[m.host for m in spec.volume_mounts]
