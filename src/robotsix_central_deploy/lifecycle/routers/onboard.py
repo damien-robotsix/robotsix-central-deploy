@@ -116,6 +116,7 @@ async def _deploy_onboard_siblings(
     if failures:
         raise RuntimeError("; ".join(failures))
 
+
 async def _rollback_onboard(
     name: str,
     config_id: str,
