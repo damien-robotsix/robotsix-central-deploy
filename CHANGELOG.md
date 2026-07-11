@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added dedicated unit tests for `AuthOps` covering `check_claude_auth`, `write_claude_credentials`, and `read_claude_credentials` with mocked Docker SDK.
 - Propagate `mem_limit` from docker-compose.yml through the full lifecycle pipeline: add `mem_limit` to `DerivedSpec`, wire it through `_build_component_config_from_spec`, and include it in `_CONTRACT_FIELDS` so contract-refresh detects changes. Previously the primary service's `mem_limit` was silently discarded, always defaulting to `"2g"`.
 - Document the rule for keeping `docs/api.md` up to date: when adding a new public `.py` module, add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive under the matching section.
 - Extract volume ops (`_volume_ops.py`) and Claude-auth ops (`_auth_ops.py`) from
