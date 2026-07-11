@@ -36,6 +36,7 @@ dev = [
     "types-docker>=7.1",
     "towncrier>=24.0",
     "hypothesis>=6.156.3",
+    "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules.git@39a1d024f7656de661779c594c2b07bb84162023",
 ]
 docs = [
     "mkdocs-material>=9.5",

@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Added dedicated unit tests for `AuthOps` covering `check_claude_auth`, `write_claude_credentials`, and `read_claude_credentials` with mocked Docker SDK.
+- Add `robotsix-modules` taxonomy validation to CI and pre-commit hooks to prevent `docs/modules.yaml` drift
 - Propagate `mem_limit` from docker-compose.yml through the full lifecycle pipeline: add `mem_limit` to `DerivedSpec`, wire it through `_build_component_config_from_spec`, and include it in `_CONTRACT_FIELDS` so contract-refresh detects changes. Previously the primary service's `mem_limit` was silently discarded, always defaulting to `"2g"`.
 - Extract duplicated sibling fan-out boilerplate from ``services.py`` and ``chat.py`` into a shared ``_fanout_siblings_best_effort`` helper in ``lifecycle/routers/_sibling_utils.py``. Also wrap each sibling deploy in ``onboard.py``'s ``_deploy_onboard_siblings`` in per-sibling try/except for best-effort resilience.
 - Document the rule for keeping `docs/api.md` up to date: when adding a new public `.py` module, add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive under the matching section.

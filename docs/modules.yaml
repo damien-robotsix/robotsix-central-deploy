@@ -1,134 +1,72 @@
 # robotsix-central-deploy modules
+package: robotsix_central_deploy
 
 modules:
   - id: lifecycle
-    name: lifecycle
     description: >
       Lifecycle control API for the robotsix suite — start, stop, restart,
       and inspect the status of managed services.
-    package: robotsix_central_deploy.lifecycle
-    entrypoint: robotsix_central_deploy.lifecycle.cli:main
-    dependencies:
-      - fastapi
-      - uvicorn
-      - pydantic
-      - robotsix-config
-      - pyyaml
-      - PyGithub
-    config:
-      file: config/config.json
-    endpoints:
-      - GET /health
-      - GET /disk
-      - POST /disk/reclaim
-      - GET /chat/components
-      - PUT /chat/config/{name}
-      - POST /chat/config/{name}/rollback
-      - POST /chat/services/{name}/restart
-      - POST /chat/services/{name}/update
-      - GET /chat/audit-log
-      - GET /chat/github/repos/{owner}/{repo}/actions/runs
-      - GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}
-      - GET /chat/github/repos/{owner}/{repo}
-      - PATCH /chat/github/repos/{owner}/{repo}
-      - POST /chat/github/repos
-      - GET /chat/github/repos/{owner}/{repo}/pulls
-      - GET /chat/github/repos/{owner}/{repo}/pulls/{number}
-      - GET /services
-      - GET /services/{name}
-      - GET /services/{name}/health
-      - GET /services/{name}/logs
-      - POST /services/{name}/start
-      - POST /services/{name}/stop
-      - POST /services/{name}/restart
-      - POST /services/{name}/deploy
-      - POST /services/{name}/rollback
-      - GET /services/{name}/history
-      - GET/PUT /services/{name}/env
-      - DELETE /services/{name}/env/{key}
-      - POST /services/{name}/env/sync-keys
-      - GET/PUT /services/{name}/config
-      - POST /services/{name}/config/assist
-      - POST /services/{name}/config/import
-      - POST /services/{name}/config/refresh-schema
-      - POST /services/{name}/refresh-contract
-      - DELETE /services/{name}
-      - GET/PUT /settings
-      - GET/POST /system/update
-      - GET /volumes/audit
-      - GET /volumes/orphans
-      - POST /volumes/prune
-      - GET /volumes/{name}/ls
-      - GET /volumes/{name}/cat
-      - GET /claude-auth/status
-      - POST /claude-auth/login
-      - POST /claude-auth/login/complete
-      - POST /claude-auth/login/cancel
-      - POST /claude-auth/credentials
-    docs: /docs
-    openapi: /openapi.json
+    dependencies: []
     paths:
       - src/robotsix_central_deploy/__init__.py
-      - src/robotsix_central_deploy/lifecycle/**/*
       - src/robotsix_central_deploy/_yaml_utils.py
       - src/robotsix_central_deploy/deploy_lock.py
       - tests/conftest.py
       - tests/__init__.py
-      - tests/deploy_lock/__init__.py
-      - tests/deploy_lock/test_deploy_lock.py
-      - tests/yaml_utils/__init__.py
-      - tests/yaml_utils/test_yaml_utils.py
-      - tests/lifecycle/**/*
+      - tests/deploy_lock/**/*
+      - tests/yaml_utils/**/*
       - docs/ARCHITECTURE.md
       - docs/api.md
       - docs/changelog.md
       - docs/configuration.md
       - docs/deployment.md
       - docs/index.md
+      - docs/modules.yaml
       - docs/nginx-deploy.conf
       - docs/openapi.json
-    tests: tests/lifecycle/
+      # Root-level repo infrastructure
+      - .gitattributes
+      - .gitignore
+      - .gitleaksignore
+      - .pre-commit-config.yaml
+      - .secrets.baseline
+      - .trivyignore
+      - .github/**/*
+      - .robotsix-mill/**/*
+      - AGENT.md
+      - CHANGELOG.md
+      - CODE_OF_CONDUCT.md
+      - CONTRIBUTING.md
+      - Dockerfile
+      - LICENSE
+      - README.md
+      - SECURITY.md
+      - _gen_openapi.py
+      - _mill_build.py
+      - changelog.d/**/*
+      - config/**/*
+      - docker-compose.yml
+      - mkdocs.yml
+      - pyproject.toml
+      - uv.lock
 
   - id: gateway
-    name: gateway
     description: >
       Reverse-proxy gateway — routes <name>.deploy.robotsix.net (Host
       subdomain) to managed container services via HTTP and WebSocket
       proxying. Legacy path URLs (deploy.robotsix.net/<name>/...) redirect
       to the component subdomain.
-    package: robotsix_central_deploy.gateway
-    dependencies:
-      - fastapi
-      - httpx
-    endpoints:
-      - ANY /                      # subdomain-routed component root
-      - ANY /{path:path}           # subdomain-routed; legacy /<name>/... -> 307 to subdomain
-      - WS /{path:path}            # WebSocket relay (subdomain only)
-    paths:
-      - src/robotsix_central_deploy/gateway/**/*
-      - tests/gateway/**/*
-      - docs/gateway/**/*
-    tests: tests/gateway/
+    dependencies: []
 
   - id: registry
-    name: registry
     description: >
       Component registry — declares each managed Docker component (id, image,
       container name, ports, mounts, env, health check). Initialised empty at
       startup and populated from the dynamic component-config JSON store
       (onboarding adds entries); consumed by the Docker-API backend.
-    package: robotsix_central_deploy.registry
-    dependencies:
-      - pydantic
-      - pyyaml
-    paths:
-      - src/robotsix_central_deploy/registry/**/*
-      - docs/registry/**/*
-      - tests/registry/**/*
-    tests: tests/registry/
+    dependencies: []
 
   - id: ui
-    name: ui
     description: >
       Monitoring dashboard UI — serves a self-contained HTML page at /ui
       showing live component status, image revision, health, start/stop/
@@ -137,85 +75,41 @@ modules:
       variables and secrets without SSH access, using the
       `GET/PUT/DELETE /services/{name}/env` API endpoints.
       Auth-gated via verify_auth.
-    package: robotsix_central_deploy.ui
-    dependencies:
-      - fastapi
-    endpoints:
-      - GET /ui
-      - GET/POST /login
-      - POST /logout
-      - GET /help/deploy-contract
-    paths:
-      - src/robotsix_central_deploy/ui/**/*
-      - docs/ui/**/*
-      - tests/ui/**/*
-    tests: tests/ui/
+    dependencies: []
 
-  - id: registry_check
-    name: registry_check
+  - id: registry-check
     description: >
       Registry image-update detection — polls the GHCR registry for the
       latest manifest digest and compares against the deployed image digest
       to determine whether an update is available.
-    package: robotsix_central_deploy.registry_check
-    dependencies:
-      - pydantic
-      - httpx
+    dependencies: []
     paths:
       - src/robotsix_central_deploy/registry_check/**/*
-      - docs/registry_check/**/*
       - tests/registry_check/**/*
-    tests: tests/registry_check/
+      - docs/registry_check/**/*
 
   - id: caretaker
-    name: caretaker
     description: >
       Background maintenance agent — runs daily passes over managed components
       for health checks, image-update detection/applying, volume auditing, and
       disk monitoring. Orchestrated by a periodic scheduler; lifecycle exposes
       a /caretaker/status endpoint.
-    package: robotsix_central_deploy.caretaker
-    dependencies:
-      - httpx
-      - pydantic
-    paths:
-      - docs/caretaker/**/*
-      - src/robotsix_central_deploy/caretaker/**/*
-      - tests/caretaker/**/*
-    tests: tests/caretaker/
+    dependencies: []
 
   - id: onboard
-    name: onboard
     description: >
       Onboard-from-git — fetches a service repo's docker-compose.yml via
       shallow git clone and parses it into a DerivedSpec against the
       central-deploy contract (v1).
-    package: robotsix_central_deploy.onboard
-    dependencies:
-      - pydantic
-      - pyyaml
-    paths:
-      - src/robotsix_central_deploy/onboard/**/*
-      - docs/onboard/**/*
-      - tests/onboard/**/*
-      - tests/onboard/test_port_utils.py
-    tests: tests/onboard/
+    dependencies: []
 
-  - id: volume_audit
-    name: volume_audit
+  - id: volume-audit
     description: >
       Docker volume audit subsystem — periodic scanning of managed named
       volumes, growth-over-time tracking with percentile and absolute-delta
       guards, and threshold-breach reporting via a pluggable report seam.
-    package: robotsix_central_deploy.volume_audit
-    dependencies:
-      - pydantic
-    config:
-      env_prefix: ROBOTSIX_LIFECYCLE_
-    endpoints:
-      - GET /volumes/audit
+    dependencies: []
     paths:
       - src/robotsix_central_deploy/volume_audit/**/*
-      - docs/volume_audit/overview.md
       - tests/volume_audit/**/*
-    tests: tests/volume_audit/
+      - docs/volume_audit/**/*
