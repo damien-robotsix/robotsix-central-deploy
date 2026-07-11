@@ -26,6 +26,7 @@ from ..deps import (
     _namespace_spec_volumes,
     _build_component_config_from_spec,
 )
+from ._sibling_utils import _fanout_siblings_best_effort
 from ..models import (
     ActionResponse,
     ActionType,
@@ -416,13 +417,7 @@ async def start_service(
     # Fan out to siblings (best-effort per sibling)
     config = registry.get(name)
     if config and config.siblings:
-        for sib, sib_record in await _get_sibling_pairs(name, config, store):
-            try:
-                final = await backend.start(sib_record)
-                sib_record.state = final
-                await store.put(sib_record)
-            except Exception:
-                logger.warning("start sibling '%s-%s' failed", name, sib.service_key)
+        await _fanout_siblings_best_effort(name, config, store, backend, "start")
 
     return ActionResponse(
         name=name,
@@ -511,13 +506,7 @@ async def stop_service(
     # Stop siblings (best-effort per sibling)
     config = registry.get(name)
     if config and config.siblings:
-        for sib, sib_record in await _get_sibling_pairs(name, config, store):
-            try:
-                final = await backend.stop(sib_record)
-                sib_record.state = final
-                await store.put(sib_record)
-            except Exception:
-                logger.warning("stop sibling '%s-%s' failed", name, sib.service_key)
+        await _fanout_siblings_best_effort(name, config, store, backend, "stop")
 
     return ActionResponse(
         name=name,
@@ -598,13 +587,7 @@ async def restart_service(
     # Restart siblings (best-effort per sibling)
     config = registry.get(name)
     if config and config.siblings:
-        for sib, sib_record in await _get_sibling_pairs(name, config, store):
-            try:
-                final = await backend.restart(sib_record)
-                sib_record.state = final
-                await store.put(sib_record)
-            except Exception:
-                logger.warning("restart sibling '%s-%s' failed", name, sib.service_key)
+        await _fanout_siblings_best_effort(name, config, store, backend, "restart")
 
     return ActionResponse(
         name=name,

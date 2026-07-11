@@ -1,0 +1,1 @@
+Follow-up: extract duplicated sibling fan-out try/except into shared helper (prior ticket 20260708T123708Z)

@@ -31,6 +31,7 @@ from ..deps import (
     _get_store,
     _validate_config_or_422,
 )
+from ._sibling_utils import _fanout_siblings_best_effort
 from .._config_utils import _mask_secrets, _merge_config, _canonical_hash
 from ..models import (
     ActionType,
@@ -597,19 +598,7 @@ async def chat_restart_service(
     # Restart siblings (best-effort).
     config = registry.get(name)
     if config and config.siblings:
-        from ..deps import _get_sibling_pairs
-
-        for sib, sib_record in await _get_sibling_pairs(name, config, store):
-            try:
-                final = await backend.restart(sib_record)
-                sib_record.state = final
-                await store.put(sib_record)
-            except Exception:
-                logger.warning(
-                    "chat restart sibling '%s-%s' failed",
-                    name.replace("\n", "\\n"),
-                    sib.service_key.replace("\n", "\\n"),
-                )
+        await _fanout_siblings_best_effort(name, config, store, backend, "restart")
 
     await audit_store.append(
         ChatAgentAuditEntry(
