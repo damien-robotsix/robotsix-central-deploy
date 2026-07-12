@@ -1,6 +1,8 @@
 """Generate docs/openapi.json by loading the FastAPI app and dumping its schema."""
+
 import json
 import sys
+
 sys.path.insert(0, "src")
 from robotsix_central_deploy.lifecycle.server import app
 
