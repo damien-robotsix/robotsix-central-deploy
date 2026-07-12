@@ -94,6 +94,15 @@ async def langfuse_proxy(
     if params:
         target_url += f"?{urllib.parse.urlencode(params)}"
 
+    # -- Validate the constructed URL targets the expected Langfuse host ----
+    _parsed_target = urllib.parse.urlparse(target_url)
+    _expected_host = urllib.parse.urlparse(config.langfuse_base_url).hostname
+    if _parsed_target.hostname != _expected_host:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid target URL — host mismatch",
+        )
+
     # -- Inject auth and forward --------------------------------------------
     headers: dict[str, str] = {}
     # Only forward safe headers from the client — never pass hop-by-hop or
