@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -337,6 +337,100 @@ async def get_service_logs(
 
 
 # ---------------------------------------------------------------------------
+# Shared lifecycle-action helper (start / stop / restart)
+# ---------------------------------------------------------------------------
+
+
+async def _lifecycle_action(
+    name: str,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    registry: ComponentRegistry,
+    action_type: Literal["start", "stop", "restart"],
+    state_starting: ServiceState,
+    state_running: ServiceState,
+    state_stopping: ServiceState | None = None,
+) -> ActionResponse:
+    """Shared implementation for start, stop, and restart endpoints.
+
+    Args:
+        name: Service name.
+        store: Service store backend.
+        backend: Execution backend.
+        registry: Component registry.
+        action_type: The action being performed ("start", "stop", "restart").
+        state_starting: The intermediate/in-progress state
+            (STARTING, STOPPING, RESTARTING).
+        state_running: The success target state (RUNNING, STOPPED, RUNNING).
+        state_stopping: Optional "already at target" state for idempotency
+            (RUNNING for start, STOPPED for stop, None for restart).
+    """
+    record = await _get_or_create_record(name, store)
+    previous = record.state
+
+    # Idempotency: already at target state (if applicable).
+    if state_stopping is not None and record.state == state_stopping:
+        return ActionResponse(
+            name=name,
+            action=ActionType(action_type),
+            previous_state=previous,
+            current_state=state_stopping,
+            detail=f"Service is already {state_stopping.value}",
+        )
+
+    # Idempotency: already in progress.
+    if record.state == state_starting:
+        return ActionResponse(
+            name=name,
+            action=ActionType(action_type),
+            previous_state=previous,
+            current_state=state_starting,
+            detail=f"{action_type.capitalize()} already in progress",
+        )
+
+    # Validate transition.
+    if not can_transition(record.state, state_starting):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot {action_type} from state '{record.state.value}'",
+        )
+
+    # Mark intermediate state, then execute.
+    record.state = state_starting
+    await store.put(record)
+
+    try:
+        final_state = await getattr(backend, action_type)(record)
+    except Exception as exc:
+        logger.exception("%s %s failed", action_type, name.replace("\n", "\\n"))
+        record.state = ServiceState.FAILED
+        record.last_error = str(exc)
+        await store.put(record)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{action_type.capitalize()} failed: {exc}",
+        )
+
+    record.state = final_state
+    record.last_error = (
+        "" if final_state == state_running else "backend reported failure"
+    )
+    await store.put(record)
+
+    # Fan out to siblings (best-effort per sibling)
+    config = registry.get(name)
+    if config and config.siblings:
+        await _fanout_siblings_best_effort(name, config, store, backend, action_type)
+
+    return ActionResponse(
+        name=name,
+        action=ActionType(action_type),
+        previous_state=previous,
+        current_state=record.state,
+    )
+
+
+# ---------------------------------------------------------------------------
 # POST /services/{name}/start
 # ---------------------------------------------------------------------------
 
@@ -364,66 +458,15 @@ async def start_service(
     start, and 500 on backend failure. Sibling services are started on a
     best-effort basis.
     """
-    record = await _get_or_create_record(name, store)
-    previous = record.state
-
-    # Idempotency: already running (or starting).
-    if record.state == ServiceState.RUNNING:
-        return ActionResponse(
-            name=name,
-            action=ActionType.START,
-            previous_state=previous,
-            current_state=ServiceState.RUNNING,
-            detail="Service is already running",
-        )
-    if record.state == ServiceState.STARTING:
-        return ActionResponse(
-            name=name,
-            action=ActionType.START,
-            previous_state=previous,
-            current_state=ServiceState.STARTING,
-            detail="Start already in progress",
-        )
-
-    # Validate transition.
-    if not can_transition(record.state, ServiceState.STARTING):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot start from state '{record.state.value}'",
-        )
-
-    # Mark starting, then execute.
-    record.state = ServiceState.STARTING
-    await store.put(record)
-
-    try:
-        final_state = await backend.start(record)
-    except Exception as exc:
-        logger.exception("start %s failed", name)
-        record.state = ServiceState.FAILED
-        record.last_error = str(exc)
-        await store.put(record)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Start failed: {exc}",
-        )
-
-    record.state = final_state
-    record.last_error = (
-        "" if final_state == ServiceState.RUNNING else "backend reported failure"
-    )
-    await store.put(record)
-
-    # Fan out to siblings (best-effort per sibling)
-    config = registry.get(name)
-    if config and config.siblings:
-        await _fanout_siblings_best_effort(name, config, store, backend, "start")
-
-    return ActionResponse(
+    return await _lifecycle_action(
         name=name,
-        action=ActionType.START,
-        previous_state=previous,
-        current_state=record.state,
+        store=store,
+        backend=backend,
+        registry=registry,
+        action_type="start",
+        state_starting=ServiceState.STARTING,
+        state_running=ServiceState.RUNNING,
+        state_stopping=ServiceState.RUNNING,
     )
 
 
@@ -455,64 +498,15 @@ async def stop_service(
     stop, and 500 on backend failure. Sibling services are stopped on a
     best-effort basis.
     """
-    record = await _get_or_create_record(name, store)
-    previous = record.state
-
-    # Idempotency.
-    if record.state == ServiceState.STOPPED:
-        return ActionResponse(
-            name=name,
-            action=ActionType.STOP,
-            previous_state=previous,
-            current_state=ServiceState.STOPPED,
-            detail="Service is already stopped",
-        )
-    if record.state == ServiceState.STOPPING:
-        return ActionResponse(
-            name=name,
-            action=ActionType.STOP,
-            previous_state=previous,
-            current_state=ServiceState.STOPPING,
-            detail="Stop already in progress",
-        )
-
-    if not can_transition(record.state, ServiceState.STOPPING):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot stop from state '{record.state.value}'",
-        )
-
-    record.state = ServiceState.STOPPING
-    await store.put(record)
-
-    try:
-        final_state = await backend.stop(record)
-    except Exception as exc:
-        logger.exception("stop %s failed", name)
-        record.state = ServiceState.FAILED
-        record.last_error = str(exc)
-        await store.put(record)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Stop failed: {exc}",
-        )
-
-    record.state = final_state
-    record.last_error = (
-        "" if final_state == ServiceState.STOPPED else "backend reported failure"
-    )
-    await store.put(record)
-
-    # Stop siblings (best-effort per sibling)
-    config = registry.get(name)
-    if config and config.siblings:
-        await _fanout_siblings_best_effort(name, config, store, backend, "stop")
-
-    return ActionResponse(
+    return await _lifecycle_action(
         name=name,
-        action=ActionType.STOP,
-        previous_state=previous,
-        current_state=record.state,
+        store=store,
+        backend=backend,
+        registry=registry,
+        action_type="stop",
+        state_starting=ServiceState.STOPPING,
+        state_running=ServiceState.STOPPED,
+        state_stopping=ServiceState.STOPPED,
     )
 
 
@@ -544,56 +538,14 @@ async def restart_service(
     restart, and 500 on backend failure. Sibling services are restarted on a
     best-effort basis.
     """
-    record = await _get_or_create_record(name, store)
-    previous = record.state
-
-    # Idempotency — if already restarting, let it continue.
-    if record.state == ServiceState.RESTARTING:
-        return ActionResponse(
-            name=name,
-            action=ActionType.RESTART,
-            previous_state=previous,
-            current_state=ServiceState.RESTARTING,
-            detail="Restart already in progress",
-        )
-
-    if not can_transition(record.state, ServiceState.RESTARTING):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot restart from state '{record.state.value}'",
-        )
-
-    record.state = ServiceState.RESTARTING
-    await store.put(record)
-
-    try:
-        final_state = await backend.restart(record)
-    except Exception as exc:
-        logger.exception("restart %s failed", name)
-        record.state = ServiceState.FAILED
-        record.last_error = str(exc)
-        await store.put(record)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Restart failed: {exc}",
-        )
-
-    record.state = final_state
-    record.last_error = (
-        "" if final_state == ServiceState.RUNNING else "backend reported failure"
-    )
-    await store.put(record)
-
-    # Restart siblings (best-effort per sibling)
-    config = registry.get(name)
-    if config and config.siblings:
-        await _fanout_siblings_best_effort(name, config, store, backend, "restart")
-
-    return ActionResponse(
+    return await _lifecycle_action(
         name=name,
-        action=ActionType.RESTART,
-        previous_state=previous,
-        current_state=record.state,
+        store=store,
+        backend=backend,
+        registry=registry,
+        action_type="restart",
+        state_starting=ServiceState.RESTARTING,
+        state_running=ServiceState.RUNNING,
     )
 
 

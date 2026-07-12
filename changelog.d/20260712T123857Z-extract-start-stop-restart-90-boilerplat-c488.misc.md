@@ -1,0 +1,1 @@
+Extract start/stop/restart ~90% boilerplate in services.py into a shared _lifecycle_action helper
