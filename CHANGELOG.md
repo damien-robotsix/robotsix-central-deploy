@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove orphaned `_gen_openapi_tmp.py` build artifact (committed by PR #425) and add to `.gitignore`
 - Added `PUT /chat/github/repos/{owner}/{repo}/security-features` endpoint so the chat agent can toggle Dependency Graph, Dependabot alerts, and Dependabot security updates in one call instead of asking the operator to manually toggle them in GitHub's web UI. Uses App installation token with PAT fallback; returns the resulting `security_and_analysis` state.
 - Add server-side auth-injecting Langfuse proxy (`/chat/langfuse/api/public/...`) so the chat container no longer needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` in its own environment. The deploy server injects HTTP Basic Auth from `langfuse_chat_public_key`/`langfuse_chat_secret_key` (or cognee equivalents via `?project=cognee`) when proxying read-only Langfuse public-API requests, mirroring the auth-injection pattern used by the `github` virtual component.
 - Replace inline fetch-repo-files preamble in `refresh_contract` with a call to the shared `_fetch_component_repo_files` helper, removing duplicated code.

@@ -1,0 +1,1 @@
+Remove orphaned _gen_openapi_tmp.py and add to .gitignore

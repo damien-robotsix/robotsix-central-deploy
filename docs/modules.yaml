@@ -42,7 +42,6 @@ modules:
       - README.md
       - SECURITY.md
       - _gen_openapi.py
-      - _gen_openapi_tmp.py
       - _mill_build.py
       - changelog.d/**/*
       - config/**/*
