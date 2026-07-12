@@ -481,7 +481,7 @@ async def preview_deploy(
     # 7 — Register the component so the gateway can route to it
     _register_preview_component(registry, ports, image_ref)
 
-    logger.info("Preview deployed → %s", preview_url)
+    logger.info("Preview deployed → %s", _log_safe(preview_url))
     logger.debug(
         "Preview source: %s@%s", _log_safe(body.repo_url), _log_safe(body.branch)
     )
