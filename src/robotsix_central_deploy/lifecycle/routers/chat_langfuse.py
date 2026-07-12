@@ -75,33 +75,31 @@ async def langfuse_proxy(
         )
 
     # -- Build target URL — preserve query string minus our ?project= param --
-    base = config.langfuse_base_url.rstrip("/")
+    # Parse the configured Langfuse base URL for safe structured construction.
+    base_url = httpx.URL(config.langfuse_base_url.rstrip("/"))
 
-    # Sanitize the user-provided path to prevent URL injection (SSRF).
+    # Sanitize the user-provided path to prevent path traversal.
     _safe_path = path.lstrip("/")
     if ".." in _safe_path.split("/"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path"
         )
     _safe_path = urllib.parse.quote(_safe_path, safe="/")
-    target_url = urllib.parse.urljoin(base + "/", f"api/public/{_safe_path}")
 
     # Forward every query param except "project" (which is ours).
     params: dict[str, str] = {}
     for key, value in request.query_params.multi_items():
         if key != "project":
             params[key] = value
-    if params:
-        target_url += f"?{urllib.parse.urlencode(params)}"
 
-    # -- Validate the constructed URL targets the expected Langfuse host ----
-    _parsed_target = urllib.parse.urlparse(target_url)
-    _expected_host = urllib.parse.urlparse(config.langfuse_base_url).hostname
-    if _parsed_target.hostname != _expected_host:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid target URL — host mismatch",
-        )
+    # Construct the target URL safely using httpx.URL.copy_with(), which
+    # preserves scheme, host, and port from the configured base URL.
+    # User-controlled values only affect the path and query string,
+    # preventing SSRF.
+    target_url = base_url.copy_with(
+        path=f"/api/public/{_safe_path}",
+        params=params if params else None,
+    )
 
     # -- Inject auth and forward --------------------------------------------
     headers: dict[str, str] = {}
@@ -114,7 +112,7 @@ async def langfuse_proxy(
         if key.lower() in _SAFE_REQUEST_HEADERS:
             headers[key] = value
     headers["authorization"] = _basic_auth_header(username, password)
-    headers["host"] = base.split("://", 1)[1].split("/", 1)[0]
+    headers["host"] = base_url.host
 
     logger.debug("langfuse proxy: %s → %s", request.url, target_url)
 

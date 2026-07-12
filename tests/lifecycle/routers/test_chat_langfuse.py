@@ -296,7 +296,7 @@ class TestLangfuseProxyQueryParamStripping:
 
         async def _fake_get(url, headers=None, **kwargs):
             nonlocal captured_url
-            captured_url = url
+            captured_url = str(url)
             resp = MagicMock(spec=httpx.Response)
             resp.status_code = 200
             resp.content = b'{"data":[]}'
