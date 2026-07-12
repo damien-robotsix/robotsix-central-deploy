@@ -31,6 +31,9 @@ component_env.json
 .DS_Store
 *.swp
 
+# Build artifacts
+_gen_openapi_tmp.py
+
 # local pip installs
 .local/
 .deps/
