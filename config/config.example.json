@@ -39,12 +39,12 @@
   "virtual_components": [
     {
       "id": "langfuse",
-      "chat_base_url": "https://langfuse.robotsix.net",
+      "chat_base_url": "http://central-deploy:8100",
       "chat_skill_endpoint": "/chat-skill",
-      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /api/public/traces` — list traces\n- `GET /api/public/traces/{traceId}` — single trace detail\n\n## Authentication\n\nHTTP Basic Auth using LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY from the agent's environment.",
-      "auth_type": "basic",
-      "auth_username_env": "LANGFUSE_PUBLIC_KEY",
-      "auth_password_env": "LANGFUSE_SECRET_KEY"
+      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /chat/langfuse/api/public/traces` — list traces (supports `?limit=`, `?page=`, `?tags=`, and `?project=robotsix-chat|cognee`)\n- `GET /chat/langfuse/api/public/traces/{traceId}` — single trace detail\n- `GET /chat/langfuse/api/public/observations` — list observations\n- `GET /chat/langfuse/api/public/observations/{observationId}` — single observation detail\n\n## Authentication\n\nNone required.  The deploy server injects HTTP Basic Auth server-side —\nthe chat container never sees the credentials.\n\n## Projects\n\nUse the `?project=` query parameter to select which Langfuse project's\ntraces to query:\n- `?project=robotsix-chat` (default) — the robotsix-chat trace project\n- `?project=cognee` — the cognee trace project",
+      "auth_type": "",
+      "auth_username_env": "",
+      "auth_password_env": ""
     },
     {
       "id": "deploy",
