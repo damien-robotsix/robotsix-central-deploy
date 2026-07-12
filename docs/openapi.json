@@ -3434,7 +3434,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3462,7 +3462,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_put",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3490,7 +3490,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3518,7 +3518,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_delete",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3546,7 +3546,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_options",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3574,7 +3574,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3602,7 +3602,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__head",
+        "operationId": "gateway_http_root_patch",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3626,60 +3626,12 @@
       }
     },
     "/{path}": {
-      "head": {
+      "get": {
         "tags": [
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__head",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__head",
+        "operationId": "gateway_http__path__get",
         "parameters": [
           {
             "name": "path",
@@ -3727,7 +3679,103 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__head",
+        "operationId": "gateway_http__path__post",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__put",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__delete",
         "parameters": [
           {
             "name": "path",
@@ -3771,6 +3819,54 @@
         }
       },
       "patch": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__patch",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
         "tags": [
           "gateway"
         ],
@@ -3823,103 +3919,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__head",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__head",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__head",
+        "operationId": "gateway_http__path__options",
         "parameters": [
           {
             "name": "path",
