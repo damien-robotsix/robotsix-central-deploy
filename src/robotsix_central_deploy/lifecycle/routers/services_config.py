@@ -48,15 +48,11 @@ from .._config_utils import (  # noqa: E402
     _deep_merge,
     _mask_secrets,
     _merge_config,
+    _sanitize_log,
     _write_llmio_tier_config,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_log(s: str) -> str:
-    """Replace newlines so user input cannot inject fake log entries."""
-    return s.replace("\n", "\\n").replace("\r", "\\r")
 
 
 router = APIRouter(tags=["services"])
