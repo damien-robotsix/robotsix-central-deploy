@@ -402,7 +402,7 @@ async def _lifecycle_action(
     try:
         final_state = await getattr(backend, action_type)(record)
     except Exception as exc:
-        logger.exception("%s %s failed", action_type, name)
+        logger.exception("%s %s failed", action_type, name.replace("\n", "\\n"))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
