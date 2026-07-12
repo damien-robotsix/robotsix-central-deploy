@@ -10,7 +10,10 @@ schema = app.openapi()
 # security-defined rule without weakening any gate.
 schema.setdefault("security", [])
 # Redocly recommended rules require a servers array and a license field.
-schema.setdefault("servers", [{"url": "http://localhost:8100", "description": "Local development server"}])
+schema.setdefault(
+    "servers",
+    [{"url": "http://localhost:8100", "description": "Local development server"}],
+)
 schema.setdefault("info", {}).setdefault("license", {"name": "MIT"})
 with open("docs/openapi.json", "w") as f:
     json.dump(schema, f, indent=2)
