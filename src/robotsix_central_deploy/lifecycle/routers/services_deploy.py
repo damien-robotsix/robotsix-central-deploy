@@ -12,7 +12,7 @@ from fastapi.params import Body
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
-from .._config_utils import _write_llmio_tier_config
+from .._config_utils import _sanitize_log, _write_llmio_tier_config
 from ..deps import (
     JobRegistry,
     _get_backend,
@@ -52,11 +52,6 @@ from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig, ServiceConfig
 
 logger = logging.getLogger(__name__)
-
-
-def _sanitize_log(s: str) -> str:
-    """Replace newlines so user input cannot inject fake log entries."""
-    return s.replace("\n", "\\n").replace("\r", "\\r")
 
 
 router = APIRouter(tags=["services"])

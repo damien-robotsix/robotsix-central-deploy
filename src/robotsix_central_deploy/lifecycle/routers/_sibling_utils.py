@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
+from .._config_utils import _sanitize_log
 from ..backends import ExecutionBackend
 from ..deps import _get_sibling_pairs
 from ..store import ServiceStore
@@ -41,6 +42,6 @@ async def _fanout_siblings_best_effort(
             logger.warning(
                 "%s sibling '%s-%s' failed",
                 action,
-                name.replace("\n", "\\n"),
-                sib.service_key.replace("\n", "\\n"),
+                _sanitize_log(name),
+                _sanitize_log(sib.service_key),
             )

@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Deduplicate `_sanitize_log` helper: routers `services_deploy` and `services_config` now import it from `_config_utils` instead of redefining it locally; `_sibling_utils` also uses the shared function.
 - Added dedicated unit tests for `AuthOps` covering `check_claude_auth`, `write_claude_credentials`, and `read_claude_credentials` with mocked Docker SDK.
 - Add `robotsix-modules` taxonomy validation to CI and pre-commit hooks to prevent `docs/modules.yaml` drift
 - Propagate `mem_limit` from docker-compose.yml through the full lifecycle pipeline: add `mem_limit` to `DerivedSpec`, wire it through `_build_component_config_from_spec`, and include it in `_CONTRACT_FIELDS` so contract-refresh detects changes. Previously the primary service's `mem_limit` was silently discarded, always defaulting to `"2g"`.
