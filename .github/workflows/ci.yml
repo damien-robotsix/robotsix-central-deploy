@@ -235,11 +235,11 @@ jobs:
             fi
           done
           # Execution-backend strings (exclude models.py where the enum lives,
-          # and backend.py/noop.py where "docker"/"noop" references the CLI
-          # binary or credential values, not the backend type)
+          # and backend.py/noop.py/chat_preview.py where "docker"/"noop"
+          # references the CLI binary or credential values, not the backend type)
           for pattern in '"docker_sdk"' '"docker"' '"noop"'; do
             matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
-              --exclude='models.py' --exclude='backend.py' --exclude='noop.py' || true)
+              --exclude='models.py' --exclude='backend.py' --exclude='noop.py' --exclude='chat_preview.py' || true)
             if [ -n "$matches" ]; then
               echo "::error file={},line={}::Raw execution-backend string $pattern found outside models.py"
               echo "$matches"
