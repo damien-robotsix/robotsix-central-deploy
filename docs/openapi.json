@@ -3506,6 +3506,69 @@
         }
       }
     },
+    "/chat/langfuse/api/public/{path}": {
+      "get": {
+        "tags": [
+          "chat-langfuse"
+        ],
+        "summary": "Proxy a Langfuse public-API request with server-side auth",
+        "description": "Forward *path* to the configured Langfuse instance with Basic Auth.\n\nThe ``?project=`` query parameter is consumed by this proxy and is\n**not** forwarded upstream \u2014 it selects which key pair to inject.\nAll other query parameters are forwarded to Langfuse as-is.",
+        "operationId": "langfuse_proxy_chat_langfuse_api_public__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Langfuse project to query: 'robotsix-chat' or 'cognee'.",
+              "default": "robotsix-chat",
+              "title": "Project"
+            },
+            "description": "Langfuse project to query: 'robotsix-chat' or 'cognee'."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [

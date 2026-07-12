@@ -17,7 +17,7 @@ and ``cognee`` — selected by the query parameter ``?project=``.
 from __future__ import annotations
 
 import base64
-from urllib.parse import urlencode
+import urllib.parse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -76,7 +76,15 @@ async def langfuse_proxy(
 
     # -- Build target URL — preserve query string minus our ?project= param --
     base = config.langfuse_base_url.rstrip("/")
-    target_url = f"{base}/api/public/{path}"
+
+    # Sanitize the user-provided path to prevent URL injection (SSRF).
+    _safe_path = path.lstrip("/")
+    if ".." in _safe_path.split("/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path"
+        )
+    _safe_path = urllib.parse.quote(_safe_path, safe="/")
+    target_url = urllib.parse.urljoin(base + "/", f"api/public/{_safe_path}")
 
     # Forward every query param except "project" (which is ours).
     params: dict[str, str] = {}
@@ -84,7 +92,7 @@ async def langfuse_proxy(
         if key != "project":
             params[key] = value
     if params:
-        target_url += f"?{urlencode(params)}"
+        target_url += f"?{urllib.parse.urlencode(params)}"
 
     # -- Inject auth and forward --------------------------------------------
     headers: dict[str, str] = {}
