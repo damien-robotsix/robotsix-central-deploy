@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Replace inline fetch-repo-files preamble in `refresh_contract` with a call to the shared `_fetch_component_repo_files` helper, removing duplicated code.
 - Deduplicate `_sanitize_log` helper: routers `services_deploy` and `services_config` now import it from `_config_utils` instead of redefining it locally; `_sibling_utils` also uses the shared function.
 - Added dedicated unit tests for `AuthOps` covering `check_claude_auth`, `write_claude_credentials`, and `read_claude_credentials` with mocked Docker SDK.
 - Add `robotsix-modules` taxonomy validation to CI and pre-commit hooks to prevent `docs/modules.yaml` drift
