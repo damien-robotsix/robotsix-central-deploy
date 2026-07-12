@@ -42,7 +42,7 @@
           "settings"
         ],
         "summary": "Put Settings",
-        "description": "Update system settings, persist to disk, and hot-apply where possible.\n\n- Secret fields sent as ``\"***\"`` preserve the existing stored value.\n- ``log_level`` is validated via Pydantic; an invalid value returns 422.\n- All settings *except* ``registry_check_interval`` take effect\n  immediately without restart.\n\n# NOTE: ``registry_check_interval`` changes are persisted and reflected\n  in ``app.state.config``, but the background ``_registry_check_loop``\n  captures its interval at startup via a positional argument.  Updating\n  the config alone does **not** alter the running task's sleep period.\n  A full service restart is required for an interval change to take\n  effect.",
+        "description": "Update system settings, persist to disk, and hot-apply where possible.\n\nOnly fields explicitly present in the request body are changed\n(PATCH semantics); unmentioned fields keep their current stored values.\nTo explicitly clear a field, send its zero value (e.g. ``\"\"`` or ``0``).\n\n- Secret fields sent as ``\"***\"`` preserve the existing stored value.\n- ``log_level`` is validated via Pydantic; an invalid value returns 422.\n- All settings *except* ``registry_check_interval`` take effect immediately\n  without restart.\n\n# NOTE: ``registry_check_interval`` changes are persisted and reflected\n  in ``app.state.config``, but the background ``_registry_check_loop``\n  captures its interval at startup via a positional argument.  Updating\n  the config alone does **not** alter the running task's sleep period.\n  A full service restart is required for an interval change to take\n  effect on the background loop.\n\n# NOTE: Volume-audit settings (``volume_audit_enabled``,\n  ``volume_audit_interval_seconds``, ``volume_audit_growth_threshold_pct``,\n  ``volume_audit_min_delta_bytes``) are persisted and reflected in\n  ``app.state.config``, but the ``VolumeAuditScheduler.loop()`` captures\n  its interval at startup via a positional argument.  A full service\n  restart is required for interval/threshold changes to take effect on\n  the running background task.\n\n# NOTE: Backend-consumed settings (e.g. ``docker_socket_url``,\n  ``docker_sdk_timeout``) are captured by\n  ``DockerSdkBackend`` at construction time \u2014 the backend is now built\n  *after* the ``system_settings.json`` overlay at startup, so a full\n  service restart applies these settings.  Updating the config at\n  runtime alone does **not** alter the running backend.",
         "operationId": "put_settings_settings_put",
         "requestBody": {
           "content": {
@@ -495,6 +495,38 @@
         }
       }
     },
+    "/components/suggest": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "List registered components for config-form URL suggestions",
+        "description": "Return every registered component's id, container_name, and first\ncontainer port so the dashboard config form can offer one-click URL\nsuggestions for ``*_url`` / ``*_base_url`` fields.",
+        "operationId": "list_component_suggestions_components_suggest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentSuggestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services/{name}": {
       "get": {
         "tags": [
@@ -562,7 +594,7 @@
           "services"
         ],
         "summary": "Remove an onboarded component and optionally its container",
-        "description": "Remove an onboarded component and optionally its container and volumes.\n\nDeletes the service record, env/secrets, config.yaml, and component config.\nOptionally stops and removes the Docker container (``stop_container``) and\ndeletes data volumes (``remove_volumes``, irreversible). Raises 404 if the\ncomponent is not found.",
+        "description": "Remove an onboarded component and optionally its container and volumes.\n\nDeletes the service record, env/secrets, config.json, and component config.\nOptionally stops and removes the Docker container (``stop_container``) and\ndeletes data volumes (``remove_volumes``, irreversible).  Idempotent \u2014\nsucceeds even when some persisted state is already absent (e.g. the\ncomponent config was cleared).  Raises 404 only when *neither* a service\nrecord nor a component config exists for *name*.",
         "operationId": "delete_service_services__name__delete",
         "parameters": [
           {
@@ -1004,13 +1036,86 @@
         }
       }
     },
+    "/services/{name}/refresh-contract": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Refetch deploy/docker-compose.yml from the repo and update stored contract",
+        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, ports, mounts, command, entrypoint,\nhealth check, siblings, labels, etc.) are refreshed from the repo HEAD.\nOperator-set fields (repo_id, caretaker_auto_update, mem_limit) and\nenvironment overrides in the EnvStore are left untouched.  The endpoint\nreturns which fields changed so the operator can decide whether a\nredeploy is needed.",
+        "operationId": "refresh_contract_services__name__refresh_contract_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractRefreshResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Component has no git_url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found or repo has no deploy/docker-compose.yml",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Repo fetch failed or compose parse failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services/{name}/deploy": {
       "post": {
         "tags": [
           "services"
         ],
         "summary": "Deploy a new image version for a service (async)",
-        "description": "Queue a deploy for a service and return immediately with a job id.\n\nOptionally accepts a specific image reference; defaults to the component's\nconfigured image. The deploy runs as a background job \u2014 the caller polls\n``GET /services/deploy-jobs/{job_id}`` for progress.\n\nReturns 202 with a ``job_id`` so the UI can poll progress. Raises 404 if\nthe service or component config is not found, 409 when a deploy is already\nin progress for the component and no job record exists (e.g. caretaker\ndeploy), and 503 when the registry checker is not loaded.",
+        "description": "Queue a deploy for a service and return immediately with a job id.\n\nOptionally accepts a specific image reference; defaults to the component's\nconfigured image.  The deploy runs as a background job \u2014 the caller polls\n``GET /services/deploy-jobs/{job_id}`` for progress.\n\nReturns 202 with a ``job_id`` so the UI can poll progress.  Raises 404 if\nthe service or component config is not found, 409 when a deploy is already\nin progress for the component and no job record exists (e.g. caretaker\ndeploy), and 503 when the registry checker is not loaded.",
         "operationId": "deploy_service_services__name__deploy_post",
         "parameters": [
           {
@@ -1042,7 +1147,7 @@
         },
         "responses": {
           "202": {
-            "description": "Deploy queued \u2014 poll job_id for progress",
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
@@ -1173,7 +1278,7 @@
           "services"
         ],
         "summary": "Rollback a service to a prior image digest",
-        "description": "Roll back a service to a previously recorded image digest.\n\nWhen *digest* is absent/None: swaps the deployed and previous digests\n(the original one-step rollback). When *digest* is present: validates it\nappears in the component's deploy history, deploys that digest via the\nbackend, and records the rollback.\n\nRaises 404 if the service or component config is not found, 409 if no\nprior digest or the target digest is not in history, and 500 on backend\nfailure. Sibling services are rolled back on a best-effort basis\n(one-step behaviour only).
+        "description": "Roll back a service to a previously recorded image digest.\n\nWhen *digest* is absent/None: swaps the deployed and previous digests\n(the original one-step rollback). When *digest* is present: validates it\nappears in the component's deploy history, deploys that digest via the\nbackend, and records the rollback.\n\nRaises 404 if the service or component config is not found, 409 if no\nprior digest or the target digest is not in history, and 500 on backend\nfailure. Sibling services are rolled back on a best-effort basis\n(one-step behaviour only).",
         "operationId": "rollback_service_services__name__rollback_post",
         "parameters": [
           {
@@ -1330,278 +1435,13 @@
         }
       }
     },
-    "/services/{name}/env": {
-      "get": {
-        "tags": [
-          "services"
-        ],
-        "summary": "Get stored environment variables and secret keys for a service",
-        "description": "Return stored environment variables and masked secret keys for a service.\n\nSecret values are never exposed \u2014 only the key names are returned, each\nmasked as ``\"***\"``. Raises 404 if the service is not found.",
-        "operationId": "get_service_env_services__name__env_get",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnvResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Service not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "services"
-        ],
-        "summary": "Upsert environment variables and secrets for a service",
-        "description": "Create or update environment variables and secrets for a service.\n\nReturns 204 No Content on success. Raises 404 if the service is not found.",
-        "operationId": "put_service_env_services__name__env_put",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnvUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Service not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/services/{name}/env/sync-keys": {
-      "post": {
-        "tags": [
-          "services"
-        ],
-        "summary": "Add env keys newly declared by the repo's compose contract",
-        "description": "Re-read the repo's compose env contract and seed newly declared keys.\n\nThe env key set belongs to the repo's contract, not the operator: keys\nwith a default value are added as plain env entries, keys declared empty\nare added as secret slots \u2014 mirroring onboard seeding. Existing values\nare never modified, and keys the contract no longer declares are only\nreported, not deleted.",
-        "operationId": "sync_env_keys_services__name__env_sync_keys_post",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnvSyncResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Component has no git_url",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Component not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Repo fetch or compose parse failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/services/{name}/env/{key}": {
-      "delete": {
-        "tags": [
-          "services"
-        ],
-        "summary": "Delete an environment variable or secret key for a service",
-        "description": "Delete a single environment-variable or secret key for a service.\n\nReturns 204 No Content on success. Raises 404 if the service or key\nis not found.",
-        "operationId": "delete_service_env_key_services__name__env__key__delete",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          },
-          {
-            "name": "key",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Key"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Service or key not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/services/{name}/config": {
       "get": {
         "tags": [
           "services"
         ],
-        "summary": "Get config.yaml schema and current values for a service",
-        "description": "Return the config.yaml schema and current masked values for a service.\n\nRaises 404 if the service has no config schema.",
+        "summary": "Get config.json schema and current values for a service",
+        "description": "Return the config.json schema and current masked values for a service.\n\nRaises 404 if the service has no config schema.",
         "operationId": "get_service_config_services__name__config_get",
         "parameters": [
           {
@@ -1661,8 +1501,8 @@
         "tags": [
           "services"
         ],
-        "summary": "Merge and save config.yaml values for a service",
-        "description": "Merge and save config.yaml values for a service, then write to the config volume.\n\nRestarts the running container (and any siblings sharing the config\nvolume) so new values take effect immediately. Returns 204 No Content.\nRaises 404 if the service has no config schema.",
+        "summary": "Merge and save config.json values for a service",
+        "description": "Merge and save config.json values for a service, then write to the config volume.\n\nRestarts the running container (and any siblings sharing the config\nvolume) so new values take effect immediately. Returns 204 No Content.\nRaises 404 if the service has no config schema.",
         "operationId": "put_service_config_services__name__config_put",
         "parameters": [
           {
@@ -1858,79 +1698,6 @@
         }
       }
     },
-    "/services/{name}/refresh-contract": {
-      "post": {
-        "tags": [
-          "services"
-        ],
-        "summary": "Refetch deploy/docker-compose.yml from the repo and update stored contract",
-        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, ports, mounts, command, entrypoint,\nhealth check, siblings, labels, etc.) are refreshed from the repo HEAD.\nOperator-set fields (repo_id, caretaker_auto_update, mem_limit) and\nenvironment overrides in the EnvStore are left untouched. The endpoint\nreturns which fields changed so the operator can decide whether a\nredeploy is needed.",
-        "operationId": "refresh_contract_services__name__refresh_contract_post",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContractRefreshResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Component has no git_url",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Component not found or repo has no deploy/docker-compose.yml",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Repo fetch failed or compose parse failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/services/{name}/config/assist": {
       "post": {
         "tags": [
@@ -2003,6 +1770,271 @@
           },
           "504": {
             "description": "Assist command timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/env": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Get stored environment variables and secret keys for a service",
+        "description": "Return stored environment variables and masked secret keys for a service.\n\nSecret values are never exposed \u2014 only the key names are returned, each\nmasked as ``\"***\"``. Raises 404 if the service is not found.",
+        "operationId": "get_service_env_services__name__env_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Upsert environment variables and secrets for a service",
+        "description": "Create or update environment variables and secrets for a service.\n\nOptionally update the memory limit for the component's container.\nReturns 204 No Content on success. Raises 404 if the service is not found.",
+        "operationId": "put_service_env_services__name__env_put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/env/sync-keys": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Add env keys newly declared by the repo's compose contract",
+        "description": "Re-read the repo's compose env contract and seed newly declared keys.\n\nThe env key set belongs to the repo's contract, not the operator: keys\nwith a default value are added as plain env entries, keys declared empty\nare added as secret slots \u2014 mirroring onboard seeding. Existing values\nare never modified, and keys the contract no longer declares are only\nreported, not deleted.",
+        "operationId": "sync_env_keys_services__name__env_sync_keys_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvSyncResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Component has no git_url",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Repo fetch or compose parse failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/env/{key}": {
+      "delete": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Delete an environment variable or secret key for a service",
+        "description": "Delete a single environment-variable or secret key for a service.\n\nReturns 204 No Content on success. Raises 404 if the service or key\nis not found.",
+        "operationId": "delete_service_env_key_services__name__env__key__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service or key not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2215,6 +2247,1186 @@
         }
       }
     },
+    "/claude-auth/status": {
+      "get": {
+        "tags": [
+          "claude-auth"
+        ],
+        "summary": "Get Claude Auth Status",
+        "description": "Return the current Claude authentication status.",
+        "operationId": "get_claude_auth_status_claude_auth_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeAuthStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claude-auth/login": {
+      "post": {
+        "tags": [
+          "claude-auth"
+        ],
+        "summary": "Start Claude Login",
+        "description": "Generate a PKCE challenge and return the OAuth authorization URL.\n\nThe operator visits the URL, authorizes, and pastes the code shown on\nAnthropic's callback page into ``POST /claude-auth/login/complete``.",
+        "operationId": "start_claude_login_claude_auth_login_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeAuthLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claude-auth/login/complete": {
+      "post": {
+        "tags": [
+          "claude-auth"
+        ],
+        "summary": "Complete Claude Login",
+        "description": "Exchange the pasted authorization code for tokens and persist them.\n\nOn success ``.credentials.json`` is written into the ``claude-auth``\nvolume with ownership ``1000:1000`` and mode ``0600``.",
+        "operationId": "complete_claude_login_claude_auth_login_complete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaudeAuthCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeAuthCompleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claude-auth/login/cancel": {
+      "post": {
+        "tags": [
+          "claude-auth"
+        ],
+        "summary": "Cancel Claude Login",
+        "description": "Discard an in-progress PKCE login session.",
+        "operationId": "cancel_claude_login_claude_auth_login_cancel_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaudeAuthCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claude-auth/credentials": {
+      "post": {
+        "tags": [
+          "claude-auth"
+        ],
+        "summary": "Write Claude Credentials",
+        "description": "Write credentials JSON directly into the ``claude-auth`` volume.\n\nThe JSON is written to ``.credentials.json`` with ownership ``1000:1000``\nand mode ``0600``.",
+        "operationId": "write_claude_credentials_claude_auth_credentials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaudeAuthCredentialsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaudeAuthCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat-skill": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Deploy server's own chat-agent skill description",
+        "description": "Return the Markdown skill description for the deploy server itself.\n\nThis lets the deploy server register as a virtual component with\n``chat_base_url`` pointing at itself, and the roster endpoint's\nprobe succeeds against this handler.",
+        "operationId": "deploy_chat_skill_chat_skill_get",
+        "responses": {
+          "200": {
+            "description": "Markdown skill body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Deploy Chat Skill Chat Skill Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/components": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "List components reachable by the chat agent",
+        "description": "Return a roster of components the chat agent can interact with.\n\nEach entry has ``id``, ``base_url``, and ``skill`` (the Markdown body\nfetched live from the component's ``GET /chat-skill``).  Components\nthat do not have ``allow_chat_access`` enabled are omitted.  A\ncomponent whose skill probe fails is served from its last-known-good\ncached skill when one exists (stale-while-error), so a transient\nprobe failure does not drop it from the roster; it is omitted only\nwhen it has never been probed successfully.\n\nSkill bodies are cached for 60 seconds; a component whose cached\nentry has expired is re-probed on the next request.",
+        "operationId": "list_chat_components_chat_components_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Chat Components Chat Components Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/chat/config/{name}": {
+      "put": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Update non-secret config keys for an allowlisted service",
+        "description": "Update non-secret config keys for an allowlisted service.\n\nSaves the current config as a rollback snapshot before applying the\nupdate.  Secret keys are rejected with 403.  Writes the merged config\nto the service's config volume and records an audit entry for every\nchanged key.",
+        "operationId": "chat_update_config_chat_config__name__put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentConfigRollbackResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted or secret key rejected"
+          },
+          "404": {
+            "description": "Service has no config schema"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/config/{name}/rollback": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Restore the previous config version for an allowlisted service",
+        "description": "Restore the previous config snapshot for an allowlisted service.\n\nReturns 404 when no previous snapshot exists (e.g. no config update\nhas been performed yet through the chat surface).",
+        "operationId": "chat_rollback_config_chat_config__name__rollback_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentConfigRollbackResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "No previous config snapshot available"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/restart": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Restart an allowlisted service (idempotent)",
+        "description": "Restart an allowlisted service. Idempotent.\n\nRaises 403 if the service is not in the chat-agent allowlist.\nRate-limited to one restart per 60 seconds per service.",
+        "operationId": "chat_restart_service_chat_services__name__restart_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentRestartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service not found"
+          },
+          "409": {
+            "description": "Invalid state transition"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/update": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Pull + recreate (deploy) an allowlisted service",
+        "description": "Pull the latest image and recreate the container for an allowlisted service.\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one update per 300 seconds per service.",
+        "operationId": "chat_update_service_chat_services__name__update_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service not found"
+          },
+          "409": {
+            "description": "Deploy already in progress"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Registry not loaded"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/audit-log": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Read recent chat-agent mutation audit entries",
+        "description": "Return recent chat-agent audit entries, most-recent-first.\n\nOptionally filter by *component* name.",
+        "operationId": "chat_audit_log_chat_audit_log_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "component",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Component"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentAuditLogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/actions/runs": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "List recent GitHub Actions workflow runs for a repository",
+        "description": "List *owner*/*repo*'s workflow runs, most-recent-first.\n\n*branch* and *run_status* (GitHub's ``status`` query param \u2014 e.g.\n``\"in_progress\"``, ``\"completed\"``, ``\"queued\"``) narrow the results.\n*per_page* is capped at 100 (GitHub's own page-size ceiling).",
+        "operationId": "list_workflow_runs_chat_github_repos__owner___repo__actions_runs_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch"
+            }
+          },
+          {
+            "name": "run_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Status"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Workflow Runs Chat Github Repos  Owner   Repo  Actions Runs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/actions/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Get a single GitHub Actions workflow run",
+        "description": "Get *owner*/*repo*'s workflow run *run_id* (status, conclusion, URL).",
+        "operationId": "get_workflow_run_chat_github_repos__owner___repo__actions_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Workflow Run Chat Github Repos  Owner   Repo  Actions Runs  Run Id  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Run (or repository) not found"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Get GitHub repository details",
+        "description": "Get *owner*/*repo*'s details (visibility, description, settings).",
+        "operationId": "get_repo_chat_github_repos__owner___repo__get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Repo Chat Github Repos  Owner   Repo  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Update GitHub repository settings",
+        "description": "Update *owner*/*repo*'s settings \u2014 only provided fields are changed.",
+        "operationId": "update_repo_chat_github_repos__owner___repo__patch",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRepoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Repo Chat Github Repos  Owner   Repo  Patch"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "422": {
+            "description": "No fields provided, or GitHub rejected the request"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "List pull requests for a repository",
+        "description": "List *owner*/*repo*'s pull requests, most-recently-updated first.\n\n*state* is one of ``\"open\"`` (default), ``\"closed\"``, or ``\"all\"``.\n*per_page* is capped at 100 (GitHub's own page-size ceiling).",
+        "operationId": "list_pulls_chat_github_repos__owner___repo__pulls_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "open",
+              "title": "State"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Pulls Chat Github Repos  Owner   Repo  Pulls Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls/{number}": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Get a single pull request",
+        "description": "Get *owner*/*repo*'s pull request *number* (status, mergeable, URL).",
+        "operationId": "get_pull_chat_github_repos__owner___repo__pulls__number__get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Pull Chat Github Repos  Owner   Repo  Pulls  Number  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Pull request (or repository) not found"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/vulnerability-alerts": {
+      "put": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Enable the Dependency graph / Dependabot vulnerability alerts",
+        "description": "Enable *owner*/*repo*'s Dependency graph and Dependabot alerts.\n\nWithout this, GitHub Actions checks that rely on the dependency graph\n(e.g. ``dependency-review-action``) fail with \"Dependency review is not\nsupported on this repository\" until a human visits Settings > Security.\nNew repos get this automatically via :func:`create_repo`; this endpoint\ncovers repos that predate that, or ones created outside the chat agent.",
+        "operationId": "enable_vulnerability_alerts_chat_github_repos__owner___repo__vulnerability_alerts_put",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Enable Vulnerability Alerts Chat Github Repos  Owner   Repo  Vulnerability Alerts Put"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Create a new GitHub repository",
+        "description": "Create a new repository under the configured account.\n\nUses ``github_repo_create_token`` (a PAT), not the GitHub App\ninstallation token \u2014 GitHub Apps cannot create repositories under a\npersonal account. The repository is always created under that token's\nown account; there is no way to target an arbitrary owner.\n\nAlso enables the Dependency graph / Dependabot alerts (see\n:func:`enable_vulnerability_alerts`) so CI checks that depend on it\n(e.g. ``dependency-review-action``) don't fail on day one.",
+        "operationId": "create_repo_chat_github_repos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRepoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Repo Chat Github Repos Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "Repository already exists"
+          },
+          "422": {
+            "description": "GitHub rejected the request (e.g. invalid name)"
+          },
+          "503": {
+            "description": "Repo creation not configured"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -2222,7 +3434,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2250,7 +3462,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2278,7 +3490,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2306,7 +3518,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2334,7 +3546,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2362,7 +3574,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2390,7 +3602,7 @@
         ],
         "summary": "Gateway Http Root",
         "description": "Handle requests to ``/`` \u2014 only active for subdomain-routed components.",
-        "operationId": "gateway_http_root__get",
+        "operationId": "gateway_http_root__head",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2414,12 +3626,12 @@
       }
     },
     "/{path}": {
-      "get": {
+      "head": {
         "tags": [
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
+        "operationId": "gateway_http__path__head",
         "parameters": [
           {
             "name": "path",
@@ -2467,199 +3679,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "head": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "gateway"
-        ],
-        "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
+        "operationId": "gateway_http__path__head",
         "parameters": [
           {
             "name": "path",
@@ -2707,7 +3727,55 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
+        "operationId": "gateway_http__path__head",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__head",
         "parameters": [
           {
             "name": "path",
@@ -2755,7 +3823,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__get",
+        "operationId": "gateway_http__path__head",
         "parameters": [
           {
             "name": "path",
@@ -2803,7 +3871,55 @@
           "gateway"
         ],
         "summary": "Gateway Http",
-        "operationId": "gateway_http__path__post",
+        "operationId": "gateway_http__path__head",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "gateway"
+        ],
+        "summary": "Gateway Http",
+        "operationId": "gateway_http__path__head",
         "parameters": [
           {
             "name": "path",
@@ -2857,8 +3973,7 @@
             "title": "Name"
           },
           "action": {
-            "type": "string",
-            "title": "Action"
+            "$ref": "#/components/schemas/ActionType"
           },
           "previous_state": {
             "$ref": "#/components/schemas/ServiceState"
@@ -2881,6 +3996,17 @@
         ],
         "title": "ActionResponse",
         "description": "Generic response for start / stop / restart requests."
+      },
+      "ActionType": {
+        "type": "string",
+        "enum": [
+          "start",
+          "stop",
+          "restart",
+          "rollback"
+        ],
+        "title": "ActionType",
+        "description": "Action type for start / stop / restart / rollback requests."
       },
       "AuditFinding": {
         "properties": {
@@ -2926,6 +4052,357 @@
         ],
         "title": "AuditFinding",
         "description": "A threshold-breach finding produced by a scan pass."
+      },
+      "ChatAgentAuditEntryResponse": {
+        "properties": {
+          "timestamp": {
+            "type": "number",
+            "title": "Timestamp"
+          },
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id"
+          },
+          "component": {
+            "type": "string",
+            "title": "Component"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "old_value": {
+            "title": "Old Value"
+          },
+          "new_value": {
+            "title": "New Value"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "agent_id",
+          "component",
+          "action"
+        ],
+        "title": "ChatAgentAuditEntryResponse",
+        "description": "One audit-log entry exposed by GET /chat/audit-log."
+      },
+      "ChatAgentAuditLogResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ChatAgentAuditEntryResponse"
+            },
+            "type": "array",
+            "title": "Entries",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ChatAgentAuditLogResponse",
+        "description": "Response body for GET /chat/audit-log."
+      },
+      "ChatAgentConfigRollbackResponse": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "title": "Component"
+          },
+          "restored": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Restored"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "component",
+          "restored"
+        ],
+        "title": "ChatAgentConfigRollbackResponse",
+        "description": "Response body for PUT /chat/config/{name} and POST /chat/config/{name}/rollback."
+      },
+      "ChatAgentConfigUpdate": {
+        "properties": {
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "ChatAgentConfigUpdate",
+        "description": "Request body for PUT /chat/config/{name}.\n\nOnly non-secret keys are accepted; secret fields are rejected with 403."
+      },
+      "ChatAgentRestartResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "action": {
+            "$ref": "#/components/schemas/ActionType",
+            "default": "restart"
+          },
+          "previous_state": {
+            "type": "string",
+            "title": "Previous State"
+          },
+          "current_state": {
+            "type": "string",
+            "title": "Current State"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "previous_state",
+          "current_state"
+        ],
+        "title": "ChatAgentRestartResponse",
+        "description": "Response body for POST /chat/services/{name}/restart."
+      },
+      "ChatAgentUpdateResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "update"
+          },
+          "deployed_digest": {
+            "type": "string",
+            "title": "Deployed Digest",
+            "default": ""
+          },
+          "previous_digest": {
+            "type": "string",
+            "title": "Previous Digest",
+            "default": ""
+          },
+          "current_state": {
+            "type": "string",
+            "title": "Current State"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "current_state"
+        ],
+        "title": "ChatAgentUpdateResponse",
+        "description": "Response body for POST /chat/services/{name}/update."
+      },
+      "ClaudeAuthCancelRequest": {
+        "properties": {
+          "login_id": {
+            "type": "string",
+            "title": "Login Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login_id"
+        ],
+        "title": "ClaudeAuthCancelRequest"
+      },
+      "ClaudeAuthCompleteRequest": {
+        "properties": {
+          "login_id": {
+            "type": "string",
+            "title": "Login Id"
+          },
+          "auth_code": {
+            "type": "string",
+            "title": "Auth Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login_id",
+          "auth_code"
+        ],
+        "title": "ClaudeAuthCompleteRequest"
+      },
+      "ClaudeAuthCompleteResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ClaudeAuthCompleteResponse"
+      },
+      "ClaudeAuthCredentialsRequest": {
+        "properties": {
+          "credentials_json": {
+            "type": "string",
+            "title": "Credentials Json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "credentials_json"
+        ],
+        "title": "ClaudeAuthCredentialsRequest"
+      },
+      "ClaudeAuthCredentialsResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ClaudeAuthCredentialsResponse"
+      },
+      "ClaudeAuthLoginResponse": {
+        "properties": {
+          "login_id": {
+            "type": "string",
+            "title": "Login Id"
+          },
+          "oauth_url": {
+            "type": "string",
+            "title": "Oauth Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login_id",
+          "oauth_url"
+        ],
+        "title": "ClaudeAuthLoginResponse"
+      },
+      "ClaudeAuthStatusResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          },
+          "refresh_status": {
+            "type": "string",
+            "title": "Refresh Status",
+            "default": ""
+          },
+          "last_refresh_error": {
+            "type": "string",
+            "title": "Last Refresh Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ClaudeAuthStatusResponse"
+      },
+      "ComponentSuggestItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "container_name": {
+            "type": "string",
+            "title": "Container Name"
+          },
+          "container_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container Port"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "container_name",
+          "container_port"
+        ],
+        "title": "ComponentSuggestItem",
+        "description": "Lightweight component info for the config-form URL suggest feature."
+      },
+      "ComponentSuggestResponse": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentSuggestItem"
+            },
+            "type": "array",
+            "title": "Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "components"
+        ],
+        "title": "ComponentSuggestResponse"
       },
       "ConfigAssistRequest": {
         "properties": {
@@ -3085,40 +4562,6 @@
         "title": "ConfigSchemaRefreshResponse",
         "description": "Body of the 200 response from POST /services/{name}/config/refresh-schema."
       },
-      "ContractRefreshResponse": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "changed_fields": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Changed Fields",
-            "default": []
-          },
-          "previous": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Previous",
-            "default": {}
-          },
-          "current": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Current",
-            "default": {}
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "ContractRefreshResponse",
-        "description": "Body of the 200 response from POST /services/{name}/refresh-contract."
-      },
       "ConfigUpdate": {
         "properties": {
           "values": {
@@ -3161,6 +4604,100 @@
         "title": "ContainerHealthSummary",
         "description": "Health snapshot for one sibling container."
       },
+      "ContractRefreshResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Changed Fields",
+            "default": []
+          },
+          "previous": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Previous",
+            "default": {}
+          },
+          "current": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ContractRefreshResponse",
+        "description": "Body of the 200 response from POST /services/{name}/refresh-contract."
+      },
+      "CreateRepoRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Repository name (no owner prefix)."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Repository description.",
+            "default": ""
+          },
+          "private": {
+            "type": "boolean",
+            "title": "Private",
+            "description": "Create as a private repository.",
+            "default": false
+          },
+          "homepage": {
+            "type": "string",
+            "title": "Homepage",
+            "description": "Homepage URL.",
+            "default": ""
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Topics",
+            "description": "Topics to attach after creation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateRepoRequest",
+        "description": "Body for ``POST /chat/github/repos``."
+      },
+      "DeployAcceptedResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "name"
+        ],
+        "title": "DeployAcceptedResponse",
+        "description": "Returned by POST /services/{name}/deploy (202) when the job is queued."
+      },
       "DeployHistoryEntry": {
         "properties": {
           "digest": {
@@ -3176,8 +4713,7 @@
             "title": "Timestamp"
           },
           "source": {
-            "type": "string",
-            "title": "Source"
+            "$ref": "#/components/schemas/DeploySource"
           },
           "previous_digest": {
             "type": "string",
@@ -3217,42 +4753,17 @@
         "title": "DeployHistoryResponse",
         "description": "Response for ``GET /services/{name}/history`` \u2014 most-recent-first."
       },
-      "DeployRequest": {
-        "properties": {
-          "image": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Image"
-          }
-        },
-        "type": "object",
-        "title": "DeployRequest",
-        "description": "Optional image override for a deploy request."
-      },
-      "DeployAcceptedResponse": {
-        "properties": {
-          "job_id": {
-            "type": "string",
-            "title": "Job Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "job_id",
-          "name"
+      "DeployJobPhase": {
+        "type": "string",
+        "enum": [
+          "deploying",
+          "waiting_health",
+          "deploying_siblings",
+          "done",
+          "failed"
         ],
-        "title": "DeployAcceptedResponse",
-        "description": "Returned by POST /services/{name}/deploy (202) when the job is queued."
+        "title": "DeployJobPhase",
+        "description": "Phases of a background deploy job."
       },
       "DeployJobStatusResponse": {
         "properties": {
@@ -3265,8 +4776,7 @@
             "title": "Component"
           },
           "phase": {
-            "type": "string",
-            "title": "Phase"
+            "$ref": "#/components/schemas/DeployJobPhase"
           },
           "error": {
             "anyOf": [
@@ -3277,7 +4787,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Error"
           },
           "name": {
@@ -3289,7 +4798,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Name"
           },
           "image": {
@@ -3301,7 +4809,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Image"
           },
           "state": {
@@ -3313,7 +4820,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "State"
           },
           "warnings": {
@@ -3333,6 +4839,34 @@
         ],
         "title": "DeployJobStatusResponse",
         "description": "Returned by GET /services/deploy-jobs/{job_id}."
+      },
+      "DeployRequest": {
+        "properties": {
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          }
+        },
+        "type": "object",
+        "title": "DeployRequest",
+        "description": "Optional image override for a deploy request."
+      },
+      "DeploySource": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "caretaker",
+          "rollback"
+        ],
+        "title": "DeploySource",
+        "description": "Source of a deploy: manual operator action, caretaker auto-update, or rollback."
       },
       "DerivedSpec": {
         "properties": {
@@ -3415,6 +4949,19 @@
             ],
             "title": "Entrypoint"
           },
+          "tmpfs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tmpfs",
+            "default": []
+          },
+          "mem_limit": {
+            "type": "string",
+            "title": "Mem Limit",
+            "default": "2g"
+          },
           "container_name": {
             "type": "string",
             "title": "Container Name",
@@ -3439,6 +4986,18 @@
               }
             ],
             "title": "Config Schema"
+          },
+          "config_example_values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Example Values"
           },
           "config_volume": {
             "anyOf": [
@@ -3469,6 +5028,33 @@
             "type": "array",
             "title": "Config Assist Seeds",
             "default": []
+          },
+          "llmio_tier_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llmio Tier Level"
+          },
+          "allow_chat_access": {
+            "type": "boolean",
+            "title": "Allow Chat Access",
+            "default": false
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
           }
         },
         "type": "object",
@@ -3563,6 +5149,21 @@
             },
             "type": "object",
             "title": "Secrets"
+          },
+          "mem_limit": {
+            "type": "string",
+            "title": "Mem Limit",
+            "default": "2g"
+          },
+          "allow_chat_access": {
+            "type": "boolean",
+            "title": "Allow Chat Access",
+            "default": false
+          },
+          "claude_mount": {
+            "type": "boolean",
+            "title": "Claude Mount",
+            "default": false
           }
         },
         "type": "object",
@@ -3622,6 +5223,39 @@
             "type": "object",
             "title": "Secrets",
             "default": {}
+          },
+          "mem_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mem Limit"
+          },
+          "allow_chat_access": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Chat Access"
+          },
+          "claude_mount": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claude Mount"
           }
         },
         "type": "object",
@@ -3735,6 +5369,14 @@
             "type": "boolean",
             "title": "Register With Mill",
             "default": true
+          },
+          "port_shifts": {
+            "items": {
+              "$ref": "#/components/schemas/PortShift"
+            },
+            "type": "array",
+            "title": "Port Shifts",
+            "default": []
           }
         },
         "type": "object",
@@ -3742,6 +5384,19 @@
           "spec"
         ],
         "title": "OnboardConfirmRequest"
+      },
+      "OnboardJobPhase": {
+        "type": "string",
+        "enum": [
+          "writing_config",
+          "deploying_primary",
+          "waiting_health",
+          "deploying_siblings",
+          "done",
+          "failed"
+        ],
+        "title": "OnboardJobPhase",
+        "description": "Phases of a background onboard deploy job."
       },
       "OnboardJobStatusResponse": {
         "properties": {
@@ -3754,16 +5409,7 @@
             "title": "Component"
           },
           "phase": {
-            "type": "string",
-            "enum": [
-              "writing_config",
-              "deploying_primary",
-              "waiting_health",
-              "deploying_siblings",
-              "done",
-              "failed"
-            ],
-            "title": "Phase"
+            "$ref": "#/components/schemas/OnboardJobPhase"
           },
           "error": {
             "anyOf": [
@@ -3808,6 +5454,14 @@
               }
             ],
             "title": "State"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
           }
         },
         "type": "object",
@@ -3841,6 +5495,14 @@
         "properties": {
           "spec": {
             "$ref": "#/components/schemas/DerivedSpec"
+          },
+          "port_shifts": {
+            "items": {
+              "$ref": "#/components/schemas/PortShift"
+            },
+            "type": "array",
+            "title": "Port Shifts",
+            "default": []
           }
         },
         "type": "object",
@@ -3909,6 +5571,44 @@
           "container"
         ],
         "title": "PortMapping"
+      },
+      "PortShift": {
+        "properties": {
+          "container_port": {
+            "type": "integer",
+            "title": "Container Port"
+          },
+          "protocol": {
+            "type": "string",
+            "title": "Protocol"
+          },
+          "original_host": {
+            "type": "integer",
+            "title": "Original Host"
+          },
+          "assigned_host": {
+            "type": "integer",
+            "title": "Assigned Host"
+          },
+          "collision_component_id": {
+            "type": "string",
+            "title": "Collision Component Id"
+          },
+          "collision_repo_id": {
+            "type": "string",
+            "title": "Collision Repo Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "container_port",
+          "protocol",
+          "original_host",
+          "assigned_host",
+          "collision_component_id",
+          "collision_repo_id"
+        ],
+        "title": "PortShift"
       },
       "PruneVolumesRequest": {
         "properties": {
@@ -4004,8 +5704,7 @@
             "title": "Name"
           },
           "action": {
-            "type": "string",
-            "title": "Action",
+            "$ref": "#/components/schemas/ActionType",
             "default": "rollback"
           },
           "rolled_back_to_digest": {
@@ -4016,10 +5715,10 @@
             "$ref": "#/components/schemas/ServiceState"
           },
           "warnings": {
-            "type": "array",
             "items": {
               "type": "string"
             },
+            "type": "array",
             "title": "Warnings",
             "default": []
           }
@@ -4281,12 +5980,12 @@
             "title": "Ports",
             "default": []
           },
-          "volume_mounts": {
+          "mounts": {
             "items": {
               "$ref": "#/components/schemas/VolumeMount"
             },
             "type": "array",
-            "title": "Volume Mounts",
+            "title": "Mounts",
             "default": []
           },
           "env": {
@@ -4344,6 +6043,30 @@
               }
             ],
             "title": "Entrypoint"
+          },
+          "tmpfs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tmpfs",
+            "default": []
+          },
+          "mem_limit": {
+            "type": "string",
+            "title": "Mem Limit",
+            "default": "2g"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
           }
         },
         "type": "object",
@@ -4406,10 +6129,62 @@
             "type": "boolean",
             "title": "Image Auto Prune",
             "default": false
+          },
+          "llmio_tier_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Llmio Tier Config",
+            "default": {}
+          },
+          "claude_auth_refresh_interval": {
+            "type": "integer",
+            "title": "Claude Auth Refresh Interval",
+            "default": 1800
+          },
+          "rate_limit_login_per_minute": {
+            "type": "integer",
+            "title": "Rate Limit Login Per Minute",
+            "default": 10
+          },
+          "rate_limit_api_per_hour": {
+            "type": "integer",
+            "title": "Rate Limit Api Per Hour",
+            "default": 20000
+          },
+          "rate_limit_login_max_attempts": {
+            "type": "integer",
+            "title": "Rate Limit Login Max Attempts",
+            "default": 20
+          },
+          "rate_limit_login_lockout_seconds": {
+            "type": "integer",
+            "title": "Rate Limit Login Lockout Seconds",
+            "default": 300
+          },
+          "volume_audit_enabled": {
+            "type": "boolean",
+            "title": "Volume Audit Enabled",
+            "default": false
+          },
+          "volume_audit_interval_seconds": {
+            "type": "integer",
+            "title": "Volume Audit Interval Seconds",
+            "default": 3600
+          },
+          "volume_audit_growth_threshold_pct": {
+            "type": "number",
+            "title": "Volume Audit Growth Threshold Pct",
+            "default": 10.0
+          },
+          "volume_audit_min_delta_bytes": {
+            "type": "integer",
+            "title": "Volume Audit Min Delta Bytes",
+            "default": 10485760
           }
         },
         "type": "object",
-        "title": "SystemSettingsResponse"
+        "title": "SystemSettingsResponse",
+        "description": "Response model \u2014 inherits all fields from SystemSettings."
       },
       "SystemSettingsUpdate": {
         "properties": {
@@ -4462,10 +6237,117 @@
             "type": "boolean",
             "title": "Image Auto Prune",
             "default": false
+          },
+          "llmio_tier_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Llmio Tier Config",
+            "default": {}
+          },
+          "claude_auth_refresh_interval": {
+            "type": "integer",
+            "title": "Claude Auth Refresh Interval",
+            "default": 1800
+          },
+          "rate_limit_login_per_minute": {
+            "type": "integer",
+            "title": "Rate Limit Login Per Minute",
+            "default": 10
+          },
+          "rate_limit_api_per_hour": {
+            "type": "integer",
+            "title": "Rate Limit Api Per Hour",
+            "default": 20000
+          },
+          "rate_limit_login_max_attempts": {
+            "type": "integer",
+            "title": "Rate Limit Login Max Attempts",
+            "default": 20
+          },
+          "rate_limit_login_lockout_seconds": {
+            "type": "integer",
+            "title": "Rate Limit Login Lockout Seconds",
+            "default": 300
+          },
+          "volume_audit_enabled": {
+            "type": "boolean",
+            "title": "Volume Audit Enabled",
+            "default": false
+          },
+          "volume_audit_interval_seconds": {
+            "type": "integer",
+            "title": "Volume Audit Interval Seconds",
+            "default": 3600
+          },
+          "volume_audit_growth_threshold_pct": {
+            "type": "number",
+            "title": "Volume Audit Growth Threshold Pct",
+            "default": 10.0
+          },
+          "volume_audit_min_delta_bytes": {
+            "type": "integer",
+            "title": "Volume Audit Min Delta Bytes",
+            "default": 10485760
           }
         },
         "type": "object",
-        "title": "SystemSettingsUpdate"
+        "title": "SystemSettingsUpdate",
+        "description": "Update model \u2014 inherits all fields and validators from SystemSettings."
+      },
+      "UpdateRepoRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "New description."
+          },
+          "private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private",
+            "description": "New visibility."
+          },
+          "has_issues": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Issues",
+            "description": "Enable/disable Issues."
+          },
+          "has_wiki": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Wiki",
+            "description": "Enable/disable the Wiki."
+          }
+        },
+        "type": "object",
+        "title": "UpdateRepoRequest",
+        "description": "Body for ``PATCH /chat/github/repos/{owner}/{repo}``.\n\nAll fields are optional; only the ones provided are changed."
       },
       "UpdateState": {
         "type": "string",
