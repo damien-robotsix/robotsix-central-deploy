@@ -40,12 +40,12 @@
   "virtual_components": [
     {
       "id": "langfuse",
-      "chat_base_url": "https://langfuse.robotsix.net",
+      "chat_base_url": "http://central-deploy:8100",
       "chat_skill_endpoint": "/chat-skill",
-      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /api/public/traces` \u2014 list traces (supports `?limit=`, `?page=`, `?tags=`)\n- `GET /api/public/traces/{traceId}` \u2014 single trace detail\n- `GET /api/public/observations` \u2014 list observations\n- `GET /api/public/observations/{observationId}` \u2014 single observation detail\n\n## Authentication\n\nHTTP Basic Auth.  Credentials are read from the agent's environment:\n- `LANGFUSE_PUBLIC_KEY` \u2014 public key (username)\n- `LANGFUSE_SECRET_KEY` \u2014 secret key (password)\n\nSeparate key pairs exist for the `robotsix-chat` and `cognee` Langfuse\nprojects; which pair is used depends on which project's traces are being\nqueried.  Both pairs should be provisioned via the EnvStore under the\n`robotsix-chat` component so they are available as container environment\nvariables at deploy time.",
-      "auth_type": "basic",
-      "auth_username_env": "LANGFUSE_PUBLIC_KEY",
-      "auth_password_env": "LANGFUSE_SECRET_KEY"
+      "chat_skill": "# Langfuse\n\nLLM observability and tracing platform.\n\n## Endpoints\n- `GET /chat/langfuse/api/public/traces` \u2014 list traces (supports `?limit=`, `?page=`, `?tags=`, and `?project=robotsix-chat|cognee`)\n- `GET /chat/langfuse/api/public/traces/{traceId}` \u2014 single trace detail\n- `GET /chat/langfuse/api/public/observations` \u2014 list observations\n- `GET /chat/langfuse/api/public/observations/{observationId}` \u2014 single observation detail\n\n## Authentication\n\nNone required.  The deploy server injects HTTP Basic Auth server-side \u2014\nthe chat container never sees the credentials.\n\n## Projects\n\nUse the `?project=` query parameter to select which Langfuse project's\ntraces to query:\n- `?project=robotsix-chat` (default) \u2014 the robotsix-chat trace project\n- `?project=cognee` \u2014 the cognee trace project",
+      "auth_type": "",
+      "auth_username_env": "",
+      "auth_password_env": ""
     },
     {
       "id": "deploy",

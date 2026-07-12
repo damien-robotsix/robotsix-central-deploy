@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add server-side auth-injecting Langfuse proxy (`/chat/langfuse/api/public/...`) so the chat container no longer needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` in its own environment. The deploy server injects HTTP Basic Auth from `langfuse_chat_public_key`/`langfuse_chat_secret_key` (or cognee equivalents via `?project=cognee`) when proxying read-only Langfuse public-API requests, mirroring the auth-injection pattern used by the `github` virtual component.
 - Replace inline fetch-repo-files preamble in `refresh_contract` with a call to the shared `_fetch_component_repo_files` helper, removing duplicated code.
 - Deduplicate `_sanitize_log` helper: routers `services_deploy` and `services_config` now import it from `_config_utils` instead of redefining it locally; `_sibling_utils` also uses the shared function.
 - Extract `_lifecycle_action` shared helper in `services.py`, consolidating ~225 lines of boilerplate from `start_service`, `stop_service`, and `restart_service` into a single parameterised implementation.
