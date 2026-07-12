@@ -356,3 +356,28 @@ class ChatAgentAuditLogResponse(BaseModel):
     """Response body for GET /chat/audit-log."""
 
     entries: list[ChatAgentAuditEntryResponse] = []
+
+
+# ---------------------------------------------------------------------------
+# Chat agent preview deployment models
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentPreviewDeployRequest(BaseModel):
+    """Request body for POST /chat/preview/deploy."""
+
+    repo_url: str
+    branch: str
+
+
+class ChatAgentPreviewDeployResponse(BaseModel):
+    """Response body for POST /chat/preview/deploy."""
+
+    preview_url: str
+    detail: str = ""
+
+
+class ChatAgentPreviewTeardownResponse(BaseModel):
+    """Response body for POST /chat/preview/teardown."""
+
+    detail: str = ""

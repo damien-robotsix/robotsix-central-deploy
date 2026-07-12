@@ -9,6 +9,7 @@ All notable changes to robotsix-central-deploy.
 - Replace inline fetch-repo-files preamble in `refresh_contract` with a call to the shared `_fetch_component_repo_files` helper, removing duplicated code.
 - Deduplicate `_sanitize_log` helper: routers `services_deploy` and `services_config` now import it from `_config_utils` instead of redefining it locally; `_sibling_utils` also uses the shared function.
 - Extract `_lifecycle_action` shared helper in `services.py`, consolidating ~225 lines of boilerplate from `start_service`, `stop_service`, and `restart_service` into a single parameterised implementation.
+- Added `/chat/preview/deploy` and `/chat/preview/teardown` endpoints for deploying an arbitrary repo+branch into a single reusable preview slot, served at `preview.<gateway_base_domain>`.)
 - Added dedicated unit tests for `AuthOps` covering `check_claude_auth`, `write_claude_credentials`, and `read_claude_credentials` with mocked Docker SDK.
 - Add `robotsix-modules` taxonomy validation to CI and pre-commit hooks to prevent `docs/modules.yaml` drift
 - Propagate `mem_limit` from docker-compose.yml through the full lifecycle pipeline: add `mem_limit` to `DerivedSpec`, wire it through `_build_component_config_from_spec`, and include it in `_CONTRACT_FIELDS` so contract-refresh detects changes. Previously the primary service's `mem_limit` was silently discarded, always defaulting to `"2g"`.
