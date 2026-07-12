@@ -115,10 +115,6 @@ def _extract_subdomain_name(headers: Any, app: Any) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-@gateway_router.api_route(
-    "/",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-)
 async def gateway_http_root(
     request: Request,
     _auth: None = Depends(verify_session),
@@ -133,6 +129,15 @@ async def gateway_http_root(
     assert config is not None
     target_base = f"http://{config.container_name}:{config.ports[0].container}"
     return await http_proxy(request, target_base, "")
+
+
+for _method in ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]:
+    gateway_router.add_api_route(
+        "/",
+        gateway_http_root,
+        methods=[_method],
+        operation_id=f"gateway_http_root_{_method.lower()}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -176,10 +181,6 @@ async def gateway_ws(websocket: WebSocket, path: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@gateway_router.api_route(
-    "/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-)
 async def gateway_http(
     request: Request,
     path: str,
@@ -219,3 +220,12 @@ async def gateway_http(
     if request.url.query:
         url += f"?{request.url.query}"
     return RedirectResponse(url=url, status_code=307)
+
+
+for _method in ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]:
+    gateway_router.add_api_route(
+        "/{path:path}",
+        gateway_http,
+        methods=[_method],
+        operation_id=f"gateway_http__path__{_method.lower()}",
+    )
