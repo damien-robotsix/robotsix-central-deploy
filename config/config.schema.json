@@ -291,6 +291,36 @@
       "title": "Github Repo Create Token",
       "type": "string"
     },
+    "langfuse_base_url": {
+      "default": "https://langfuse.robotsix.net",
+      "description": "Langfuse instance base URL (no trailing slash).",
+      "title": "Langfuse Base Url",
+      "type": "string"
+    },
+    "langfuse_chat_public_key": {
+      "default": "",
+      "description": "Langfuse public key for the robotsix-chat trace project.",
+      "title": "Langfuse Chat Public Key",
+      "type": "string"
+    },
+    "langfuse_chat_secret_key": {
+      "default": "",
+      "description": "Langfuse secret key for the robotsix-chat trace project.",
+      "title": "Langfuse Chat Secret Key",
+      "type": "string"
+    },
+    "langfuse_cognee_public_key": {
+      "default": "",
+      "description": "Langfuse public key for the cognee trace project.",
+      "title": "Langfuse Cognee Public Key",
+      "type": "string"
+    },
+    "langfuse_cognee_secret_key": {
+      "default": "",
+      "description": "Langfuse secret key for the cognee trace project.",
+      "title": "Langfuse Cognee Secret Key",
+      "type": "string"
+    },
     "caretaker_enabled": {
       "default": false,
       "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",
