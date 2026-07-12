@@ -6765,5 +6765,6 @@
         "description": "Size of a single Docker volume (from ``docker system df``)."
       }
     }
-  }
+  },
+  "security": []
 }
