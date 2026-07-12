@@ -7,4 +7,5 @@ from robotsix_central_deploy.lifecycle.server import app
 schema = app.openapi()
 with open("docs/openapi.json", "w") as f:
     json.dump(schema, f, indent=2)
+    f.write("\n")
 print("OpenAPI schema written to docs/openapi.json")

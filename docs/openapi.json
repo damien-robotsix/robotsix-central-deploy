@@ -3427,6 +3427,82 @@
         }
       }
     },
+    "/chat/preview/deploy": {
+      "post": {
+        "tags": [
+          "chat-preview"
+        ],
+        "summary": "Deploy a repo+branch into the preview slot",
+        "description": "Deploy *repo_url* at *branch* into the single reusable preview slot.\n\nClones the repo, builds the Docker image via compose when needed,\ncreates + starts the container on the proxy network, and registers\nthe preview component so the gateway can route to it.\n\nA new deploy replaces whatever currently occupies the slot.",
+        "operationId": "preview_deploy_chat_preview_deploy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentPreviewDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentPreviewDeployResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "400": {
+            "description": "Bad request \u2014 missing compose file or clone failure"
+          },
+          "503": {
+            "description": "gateway_base_domain not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/preview/teardown": {
+      "post": {
+        "tags": [
+          "chat-preview"
+        ],
+        "summary": "Tear down the preview slot",
+        "description": "Tear down the preview slot \u2014 stop/remove the container and clean up.",
+        "operationId": "preview_teardown_chat_preview_teardown_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentPreviewTeardownResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -4158,6 +4234,56 @@
         ],
         "title": "ChatAgentConfigUpdate",
         "description": "Request body for PUT /chat/config/{name}.\n\nOnly non-secret keys are accepted; secret fields are rejected with 403."
+      },
+      "ChatAgentPreviewDeployRequest": {
+        "properties": {
+          "repo_url": {
+            "type": "string",
+            "title": "Repo Url"
+          },
+          "branch": {
+            "type": "string",
+            "title": "Branch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repo_url",
+          "branch"
+        ],
+        "title": "ChatAgentPreviewDeployRequest",
+        "description": "Request body for POST /chat/preview/deploy."
+      },
+      "ChatAgentPreviewDeployResponse": {
+        "properties": {
+          "preview_url": {
+            "type": "string",
+            "title": "Preview Url"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "preview_url"
+        ],
+        "title": "ChatAgentPreviewDeployResponse",
+        "description": "Response body for POST /chat/preview/deploy."
+      },
+      "ChatAgentPreviewTeardownResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "ChatAgentPreviewTeardownResponse",
+        "description": "Response body for POST /chat/preview/teardown."
       },
       "ChatAgentRestartResponse": {
         "properties": {
