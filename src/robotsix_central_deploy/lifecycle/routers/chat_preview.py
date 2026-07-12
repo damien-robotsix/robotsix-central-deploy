@@ -32,6 +32,12 @@ from ...registry.models import ComponentConfig, PortMapping
 
 logger = logging.getLogger(__name__)
 
+
+def _log_safe(value: str) -> str:
+    """Replace newlines to prevent log-forgery via user-controlled input."""
+    return value.replace("\n", "\\n").replace("\r", "\\r")
+
+
 router = APIRouter(tags=["chat-preview"])
 
 # ---------------------------------------------------------------------------
@@ -40,7 +46,7 @@ router = APIRouter(tags=["chat-preview"])
 
 _PREVIEW_COMPONENT_ID = "preview"
 _PREVIEW_CONTAINER_NAME = "preview"
-_PREVIEW_DIR = Path("/tmp/preview-repo")  # noqa: S108 — intentional fixed path for single preview slot
+_PREVIEW_DIR = Path("/tmp/preview-repo")  # noqa: S108  # nosec B108 — intentional fixed path for single preview slot
 _PREVIEW_IMAGE_TAG = "preview:latest"
 
 
@@ -90,7 +96,7 @@ async def _clone_repo(repo_url: str, branch: str, target_dir: Path) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"git clone failed: {err.strip()}",
         )
-    logger.info("Cloned %s@%s → %s", repo_url, branch, target_dir)
+    logger.info("Cloned %s@%s → %s", _log_safe(repo_url), _log_safe(branch), target_dir)
 
 
 def _find_compose_file(base_dir: Path) -> Path:
@@ -475,7 +481,7 @@ async def preview_deploy(
     # 7 — Register the component so the gateway can route to it
     _register_preview_component(registry, ports, image_ref)
 
-    logger.info("Preview deployed: %s → %s", body.repo_url, preview_url)
+    logger.info("Preview deployed: %s → %s", _log_safe(body.repo_url), preview_url)
 
     return ChatAgentPreviewDeployResponse(
         preview_url=preview_url,
