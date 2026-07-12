@@ -3384,6 +3384,72 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/security-features": {
+      "put": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Toggle repository security features",
+        "description": "Enable or disable security features on *owner*/*repo*.\n\nThis combines what would otherwise require two separate GitHub API\ncalls (``vulnerability-alerts`` and ``automated-security-fixes``)\ninto one endpoint.  Only the features whose body fields are provided\nare changed; omit a field to leave it as-is.",
+        "operationId": "set_security_features_chat_github_repos__owner___repo__security_features_put",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecurityFeaturesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Set Security Features Chat Github Repos  Owner   Repo  Security Features Put"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "422": {
+            "description": "No fields provided, or GitHub rejected the request"
+          },
+          "503": {
+            "description": "Neither GitHub App nor PAT configured for this operation"
+          }
+        }
+      }
+    },
     "/chat/github/repos": {
       "post": {
         "tags": [
@@ -5923,6 +5989,49 @@
         ],
         "title": "RollbackResponse",
         "description": "API response for ``POST /services/{name}/rollback``."
+      },
+      "SecurityFeaturesRequest": {
+        "properties": {
+          "dependency_graph": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Graph",
+            "description": "Enable/disable the Dependency graph (shares the vulnerability-alerts endpoint with Dependabot alerts)."
+          },
+          "dependabot_alerts": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependabot Alerts",
+            "description": "Enable/disable Dependabot vulnerability alerts (shares the vulnerability-alerts endpoint with the Dependency graph)."
+          },
+          "dependabot_security_updates": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependabot Security Updates",
+            "description": "Enable/disable Dependabot automated security fixes."
+          }
+        },
+        "type": "object",
+        "title": "SecurityFeaturesRequest",
+        "description": "Body for ``PUT /chat/github/repos/{owner}/{repo}/security-features``.\n\nAll three fields are optional; only the ones provided are changed.\n*dependency_graph* and *dependabot_alerts* share the same underlying\nGitHub API (``vulnerability-alerts``), so setting either to ``true``\nenables vulnerability alerts and setting either to ``false`` (without\nthe other being ``true``) disables them.  *dependabot_security_updates*\ncontrols automated security fixes independently."
       },
       "SelfUpdateStatus": {
         "properties": {

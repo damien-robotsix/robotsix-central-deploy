@@ -7,6 +7,9 @@ Exposes:
 - ``PATCH /chat/github/repos/{owner}/{repo}`` — update repo settings
 - ``PUT /chat/github/repos/{owner}/{repo}/vulnerability-alerts`` — enable the
   Dependency graph / Dependabot alerts
+- ``PUT /chat/github/repos/{owner}/{repo}/security-features`` — toggle
+  repository security features (dependency graph, Dependabot alerts,
+  Dependabot security updates) in one call
 - ``POST /chat/github/repos`` — create a new repository (Dependency graph is
   enabled automatically as part of creation)
 - ``GET /chat/github/repos/{owner}/{repo}/pulls`` — list pull requests
@@ -20,13 +23,14 @@ creation alone uses a separate PAT (``github_repo_create_token``): GitHub
 App installation tokens cannot create repositories under a personal
 account.
 
-Reads need no audit/confirmation gate. Repo update/create are genuine
-mutations, so both are audit-logged (mirroring :mod:`.chat`'s
-config/restart/update endpoints) and — per the ``github`` skill's
-documented safety rule — expected to only be called after the chat agent
-has obtained explicit user confirmation in-conversation (a server-side
-confirmation gate isn't possible here; the skill text is the enforcement
-point, same as the config/restart/update endpoints in :mod:`.chat`).
+Reads need no audit/confirmation gate. Repo update, security-features
+toggle, and repo creation are genuine mutations, so all are audit-logged
+(mirroring :mod:`.chat`'s config/restart/update endpoints) and — per the
+``github`` skill's documented safety rule — expected to only be called
+after the chat agent has obtained explicit user confirmation
+in-conversation (a server-side confirmation gate isn't possible here;
+the skill text is the enforcement point, same as the config/restart/update
+endpoints in :mod:`.chat`).
 """
 
 from __future__ import annotations
@@ -75,6 +79,33 @@ async def _get_client_or_503(config: LifecycleConfig, owner: str, repo: str) -> 
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
+
+
+async def _get_client_or_503_with_pat_fallback(
+    config: LifecycleConfig, owner: str, repo: str
+) -> Any:
+    """Return a GitHub client: App installation token first, PAT fallback.
+
+    The security-features endpoint needs a credential with Administration
+    scope on the target repo. The GitHub App installation token is the
+    primary choice (same App that all other repo-mutation endpoints use);
+    if the App is not configured we fall back to the repo-creation PAT.
+    If neither credential is available the endpoint returns 503.
+    """
+    app_configured = bool(config.github_app_id and config.github_app_private_key)
+    pat_configured = bool(config.github_repo_create_token)
+
+    if app_configured:
+        return await get_github_client(config, owner, repo)
+
+    if pat_configured:
+        return get_repo_create_client(config)
+
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Neither GitHub App installation token nor repo-creation PAT "
+        "is configured. At least one must be set to use security-features.",
+    )
 
 
 def _list_runs_sync(
@@ -449,6 +480,120 @@ async def enable_vulnerability_alerts(
             key=f"{owner}/{repo}",
             new_value=True,
             detail=f"Enabled Dependency graph/vulnerability alerts on {result['full_name']}",
+        )
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# PUT /chat/github/repos/{owner}/{repo}/security-features — toggle repository
+# security features (dependency graph, Dependabot alerts, Dependabot security
+# updates).  Uses the App installation token primarily; falls back to the
+# repo-creation PAT when the App is not configured.
+# ---------------------------------------------------------------------------
+
+
+class SecurityFeaturesRequest(BaseModel):
+    """Body for ``PUT /chat/github/repos/{owner}/{repo}/security-features``.
+
+    All three fields are optional; only the ones provided are changed.
+    *dependency_graph* and *dependabot_alerts* share the same underlying
+    GitHub API (``vulnerability-alerts``), so setting either to ``true``
+    enables vulnerability alerts and setting either to ``false`` (without
+    the other being ``true``) disables them.  *dependabot_security_updates*
+    controls automated security fixes independently.
+    """
+
+    dependency_graph: bool | None = Field(
+        None,
+        description="Enable/disable the Dependency graph "
+        "(shares the vulnerability-alerts endpoint with Dependabot alerts).",
+    )
+    dependabot_alerts: bool | None = Field(
+        None,
+        description="Enable/disable Dependabot vulnerability alerts "
+        "(shares the vulnerability-alerts endpoint with the Dependency graph).",
+    )
+    dependabot_security_updates: bool | None = Field(
+        None,
+        description="Enable/disable Dependabot automated security fixes.",
+    )
+
+
+def _set_security_features_sync(
+    client: Any, owner: str, repo: str, body: SecurityFeaturesRequest
+) -> dict[str, Any]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+
+    # Vulnerability alerts: shared underlying API for both
+    # dependency_graph and dependabot_alerts — true wins.
+    if body.dependency_graph is True or body.dependabot_alerts is True:
+        repo_obj.enable_vulnerability_alert()
+    elif body.dependency_graph is False or body.dependabot_alerts is False:
+        repo_obj.disable_vulnerability_alert()
+
+    # Dependabot security updates: independent toggle.
+    if body.dependabot_security_updates is True:
+        repo_obj.enable_automated_security_fixes()
+    elif body.dependabot_security_updates is False:
+        repo_obj.disable_automated_security_fixes()
+
+    # Re-fetch so the caller sees the resulting security_and_analysis state.
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    return {
+        "full_name": repo_obj.full_name,
+        "security_and_analysis": repo_obj.raw_data.get("security_and_analysis", {}),
+    }
+
+
+@router.put(
+    "/chat/github/repos/{owner}/{repo}/security-features",
+    summary="Toggle repository security features",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        422: {"description": "No fields provided, or GitHub rejected the request"},
+        503: {
+            "description": "Neither GitHub App nor PAT configured for this operation"
+        },
+    },
+)
+async def set_security_features(
+    owner: str,
+    repo: str,
+    body: SecurityFeaturesRequest,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Enable or disable security features on *owner*/*repo*.
+
+    This combines what would otherwise require two separate GitHub API
+    calls (``vulnerability-alerts`` and ``automated-security-fixes``)
+    into one endpoint.  Only the features whose body fields are provided
+    are changed; omit a field to leave it as-is.
+    """
+    if body.model_dump(exclude_none=True) == {}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one security feature must be provided",
+        )
+    client = await _get_client_or_503_with_pat_fallback(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(
+            _set_security_features_sync, client, owner, repo, body
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="set_security_features",
+            key=f"{owner}/{repo}",
+            new_value=body.model_dump(exclude_none=True),
+            detail=f"Updated security features on {result['full_name']}",
         )
     )
     return result
