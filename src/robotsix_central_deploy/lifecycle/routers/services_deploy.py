@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.params import Body
@@ -87,15 +87,24 @@ def _build_sibling_config(
     )
 
 
-async def _fanout_deploy_siblings(
+async def _fanout_sibling_action(
     name: str,
     store: ServiceStore,
-    backend: ExecutionBackend,
     registry: ComponentRegistry,
     env_store: EnvStore,
-    deploy_history_store: DeployHistoryStore,
+    *,
+    action: Callable[
+        [ServiceConfig, ServiceRecord, str, ComponentConfig], Awaitable[None]
+    ],
+    action_label: str,
 ) -> None:
-    """Deploy all siblings of *name* (best-effort per sibling)."""
+    """Fan out an action to all siblings of *name* (best-effort per sibling).
+
+    Fetches the fresh config, iterates sibling pairs, resolves merged env,
+    builds an effective ComponentConfig, and calls *action* for each sibling.
+    Exceptions are caught and logged as warnings so one failing sibling does
+    not block the others.
+    """
     config_fresh = registry.get(name)
     if not config_fresh or not config_fresh.siblings:
         return
@@ -104,72 +113,12 @@ async def _fanout_deploy_siblings(
         merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
         effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
-            sib_outcome = await backend.deploy(
-                sib_record, effective_sib, sib_config.image
-            )
-            sib_record.state = sib_outcome.state
-            sib_record.image = sib_config.image
-            sib_record.deployed_image_digest = sib_outcome.deployed_digest
-            sib_record.previous_image_digest = sib_outcome.previous_digest
-            await store.put(sib_record)
-            # Record sibling history (best-effort)
-            try:
-                await deploy_history_store.append(
-                    sib_name,
-                    DeployHistoryEntry(
-                        digest=sib_outcome.deployed_digest,
-                        image_ref=sib_config.image,
-                        timestamp=time.time(),
-                        source=DeploySource.MANUAL,
-                        previous_digest=sib_outcome.previous_digest,
-                    ),
-                )
-            except Exception:
-                logger.warning(
-                    "deploy sibling '%s': failed to record history",
-                    _sanitize_log(sib_name),
-                    exc_info=True,
-                )
-        except Exception:
-            logger.warning("deploy sibling '%s' failed", _sanitize_log(sib_name))
-
-
-async def _fanout_rollback_siblings(
-    name: str,
-    store: ServiceStore,
-    backend: ExecutionBackend,
-    registry: ComponentRegistry,
-    env_store: EnvStore,
-) -> None:
-    """Roll back all siblings of *name* (best-effort per sibling)."""
-    config_fresh = registry.get(name)
-    if not config_fresh or not config_fresh.siblings:
-        return
-    for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
-        if not sib_record.previous_image_digest:
-            logger.warning(
-                "rollback sibling '%s-%s': no prior digest — skipping",
-                _sanitize_log(name),
-                _sanitize_log(sib_config.service_key),
-            )
-            continue
-        sib_name = f"{name}-{sib_config.service_key}"
-        merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
-        effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
-        try:
-            sib_outcome = await backend.rollback(sib_record, effective_sib)
-            old_dep_sib = sib_record.deployed_image_digest
-            old_prev_sib = sib_record.previous_image_digest
-            sib_record.state = sib_outcome.state
-            sib_record.deployed_image_digest = old_prev_sib
-            sib_record.previous_image_digest = old_dep_sib
-            sib_record.image_revision = old_prev_sib
-            await store.put(sib_record)
+            await action(sib_config, sib_record, sib_name, effective_sib)
         except Exception:
             logger.warning(
-                "rollback sibling '%s-%s' failed",
-                _sanitize_log(name),
-                _sanitize_log(sib_config.service_key),
+                "%s sibling '%s' failed",
+                action_label,
+                _sanitize_log(sib_name),
             )
 
 
@@ -362,8 +311,47 @@ async def _run_deploy_job(
 
         # Deploy siblings
         job_registry.update_deploy_phase(job_id, DeployJobPhase.DEPLOYING_SIBLINGS)
-        await _fanout_deploy_siblings(
-            name, store, backend, registry, env_store, deploy_history_store
+
+        async def _do_deploy_sibling(
+            sib_config: ServiceConfig,
+            sib_record: ServiceRecord,
+            sib_name: str,
+            effective_sib: ComponentConfig,
+        ) -> None:
+            sib_outcome = await backend.deploy(
+                sib_record, effective_sib, sib_config.image
+            )
+            sib_record.state = sib_outcome.state
+            sib_record.image = sib_config.image
+            sib_record.deployed_image_digest = sib_outcome.deployed_digest
+            sib_record.previous_image_digest = sib_outcome.previous_digest
+            await store.put(sib_record)
+            # Record sibling history (best-effort)
+            try:
+                await deploy_history_store.append(
+                    sib_name,
+                    DeployHistoryEntry(
+                        digest=sib_outcome.deployed_digest,
+                        image_ref=sib_config.image,
+                        timestamp=time.time(),
+                        source=DeploySource.MANUAL,
+                        previous_digest=sib_outcome.previous_digest,
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "deploy sibling '%s': failed to record history",
+                    _sanitize_log(sib_name),
+                    exc_info=True,
+                )
+
+        await _fanout_sibling_action(
+            name,
+            store,
+            registry,
+            env_store,
+            action=_do_deploy_sibling,
+            action_label="deploy",
         )
 
         # Auto-prune dangling images left behind by the update (opt-in setting);
@@ -497,6 +485,28 @@ async def rollback_service(
     if body is None:
         body = RollbackRequest()
 
+    async def _do_rollback_sibling(
+        sib_config: ServiceConfig,
+        sib_record: ServiceRecord,
+        sib_name: str,
+        effective_sib: ComponentConfig,
+    ) -> None:
+        if not sib_record.previous_image_digest:
+            logger.warning(
+                "rollback sibling '%s-%s': no prior digest — skipping",
+                _sanitize_log(name),
+                _sanitize_log(sib_config.service_key),
+            )
+            return
+        sib_outcome = await backend.rollback(sib_record, effective_sib)
+        old_dep_sib = sib_record.deployed_image_digest
+        old_prev_sib = sib_record.previous_image_digest
+        sib_record.state = sib_outcome.state
+        sib_record.deployed_image_digest = old_prev_sib
+        sib_record.previous_image_digest = old_dep_sib
+        sib_record.image_revision = old_prev_sib
+        await store.put(sib_record)
+
     # -- Target-digest rollback (multi-entry history) -----------------------
     if body.digest is not None:
         target_digest = body.digest
@@ -559,7 +569,14 @@ async def rollback_service(
             )
 
         # Fan out siblings (one-step; current behaviour)
-        await _fanout_rollback_siblings(name, store, backend, registry, env_store)
+        await _fanout_sibling_action(
+            name,
+            store,
+            registry,
+            env_store,
+            action=_do_rollback_sibling,
+            action_label="rollback",
+        )
 
         return RollbackResponse(
             name=name,
@@ -600,7 +617,14 @@ async def rollback_service(
     await store.put(record)
 
     # Rollback siblings using each sibling's previous_image_digest
-    await _fanout_rollback_siblings(name, store, backend, registry, env_store)
+    await _fanout_sibling_action(
+        name,
+        store,
+        registry,
+        env_store,
+        action=_do_rollback_sibling,
+        action_label="rollback",
+    )
 
     return RollbackResponse(
         name=name,
