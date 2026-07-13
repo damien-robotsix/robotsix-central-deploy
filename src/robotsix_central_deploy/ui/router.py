@@ -85,9 +85,7 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
 
     csrf_secret = get_csrf_secret(cfg.csrf_secret)
     csrf_helper = CSRFHelper(csrf_secret)
-    csrf_token = request.cookies.get("csrftoken")
-    if not csrf_token:
-        csrf_token = csrf_helper.generate()
+    csrf_token = csrf_helper.generate()
 
     page = (
         _LOGIN_HTML.replace("{{next}}", _html.escape(next))

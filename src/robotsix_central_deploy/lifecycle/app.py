@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 try:
     from starlette_csrf import CSRFMiddleware  # type: ignore[attr-defined]
+
     _HAS_CSRF = True
 except ImportError:
     _HAS_CSRF = False

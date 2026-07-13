@@ -387,6 +387,12 @@
       "title": "Rate Limit Login Lockout Seconds",
       "type": "integer"
     },
+    "csrf_secret": {
+      "default": "",
+      "description": "Secret key for CSRF token signing. Auto-generated (random) when empty, which invalidates outstanding tokens on every restart \u2014 acceptable for single-server deployments.",
+      "title": "Csrf Secret",
+      "type": "string"
+    },
     "virtual_components": {
       "description": "Virtual (non-Docker) components to register in the chat-agent component roster alongside onboarded Docker services.",
       "items": {
@@ -399,3 +405,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+

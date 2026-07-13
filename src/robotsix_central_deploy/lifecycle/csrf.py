@@ -11,10 +11,12 @@ import secrets as _secrets
 try:
     from itsdangerous import BadSignature
     from itsdangerous.url_safe import URLSafeSerializer
+
     _HAS_ITSDANGEROUS = True
 except ImportError:
     _HAS_ITSDANGEROUS = False
     import logging
+
     logging.getLogger(__name__).warning(
         "itsdangerous not installed; CSRF token validation disabled"
     )
@@ -43,7 +45,9 @@ class CSRFHelper:
 
     def __init__(self, secret: str) -> None:
         if _HAS_ITSDANGEROUS:
-            self.serializer: URLSafeSerializer | None = URLSafeSerializer(secret, "csrftoken")
+            self.serializer: URLSafeSerializer | None = URLSafeSerializer(
+                secret, "csrftoken"
+            )
         else:
             self.serializer = None
 
