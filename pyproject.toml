@@ -17,6 +17,7 @@ dependencies = [
     "jsonschema>=4.0",
     "structlog>=24.0",
     "PyGithub>=2.9.0",
+    "starlette-csrf>=3.0.0",
     "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@3b999fc697fd1112024160f6f5ba45bd89e7f5d0",
     "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@424f8ec5140e14e9699b92d5c3755d929625b570",
 ]
@@ -130,7 +131,7 @@ fail_under = 80
 
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
-per_rule_ignores = { "DEP001" = ["hatchling"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config", "structlog"], "DEP003" = ["starlette", "requests", "tomli"] }
+per_rule_ignores = { "DEP001" = ["hatchling"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config", "structlog"], "DEP003" = ["starlette", "requests", "tomli", "itsdangerous"] }
 
 [tool.towncrier]
 package = "robotsix_central_deploy"

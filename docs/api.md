@@ -40,6 +40,8 @@
 
 ::: robotsix_central_deploy.lifecycle.config
 
+::: robotsix_central_deploy.lifecycle.csrf
+
 ::: robotsix_central_deploy.lifecycle.store
 
 ## Lifecycle Backends

@@ -73,11 +73,31 @@ def _basic_header(password: str, username: str = "anyuser") -> dict[str, str]:
     return {"Authorization": f"Basic {encoded}"}
 
 
+async def _get_csrf_token(client: AsyncClient) -> str:
+    """GET /login and return the csrftoken cookie value."""
+    resp = await client.get("/login", follow_redirects=False)
+    set_cookie = resp.headers.get("set-cookie", "")
+    token = ""
+    for part in set_cookie.split(";"):
+        part = part.strip()
+        if part.startswith("csrftoken="):
+            token = part[len("csrftoken=") :]
+            break
+    return token
+
+
 async def _login(client: AsyncClient, password: str, username: str = "") -> str:
     """POST /login and return the session_token cookie value."""
+    csrf_token = await _get_csrf_token(client)
     resp = await client.post(
         "/login",
-        data={"username": username, "password": password, "next": "/ui"},
+        data={
+            "username": username,
+            "password": password,
+            "next": "/ui",
+            "csrftoken": csrf_token,
+        },
+        cookies={"csrftoken": csrf_token},
         follow_redirects=False,
     )
     # httpx does not persist cookies across requests by default; extract the
@@ -136,8 +156,16 @@ class TestUiRouter:
         assert "Robotsix Deploy" in resp.text
 
     async def test_login_wrong_password_returns_error(self, client: AsyncClient):
+        csrf_token = await _get_csrf_token(client)
         resp = await client.post(
-            "/login", data={"username": "", "password": "wrong", "next": "/ui"}
+            "/login",
+            data={
+                "username": "",
+                "password": "wrong",
+                "next": "/ui",
+                "csrftoken": csrf_token,
+            },
+            cookies={"csrftoken": csrf_token},
         )
         assert resp.status_code == 401
         assert "Invalid credentials" in resp.text
@@ -234,31 +262,60 @@ class TestRateLimiting:
 
     async def test_login_rate_limit_returns_429(self, client: AsyncClient):
         """After exceeding the per-minute login limit, further POSTs get 429."""
+        csrf_token = await _get_csrf_token(client)
         for _ in range(3):
             resp = await client.post(
-                "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+                "/login",
+                data={
+                    "username": "",
+                    "password": self.API_KEY,
+                    "next": "/ui",
+                    "csrftoken": csrf_token,
+                },
+                cookies={"csrftoken": csrf_token},
             )
             # First 3 should succeed (correct password → 303 redirect)
             assert resp.status_code == 303
 
         # 4th request within the same window should be rate-limited
         resp = await client.post(
-            "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+            "/login",
+            data={
+                "username": "",
+                "password": self.API_KEY,
+                "next": "/ui",
+                "csrftoken": csrf_token,
+            },
+            cookies={"csrftoken": csrf_token},
         )
         assert resp.status_code == 429
 
     async def test_login_lockout_after_failures(self, client: AsyncClient):
         """After N failed logins the IP is locked out."""
+        csrf_token = await _get_csrf_token(client)
         for _ in range(3):
             resp = await client.post(
                 "/login",
-                data={"username": "", "password": "wrong", "next": "/ui"},
+                data={
+                    "username": "",
+                    "password": "wrong",
+                    "next": "/ui",
+                    "csrftoken": csrf_token,
+                },
+                cookies={"csrftoken": csrf_token},
             )
             assert resp.status_code == 401
 
         # Next attempt, even with correct password, should be locked out
         resp = await client.post(
-            "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+            "/login",
+            data={
+                "username": "",
+                "password": self.API_KEY,
+                "next": "/ui",
+                "csrftoken": csrf_token,
+            },
+            cookies={"csrftoken": csrf_token},
         )
         assert resp.status_code == 429
         assert "Too many login attempts" in resp.json()["detail"]
@@ -312,7 +369,15 @@ class TestRateLimiting:
             assert resp.status_code != 429
 
         # Direct-host login still works: no lockout was recorded.
+        csrf_token = await _get_csrf_token(client)
         resp = await client.post(
-            "/login", data={"username": "", "password": self.API_KEY, "next": "/ui"}
+            "/login",
+            data={
+                "username": "",
+                "password": self.API_KEY,
+                "next": "/ui",
+                "csrftoken": csrf_token,
+            },
+            cookies={"csrftoken": csrf_token},
         )
         assert resp.status_code == 303

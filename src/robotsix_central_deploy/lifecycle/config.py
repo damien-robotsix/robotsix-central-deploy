@@ -354,6 +354,15 @@ class LifecycleConfig(BaseModel):
         description="Lockout duration (seconds) after too many failed logins.",
     )
 
+    csrf_secret: str = Field(
+        "",
+        description=(
+            "Secret key for CSRF token signing. Auto-generated (random) "
+            "when empty, which invalidates outstanding tokens on every "
+            "restart — acceptable for single-server deployments."
+        ),
+    )
+
     # Virtual chat components
     virtual_components: list[VirtualComponentEntry] = Field(
         default_factory=list,

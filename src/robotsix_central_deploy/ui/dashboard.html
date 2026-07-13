@@ -317,6 +317,7 @@
 <div id="settings-section" style="display:none;">
   <h2 style="margin-bottom:16px;color:var(--blue);">System Settings</h2>
   <form id="settings-form" onsubmit="saveSettings(event)">
+    <input type="hidden" name="csrftoken" value="{{csrf_token}}">
     <table style="margin-bottom:20px;">
       <tr>
         <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Disk Warning (% free)</td>
