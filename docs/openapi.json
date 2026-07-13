@@ -5227,7 +5227,7 @@
           },
           "siblings": {
             "items": {
-              "$ref": "#/components/schemas/SiblingDerivedSpec"
+              "$ref": "#/components/schemas/ServiceConfig"
             },
             "type": "array",
             "title": "Siblings",
@@ -6091,6 +6091,126 @@
         "title": "SelfUpdateTriggered",
         "description": "Response model for ``POST /system/update``."
       },
+      "ServiceConfig": {
+        "properties": {
+          "service_key": {
+            "type": "string",
+            "title": "Service Key"
+          },
+          "container_name": {
+            "type": "string",
+            "title": "Container Name"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortMapping"
+            },
+            "type": "array",
+            "title": "Ports",
+            "default": []
+          },
+          "mounts": {
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "type": "array",
+            "title": "Mounts",
+            "default": []
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env",
+            "default": {}
+          },
+          "claude_mount": {
+            "type": "boolean",
+            "title": "Claude Mount",
+            "default": false
+          },
+          "host_docker_sock": {
+            "type": "boolean",
+            "title": "Host Docker Sock",
+            "default": false
+          },
+          "health_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
+          },
+          "tmpfs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tmpfs",
+            "default": []
+          },
+          "mem_limit": {
+            "type": "string",
+            "title": "Mem Limit",
+            "default": "2g"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_key",
+          "container_name",
+          "image"
+        ],
+        "title": "ServiceConfig",
+        "description": "Persisted config for one non-primary (sibling) service in a multi-service component."
+      },
       "ServiceHealthResponse": {
         "properties": {
           "name": {
@@ -6258,126 +6378,6 @@
         ],
         "title": "ServiceStatus",
         "description": "Full status returned by ``GET /services/{name}``."
-      },
-      "SiblingDerivedSpec": {
-        "properties": {
-          "service_key": {
-            "type": "string",
-            "title": "Service Key"
-          },
-          "container_name": {
-            "type": "string",
-            "title": "Container Name"
-          },
-          "image": {
-            "type": "string",
-            "title": "Image"
-          },
-          "ports": {
-            "items": {
-              "$ref": "#/components/schemas/PortMapping"
-            },
-            "type": "array",
-            "title": "Ports",
-            "default": []
-          },
-          "mounts": {
-            "items": {
-              "$ref": "#/components/schemas/VolumeMount"
-            },
-            "type": "array",
-            "title": "Mounts",
-            "default": []
-          },
-          "env": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Env",
-            "default": {}
-          },
-          "claude_mount": {
-            "type": "boolean",
-            "title": "Claude Mount",
-            "default": false
-          },
-          "host_docker_sock": {
-            "type": "boolean",
-            "title": "Host Docker Sock",
-            "default": false
-          },
-          "health_check": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HealthCheck"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "command": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Command"
-          },
-          "entrypoint": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Entrypoint"
-          },
-          "tmpfs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tmpfs",
-            "default": []
-          },
-          "mem_limit": {
-            "type": "string",
-            "title": "Mem Limit",
-            "default": "2g"
-          },
-          "user": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User"
-          }
-        },
-        "type": "object",
-        "required": [
-          "service_key",
-          "container_name",
-          "image"
-        ],
-        "title": "SiblingDerivedSpec",
-        "description": "Parsed config for a non-primary service in a multi-service compose."
       },
       "SystemSettingsResponse": {
         "properties": {

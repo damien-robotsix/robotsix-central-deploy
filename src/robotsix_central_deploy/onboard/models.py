@@ -8,29 +8,14 @@ from robotsix_central_deploy.registry.models import (
     ConfigAssistSeed,
     HealthCheck,
     PortMapping,
+    ServiceConfig,
     VolumeMount,
 )
 
-
-class SiblingDerivedSpec(BaseModel):
-    """Parsed config for a non-primary service in a multi-service compose."""
-
-    service_key: str  # compose services: key (e.g. "ingester")
-    container_name: (
-        str  # derived name ("<component>-<service_key>") or container_name: override
-    )
-    image: str
-    ports: list[PortMapping] = []
-    mounts: list[VolumeMount] = []
-    env: dict[str, str] = {}
-    claude_mount: bool = False
-    host_docker_sock: bool = False
-    health_check: Optional[HealthCheck] = None
-    command: Optional[list[str]] = None
-    entrypoint: Optional[list[str]] = None
-    tmpfs: list[str] = []  # paths to mount as tmpfs (e.g. ["/run"])
-    mem_limit: str = "2g"
-    user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
+# SiblingDerivedSpec is a type alias for ServiceConfig — the onboard parser
+# produces the same shape as the persisted sibling model, avoiding a fragile
+# duplicate field list.
+SiblingDerivedSpec = ServiceConfig
 
 
 class DerivedSpec(BaseModel):
