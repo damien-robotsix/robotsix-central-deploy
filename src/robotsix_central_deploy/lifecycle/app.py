@@ -27,6 +27,7 @@ except ImportError:
 try:
     from secure import Secure, Preset
     from secure.middleware import SecureASGIMiddleware
+
     _HAS_SECURE = True
 except ImportError:  # pragma: no cover — optional dep
     _HAS_SECURE = False
@@ -103,6 +104,9 @@ if _HAS_CSRF:
     )
 
 if _HAS_SECURE:
+    # Preset.BALANCED already permits inline styles (style-src includes
+    # 'unsafe-inline') and inline scripts (script-src includes 'self'),
+    # so the dashboard's 122+ inline style attributes render correctly.
     secure_headers = Secure.from_preset(Preset.BALANCED)
     app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
 
