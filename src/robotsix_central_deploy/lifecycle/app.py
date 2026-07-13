@@ -24,6 +24,14 @@ except ImportError:
         "starlette-csrf not installed; CSRF middleware disabled"
     )
 
+try:
+    from secure import Secure, Preset
+    from secure.middleware import SecureASGIMiddleware
+
+    _HAS_SECURE = True
+except ImportError:  # pragma: no cover — optional dep
+    _HAS_SECURE = False
+
 from .csrf import get_csrf_secret
 from .deps import lifespan
 from .error_handlers import register_error_handlers
@@ -94,6 +102,13 @@ if _HAS_CSRF:
         cookie_samesite="lax",
         exempt_urls=_CSRF_EXEMPT_URLS,
     )
+
+if _HAS_SECURE:
+    # Preset.BALANCED already permits inline styles (style-src includes
+    # 'unsafe-inline') and inline scripts (script-src includes 'self'),
+    # so the dashboard's 122+ inline style attributes render correctly.
+    secure_headers = Secure.from_preset(Preset.BALANCED)
+    app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
 
 app.include_router(ui_router)
 app.include_router(settings_router)

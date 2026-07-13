@@ -14,6 +14,7 @@ All notable changes to robotsix-central-deploy.
   the login form, and hidden CSRF fields in the dashboard settings form.
   API routes authenticated via ``X-API-Key`` header are exempt from CSRF
   checks since bearer-style auth is not vulnerable to CSRF.
+- Add SecureASGIMiddleware with the BALANCED preset for security headers (CSP, HSTS, X-Frame-Options, etc.)
 - Eliminate `SiblingDerivedSpec` field duplication by making it a type alias for `ServiceConfig` from `registry.models`
 - Extract shared sibling fan-out plumbing in ``services_deploy.py``: the common sibling-iteration preamble from ``_fanout_deploy_siblings`` and ``_fanout_rollback_siblings`` is now a single ``_fanout_sibling_action`` helper that accepts a per-sibling action callback, eliminating ~40 lines of duplicated boilerplate.
 - Remove orphaned `_gen_openapi_tmp.py` build artifact (committed by PR #425) and add to `.gitignore`
