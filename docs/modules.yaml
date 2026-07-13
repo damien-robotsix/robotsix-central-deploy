@@ -11,6 +11,7 @@ modules:
       - src/robotsix_central_deploy/__init__.py
       - src/robotsix_central_deploy/_yaml_utils.py
       - src/robotsix_central_deploy/deploy_lock.py
+      - src/robotsix_central_deploy/lifecycle/csrf.py
       - tests/conftest.py
       - tests/__init__.py
       - tests/deploy_lock/**/*

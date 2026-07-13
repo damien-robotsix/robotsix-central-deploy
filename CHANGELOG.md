@@ -6,6 +6,14 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Guard `starlette-csrf` and `itsdangerous` imports so the lifecycle server
+  remains importable (and the CSRF feature degrades gracefully) when those
+  optional packages are not installed in the environment.
+- Add CSRF protection: ``starlette-csrf`` middleware with cookie-based token
+  validation for browser-facing routes, manual token injection/validation on
+  the login form, and hidden CSRF fields in the dashboard settings form.
+  API routes authenticated via ``X-API-Key`` header are exempt from CSRF
+  checks since bearer-style auth is not vulnerable to CSRF.
 - Eliminate `SiblingDerivedSpec` field duplication by making it a type alias for `ServiceConfig` from `registry.models`
 - Remove orphaned `_gen_openapi_tmp.py` build artifact (committed by PR #425) and add to `.gitignore`
 - Added `PUT /chat/github/repos/{owner}/{repo}/security-features` endpoint so the chat agent can toggle Dependency Graph, Dependabot alerts, and Dependabot security updates in one call instead of asking the operator to manually toggle them in GitHub's web UI. Uses App installation token with PAT fallback; returns the resulting `security_and_analysis` state.

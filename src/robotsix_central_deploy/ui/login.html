@@ -54,6 +54,7 @@
   <h1>Robotsix Deploy</h1>
   <form method="post" action="/login">
     <input type="hidden" name="next" value="{{next}}">
+    <input type="hidden" name="csrftoken" value="{{csrf_token}}">
     <label>Username
       <input type="text" name="username" autocomplete="username" required>
     </label>

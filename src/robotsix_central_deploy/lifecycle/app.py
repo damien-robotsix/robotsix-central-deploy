@@ -8,8 +8,22 @@ are in ``deps.py``.  Endpoint handlers are organised by resource in the
 
 from __future__ import annotations
 
+import re
+
+import logging
+
 from fastapi import FastAPI
 
+try:
+    from starlette_csrf import CSRFMiddleware  # type: ignore[attr-defined]
+    _HAS_CSRF = True
+except ImportError:
+    _HAS_CSRF = False
+    logging.getLogger(__name__).warning(
+        "starlette-csrf not installed; CSRF middleware disabled"
+    )
+
+from .csrf import get_csrf_secret
 from .deps import lifespan
 from .error_handlers import register_error_handlers
 from .models import ErrorDetail
@@ -31,6 +45,25 @@ from .routers.chat_langfuse import router as chat_langfuse_router
 from .settings_router import settings_router
 from ..ui.router import router as ui_router
 
+# URL patterns exempt from CSRF checks — these are API routes authenticated
+# via X-API-Key / Basic-Auth headers (bearer-style, not vulnerable to CSRF)
+# plus the login/logout endpoints which handle CSRF tokens manually.
+_CSRF_EXEMPT_URLS: list[re.Pattern[str]] = [
+    re.compile(r"^/health$"),
+    re.compile(r"^/login$"),
+    re.compile(r"^/logout$"),
+    re.compile(r"^/services"),
+    re.compile(r"^/settings$"),
+    re.compile(r"^/system/"),
+    re.compile(r"^/onboard"),
+    re.compile(r"^/volumes"),
+    re.compile(r"^/caretaker/"),
+    re.compile(r"^/disk"),
+    re.compile(r"^/chat/"),
+    re.compile(r"^/claude-auth/"),
+    re.compile(r"^/components/"),
+]
+
 app = FastAPI(
     title="robotsix-central-deploy Lifecycle API",
     version="0.1.0",
@@ -49,6 +82,17 @@ app = FastAPI(
 register_error_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
+
+if _HAS_CSRF:
+    _initial_csrf_secret = get_csrf_secret("")
+    app.add_middleware(
+        CSRFMiddleware,
+        secret=_initial_csrf_secret,
+        cookie_secure=True,
+        cookie_httponly=True,
+        cookie_samesite="lax",
+        exempt_urls=_CSRF_EXEMPT_URLS,
+    )
 
 app.include_router(ui_router)
 app.include_router(settings_router)

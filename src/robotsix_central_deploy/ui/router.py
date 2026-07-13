@@ -41,8 +41,33 @@ async def ui_static(filename: str) -> FileResponse:
 
 
 @router.get("/ui", response_class=HTMLResponse, include_in_schema=False)
-async def dashboard(_auth: None = Depends(verify_session)) -> str:
-    return _HTML
+async def dashboard(
+    request: Request, _auth: None = Depends(verify_session)
+) -> Response:
+    cfg = request.app.state.config
+    from ..lifecycle.csrf import get_csrf_secret
+
+    csrf_token = request.cookies.get("csrftoken", "")
+    set_cookie = False
+    if not csrf_token:
+        csrf_secret = get_csrf_secret(cfg.csrf_secret)
+        from ..lifecycle.csrf import CSRFHelper
+
+        csrf_helper = CSRFHelper(csrf_secret)
+        csrf_token = csrf_helper.generate()
+        set_cookie = True
+    page = _HTML.replace("{{csrf_token}}", _html.escape(csrf_token))
+    response: Response = HTMLResponse(content=page)
+    if set_cookie:
+        response.set_cookie(
+            key="csrftoken",
+            value=csrf_token,
+            httponly=True,
+            samesite="lax",
+            path="/",
+            secure=True,
+        )
+    return response
 
 
 @router.get("/login", include_in_schema=False)
@@ -54,8 +79,31 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
         return RedirectResponse(url=_safe_next(next), status_code=303)
-    page = _LOGIN_HTML.replace("{{next}}", _html.escape(next)).replace("{{error}}", "")
-    return HTMLResponse(content=page)
+
+    # --- CSRF token -------------------------------------------------------
+    from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
+
+    csrf_secret = get_csrf_secret(cfg.csrf_secret)
+    csrf_helper = CSRFHelper(csrf_secret)
+    csrf_token = request.cookies.get("csrftoken")
+    if not csrf_token:
+        csrf_token = csrf_helper.generate()
+
+    page = (
+        _LOGIN_HTML.replace("{{next}}", _html.escape(next))
+        .replace("{{error}}", "")
+        .replace("{{csrf_token}}", _html.escape(csrf_token))
+    )
+    response: Response = HTMLResponse(content=page)
+    response.set_cookie(
+        key="csrftoken",
+        value=csrf_token,
+        httponly=True,
+        samesite="lax",
+        path="/",
+        secure=True,
+    )
+    return response
 
 
 @router.post("/login", include_in_schema=False)
@@ -69,6 +117,27 @@ async def login_submit(request: Request) -> Response:
     next_url = _safe_next(params.get("next", ["/ui"])[0])
 
     cfg = request.app.state.config
+
+    # --- CSRF validation --------------------------------------------------
+    from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
+
+    csrf_secret = get_csrf_secret(cfg.csrf_secret)
+    csrf_helper = CSRFHelper(csrf_secret)
+    cookie_token = request.cookies.get("csrftoken", "")
+    form_token = params.get("csrftoken", [""])[0]
+    if not csrf_helper.validate(cookie_token, form_token):
+        page = (
+            _LOGIN_HTML.replace("{{next}}", _html.escape(next_url))
+            .replace(
+                "{{error}}",
+                "CSRF token validation failed — please reload the page and try again.",
+            )
+            .replace(
+                "{{csrf_token}}", _html.escape(cookie_token or csrf_helper.generate())
+            )
+        )
+        return HTMLResponse(content=page, status_code=403)
+
     authed = False
     if not cfg.auth_required:
         authed = True
@@ -80,10 +149,23 @@ async def login_submit(request: Request) -> Response:
         authed = hmac.compare_digest(password, cfg.api_key)
 
     if not authed:
-        page = _LOGIN_HTML.replace("{{next}}", _html.escape(next_url)).replace(
-            "{{error}}", "Invalid credentials"
+        # Generate a fresh CSRF token for the re-displayed login form
+        fresh_csrf = csrf_helper.generate()
+        page = (
+            _LOGIN_HTML.replace("{{next}}", _html.escape(next_url))
+            .replace("{{error}}", "Invalid credentials")
+            .replace("{{csrf_token}}", _html.escape(fresh_csrf))
         )
-        return HTMLResponse(content=page, status_code=401)
+        response: Response = HTMLResponse(content=page, status_code=401)
+        response.set_cookie(
+            key="csrftoken",
+            value=fresh_csrf,
+            httponly=True,
+            samesite="lax",
+            path="/",
+            secure=True,
+        )
+        return response
 
     store: SessionStore = request.app.state.session_store
     token = store.create()
