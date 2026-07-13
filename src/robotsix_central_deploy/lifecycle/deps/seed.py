@@ -69,7 +69,7 @@ def _build_component_config_from_spec(
     operator-set fields (``repo_id``, ``caretaker_auto_update``)
     without branching.
     """
-    from robotsix_central_deploy.registry.models import ComponentConfig, ServiceConfig  # noqa: PLC0415
+    from robotsix_central_deploy.registry.models import ComponentConfig  # noqa: PLC0415
 
     config = ComponentConfig(
         id=spec.name,
@@ -87,25 +87,7 @@ def _build_component_config_from_spec(
         host_docker_sock=spec.host_docker_sock,
         named_volumes=[m.host for m in spec.volume_mounts]
         + [m.host for sib in spec.siblings for m in sib.mounts],
-        siblings=[
-            ServiceConfig(
-                service_key=sib.service_key,
-                container_name=sib.container_name,
-                image=sib.image,
-                ports=sib.ports,
-                mounts=sib.mounts,
-                env=sib.env,
-                claude_mount=sib.claude_mount,
-                host_docker_sock=sib.host_docker_sock,
-                health_check=sib.health_check,
-                command=sib.command,
-                entrypoint=sib.entrypoint,
-                tmpfs=sib.tmpfs,
-                mem_limit=sib.mem_limit,
-                user=sib.user,
-            )
-            for sib in spec.siblings
-        ],
+        siblings=[sib.model_copy() for sib in spec.siblings],
         git_url=git_url,
         has_config_yaml=(spec.config_schema is not None),
         config_volume=spec.config_volume,

@@ -1,0 +1,1 @@
+Eliminate SiblingDerivedSpec↔ServiceConfig structural duplication by making onboard/models.py reuse registry/models.py ServiceConfig directly
