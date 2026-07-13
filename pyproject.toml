@@ -18,6 +18,7 @@ dependencies = [
     "structlog>=24.0",
     "PyGithub>=2.9.0",
     "starlette-csrf>=3.0.0",
+    "secure>=2.0",
     "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@3b999fc697fd1112024160f6f5ba45bd89e7f5d0",
     "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@424f8ec5140e14e9699b92d5c3755d929625b570",
 ]
