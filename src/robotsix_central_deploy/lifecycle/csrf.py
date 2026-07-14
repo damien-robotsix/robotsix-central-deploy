@@ -1,7 +1,7 @@
 """CSRF protection helpers.
 
-Provides token generation / validation and a middleware factory that
-wraps ``starlette_csrf.CSRFMiddleware``.
+Provides token generation / validation and a gateway-aware subclass of
+``starlette_csrf.CSRFMiddleware``.
 """
 
 from __future__ import annotations
@@ -20,6 +20,15 @@ except ImportError:
     logging.getLogger(__name__).warning(
         "itsdangerous not installed; CSRF token validation disabled"
     )
+
+try:
+    from starlette.datastructures import Headers
+    from starlette.types import Receive, Scope, Send
+    from starlette_csrf import CSRFMiddleware  # type: ignore[attr-defined]
+
+    _HAS_STARLETTE_CSRF = True
+except ImportError:
+    _HAS_STARLETTE_CSRF = False
 
 # Random secret if the operator doesn't supply one — regenerates on every
 # restart, which invalidates any outstanding CSRF cookies.  That's an
@@ -70,3 +79,28 @@ class CSRFHelper:
             return _secrets.compare_digest(decoded1, decoded2)
         except BadSignature:
             return False
+
+
+if _HAS_STARLETTE_CSRF:
+
+    class GatewayAwareCSRFMiddleware(CSRFMiddleware):
+        """CSRF middleware that skips gateway-proxied component requests.
+
+        ``exempt_urls`` only matches the request *path*, but the gateway
+        routes components by Host subdomain (``<name>.<gateway_base_domain>``),
+        so unsafe-method requests to proxied apps (e.g. a chat message POST)
+        would be rejected with a CSRF token those apps never receive.
+        Proxied components are responsible for their own CSRF protection.
+        """
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            if scope["type"] in ("http", "websocket"):
+                # Imported lazily: gateway.router pulls in lifecycle modules,
+                # and this module is imported during lifecycle.app start-up.
+                from ..gateway.router import _extract_subdomain_name
+
+                headers = Headers(scope=scope)
+                if _extract_subdomain_name(headers, scope.get("app")) is not None:
+                    await self.app(scope, receive, send)
+                    return
+            await super().__call__(scope, receive, send)

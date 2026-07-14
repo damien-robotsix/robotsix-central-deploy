@@ -15,7 +15,7 @@ import logging
 from fastapi import FastAPI
 
 try:
-    from starlette_csrf import CSRFMiddleware  # type: ignore[attr-defined]
+    from .csrf import GatewayAwareCSRFMiddleware
 
     _HAS_CSRF = True
 except ImportError:
@@ -95,7 +95,7 @@ app.add_middleware(RateLimitMiddleware)
 if _HAS_CSRF:
     _initial_csrf_secret = get_csrf_secret("")
     app.add_middleware(
-        CSRFMiddleware,
+        GatewayAwareCSRFMiddleware,
         secret=_initial_csrf_secret,
         cookie_secure=True,
         cookie_httponly=True,
