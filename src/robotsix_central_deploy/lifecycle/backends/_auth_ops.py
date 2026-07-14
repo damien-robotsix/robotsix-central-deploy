@@ -20,6 +20,35 @@ class AuthOps:
     def __init__(self, client: Any) -> None:
         self._client = client
 
+    def _read_volume_credentials(self, volume_name: str) -> str | None:
+        """Read ``.credentials.json`` from *volume_name* via a one-shot
+        busybox container.
+
+        Returns the decoded file content, or ``None`` if the file is
+        missing or the read fails.
+        """
+        import docker
+
+        try:
+            result = self._client.containers.run(
+                "busybox",
+                command=[
+                    "sh",
+                    "-c",
+                    "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
+                ],
+                volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
+                remove=True,
+            )
+            content: str = result.decode("utf-8", errors="replace").strip()
+        except docker.errors.ContainerError:
+            return None
+
+        if content == "MISSING" or not content:
+            return None
+
+        return content
+
     def check_claude_credentials(self) -> list[str]:
         """Validate that the ``claude-auth`` volume contains a readable
         ``.credentials.json``. Returns a list of warning strings (empty
@@ -78,25 +107,8 @@ class AuthOps:
                 }
 
             # Check for .credentials.json existence and parse it.
-            try:
-                result = self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
-                    ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
-                    remove=True,
-                )
-                content = result.decode("utf-8", errors="replace").strip()
-            except docker.errors.ContainerError:
-                return {
-                    "status": "not-authenticated",
-                    "detail": "Failed to read credentials from volume.",
-                }
-
-            if content == "MISSING" or not content:
+            content = self._read_volume_credentials(volume_name)
+            if content is None:
                 return {
                     "status": "not-authenticated",
                     "detail": "No credentials file found.",
@@ -220,22 +232,8 @@ class AuthOps:
             except docker.errors.NotFound:
                 raise ValueError(f"Volume '{volume_name}' does not exist.")
 
-            try:
-                raw = self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cat /mnt/.credentials.json 2>/dev/null || echo 'MISSING'",
-                    ],
-                    volumes={volume_name: {"bind": "/mnt", "mode": "ro"}},
-                    remove=True,
-                )
-                content = raw.decode("utf-8", errors="replace").strip()
-            except docker.errors.ContainerError:
-                raise ValueError("Failed to read credentials from volume.")
-
-            if content == "MISSING" or not content:
+            content = self._read_volume_credentials(volume_name)
+            if content is None:
                 raise ValueError("No credentials file found.")
 
             try:

@@ -44,7 +44,7 @@ class TestCheckClaudeAuth:
         client.containers.run.side_effect = dm.errors.ContainerError()
         result = await ops.check_claude_auth("test-vol")
         assert result["status"] == "not-authenticated"
-        assert "Failed to read" in result["detail"]
+        assert "No credentials" in result["detail"]
 
     async def test_missing_content_returns_not_authenticated(self, auth_ops):
         ops, client, dm = auth_ops
@@ -252,7 +252,7 @@ class TestReadClaudeCredentials:
     async def test_container_error_raises_value_error(self, auth_ops):
         ops, client, dm = auth_ops
         client.containers.run.side_effect = dm.errors.ContainerError()
-        with pytest.raises(ValueError, match="Failed to read"):
+        with pytest.raises(ValueError, match="No credentials"):
             await ops.read_claude_credentials("test-vol")
 
     async def test_missing_content_raises_value_error(self, auth_ops):
