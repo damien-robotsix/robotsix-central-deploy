@@ -283,6 +283,17 @@ def _merge_config_json_schema(
                     i_submitted[key] if isinstance(i_submitted.get(key), dict) else {}
                 )
                 result[key] = _recursive(resolved, sub_existing, sub_submitted)
+            elif key in i_submitted and i_submitted[key] is None:
+                # The form submits null for a field left empty (e.g. a
+                # cleared number input on a nullable field). Treat it like
+                # an absent key instead of feeding None to type coercion,
+                # which would 422 the whole save.
+                if prefer_existing_for_unset and key in i_existing:
+                    result[key] = i_existing[key]
+                elif "default" in resolved:
+                    result[key] = resolved["default"]
+                else:
+                    result[key] = None
             elif key in i_submitted:
                 try:
                     result[key] = _coerce_by_schema(resolved, i_submitted[key])

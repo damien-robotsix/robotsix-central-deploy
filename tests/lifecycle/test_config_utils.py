@@ -539,6 +539,38 @@ class TestMergeConfig:
         )
         assert result == {"host": "old.example.com", "port": 3000}
 
+    def test_submitted_none_treated_as_unset(self):
+        """A null from a cleared form field must not 422 integer coercion."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 8080},
+                "workers": {"type": "integer"},
+            },
+        }
+        existing = {"host": "old.example.com", "port": 3000}
+        submitted = {"host": "new.example.com", "port": None, "workers": None}
+        result = _merge_config(schema, existing, submitted)
+        # port: None → default (prefer_existing_for_unset=False);
+        # workers: None, no default, not in existing → stays None
+        assert result == {"host": "new.example.com", "port": 8080, "workers": None}
+
+    def test_submitted_none_prefers_existing_when_flagged(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 8080},
+            },
+        }
+        existing = {"host": "old.example.com", "port": 3000}
+        submitted = {"host": "new.example.com", "port": None}
+        result = _merge_config(
+            schema, existing, submitted, prefer_existing_for_unset=True
+        )
+        assert result == {"host": "new.example.com", "port": 3000}
+
     def test_prefer_existing_for_unset_flat(self):
         template = {"host": "localhost", "port": "8080"}
         existing = {"host": "old.example.com", "port": "3000"}
