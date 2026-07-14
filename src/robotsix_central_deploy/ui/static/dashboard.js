@@ -486,6 +486,8 @@ var DEPLOY_PHASE_LABELS = {
   failed: 'Failed',
 };
 
+var DEPLOY_POLL_INTERVAL_MS = 5000;
+
 var _deployJobPollTimers = {};
 
 // Current phase label per service while a deploy job is in flight.  The
@@ -573,7 +575,7 @@ function pollDeployJob(name, jobId) {
         showRowError(name, 'Deploy poll error: ' + err.message);
         clearDeployInProgress(name);
       }
-    }, 1500);
+    }, DEPLOY_POLL_INTERVAL_MS);
   }
   poll();
 }
@@ -2132,7 +2134,7 @@ function pollOnboardJob(jobId, errEl) {
         document.getElementById('ob-deploy-btn').textContent = 'Deploy';
         progEl.style.display = 'none';
       }
-    }, 1500);
+    }, DEPLOY_POLL_INTERVAL_MS);
   }
 
   poll();
