@@ -244,7 +244,8 @@ class TestUiRouter:
 
 class TestCspNoInlineScripts:
     """Assert that the dashboard, login, and JavaScript contain no inline
-    onclick= attributes or inline <script> blocks, so the CSP
+    event-handler attributes (onclick=, onchange=, onsubmit=, …) or inline
+    <script> blocks, so the CSP
     ``script-src 'self'; script-src-attr 'none'`` does not break the UI."""
 
     _UI_DIR = (
@@ -254,16 +255,22 @@ class TestCspNoInlineScripts:
         / "ui"
     )
 
-    def test_dashboard_html_no_onclick(self):
+    _INLINE_HANDLER_RE = re.compile(r"\son\w+\s*=")
+
+    def test_dashboard_html_no_inline_event_handlers(self):
         html = (self._UI_DIR / "dashboard.html").read_text(encoding="utf-8")
-        assert "onclick=" not in html, (
-            "dashboard.html must not contain inline onclick handlers"
+        match = self._INLINE_HANDLER_RE.search(html)
+        assert match is None, (
+            f"dashboard.html must not contain inline event handlers; "
+            f"found '{match.group().strip()}'"
         )
 
-    def test_dashboard_js_no_onclick(self):
+    def test_dashboard_js_no_inline_event_handlers(self):
         js = (self._UI_DIR / "static" / "dashboard.js").read_text(encoding="utf-8")
-        assert "onclick=" not in js, (
-            "dashboard.js template strings must not contain inline onclick handlers"
+        match = self._INLINE_HANDLER_RE.search(js)
+        assert match is None, (
+            f"dashboard.js template strings must not contain inline event "
+            f"handlers; found '{match.group().strip()}'"
         )
 
     def test_login_html_no_inline_script(self):

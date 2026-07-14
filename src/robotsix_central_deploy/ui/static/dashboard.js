@@ -67,6 +67,47 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// Delegated change handler — same pattern for onchange replacements
+// (e.g. checkboxes with data-action="updateRemoveBtn").
+document.addEventListener('change', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+
+  const action = target.dataset.action;
+  const args = [];
+  let i = 0;
+  while (target.dataset['arg-' + i] !== undefined) {
+    args.push(target.dataset['arg-' + i]);
+    i++;
+  }
+
+  const fn = window[action];
+  if (typeof fn === 'function') {
+    fn.apply(null, args);
+  }
+});
+
+// Delegated submit handler — calls e.preventDefault() because native
+// form submission (GET-only /ui) would discard the user's changes.
+document.addEventListener('submit', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+  e.preventDefault();
+
+  const action = target.dataset.action;
+  const args = [];
+  let i = 0;
+  while (target.dataset['arg-' + i] !== undefined) {
+    args.push(target.dataset['arg-' + i]);
+    i++;
+  }
+
+  const fn = window[action];
+  if (typeof fn === 'function') {
+    fn.apply(null, args);
+  }
+});
+
 function renderRow(svc) {
   const state = svc.state || 'unknown';
   const badgeClass = `badge-${state}`;
@@ -2428,8 +2469,7 @@ async function loadSettings() {
   }
 }
 
-async function saveSettings(event) {
-  event.preventDefault();
+async function saveSettings() {
   var body = {
     disk_warn_pct: parseFloat(document.getElementById('s-disk-warn').value),
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),

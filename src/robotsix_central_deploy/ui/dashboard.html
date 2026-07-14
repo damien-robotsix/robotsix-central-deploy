@@ -92,7 +92,7 @@
     </div>
     <div class="env-section" style="border:1px solid #c0392b;border-radius:4px;padding:10px 12px;background:#2a1013;">
       <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;">
-        <input type="checkbox" id="remove-delete-volumes" onchange="updateRemoveBtn()">
+        <input type="checkbox" id="remove-delete-volumes" data-action="updateRemoveBtn">
         <span>
           <strong style="color:#f87171;">&#9888; Also delete data volumes</strong><br>
           <span style="color:#fca5a5;font-size:0.8rem;">IRREVERSIBLE — permanently destroys all data in this component's named volumes. Leave unchecked to preserve the data (e.g. to re-add the component later).</span>
@@ -316,7 +316,7 @@
 <!-- Settings section -->
 <div id="settings-section" style="display:none;">
   <h2 style="margin-bottom:16px;color:var(--blue);">System Settings</h2>
-  <form id="settings-form" onsubmit="saveSettings(event)">
+  <form id="settings-form" data-action="saveSettings">
     <input type="hidden" name="csrftoken" value="{{csrf_token}}">
     <table style="margin-bottom:20px;">
       <tr>
@@ -367,7 +367,7 @@
       <tr>
         <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Daily Caretaker Pass</td>
         <td style="padding:6px 12px;">
-          <input id="s-caretaker-enabled" type="checkbox" onchange="onCaretakerEnabledChange()"
+          <input id="s-caretaker-enabled" type="checkbox" data-action="onCaretakerEnabledChange"
                  style="accent-color:var(--blue);" />
           <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">enable periodic auto-update, health, and volume checks</span>
         </td>

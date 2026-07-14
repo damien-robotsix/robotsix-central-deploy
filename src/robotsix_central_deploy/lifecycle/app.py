@@ -106,8 +106,9 @@ if _HAS_SECURE:
     # Preset.BALANCED permits inline styles (style-src 'unsafe-inline')
     # but blocks inline event handlers (script-src-attr 'none') and
     # inline <script> blocks (script-src 'self' only).
-    # The dashboard uses delegated click handlers (data-action) and
-    # static .js files exclusively, so the tight CSP works correctly.
+    # The dashboard uses delegated event listeners (data-action) for
+    # click, change, and submit, plus static .js files exclusively,
+    # so the tight CSP works correctly.
     secure_headers = Secure.from_preset(Preset.BALANCED)
     app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
 
