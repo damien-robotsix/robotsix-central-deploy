@@ -3321,6 +3321,90 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/merge": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Merge (or merge-queue) a pull request",
+        "description": "Merge *owner*/*repo*'s pull request *pull_number*.\n\nThe optional *merge_method* (``merge``, ``squash``, ``rebase``) and\n*sha* (expected HEAD SHA guard) are passed through to GitHub.  When\nthe repository uses a merge queue the endpoint enqueues the PR\nrather than merging directly \u2014 the response ``merged`` field is\n``true`` when the enqueue succeeded.\n\nRequires a write-capable credential: the GitHub App installation\ntoken (same as repo-update/security-features). Returns 503 if the\nApp is not configured, 404 if the App is not installed on the repo,\n405 if the merge is not allowed (e.g. required status checks\nfailing or merge-queue blocking), 409 on merge conflicts, and 422\nfor other GitHub-side rejections.",
+        "operationId": "merge_pull_chat_github_repos__owner___repo__pulls__pull_number__merge_post",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergePullRequest",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Merged or enqueued successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Merge Pull Chat Github Repos  Owner   Repo  Pulls  Pull Number  Merge Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "405": {
+            "description": "Merge not allowed (branch protection, merge-queue required, or the PR is not in a mergeable state)"
+          },
+          "409": {
+            "description": "Merge conflict"
+          },
+          "422": {
+            "description": "GitHub rejected the merge request"
+          },
+          "502": {
+            "description": "GitHub API returned an unexpected error"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/vulnerability-alerts": {
       "put": {
         "tags": [
@@ -5586,6 +5670,37 @@
         ],
         "title": "HealthCheck",
         "description": "Mirrors the Docker HealthCheck spec."
+      },
+      "MergePullRequest": {
+        "properties": {
+          "merge_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merge Method",
+            "description": "Merge method: ``merge`` (default for most repos), ``squash``, or ``rebase``. Omit to use the repo/PR default."
+          },
+          "sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha",
+            "description": "Expected HEAD SHA of the pull request. When provided this is passed through to GitHub as a guard against merging a branch that has moved since the operator last reviewed it."
+          }
+        },
+        "type": "object",
+        "title": "MergePullRequest",
+        "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge``.\n\nBoth fields are optional; GitHub applies the repo/PR-appropriate\ndefaults when they are omitted."
       },
       "OnboardConfirmAcceptedResponse": {
         "properties": {

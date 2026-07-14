@@ -1,0 +1,1 @@
+github component: expose a gated merge-PR endpoint for the chat agent

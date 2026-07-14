@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge` endpoint for merging (or merge-queuing) pull requests via the GitHub App installation token. Optional `merge_method` and `sha` guard are passed through to GitHub. When the repository requires a merge queue, the endpoint falls back to a raw API requester to enqueue the PR. Returns 404 for repos the credential doesn't cover, 405 if merge is not allowed, 409 on conflicts, 422 for GitHub-side rejections, and 503 when the App is not configured. The github component skill doc now includes the endpoint with an explicit 🛑 confirmation-gate safety rule.
 - Extract duplicated volume-write boilerplate from ``write_config_to_volume`` and ``write_llmio_tier_config_to_volume`` into private ``_write_json_to_volume`` helper
 - Replace unmaintained `starlette-csrf` with actively maintained `asgi-csrf` (v0.11) for CSRF protection. The `GatewayAwareCSRFMiddleware` pattern (skipping CSRF for gateway-proxied subdomain requests) is preserved.
 - Guard `starlette-csrf` and `itsdangerous` imports so the lifecycle server

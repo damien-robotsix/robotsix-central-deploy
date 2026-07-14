@@ -1191,6 +1191,335 @@ class TestGetPull:
         assert resp.status_code == 404
 
 
+class _FakeMergeStatus:
+    """Stand-in for a PyGithub ``PullRequestMergeStatus``."""
+
+    def __init__(
+        self,
+        *,
+        merged: bool = True,
+        message: str = "Pull Request successfully merged",
+        sha: str = "abc123def456",
+    ) -> None:
+        self.merged = merged
+        self.message = message
+        self.sha = sha
+
+
+class TestMergePull:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_merges_pull(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(return_value=_FakeMergeStatus(sha="sha-merged"))
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={"merge_method": "squash", "sha": "abc123"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["merged"] is True
+        assert body["sha"] == "sha-merged"
+        assert "merged" in body["message"].lower()
+        repo_obj.get_pull.assert_called_once_with(42)
+        fake_pr.merge.assert_called_once_with(merge_method="squash", sha="abc123")
+
+    async def test_merges_without_body_fields(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """Empty body — merge with defaults, sha=NotSet."""
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(return_value=_FakeMergeStatus())
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        fake_pr.merge.assert_called_once()
+
+    async def test_records_audit_entry(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(
+            return_value=_FakeMergeStatus(
+                message="Pull Request successfully merged", sha="abc"
+            )
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={"merge_method": "merge"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "merge_pull"
+        assert entries[0].key == "acme/widget#42"
+        assert entries[0].new_value["merge_method"] == "merge"
+
+    async def test_pull_not_found_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        repo_obj = MagicMock()
+        repo_obj.get_pull.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/9999/merge",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_merge_not_allowed_returns_405(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import GithubException
+
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(
+            side_effect=GithubException(
+                405, data={"message": "Merge queue is required for this repository"}
+            )
+        )
+        # Also make the raw requester path fail so we surface the 405
+        fake_pr._requester = MagicMock()
+        fake_pr._requester.requestJsonAndCheck = MagicMock(
+            side_effect=GithubException(
+                405, data={"message": "Merge queue is required for this repository"}
+            )
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+        # Attach _requester for the raw fallback path
+        fake_client._requester = fake_pr._requester
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 405
+
+    async def test_merge_conflict_returns_409(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import GithubException
+
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(
+            side_effect=GithubException(409, data={"message": "Merge conflict"})
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 409
+
+    async def test_unprocessable_returns_422(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import GithubException
+
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(
+            side_effect=GithubException(
+                422, data={"message": "Pull Request is not mergeable"}
+            )
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_github_404_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import GithubException
+
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(
+            side_effect=GithubException(404, data={"message": "Not Found"})
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_raw_requester_fallback_on_405(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """When pr.merge() returns 405, fall back to raw requester."""
+        from github import GithubException
+
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(
+            side_effect=GithubException(
+                405, data={"message": "Merge queue is required for this repository"}
+            )
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+
+        fake_client = _fake_client(repo_obj)
+        fake_client._requester = MagicMock()
+        fake_client._requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {
+                "merged": True,
+                "message": "Enqueued in merge queue",
+                "sha": "sha-enqueued",
+            },
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={"merge_method": "squash", "sha": "abc123"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["merged"] is True
+        assert body["sha"] == "sha-enqueued"
+        # Raw requester should have been called with the right params
+        fake_client._requester.requestJsonAndCheck.assert_called_once_with(
+            "PUT",
+            "/repos/acme/widget/pulls/42/merge",
+            input={"merge_method": "squash", "sha": "abc123"},
+        )
+
+
 class TestGitHubAppNotConfiguredError:
     def test_message_mentions_both_fields(self):
         # Sanity check on the error message content raised by github_app.py,
