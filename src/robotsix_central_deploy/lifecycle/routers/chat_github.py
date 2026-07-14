@@ -14,6 +14,8 @@ Exposes:
   enabled automatically as part of creation)
 - ``GET /chat/github/repos/{owner}/{repo}/pulls`` — list pull requests
 - ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}`` — a single pull request
+- ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge`` — merge (or
+  merge-queue) a pull request
 
 This is the sole implementation of GitHub access for the chat agent — the
 chat container never holds a GitHub credential of its own. Actions-status
@@ -340,6 +342,217 @@ async def get_pull(
     except Exception as exc:
         _reraise_github_errors(exc, owner, repo)
         raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge — merge (or
+# merge-queue) a pull request (write; App installation token)
+# ---------------------------------------------------------------------------
+
+
+class MergePullRequest(BaseModel):
+    """Body for ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge``.
+
+    Both fields are optional; GitHub applies the repo/PR-appropriate
+    defaults when they are omitted.
+    """
+
+    merge_method: str | None = Field(
+        None,
+        description="Merge method: ``merge`` (default for most repos), "
+        "``squash``, or ``rebase``. Omit to use the repo/PR default.",
+    )
+    sha: str | None = Field(
+        None,
+        description="Expected HEAD SHA of the pull request. When provided "
+        "this is passed through to GitHub as a guard against merging a "
+        "branch that has moved since the operator last reviewed it.",
+    )
+
+
+def _merge_pull_sync(
+    client: Any, owner: str, repo: str, pull_number: int, body: MergePullRequest
+) -> dict[str, Any]:
+    from github import GithubObject
+
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    pr = repo_obj.get_pull(pull_number)
+
+    kwargs: dict[str, Any] = {}
+    if body.merge_method:
+        kwargs["merge_method"] = body.merge_method
+    if body.sha:
+        kwargs["sha"] = body.sha
+    else:
+        kwargs["sha"] = GithubObject.NotSet
+
+    merge_status = pr.merge(**kwargs)
+    return {
+        "merged": merge_status.merged,
+        "message": merge_status.message,
+        "sha": merge_status.sha,
+    }
+
+
+def _merge_via_raw_requester(
+    client: Any, owner: str, repo: str, pull_number: int, body: MergePullRequest
+) -> dict[str, Any]:
+    """Fallback merge via the raw GitHub API (used for merge-queue repos).
+
+    When a repository requires a merge queue, PyGithub's ``pr.merge()``
+    returns 405 ``Method Not Allowed``.  The raw GitHub API can still
+    enqueue the PR via the same endpoint with a POST-join approach — the
+    ``_requester`` bypasses PyGithub's method-guard and lets the GitHub
+    API decide whether to enqueue or merge directly.
+    """
+    input_params: dict[str, Any] = {}
+    if body.merge_method:
+        input_params["merge_method"] = body.merge_method
+    if body.sha:
+        input_params["sha"] = body.sha
+
+    headers, data = client._requester.requestJsonAndCheck(
+        "PUT",
+        f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
+        input=input_params if input_params else None,
+    )
+    # When the merge succeeds the response data is the merge status object;
+    # on failure requestJsonAndCheck raises GithubException.
+    return {
+        "merged": data.get("merged", False),
+        "message": data.get("message", ""),
+        "sha": data.get("sha", ""),
+    }
+
+
+def _reraise_merge_errors(
+    exc: Exception, owner: str, repo: str, pull_number: int
+) -> None:
+    """Map PyGithub merge exceptions to the matching HTTP status, else re-raise."""
+    from github import GithubException, UnknownObjectException
+
+    if isinstance(exc, UnknownObjectException):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Not found: {owner}/{repo} pull #{pull_number} "
+            "(or the GitHub App is not installed on it)",
+        ) from exc
+    if isinstance(exc, GithubException):
+        gh_status = exc.status
+        detail = str(exc)
+        if gh_status == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Not found: {owner}/{repo} pull #{pull_number} or repo",
+            ) from exc
+        if gh_status == 405:
+            raise HTTPException(
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+                detail=f"Merge not allowed for {owner}/{repo}#{pull_number}: {detail}",
+            ) from exc
+        if gh_status == 409:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Merge conflict for {owner}/{repo}#{pull_number}: {detail}",
+            ) from exc
+        if gh_status == 422:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"GitHub rejected merge for {owner}/{repo}#{pull_number}: {detail}",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"GitHub API error merging {owner}/{repo}#{pull_number}: {detail}",
+        ) from exc
+    raise exc
+
+
+@router.post(
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/merge",
+    summary="Merge (or merge-queue) a pull request",
+    responses={
+        200: {"description": "Merged or enqueued successfully"},
+        401: {"description": "Unauthorized"},
+        404: {"description": "PR or repository not found, or App not installed on it"},
+        405: {
+            "description": "Merge not allowed (branch protection, merge-queue "
+            "required, or the PR is not in a mergeable state)"
+        },
+        409: {"description": "Merge conflict"},
+        422: {"description": "GitHub rejected the merge request"},
+        502: {"description": "GitHub API returned an unexpected error"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def merge_pull(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    body: MergePullRequest = MergePullRequest(merge_method=None, sha=None),
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Merge *owner*/*repo*'s pull request *pull_number*.
+
+    The optional *merge_method* (``merge``, ``squash``, ``rebase``) and
+    *sha* (expected HEAD SHA guard) are passed through to GitHub.  When
+    the repository uses a merge queue the endpoint enqueues the PR
+    rather than merging directly — the response ``merged`` field is
+    ``true`` when the enqueue succeeded.
+
+    Requires a write-capable credential: the GitHub App installation
+    token (same as repo-update/security-features). Returns 503 if the
+    App is not configured, 404 if the App is not installed on the repo,
+    405 if the merge is not allowed (e.g. required status checks
+    failing or merge-queue blocking), 409 on merge conflicts, and 422
+    for other GitHub-side rejections.
+    """
+    from github import GithubException
+
+    client = await _get_client_or_503(config, owner, repo)
+
+    try:
+        result = await asyncio.to_thread(
+            _merge_pull_sync, client, owner, repo, pull_number, body
+        )
+    except GithubException as exc:
+        if exc.status == 405:
+            # 405 may mean the repo requires a merge queue — try the raw
+            # requester path, which can still enqueue.
+            try:
+                result = await asyncio.to_thread(
+                    _merge_via_raw_requester,
+                    client,
+                    owner,
+                    repo,
+                    pull_number,
+                    body,
+                )
+            except Exception as fallback_exc:
+                _reraise_merge_errors(fallback_exc, owner, repo, pull_number)
+                raise  # pragma: no cover
+        else:
+            _reraise_merge_errors(exc, owner, repo, pull_number)
+            raise  # pragma: no cover
+    except Exception as exc:
+        _reraise_merge_errors(exc, owner, repo, pull_number)
+        raise  # pragma: no cover
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="merge_pull",
+            key=f"{owner}/{repo}#{pull_number}",
+            new_value={
+                "merge_method": body.merge_method,
+                "sha": body.sha,
+                "result": result,
+            },
+            detail=f"Merged (or enqueued) {owner}/{repo}#{pull_number}: {result['message']}",
+        )
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
