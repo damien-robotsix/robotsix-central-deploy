@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -234,6 +235,52 @@ class TestUiRouter:
         # With valid Basic Auth → 200
         resp = await client.get("/services", headers=_basic_header(self.API_KEY))
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# CSP regression — no inline event handlers or inline scripts
+# ---------------------------------------------------------------------------
+
+
+class TestCspNoInlineScripts:
+    """Assert that the dashboard, login, and JavaScript contain no inline
+    onclick= attributes or inline <script> blocks, so the CSP
+    ``script-src 'self'; script-src-attr 'none'`` does not break the UI."""
+
+    _UI_DIR = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "robotsix_central_deploy"
+        / "ui"
+    )
+
+    def test_dashboard_html_no_onclick(self):
+        html = (self._UI_DIR / "dashboard.html").read_text(encoding="utf-8")
+        assert "onclick=" not in html, (
+            "dashboard.html must not contain inline onclick handlers"
+        )
+
+    def test_dashboard_js_no_onclick(self):
+        js = (self._UI_DIR / "static" / "dashboard.js").read_text(encoding="utf-8")
+        assert "onclick=" not in js, (
+            "dashboard.js template strings must not contain inline onclick handlers"
+        )
+
+    def test_login_html_no_inline_script(self):
+        html = (self._UI_DIR / "login.html").read_text(encoding="utf-8")
+        # An inline <script> block has content between <script> and </script>.
+        # <script src="..."></script> is fine (no inline body).
+        inline_script = re.search(r"<script[^>]*>[\s\S]*?</script>", html)
+        if inline_script:
+            tag = inline_script.group()
+            has_body = not re.match(r"<script\s+src=", tag)
+        else:
+            has_body = False
+        assert not has_body, "login.html must not contain inline <script> blocks"
+
+    def test_login_js_exists(self):
+        login_js = self._UI_DIR / "static" / "login.js"
+        assert login_js.is_file(), "login.js must exist as a static file"
 
 
 # ---------------------------------------------------------------------------

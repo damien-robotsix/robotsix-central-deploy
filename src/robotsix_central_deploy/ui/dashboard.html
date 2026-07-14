@@ -10,23 +10,23 @@
 
 <header>
   <h1>Robotsix Deploy — Component Status</h1>
-  <button id="add-component-btn" onclick="openOnboardModal()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">+ Add Component</button>
-  <button id="settings-btn" onclick="showSettingsSection()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Settings</button>
-  <button id="self-update-btn" onclick="triggerSelfUpdate()" title="A newer server image is available on the registry" style="display:none;padding:6px 14px;font-size:0.85rem;border:1px solid #16a34a;border-radius:4px;background:#14532d;color:#bbf7d0;cursor:pointer;">⬆ Update server</button>
-  <button id="logout-btn" onclick="doLogout()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Logout</button>
+  <button id="add-component-btn" data-action="openOnboardModal" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">+ Add Component</button>
+  <button id="settings-btn" data-action="showSettingsSection" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Settings</button>
+  <button id="self-update-btn" data-action="triggerSelfUpdate" title="A newer server image is available on the registry" style="display:none;padding:6px 14px;font-size:0.85rem;border:1px solid #16a34a;border-radius:4px;background:#14532d;color:#bbf7d0;cursor:pointer;">⬆ Update server</button>
+  <button id="logout-btn" data-action="doLogout" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Logout</button>
   <span id="refresh-time">Last refreshed: --:--:--</span>
 </header>
 
 <div id="error-banner" class="error-banner"></div>
 
 <div id="warning-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
-  <button onclick="hideWarning()" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
+  <button data-action="hideWarning" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
   <span id="warning-banner-text"></span>
 </div>
 
 <div id="caretaker-degraded-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
   &#9888; Caretaker reporting is degraded &mdash; deploy the mill component to enable board issue tracking.
-  <button onclick="document.getElementById('caretaker-degraded-banner').style.display='none'" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
+  <button data-action="hideCaretakerDegradedBanner" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
 </div>
 
 <div id="disk-warning" class="banner banner-warn" style="display:none"></div>
@@ -80,7 +80,7 @@
   <div class="env-panel" style="max-width:460px;">
     <div class="env-header">
       <h2 id="remove-modal-title">Remove <span id="remove-modal-component"></span></h2>
-      <button class="env-close" onclick="closeRemoveModal()" title="Close">&times;</button>
+      <button class="env-close" data-action="closeRemoveModal" title="Close">&times;</button>
     </div>
     <div class="env-section">
       <label style="display:flex;gap:8px;align-items:center;cursor:pointer;">
@@ -101,8 +101,8 @@
     </div>
     <div id="remove-modal-error" class="env-modal-error"></div>
     <div class="env-footer">
-      <button class="btn-secondary" onclick="closeRemoveModal()">Cancel</button>
-      <button class="btn-danger" id="remove-confirm-btn" style="padding:6px 16px;" onclick="confirmRemove()">Remove component</button>
+      <button class="btn-secondary" data-action="closeRemoveModal">Cancel</button>
+      <button class="btn-danger" id="remove-confirm-btn" style="padding:6px 16px;" data-action="confirmRemove">Remove component</button>
     </div>
   </div>
 </div>
@@ -111,7 +111,7 @@
   <div class="env-panel">
     <div class="env-header">
       <h2 id="env-modal-title">Component Config: <span id="env-modal-component"></span></h2>
-      <button class="env-close" onclick="closeEnvModal()" title="Close">&times;</button>
+      <button class="env-close" data-action="closeEnvModal" title="Close">&times;</button>
     </div>
     <div id="env-modal-error" class="env-modal-error"></div>
     <div class="env-section">
@@ -149,9 +149,9 @@
       </div>
     </div>
     <div class="env-footer">
-      <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
-      <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
-      <button id="env-sync-keys-btn" class="btn-secondary" onclick="syncEnvKeys()"
+      <button class="btn-primary" data-action="saveEnvChanges">Save</button>
+      <button class="btn-secondary" data-action="closeEnvModal">Close</button>
+      <button id="env-sync-keys-btn" class="btn-secondary" data-action="syncEnvKeys"
               title="Re-read the repo's compose env contract and add newly declared keys. Existing values are kept; keys are never removed."
               style="margin-left:auto;">↻ Sync keys from repo</button>
     </div>
@@ -169,12 +169,12 @@
     <div id="config-form-body"></div>
     <textarea id="config-raw-body" style="display:none;width:100%;height:300px;font-family:monospace;font-size:0.82rem;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:10px;resize:vertical;" spellcheck="false" placeholder="Paste or edit raw JSON config here..."></textarea>
     <div class="env-footer">
-      <button class="btn-primary" onclick="saveConfigValues()">Save</button>
-      <button class="btn-secondary" onclick="closeConfigModal()">Close</button>
-      <button id="config-raw-toggle-btn" class="btn-secondary" onclick="toggleConfigMode()"
+      <button class="btn-primary" data-action="saveConfigValues">Save</button>
+      <button class="btn-secondary" data-action="closeConfigModal">Close</button>
+      <button id="config-raw-toggle-btn" class="btn-secondary" data-action="toggleConfigMode"
               title="Toggle between field-by-field form and raw JSON editing"
               style="margin-left:auto;">{ } Raw</button>
-      <button id="config-refresh-schema-btn" class="btn-secondary" onclick="refreshConfigSchema()"
+      <button id="config-refresh-schema-btn" class="btn-secondary" data-action="refreshConfigSchema"
               title="Refetch config/config.schema.json from the component's repo — picks up new fields, types, and descriptions without re-onboarding. Stored values are kept."
               style="margin-left:auto;">↻ Refresh schema</button>
     </div>
@@ -185,7 +185,7 @@
   <div class="log-panel">
     <div class="log-header">
       <h2 id="log-modal-title">Logs — <span id="log-modal-component"></span></h2>
-      <button class="log-close" onclick="closeLogs()" title="Close">&times;</button>
+      <button class="log-close" data-action="closeLogs" title="Close">&times;</button>
     </div>
     <div id="log-status" class="log-status">Connecting…</div>
     <div class="log-body">
@@ -198,7 +198,7 @@
   <div class="env-panel" style="max-width:780px;">
     <div class="env-header">
       <h2 id="history-modal-title">Deploy History — <span id="history-modal-component"></span></h2>
-      <button class="env-close" onclick="closeHistoryModal()" title="Close">&times;</button>
+      <button class="env-close" data-action="closeHistoryModal" title="Close">&times;</button>
     </div>
     <div id="history-modal-error" class="env-modal-error"></div>
     <div style="max-height:60vh;overflow-y:auto;">
@@ -216,7 +216,7 @@
       </table>
     </div>
     <div class="env-footer">
-      <button class="btn-secondary" onclick="closeHistoryModal()">Close</button>
+      <button class="btn-secondary" data-action="closeHistoryModal">Close</button>
     </div>
   </div>
 </div>
@@ -225,7 +225,7 @@
   <div class="onboard-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <h2 id="onboard-modal-title" style="margin:0;">Add Component</h2>
-      <button id="ob-close-x" class="onboard-close" onclick="closeOnboardModal()" title="Close">&times;</button>
+      <button id="ob-close-x" class="onboard-close" data-action="closeOnboardModal" title="Close">&times;</button>
     </div>
 
     <!-- Step 1 -->
@@ -244,8 +244,8 @@
       </label>
       <div id="ob-step1-error" class="ob-error" style="display:none"></div>
       <div class="ob-actions">
-        <button id="ob-fetch-btn" onclick="onboardFetch()">Fetch Spec</button>
-        <button onclick="closeOnboardModal()">Cancel</button>
+        <button id="ob-fetch-btn" data-action="onboardFetch">Fetch Spec</button>
+        <button data-action="closeOnboardModal">Cancel</button>
       </div>
     </div>
 
@@ -305,9 +305,9 @@
       <div id="ob-deploy-progress" class="ob-progress" style="display:none"></div>
       <div id="ob-step2-error" class="ob-error" style="display:none"></div>
       <div class="ob-actions">
-        <button id="ob-deploy-btn" onclick="onboardDeploy()">Deploy</button>
-        <button id="ob-back-btn" onclick="showStep1()">Back</button>
-        <button id="ob-cancel-btn" onclick="closeOnboardModal()">Cancel</button>
+        <button id="ob-deploy-btn" data-action="onboardDeploy">Deploy</button>
+        <button id="ob-back-btn" data-action="showStep1">Back</button>
+        <button id="ob-cancel-btn" data-action="closeOnboardModal">Cancel</button>
       </div>
     </div>
   </div>
@@ -417,7 +417,7 @@
     </table>
     <div style="display:flex;gap:8px;">
       <button type="submit" class="btn-primary">Save Settings</button>
-      <button type="button" class="btn-secondary" onclick="hideSettingsSection()">Back to Dashboard</button>
+      <button type="button" class="btn-secondary" data-action="hideSettingsSection">Back to Dashboard</button>
     </div>
   </form>
   <div id="settings-toast" style="margin-top:12px;font-size:0.85rem;"></div>
@@ -471,7 +471,7 @@
   <div class="vb-panel">
     <div class="vb-header">
       <h2 id="vb-modal-title">Volume: <span id="vb-volume-name"></span></h2>
-      <button class="vb-close" onclick="closeVolumeBrowser()" title="Close">&times;</button>
+      <button class="vb-close" data-action="closeVolumeBrowser" title="Close">&times;</button>
     </div>
     <div id="vb-breadcrumb" class="vb-breadcrumb"></div>
     <div id="vb-listing" class="vb-listing"></div>

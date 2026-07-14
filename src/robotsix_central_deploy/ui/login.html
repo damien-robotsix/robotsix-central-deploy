@@ -65,11 +65,6 @@
   </form>
   <div class="error" id="login-error">{{error}}</div>
 </div>
-<script>
-(function() {
-  var el = document.getElementById('login-error');
-  if (el && el.textContent.trim()) { el.style.display = 'block'; }
-})();
-</script>
+<script src="/ui/static/login.js"></script>
 </body>
 </html>

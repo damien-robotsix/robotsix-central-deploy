@@ -33,6 +33,40 @@ function hideWarning() {
   el.style.display = 'none';
 }
 
+function dismissDeploySuccess() {
+  // Called from the deploy-success inline message's OK button.
+  closeOnboardModal();
+  loadDashboard();
+}
+
+function hideCaretakerDegradedBanner() {
+  const el = document.getElementById('caretaker-degraded-banner');
+  if (el) el.style.display = 'none';
+}
+
+// Delegated click handler — dispatches data-action attributes so the
+// dashboard works under a strict CSP (script-src-attr 'none').
+document.addEventListener('click', function(e) {
+  const target = e.target.closest('[data-action]');
+  if (!target) return;
+
+  // Prevent default for anchor tags (e.g. Logs links)
+  if (target.tagName === 'A') e.preventDefault();
+
+  const action = target.dataset.action;
+  const args = [];
+  let i = 0;
+  while (target.dataset['arg-' + i] !== undefined) {
+    args.push(target.dataset['arg-' + i]);
+    i++;
+  }
+
+  const fn = window[action];
+  if (typeof fn === 'function') {
+    fn.apply(null, args);
+  }
+});
+
 function renderRow(svc) {
   const state = svc.state || 'unknown';
   const badgeClass = `badge-${state}`;
@@ -96,21 +130,21 @@ function renderRow(svc) {
     <td><span class="${healthClass}" title="${escAttr(healthTitle)}">${escHtml(healthDisplay)}</span></td>
     <td>${updateBadge}</td>
     <td class="actions">
-      <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
-      <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
-      <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
-      <button onclick="updateService('${escAttr(svc.name)}')" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container"${_deployPhaseLabels[svc.name] ? ' disabled' : ''}>${_deployPhaseLabels[svc.name] ? escHtml(_deployPhaseLabels[svc.name]) : 'Update'}</button>
-      <button onclick="openHistoryModal('${escAttr(svc.name)}')" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
+      <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="start" id="btn-start-${escAttr(svc.name)}">Start</button>
+      <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="stop" id="btn-stop-${escAttr(svc.name)}">Stop</button>
+      <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="restart" id="btn-restart-${escAttr(svc.name)}">Restart</button>
+      <button data-action="updateService" data-arg-0="${escAttr(svc.name)}" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container"${_deployPhaseLabels[svc.name] ? ' disabled' : ''}>${_deployPhaseLabels[svc.name] ? escHtml(_deployPhaseLabels[svc.name]) : 'Update'}</button>
+      <button data-action="openHistoryModal" data-arg-0="${escAttr(svc.name)}" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
       ${svc.has_config_yaml
-        ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>
-           <button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Env &amp; Secrets</button>`
-        : `<button onclick="openEnvModal('${escAttr(svc.name)}')" class="btn-secondary">Config</button>`
+        ? `<button data-action="openConfigModal" data-arg-0="${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;">Configure</button>
+           <button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Env &amp; Secrets</button>`
+        : `<button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Config</button>`
       }
-      <button class="btn-danger" onclick="doRemove('${escAttr(svc.name)}')">Remove</button>
+      <button class="btn-danger" data-action="doRemove" data-arg-0="${escAttr(svc.name)}">Remove</button>
       <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
     </td>
     <td>${openLink}</td>
-    <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
+    <td><a href="#" class="logs-link" data-action="openLogs" data-arg-0="${escAttr(svc.name)}">Logs</a></td>
   </tr>`;
 }
 
@@ -154,7 +188,7 @@ function renderSiblingRow(svc) {
     <td>${updateBadge}</td>
     <td class="actions"></td>
     <td>${openLink}</td>
-    <td><a href="#" class="logs-link" onclick="openLogs('${escAttr(svc.name)}'); return false;">Logs</a></td>
+    <td><a href="#" class="logs-link" data-action="openLogs" data-arg-0="${escAttr(svc.name)}">Logs</a></td>
   </tr>`;
 }
 
@@ -254,7 +288,7 @@ function renderDiskPanel(data) {
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
-        `<tr><th style="font-weight:400;"><span class="volume-name-cell" onclick="openVolumeBrowser('${escAttr(v.name)}')">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
+        `<tr><th style="font-weight:400;"><span class="volume-name-cell" data-action="openVolumeBrowser" data-arg-0="${escAttr(v.name)}">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
     ).join('');
     const volTable = vols.length
         ? `<table style="margin-top:10px;"><tr><th colspan="2" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
@@ -266,7 +300,7 @@ function renderDiskPanel(data) {
             ${usedPct}%</td></tr>
           <tr><th>Docker images (host total)</th><td>${fmt_bytes(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_bytes(data.docker.build_cache_size_bytes)}</td></tr>
-          <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}${data.docker.build_cache_reclaimable_bytes > 0 ? ` <button id="reclaim-btn" class="reclaim-btn" onclick="reclaimBuildCache()">Reclaim</button>` : ''}</td></tr>
+          <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}${data.docker.build_cache_reclaimable_bytes > 0 ? ` <button id="reclaim-btn" class="reclaim-btn" data-action="reclaimBuildCache">Reclaim</button>` : ''}</td></tr>
         </table>${volTable}`;
 }
 
@@ -375,7 +409,7 @@ function renderOrphanVolumes(data) {
     <table style="border-collapse:collapse;min-width:400px;">
       <tr><th colspan="2" style="text-align:left;color:#94a3b8;padding:4px 12px;">
         ${vols.length} orphan volume${vols.length === 1 ? '' : 's'} &middot; ${fmt_bytes(data.total_bytes)}
-        <button id="prune-vols-btn" class="reclaim-btn" onclick="pruneOrphanVolumes()">Prune all</button>
+        <button id="prune-vols-btn" class="reclaim-btn" data-action="pruneOrphanVolumes">Prune all</button>
       </th></tr>
       ${rows}
     </table>`;
@@ -1501,7 +1535,7 @@ function _injectConfigAssistUI() {
   bar.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:0.25rem 0;margin-top:0.5rem;';
   bar.innerHTML = `
     <button id="config-assist-btn" class="btn-secondary"
-            onclick="runConfigAssist()">Auto-detect / Assist</button>
+            data-action="runConfigAssist">Auto-detect / Assist</button>
     ${seedInputsHtml}
     <span id="config-assist-spinner" style="display:none;margin-left:0.5rem;">&#x27F3; Running&hellip;</span>
   `;
@@ -1932,7 +1966,7 @@ function renderHistoryRows(entries, runningDigest) {
     const imageRef = entry.image_ref || '\u2014';
     const rollbackBtn = isCurrent
       ? '<span style="font-size:0.78rem;color:var(--blue);">current</span>'
-      : `<button style="font-size:0.75rem;padding:3px 8px;" onclick="rollbackTo('${escAttr(_historyModalName)}', '${escAttr(digest)}')">Rollback</button>`;
+      : `<button style="font-size:0.75rem;padding:3px 8px;" data-action="rollbackTo" data-arg-0="${escAttr(_historyModalName)}" data-arg-1="${escAttr(digest)}">Rollback</button>`;
 
     html += `<tr class="${rowClass}">
       <td><span title="${escAttr(digest)}">${escHtml(shortDigest)}</span></td>
@@ -2106,7 +2140,7 @@ function pollOnboardJob(jobId, errEl) {
                   return '<li>' + escHtml(w) + '</li>';
                 }).join('') + '</ul>'
               + '<small>Please manually notify the affected component maintainers to update their deploy/docker-compose.yml.</small>'
-              + '<br><button onclick="this.parentElement.remove();closeOnboardModal();loadDashboard();">OK</button>'
+              + '<br><button data-action="dismissDeploySuccess">OK</button>'
               + '</div>';
             progEl.innerHTML = warnHtml;
             progEl.style.display = '';
@@ -2518,11 +2552,11 @@ async function loadVolumeDir(path) {
 function renderBreadcrumb(path) {
   const el = document.getElementById('vb-breadcrumb');
   const parts = (path || '').split('/').filter(Boolean);
-  let html = '<button onclick="loadVolumeDir(\'\')">/ (root)</button>';
+  let html = '<button data-action="loadVolumeDir" data-arg-0="">/ (root)</button>';
   let accum = '';
   for (const p of parts) {
     accum += '/' + p;
-    html += ` <span style="color:#475569;">/</span> <button onclick="loadVolumeDir('${escAttr(accum)}')">${escHtml(p)}</button>`;
+    html += ` <span style="color:#475569;">/</span> <button data-action="loadVolumeDir" data-arg-0="${escAttr(accum)}">${escHtml(p)}</button>`;
   }
   el.innerHTML = html;
 }
@@ -2538,7 +2572,7 @@ function renderVolumeListing(entries) {
   let parentRow = '';
   if (currentVolumePath && currentVolumePath !== '' && currentVolumePath !== '/') {
     const parentPath = currentVolumePath.substring(0, currentVolumePath.lastIndexOf('/')) || '';
-    parentRow = `<tr><td colspan="2"><span class="vb-parent" onclick="loadVolumeDir('${escAttr(parentPath || '')}')">\u2190 .. (parent)</span></td></tr>`;
+    parentRow = `<tr><td colspan="2"><span class="vb-parent" data-action="loadVolumeDir" data-arg-0="${escAttr(parentPath || '')}">\u2190 .. (parent)</span></td></tr>`;
   }
 
   const sorted = [...entries].sort((a, b) => {
@@ -2551,9 +2585,9 @@ function renderVolumeListing(entries) {
     const size = e.size_bytes !== undefined ? fmt_bytes(e.size_bytes) : '\u2014';
     const fullPath = (currentVolumePath ? currentVolumePath + '/' : '') + e.name;
     if (e.type === 'dir') {
-      return `<tr><td><span class="vb-entry vb-dir" onclick="loadVolumeDir('${escAttr(fullPath)}')">${name}</span></td><td style="color:#64748b;">\u2014</td></tr>`;
+      return `<tr><td><span class="vb-entry vb-dir" data-action="loadVolumeDir" data-arg-0="${escAttr(fullPath)}">${name}</span></td><td style="color:#64748b;">\u2014</td></tr>`;
     }
-    return `<tr><td><span class="vb-entry vb-file" onclick="loadVolumeFile('${escAttr(fullPath)}', '${escAttr(e.name)}')">${name}</span></td><td style="color:#94a3b8;">${size}</td></tr>`;
+    return `<tr><td><span class="vb-entry vb-file" data-action="loadVolumeFile" data-arg-0="${escAttr(fullPath)}" data-arg-1="${escAttr(e.name)}">${name}</span></td><td style="color:#94a3b8;">${size}</td></tr>`;
   }).join('');
 
   el.innerHTML = `<table>${parentRow}${rows}</table>`;
