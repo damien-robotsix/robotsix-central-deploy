@@ -25,7 +25,18 @@ except ImportError:
     )
 
 try:
-    from secure import Secure, Preset
+    from secure import (
+        ContentSecurityPolicy,
+        CrossOriginOpenerPolicy,
+        CrossOriginResourcePolicy,
+        PermissionsPolicy,
+        ReferrerPolicy,
+        Secure,
+        Server,
+        StrictTransportSecurity,
+        XContentTypeOptions,
+        XFrameOptions,
+    )
     from secure.middleware import SecureASGIMiddleware
 
     _HAS_SECURE = True
@@ -104,10 +115,37 @@ if _HAS_CSRF:
     )
 
 if _HAS_SECURE:
-    # Preset.BALANCED already permits inline styles (style-src includes
-    # 'unsafe-inline') and inline scripts (script-src includes 'self'),
-    # so the dashboard's 122+ inline style attributes render correctly.
-    secure_headers = Secure.from_preset(Preset.BALANCED)
+    # Mirrors Preset.BALANCED except for the CSP script directives: the
+    # dashboard wires its buttons through inline onclick= attributes (both
+    # in the template and in rows rendered by dashboard.js) and login.html
+    # carries an inline <script>, so script-src needs 'unsafe-inline' and
+    # script-src-attr must not be 'none' — BALANCED's script-src 'self' +
+    # script-src-attr 'none' silently disabled every button in the UI.
+    _csp = (
+        ContentSecurityPolicy()
+        .default_src("'self'")
+        .base_uri("'self'")
+        .font_src("'self'", "https:", "data:")
+        .form_action("'self'")
+        .frame_ancestors("'self'")
+        .img_src("'self'", "data:")
+        .object_src("'none'")
+        .script_src("'self'", "'unsafe-inline'")
+        .script_src_attr("'unsafe-inline'")
+        .style_src("'self'", "https:", "'unsafe-inline'")
+        .upgrade_insecure_requests()
+    )
+    secure_headers = Secure(
+        coop=CrossOriginOpenerPolicy().same_origin(),
+        corp=CrossOriginResourcePolicy().same_origin(),
+        csp=_csp,
+        hsts=StrictTransportSecurity().max_age(31536000).include_subdomains(),
+        permissions=PermissionsPolicy().geolocation().microphone().camera(),
+        referrer=ReferrerPolicy().strict_origin_when_cross_origin(),
+        server=Server().set(""),
+        xcto=XContentTypeOptions().nosniff(),
+        xfo=XFrameOptions().sameorigin(),
+    )
     app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
 
 app.include_router(ui_router)
