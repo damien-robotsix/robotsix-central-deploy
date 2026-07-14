@@ -250,7 +250,7 @@ function renderDiskPanel(data) {
     const warn = freePct < data.warn_threshold_pct;
     document.getElementById('disk-warning').textContent =
       `⚠ Low disk space — free space is below ${data.warn_threshold_pct}%!`;
-    document.getElementById('disk-warning').style.display = warn ? '' : 'none';
+    document.getElementById('disk-warning').style.display = warn ? 'block' : 'none';
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
@@ -285,7 +285,7 @@ async function fetchVolumeAudit() {
       panel.style.display = 'none';
       return;
     }
-    panel.style.display = '';
+    panel.style.display = 'block';
     renderVolumeAuditPanel(data);
   } catch (_e) {
     // silently skip — audit panel is optional
@@ -337,7 +337,7 @@ function renderVolumeAuditPanel(data) {
   const findingsList = document.getElementById('volume-audit-findings-list');
   const findings = (data.recent_findings || []).slice(-5);
   if (findings.length > 0) {
-    findingsDiv.style.display = '';
+    findingsDiv.style.display = 'block';
     findingsList.innerHTML = findings.map(f =>
       `<li>${escHtml(f.finding_at ? new Date(f.finding_at).toLocaleString() : '')} \u2014
            ${escHtml(f.detail || f.volume_name)}</li>`
@@ -367,7 +367,7 @@ function renderOrphanVolumes(data) {
     panel.style.display = 'none';
     return;
   }
-  panel.style.display = '';
+  panel.style.display = 'block';
   const rows = vols.slice().sort((a, b) => b.size_bytes - a.size_bytes).map(v =>
     `<tr><th style="font-weight:400;text-align:left;">${escHtml(v.name)}</th><td style="text-align:right;">${fmt_bytes(v.size_bytes)}</td></tr>`
   ).join('');
@@ -2334,7 +2334,7 @@ function showSettingsSection() {
   document.querySelector('header').style.display = 'none';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = 'none');
   document.querySelector('table').style.display = 'none';
-  document.getElementById('settings-section').style.display = '';
+  document.getElementById('settings-section').style.display = 'block';
   loadSettings();
   fetchClaudeAuthStatus();
 }
@@ -2374,8 +2374,8 @@ async function loadSettings() {
     document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
     document.getElementById('s-mill-component').value = s.mill_component_id || 'mill';
     document.getElementById('s-image-prune').checked = !!s.image_auto_prune;
-    document.getElementById('s-caretaker-interval-row').style.display = s.caretaker_enabled ? '' : 'none';
-    document.getElementById('s-mill-component-row').style.display = s.caretaker_enabled ? '' : 'none';
+    document.getElementById('s-caretaker-interval-row').style.display = s.caretaker_enabled ? 'table-row' : 'none';
+    document.getElementById('s-mill-component-row').style.display = s.caretaker_enabled ? 'table-row' : 'none';
     // LLMIO tier config
     if (s.llmio_tier_config) {
       for (var level = 1; level <= 4; level++) {
@@ -2439,8 +2439,8 @@ async function saveSettings(event) {
 
 function onCaretakerEnabledChange() {
   var enabled = document.getElementById('s-caretaker-enabled').checked;
-  document.getElementById('s-caretaker-interval-row').style.display = enabled ? '' : 'none';
-  document.getElementById('s-mill-component-row').style.display = enabled ? '' : 'none';
+  document.getElementById('s-caretaker-interval-row').style.display = enabled ? 'table-row' : 'none';
+  document.getElementById('s-mill-component-row').style.display = enabled ? 'table-row' : 'none';
 }
 
 async function checkCaretakerStatus() {
@@ -2780,7 +2780,7 @@ async function startClaudeLogin() {
     urlLink.href = data.oauth_url;
     urlLink.textContent = data.oauth_url;
     codeInput.value = '';
-    loginSection.style.display = '';
+    loginSection.style.display = 'block';
     submitBtn.disabled = false;
     cancelBtn.disabled = false;
     toast.textContent = 'Visit the URL above, authorize, then paste the code below.';
@@ -2804,7 +2804,7 @@ async function completeClaudeLogin() {
   const authCode = codeInput.value.trim();
   if (!authCode) {
     errorDiv.textContent = 'Please paste the authorization code.';
-    errorDiv.style.display = '';
+    errorDiv.style.display = 'block';
     return;
   }
   errorDiv.style.display = 'none';
@@ -2833,12 +2833,12 @@ async function completeClaudeLogin() {
       await fetchClaudeAuthStatus();
     } else {
       errorDiv.textContent = data.error || 'Login failed.';
-      errorDiv.style.display = '';
+      errorDiv.style.display = 'block';
       toast.textContent = '';
     }
   } catch (e) {
     errorDiv.textContent = `Login failed: ${e.message}`;
-    errorDiv.style.display = '';
+    errorDiv.style.display = 'block';
     toast.textContent = '';
   } finally {
     submitBtn.disabled = false;

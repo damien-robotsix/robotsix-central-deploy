@@ -410,6 +410,17 @@
 /* Utility: hide element */
 .hidden { display: none; }
 
+/* Elements initially hidden, shown via JS style.display override */
+#disk-warning,
+#volume-audit-panel,
+#volume-audit-findings,
+#orphan-volumes-panel,
+#settings-section,
+#s-caretaker-interval-row,
+#s-mill-component-row,
+#claude-auth-login-section,
+#claude-auth-login-error { display: none; }
+
 /* Toast messages */
 .toast-row { margin-top:8px; font-size:0.85rem; min-height:1.2em; }
 

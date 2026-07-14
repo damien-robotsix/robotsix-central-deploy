@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract remaining inline `style="display:none"` attributes from `dashboard.html` into CSS rules, and update JS `style.display = ''` calls to explicit display values so the CSS rules are properly overridden at runtime.
 - Complete UI refactor: extract inline `<style>` and `<script>` blocks from `ui/login.html` into `ui/static/login.css` and `ui/static/login.js`; replace `get_deploy_contract()` inline HTML string concatenation with `ui/deploy-contract.html` template; replace ~110 inline `style="..."` attributes in `dashboard.html` with CSS classes defined in `dashboard.css`; replace all 31 inline event handlers (`onclick`, `onsubmit`, `onchange`) with `addEventListener` bindings in `dashboard.js` via `wireEventListeners()`.
 - Extract shared `_call_github_endpoint` helper in `chat_github.py` to eliminate duplicated try/except/raise boilerplate across 9 GitHub endpoint handlers. Read handlers use the helper directly; write handlers additionally pass an `audit_entry` for audit logging on success.
 - Extract shared `_read_and_parse_credentials` helper in `_auth_ops.py` to eliminate duplicated volume-exist → read → parse orchestration in `check_claude_auth` and `read_claude_credentials`.

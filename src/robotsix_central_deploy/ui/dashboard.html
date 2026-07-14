@@ -29,7 +29,7 @@
   <button id="caretaker-degraded-close-btn" class="banner-close">&times;</button>
 </div>
 
-<div id="disk-warning" class="banner banner-warn" style="display:none"></div>
+<div id="disk-warning" class="banner banner-warn"></div>
 
 <table>
   <thead>
@@ -55,19 +55,19 @@
   <div id="disk-toast" class="toast-row"></div>
 </section>
 
-<section class="disk-panel" id="volume-audit-panel" style="display:none">
+<section class="disk-panel" id="volume-audit-panel">
   <div class="disk-header">
     <span class="disk-title">Volume Audit</span>
     <span id="volume-audit-timestamp" class="disk-meta"></span>
   </div>
   <div id="volume-audit-content"></div>
-  <div id="volume-audit-findings" style="display:none">
+  <div id="volume-audit-findings">
     <strong>Recent findings:</strong>
     <ul id="volume-audit-findings-list"></ul>
   </div>
 </section>
 
-<section class="disk-panel" id="orphan-volumes-panel" style="display:none">
+<section class="disk-panel" id="orphan-volumes-panel">
   <div class="disk-header">
     <span class="disk-title">Orphan Volumes</span>
     <span class="disk-meta">owned by no component &amp; not in use</span>
@@ -158,7 +158,7 @@
 </div>
 
 <div id="config-modal" class="env-overlay" role="dialog" aria-modal="true"
-     aria-labelledby="config-modal-title" style="display:none">
+     aria-labelledby="config-modal-title">
   <div class="env-panel">
     <div class="env-header">
       <span id="config-modal-title">Configure</span>
@@ -311,7 +311,7 @@
 </div>
 
 <!-- Settings section -->
-<div id="settings-section" style="display:none;">
+<div id="settings-section">
   <h2 class="section-header">System Settings</h2>
   <form id="settings-form">
     <input type="hidden" name="csrftoken" value="{{csrf_token}}">
@@ -366,13 +366,13 @@
           <span class="settings-hint">enable periodic auto-update, health, and volume checks</span>
         </td>
       </tr>
-      <tr id="s-caretaker-interval-row" style="display:none">
+      <tr id="s-caretaker-interval-row">
         <td class="settings-label">Caretaker Interval (hours)</td>
         <td class="settings-value">
           <input id="s-caretaker-interval" type="number" step="1" min="1" class="num-input-md" />
         </td>
       </tr>
-      <tr id="s-mill-component-row" style="display:none">
+      <tr id="s-mill-component-row">
         <td class="settings-label">Mill Component</td>
         <td class="settings-value">
           <input id="s-mill-component" type="text"
@@ -422,7 +422,7 @@
     <div id="claude-auth-detail" class="auth-detail"></div>
 
     <!-- Login flow -->
-    <div id="claude-auth-login-section" style="display:none;">
+    <div id="claude-auth-login-section">
       <div id="claude-auth-oauth-url-box" class="auth-url-box">
         <strong class="text-bright">1.</strong> Visit this URL to authorize:<br>
         <a id="claude-auth-oauth-url" href="#" target="_blank" rel="noopener" class="link-blue-sm"></a>
@@ -435,7 +435,7 @@
         <button id="claude-auth-submit-btn" class="btn-primary btn-sm">Complete Login</button>
         <button id="claude-auth-cancel-btn" class="btn-secondary btn-sm">Cancel</button>
       </div>
-      <div id="claude-auth-login-error" style="display:none;" class="auth-error"></div>
+      <div id="claude-auth-login-error" class="auth-error"></div>
     </div>
 
     <!-- Fallback: paste credentials JSON -->
