@@ -133,7 +133,7 @@ class TestVolumeOpsWriteConfig:
             docker_mock.errors.APIError = type(api_error)
 
             with pytest.raises(
-                RuntimeError, match="write_llmio_tier_config_to_volume failed"
+                RuntimeError, match="llmio_tier_config\\.json write failed"
             ):
                 await vo.write_llmio_tier_config_to_volume("data-vol", {"key": "val"})
 

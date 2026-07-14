@@ -78,11 +78,14 @@ class VolumeOps:
 
     # -- config volume helpers ----------------------------------------------
 
-    async def write_config_to_volume(
-        self, volume_name: str, config_dict: dict[str, Any]
+    async def _write_json_to_volume(
+        self,
+        volume_name: str,
+        filename: str,
+        config_dict: dict[str, Any],
     ) -> None:
-        """Write *config_dict* as JSON into a Docker named volume via a
-        temporary busybox container.
+        """Write *config_dict* as JSON into *filename* on a Docker named volume
+        via a temporary busybox container.
 
         The volume **must** already exist; this method only writes to it.
         """
@@ -94,7 +97,10 @@ class VolumeOps:
         json_content = json.dumps(config_dict, indent=2, sort_keys=True)
         encoded = base64.b64encode(json_content.encode()).decode()
         # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
-        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/config.json && chmod 777 /config && chmod 666 /config/config.json"
+        cmd = (
+            f"mkdir -p /config && echo {encoded} | base64 -d > /config/{filename}"
+            f" && chmod 777 /config && chmod 666 /config/{filename}"
+        )
         loop = asyncio.get_running_loop()
 
         def _run() -> None:
@@ -107,10 +113,20 @@ class VolumeOps:
                 )
             except docker.errors.APIError as exc:
                 raise RuntimeError(
-                    f"write_config_to_volume failed for {volume_name}: {exc}"
+                    f"{filename} write failed for {volume_name}: {exc}"
                 ) from exc
 
         await loop.run_in_executor(None, _run)
+
+    async def write_config_to_volume(
+        self, volume_name: str, config_dict: dict[str, Any]
+    ) -> None:
+        """Write *config_dict* as JSON into a Docker named volume via a
+        temporary busybox container.
+
+        The volume **must** already exist; this method only writes to it.
+        """
+        await self._write_json_to_volume(volume_name, "config.json", config_dict)
 
     async def write_llmio_tier_config_to_volume(
         self, volume_name: str, tier_config: dict[str, Any]
@@ -120,30 +136,9 @@ class VolumeOps:
 
         The volume **must** already exist; this method only writes to it.
         """
-        import base64
-        import json
-
-        import docker
-
-        json_content = json.dumps(tier_config, indent=2, sort_keys=True)
-        encoded = base64.b64encode(json_content.encode()).decode()
-        cmd = f"mkdir -p /config && echo {encoded} | base64 -d > /config/llmio_tier_config.json && chmod 777 /config && chmod 666 /config/llmio_tier_config.json"
-        loop = asyncio.get_running_loop()
-
-        def _run() -> None:
-            try:
-                self._client.containers.run(
-                    "busybox",
-                    command=["sh", "-c", cmd],
-                    volumes={volume_name: {"bind": "/config", "mode": "rw"}},
-                    remove=True,
-                )
-            except docker.errors.APIError as exc:
-                raise RuntimeError(
-                    f"write_llmio_tier_config_to_volume failed for {volume_name}: {exc}"
-                ) from exc
-
-        await loop.run_in_executor(None, _run)
+        await self._write_json_to_volume(
+            volume_name, "llmio_tier_config.json", tier_config
+        )
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Read /config/config.json from a named volume via a temporary busybox container."""
