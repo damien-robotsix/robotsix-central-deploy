@@ -10,23 +10,23 @@
 
 <header>
   <h1>Robotsix Deploy — Component Status</h1>
-  <button id="add-component-btn" onclick="openOnboardModal()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">+ Add Component</button>
-  <button id="settings-btn" onclick="showSettingsSection()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Settings</button>
-  <button id="self-update-btn" onclick="triggerSelfUpdate()" title="A newer server image is available on the registry" style="display:none;padding:6px 14px;font-size:0.85rem;border:1px solid #16a34a;border-radius:4px;background:#14532d;color:#bbf7d0;cursor:pointer;">⬆ Update server</button>
-  <button id="logout-btn" onclick="doLogout()" style="padding:6px 14px;font-size:0.85rem;border:1px solid #475569;border-radius:4px;background:#1e293b;color:#cbd5e1;cursor:pointer;">Logout</button>
+  <button id="add-component-btn" class="header-btn">+ Add Component</button>
+  <button id="settings-btn" class="header-btn">Settings</button>
+  <button id="self-update-btn" class="self-update-btn" title="A newer server image is available on the registry">⬆ Update server</button>
+  <button id="logout-btn" class="header-btn">Logout</button>
   <span id="refresh-time">Last refreshed: --:--:--</span>
 </header>
 
 <div id="error-banner" class="error-banner"></div>
 
-<div id="warning-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
-  <button onclick="hideWarning()" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
+<div id="warning-banner" class="error-banner warning-banner">
+  <button id="warning-close-btn" class="banner-close">&times;</button>
   <span id="warning-banner-text"></span>
 </div>
 
-<div id="caretaker-degraded-banner" class="error-banner" style="display:none;background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c;">
+<div id="caretaker-degraded-banner" class="error-banner warning-banner">
   &#9888; Caretaker reporting is degraded &mdash; deploy the mill component to enable board issue tracking.
-  <button onclick="document.getElementById('caretaker-degraded-banner').style.display='none'" style="background:none;border:none;color:inherit;cursor:pointer;float:right;font-size:1.1rem;">&times;</button>
+  <button id="caretaker-degraded-close-btn" class="banner-close">&times;</button>
 </div>
 
 <div id="disk-warning" class="banner banner-warn" style="display:none"></div>
@@ -45,14 +45,14 @@
     </tr>
   </thead>
   <tbody id="table-body">
-    <tr><td colspan="8" style="text-align:center;color:#9e9e9e;">Loading…</td></tr>
+    <tr><td colspan="8" class="loading-cell">Loading…</td></tr>
   </tbody>
 </table>
 
 <section class="disk-panel">
   <h2>Disk Usage</h2>
   <div id="disk-content">Loading…</div>
-  <div id="disk-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
+  <div id="disk-toast" class="toast-row"></div>
 </section>
 
 <section class="disk-panel" id="volume-audit-panel" style="display:none">
@@ -73,36 +73,36 @@
     <span class="disk-meta">owned by no component &amp; not in use</span>
   </div>
   <div id="orphan-volumes-content"></div>
-  <div id="orphan-volumes-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
+  <div id="orphan-volumes-toast" class="toast-row"></div>
 </section>
 
 <div id="remove-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
-  <div class="env-panel" style="max-width:460px;">
+  <div class="env-panel env-panel-max-460">
     <div class="env-header">
       <h2 id="remove-modal-title">Remove <span id="remove-modal-component"></span></h2>
-      <button class="env-close" onclick="closeRemoveModal()" title="Close">&times;</button>
+      <button id="remove-close-btn" class="env-close" title="Close">&times;</button>
     </div>
     <div class="env-section">
-      <label style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+      <label class="form-check-label">
         <input type="checkbox" id="remove-stop-container" checked>
         <span>Stop &amp; remove the managed container
-          <span style="color:#94a3b8;font-size:0.78rem;">(uncheck for registry-only removal — leaves the container running)</span>
+          <span class="text-muted-sm">(uncheck for registry-only removal — leaves the container running)</span>
         </span>
       </label>
     </div>
-    <div class="env-section" style="border:1px solid #c0392b;border-radius:4px;padding:10px 12px;background:#2a1013;">
-      <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;">
-        <input type="checkbox" id="remove-delete-volumes" onchange="updateRemoveBtn()">
+    <div class="env-section warning-box">
+      <label class="form-check-label-start">
+        <input type="checkbox" id="remove-delete-volumes">
         <span>
-          <strong style="color:#f87171;">&#9888; Also delete data volumes</strong><br>
-          <span style="color:#fca5a5;font-size:0.8rem;">IRREVERSIBLE — permanently destroys all data in this component's named volumes. Leave unchecked to preserve the data (e.g. to re-add the component later).</span>
+          <strong class="text-danger">&#9888; Also delete data volumes</strong><br>
+          <span class="text-danger-sm">IRREVERSIBLE — permanently destroys all data in this component's named volumes. Leave unchecked to preserve the data (e.g. to re-add the component later).</span>
         </span>
       </label>
     </div>
     <div id="remove-modal-error" class="env-modal-error"></div>
     <div class="env-footer">
-      <button class="btn-secondary" onclick="closeRemoveModal()">Cancel</button>
-      <button class="btn-danger" id="remove-confirm-btn" style="padding:6px 16px;" onclick="confirmRemove()">Remove component</button>
+      <button id="remove-cancel-btn" class="btn-secondary">Cancel</button>
+      <button class="btn-danger btn-pad" id="remove-confirm-btn">Remove component</button>
     </div>
   </div>
 </div>
@@ -111,7 +111,7 @@
   <div class="env-panel">
     <div class="env-header">
       <h2 id="env-modal-title">Component Config: <span id="env-modal-component"></span></h2>
-      <button class="env-close" onclick="closeEnvModal()" title="Close">&times;</button>
+      <button id="env-close-btn" class="env-close" title="Close">&times;</button>
     </div>
     <div id="env-modal-error" class="env-modal-error"></div>
     <div class="env-section">
@@ -125,8 +125,8 @@
     <div class="env-section">
       <h3>Memory Limit</h3>
       <div class="env-row">
-        <input type="text" id="mem-limit-input" class="env-value" placeholder="2g" style="width:120px">
-        <span style="font-size:0.85em;color:var(--text-muted);margin-left:0.5rem;">Docker memory limit (e.g. 2g, 512m, 1g). Applied on next deploy.</span>
+        <input type="text" id="mem-limit-input" class="env-value mem-limit-input" placeholder="2g">
+        <span class="env-mem-hint">Docker memory limit (e.g. 2g, 512m, 1g). Applied on next deploy.</span>
       </div>
     </div>
     <div class="env-section">
@@ -145,15 +145,14 @@
           <input type="checkbox" id="claude-mount-checkbox" />
           Mount Claude credentials volume (claude-auth → /home/app/.claude)
         </label>
-        <span style="font-size:0.82em;color:var(--text-muted);margin-left:0.5rem;">Takes effect on next deploy.</span>
+        <span class="claude-mount-hint">Takes effect on next deploy.</span>
       </div>
     </div>
     <div class="env-footer">
-      <button class="btn-primary" onclick="saveEnvChanges()">Save</button>
-      <button class="btn-secondary" onclick="closeEnvModal()">Close</button>
-      <button id="env-sync-keys-btn" class="btn-secondary" onclick="syncEnvKeys()"
-              title="Re-read the repo's compose env contract and add newly declared keys. Existing values are kept; keys are never removed."
-              style="margin-left:auto;">↻ Sync keys from repo</button>
+      <button id="env-save-btn" class="btn-primary">Save</button>
+      <button id="env-cancel-btn" class="btn-secondary">Close</button>
+      <button id="env-sync-keys-btn" class="btn-secondary btn-margin-left"
+              title="Re-read the repo's compose env contract and add newly declared keys. Existing values are kept; keys are never removed.">↻ Sync keys from repo</button>
     </div>
   </div>
 </div>
@@ -167,16 +166,14 @@
     </div>
     <div id="config-modal-error" class="env-modal-error"></div>
     <div id="config-form-body"></div>
-    <textarea id="config-raw-body" style="display:none;width:100%;height:300px;font-family:monospace;font-size:0.82rem;background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:10px;resize:vertical;" spellcheck="false" placeholder="Paste or edit raw JSON config here..."></textarea>
+    <textarea id="config-raw-body" class="config-textarea" spellcheck="false" placeholder="Paste or edit raw JSON config here..."></textarea>
     <div class="env-footer">
-      <button class="btn-primary" onclick="saveConfigValues()">Save</button>
-      <button class="btn-secondary" onclick="closeConfigModal()">Close</button>
-      <button id="config-raw-toggle-btn" class="btn-secondary" onclick="toggleConfigMode()"
-              title="Toggle between field-by-field form and raw JSON editing"
-              style="margin-left:auto;">{ } Raw</button>
-      <button id="config-refresh-schema-btn" class="btn-secondary" onclick="refreshConfigSchema()"
-              title="Refetch config/config.schema.json from the component's repo — picks up new fields, types, and descriptions without re-onboarding. Stored values are kept."
-              style="margin-left:auto;">↻ Refresh schema</button>
+      <button id="config-save-btn" class="btn-primary">Save</button>
+      <button id="config-cancel-btn" class="btn-secondary">Close</button>
+      <button id="config-raw-toggle-btn" class="btn-secondary btn-margin-left"
+              title="Toggle between field-by-field form and raw JSON editing">{ } Raw</button>
+      <button id="config-refresh-schema-btn" class="btn-secondary btn-margin-left"
+              title="Refetch config/config.schema.json from the component's repo — picks up new fields, types, and descriptions without re-onboarding. Stored values are kept.">↻ Refresh schema</button>
     </div>
   </div>
 </div>
@@ -185,7 +182,7 @@
   <div class="log-panel">
     <div class="log-header">
       <h2 id="log-modal-title">Logs — <span id="log-modal-component"></span></h2>
-      <button class="log-close" onclick="closeLogs()" title="Close">&times;</button>
+      <button id="log-close-btn" class="log-close" title="Close">&times;</button>
     </div>
     <div id="log-status" class="log-status">Connecting…</div>
     <div class="log-body">
@@ -195,13 +192,13 @@
 </div>
 
 <div id="history-modal" class="env-overlay" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
-  <div class="env-panel" style="max-width:780px;">
+  <div class="env-panel history-panel-width">
     <div class="env-header">
       <h2 id="history-modal-title">Deploy History — <span id="history-modal-component"></span></h2>
-      <button class="env-close" onclick="closeHistoryModal()" title="Close">&times;</button>
+      <button id="history-close-btn" class="env-close" title="Close">&times;</button>
     </div>
     <div id="history-modal-error" class="env-modal-error"></div>
-    <div style="max-height:60vh;overflow-y:auto;">
+    <div class="history-scroll">
       <table class="history-table">
         <thead>
           <tr>
@@ -216,24 +213,24 @@
       </table>
     </div>
     <div class="env-footer">
-      <button class="btn-secondary" onclick="closeHistoryModal()">Close</button>
+      <button id="history-cancel-btn" class="btn-secondary">Close</button>
     </div>
   </div>
 </div>
 
 <div id="onboard-modal" class="onboard-overlay" role="dialog" aria-modal="true" aria-labelledby="onboard-modal-title">
   <div class="onboard-panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <h2 id="onboard-modal-title" style="margin:0;">Add Component</h2>
-      <button id="ob-close-x" class="onboard-close" onclick="closeOnboardModal()" title="Close">&times;</button>
+    <div class="onboard-header-row">
+      <h2 id="onboard-modal-title" class="no-margin">Add Component</h2>
+      <button id="ob-close-x" class="onboard-close" title="Close">&times;</button>
     </div>
 
     <!-- Step 1 -->
     <div id="onboard-step1">
-      <p style="margin:0 0 10px;font-size:0.82rem;color:#94a3b8;">
+      <p class="onboard-step-intro">
         Ensure your repo follows the
         <a href="/help/deploy-contract" target="_blank"
-           style="color:#60a5fa;text-decoration:underline;">deploy contract</a>
+           class="link-blue">deploy contract</a>
         before fetching.
       </p>
       <label>Git URL
@@ -242,15 +239,15 @@
       <label>Name (slug)
         <input id="ob-name" type="text" placeholder="my-service" pattern="[a-z0-9][a-z0-9-]*" />
       </label>
-      <div id="ob-step1-error" class="ob-error" style="display:none"></div>
+      <div id="ob-step1-error" class="ob-error hidden"></div>
       <div class="ob-actions">
-        <button id="ob-fetch-btn" onclick="onboardFetch()">Fetch Spec</button>
-        <button onclick="closeOnboardModal()">Cancel</button>
+        <button id="ob-fetch-btn">Fetch Spec</button>
+        <button id="ob-cancel-step1-btn">Cancel</button>
       </div>
     </div>
 
     <!-- Step 2 -->
-    <div id="onboard-step2" style="display:none">
+    <div id="onboard-step2" class="hidden">
       <p><strong>Image:</strong> <span id="ob-image"></span></p>
 
       <h3>Ports</h3>
@@ -260,7 +257,7 @@
       <div id="ob-volumes"></div>
 
       <h3>Environment</h3>
-      <p class="ob-secrets-hint" style="font-size:0.85rem;color:var(--muted);margin:4px 0 8px;">
+      <p class="ob-secrets-hint secrets-hint">
         Secret fields may be left empty — the component deploys without them.
         Fill them in afterwards via <strong>Configure&nbsp;→&nbsp;Save</strong>, which auto-restarts the component.
       </p>
@@ -269,9 +266,9 @@
         <tbody id="ob-env-body"></tbody>
       </table>
 
-      <div id="ob-config-section" style="display:none">
+      <div id="ob-config-section" class="hidden">
         <h3>Configuration (config.json)</h3>
-        <p class="ob-secrets-hint" style="font-size:0.85rem;color:var(--muted);margin:4px 0 8px;">
+        <p class="ob-secrets-hint secrets-hint">
           Secret fields may be left empty — the component deploys without them.
           Fill them in afterwards via <strong>Configure&nbsp;→&nbsp;Save</strong>, which auto-restarts the component.
         </p>
@@ -289,12 +286,12 @@
         Allow chat agent access
       </label>
 
-      <div id="ob-mill-tracking" style="margin-top:12px;">
+      <div id="ob-mill-tracking" class="mt-12">
         <label>
           <input type="checkbox" id="ob-register-mill" checked>
           Report problems to mill <em>(recommended)</em>
         </label>
-        <div style="font-size:0.78rem;color:#94a3b8;margin:2px 0 0 24px;">
+        <div class="feature-note">
           Caretaker findings for this component (failed health checks, update
           problems) are filed as issues on the component's repo board, where
           mill picks them up. Has no effect unless the caretaker is enabled
@@ -302,12 +299,12 @@
         </div>
       </div>
 
-      <div id="ob-deploy-progress" class="ob-progress" style="display:none"></div>
-      <div id="ob-step2-error" class="ob-error" style="display:none"></div>
+      <div id="ob-deploy-progress" class="ob-progress hidden"></div>
+      <div id="ob-step2-error" class="ob-error hidden"></div>
       <div class="ob-actions">
-        <button id="ob-deploy-btn" onclick="onboardDeploy()">Deploy</button>
-        <button id="ob-back-btn" onclick="showStep1()">Back</button>
-        <button id="ob-cancel-btn" onclick="closeOnboardModal()">Cancel</button>
+        <button id="ob-deploy-btn">Deploy</button>
+        <button id="ob-back-btn">Back</button>
+        <button id="ob-cancel-btn">Cancel</button>
       </div>
     </div>
   </div>
@@ -315,30 +312,28 @@
 
 <!-- Settings section -->
 <div id="settings-section" style="display:none;">
-  <h2 style="margin-bottom:16px;color:var(--blue);">System Settings</h2>
-  <form id="settings-form" onsubmit="saveSettings(event)">
+  <h2 class="section-header">System Settings</h2>
+  <form id="settings-form">
     <input type="hidden" name="csrftoken" value="{{csrf_token}}">
-    <table style="margin-bottom:20px;">
+    <table class="settings-table">
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Disk Warning (% free)</td>
-        <td style="padding:6px 12px;">
-          <input id="s-disk-warn" type="number" step="0.1" min="0" max="100"
-                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
-                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:100px;" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">% free (warn when below)</span>
+        <td class="settings-label">Disk Warning (% free)</td>
+        <td class="settings-value">
+          <input id="s-disk-warn" type="number" step="0.1" min="0" max="100" class="num-input-sm" />
+          <span class="settings-hint">% free (warn when below)</span>
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Registry Check Interval (s)</td>
-        <td style="padding:6px 12px;">
-          <input id="s-reg-interval" type="number" step="1" min="0" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:120px;" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">0 = disabled</span>
+        <td class="settings-label">Registry Check Interval (s)</td>
+        <td class="settings-value">
+          <input id="s-reg-interval" type="number" step="1" min="0" class="num-input-md" />
+          <span class="settings-hint">0 = disabled</span>
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Log Level</td>
-        <td style="padding:6px 12px;">
-          <select id="s-log-level" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;">
+        <td class="settings-label">Log Level</td>
+        <td class="settings-value">
+          <select id="s-log-level" class="settings-input">
             <option value="DEBUG">DEBUG</option>
             <option value="INFO">INFO</option>
             <option value="WARNING">WARNING</option>
@@ -348,121 +343,117 @@
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Gateway Base Domain</td>
-        <td style="padding:6px 12px;">
+        <td class="settings-label">Gateway Base Domain</td>
+        <td class="settings-value">
           <input id="s-gateway-domain" type="text"
                  placeholder="e.g. deploy.example.com"
-                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
-                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">used for service shortcut links</span>
+                 class="gateway-input" />
+          <span class="settings-hint">used for service shortcut links</span>
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Auto-Prune Old Images</td>
-        <td style="padding:6px 12px;">
-          <input id="s-image-prune" type="checkbox" style="accent-color:var(--blue);" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">remove dangling images after updates (rollback images are kept)</span>
+        <td class="settings-label">Auto-Prune Old Images</td>
+        <td class="settings-value">
+          <input id="s-image-prune" type="checkbox" class="accent-checkbox" />
+          <span class="settings-hint">remove dangling images after updates (rollback images are kept)</span>
         </td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Daily Caretaker Pass</td>
-        <td style="padding:6px 12px;">
-          <input id="s-caretaker-enabled" type="checkbox" onchange="onCaretakerEnabledChange()"
-                 style="accent-color:var(--blue);" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">enable periodic auto-update, health, and volume checks</span>
+        <td class="settings-label">Daily Caretaker Pass</td>
+        <td class="settings-value">
+          <input id="s-caretaker-enabled" type="checkbox"
+                 class="accent-checkbox" />
+          <span class="settings-hint">enable periodic auto-update, health, and volume checks</span>
         </td>
       </tr>
       <tr id="s-caretaker-interval-row" style="display:none">
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Caretaker Interval (hours)</td>
-        <td style="padding:6px 12px;">
-          <input id="s-caretaker-interval" type="number" step="1" min="1"
-                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
-                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:120px;" />
+        <td class="settings-label">Caretaker Interval (hours)</td>
+        <td class="settings-value">
+          <input id="s-caretaker-interval" type="number" step="1" min="1" class="num-input-md" />
         </td>
       </tr>
       <tr id="s-mill-component-row" style="display:none">
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Mill Component</td>
-        <td style="padding:6px 12px;">
+        <td class="settings-label">Mill Component</td>
+        <td class="settings-value">
           <input id="s-mill-component" type="text"
                  placeholder="mill"
-                 style="background:#0f172a;border:1px solid #475569;border-radius:4px;
-                        color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:280px;" />
-          <span style="font-size:0.75rem;color:#94a3b8;margin-left:6px;">component id the caretaker reports findings to</span>
+                 class="gateway-input" />
+          <span class="settings-hint">component id the caretaker reports findings to</span>
         </td>
       </tr>
     </table>
-    <h3 style="margin-bottom:8px;color:var(--blue);">LLMIO Tier Configuration</h3>
-    <p style="font-size:0.8rem;color:#94a3b8;margin-bottom:12px;">Fleet-global mapping from capability level to provider and model. Changing these values affects every LLM component on its next deploy.</p>
-    <table style="margin-bottom:20px;" id="tier-config-table">
+    <h3 class="section-subheader">LLMIO Tier Configuration</h3>
+    <p class="tier-desc">Fleet-global mapping from capability level to provider and model. Changing these values affects every LLM component on its next deploy.</p>
+    <table class="settings-table" id="tier-config-table">
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;width:80px;">Level 1</td>
-        <td style="padding:6px 6px;"><input id="tier-level1-provider" type="text" placeholder="openrouter-deepseek" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:140px;" /></td>
-        <td style="padding:6px 6px;"><input id="tier-level1-model" type="text" placeholder="deepseek-v4-flash" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:240px;" /></td>
+        <td class="settings-label tier-label">Level 1</td>
+        <td class="tier-cell"><input id="tier-level1-provider" type="text" placeholder="openrouter-deepseek" class="tier-input-sm" /></td>
+        <td class="tier-cell"><input id="tier-level1-model" type="text" placeholder="deepseek-v4-flash" class="tier-input-md" /></td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Level 2</td>
-        <td style="padding:6px 6px;"><input id="tier-level2-provider" type="text" placeholder="openrouter-deepseek" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:140px;" /></td>
-        <td style="padding:6px 6px;"><input id="tier-level2-model" type="text" placeholder="deepseek-v4-pro" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:240px;" /></td>
+        <td class="settings-label tier-label">Level 2</td>
+        <td class="tier-cell"><input id="tier-level2-provider" type="text" placeholder="openrouter-deepseek" class="tier-input-sm" /></td>
+        <td class="tier-cell"><input id="tier-level2-model" type="text" placeholder="deepseek-v4-pro" class="tier-input-md" /></td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Level 3</td>
-        <td style="padding:6px 6px;"><input id="tier-level3-provider" type="text" placeholder="claudeSDK" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:140px;" /></td>
-        <td style="padding:6px 6px;"><input id="tier-level3-model" type="text" placeholder="opus" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:240px;" /></td>
+        <td class="settings-label tier-label">Level 3</td>
+        <td class="tier-cell"><input id="tier-level3-provider" type="text" placeholder="claudeSDK" class="tier-input-sm" /></td>
+        <td class="tier-cell"><input id="tier-level3-model" type="text" placeholder="opus" class="tier-input-md" /></td>
       </tr>
       <tr>
-        <td style="padding:6px 12px;color:#94a3b8;font-size:0.9rem;">Level 4</td>
-        <td style="padding:6px 6px;"><input id="tier-level4-provider" type="text" placeholder="claudeSDK" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:140px;" /></td>
-        <td style="padding:6px 6px;"><input id="tier-level4-model" type="text" placeholder="claude-fable-5" style="background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;padding:5px 10px;font-size:0.9rem;width:240px;" /></td>
+        <td class="settings-label tier-label">Level 4</td>
+        <td class="tier-cell"><input id="tier-level4-provider" type="text" placeholder="claudeSDK" class="tier-input-sm" /></td>
+        <td class="tier-cell"><input id="tier-level4-model" type="text" placeholder="claude-fable-5" class="tier-input-md" /></td>
       </tr>
     </table>
-    <div style="display:flex;gap:8px;">
+    <div class="flex-row">
       <button type="submit" class="btn-primary">Save Settings</button>
-      <button type="button" class="btn-secondary" onclick="hideSettingsSection()">Back to Dashboard</button>
+      <button type="button" id="settings-back-btn" class="btn-secondary">Back to Dashboard</button>
     </div>
   </form>
-  <div id="settings-toast" style="margin-top:12px;font-size:0.85rem;"></div>
+  <div id="settings-toast" class="settings-toast"></div>
 
   <!-- ═══ Claude auth panel ════════════════════════════════════════ -->
-  <section class="disk-panel" id="claude-auth-panel" style="margin-top:24px;">
+  <section class="disk-panel mt-24" id="claude-auth-panel">
     <div class="disk-header">
       <span class="disk-title">Claude Auth</span>
-      <span id="claude-auth-status-badge" style="font-size:0.85rem;"></span>
+      <span id="claude-auth-status-badge" class="text-sm"></span>
     </div>
-    <div id="claude-auth-detail" style="font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"></div>
+    <div id="claude-auth-detail" class="auth-detail"></div>
 
     <!-- Login flow -->
     <div id="claude-auth-login-section" style="display:none;">
-      <div id="claude-auth-oauth-url-box" style="margin-bottom:8px;padding:8px 12px;background:#1e1e1e;border-radius:4px;word-break:break-all;">
-        <strong style="color:#e2e8f0;">1.</strong> Visit this URL to authorize:<br>
-        <a id="claude-auth-oauth-url" href="#" target="_blank" rel="noopener" style="color:var(--blue);font-size:0.82rem;"></a>
+      <div id="claude-auth-oauth-url-box" class="auth-url-box">
+        <strong class="text-bright">1.</strong> Visit this URL to authorize:<br>
+        <a id="claude-auth-oauth-url" href="#" target="_blank" rel="noopener" class="link-blue-sm"></a>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <label style="font-size:0.85rem;color:#94a3b8;flex-shrink:0;">
-          <strong style="color:#e2e8f0;">2.</strong> Paste authorization code:
+      <div class="auth-step-row">
+        <label class="env-label-inline">
+          <strong class="text-bright">2.</strong> Paste authorization code:
         </label>
-        <input id="claude-auth-code-input" type="text" placeholder="Auth code from browser…" style="flex:1;padding:6px 10px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.85rem;">
-        <button id="claude-auth-submit-btn" class="btn-primary" style="font-size:0.82rem;">Complete Login</button>
-        <button id="claude-auth-cancel-btn" class="btn-secondary" style="font-size:0.82rem;">Cancel</button>
+        <input id="claude-auth-code-input" type="text" placeholder="Auth code from browser…" class="auth-code-input">
+        <button id="claude-auth-submit-btn" class="btn-primary btn-sm">Complete Login</button>
+        <button id="claude-auth-cancel-btn" class="btn-secondary btn-sm">Cancel</button>
       </div>
-      <div id="claude-auth-login-error" style="display:none;padding:8px 12px;background:var(--red-bg);color:var(--red);border-radius:4px;font-size:0.82rem;margin-bottom:8px;"></div>
+      <div id="claude-auth-login-error" style="display:none;" class="auth-error"></div>
     </div>
 
     <!-- Fallback: paste credentials JSON -->
-    <details id="claude-auth-paste-section" style="margin-top:8px;">
-      <summary style="cursor:pointer;font-size:0.82rem;color:#64748b;">Paste credentials JSON (fallback)</summary>
-      <div style="margin-top:8px;">
-        <textarea id="claude-auth-paste-textarea" rows="6" placeholder='Paste .credentials.json content…' style="width:100%;padding:8px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;font-size:0.8rem;font-family:monospace;resize:vertical;"></textarea>
-        <button id="claude-auth-paste-btn" class="btn-secondary" style="margin-top:4px;font-size:0.82rem;">Save Credentials</button>
-        <span id="claude-auth-paste-msg" style="margin-left:8px;font-size:0.82rem;"></span>
+    <details id="claude-auth-paste-section" class="mt-8">
+      <summary class="details-summary">Paste credentials JSON (fallback)</summary>
+      <div class="mt-8">
+        <textarea id="claude-auth-paste-textarea" rows="6" placeholder='Paste .credentials.json content…' class="paste-textarea"></textarea>
+        <button id="claude-auth-paste-btn" class="btn-secondary paste-btn-margin">Save Credentials</button>
+        <span id="claude-auth-paste-msg" class="paste-msg"></span>
       </div>
     </details>
 
     <!-- Actions -->
-    <div style="margin-top:10px;display:flex;gap:8px;">
-      <button id="claude-auth-login-btn" class="btn-primary" style="font-size:0.82rem;">Log in with Claude</button>
-      <button id="claude-auth-refresh-btn" class="btn-secondary" style="font-size:0.82rem;">Refresh Status</button>
+    <div class="auth-actions-row">
+      <button id="claude-auth-login-btn" class="btn-primary btn-sm">Log in with Claude</button>
+      <button id="claude-auth-refresh-btn" class="btn-secondary btn-sm">Refresh Status</button>
     </div>
-    <div id="claude-auth-toast" style="margin-top:8px;font-size:0.85rem;min-height:1.2em;"></div>
+    <div id="claude-auth-toast" class="toast-row"></div>
   </section>
 </div>
 
@@ -471,7 +462,7 @@
   <div class="vb-panel">
     <div class="vb-header">
       <h2 id="vb-modal-title">Volume: <span id="vb-volume-name"></span></h2>
-      <button class="vb-close" onclick="closeVolumeBrowser()" title="Close">&times;</button>
+      <button id="vb-close-btn" class="vb-close" title="Close">&times;</button>
     </div>
     <div id="vb-breadcrumb" class="vb-breadcrumb"></div>
     <div id="vb-listing" class="vb-listing"></div>

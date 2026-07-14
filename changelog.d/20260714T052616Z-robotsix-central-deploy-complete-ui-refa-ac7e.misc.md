@@ -1,0 +1,1 @@
+robotsix-central-deploy: Complete UI refactoring — remaining inline code after initial extraction

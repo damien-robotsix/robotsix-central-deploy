@@ -19,6 +19,9 @@ router = APIRouter()
 _STATIC_DIR = Path(__file__).parent / "static"
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
 _CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
+_DEPLOY_CONTRACT_HTML = (Path(__file__).parent / "deploy-contract.html").read_text(
+    encoding="utf-8"
+)
 _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 
 
@@ -200,19 +203,8 @@ async def logout(request: Request) -> Response:
 
 @router.get("/help/deploy-contract", include_in_schema=False)
 def get_deploy_contract() -> Response:
-    html = (
-        "<!DOCTYPE html><html><head><meta charset=utf-8>"
-        "<title>Deploy Contract</title>"
-        "<style>"
-        "body{background:#0f172a;color:#e2e8f0;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;"
-        "margin:0;padding:20px 24px}"
-        "a{color:#60a5fa}"
-        "pre{white-space:pre-wrap;word-wrap:break-word}"
-        ".nav{margin-bottom:16px}"
-        "</style></head><body>"
-        '<div class="nav"><a href="/ui">← Dashboard</a></div>'
-        f"<pre>{_escape_html(_CONTRACT)}</pre>"
-        "</body></html>"
+    html = _DEPLOY_CONTRACT_HTML.replace(
+        "{{contract_content}}", _escape_html(_CONTRACT)
     )
     return Response(content=html, media_type="text/html; charset=utf-8")
 

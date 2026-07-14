@@ -2994,7 +2994,117 @@ async function pollSelfUpdateRecovery(startedAt) {
   setTimeout(() => pollSelfUpdateRecovery(startedAt), 3000);
 }
 
+// Wire up event listeners for all buttons/forms (replaces inline onclick/onsubmit/onchange)
+function wireEventListeners() {
+  // Header buttons
+  const addBtn = document.getElementById('add-component-btn');
+  if (addBtn) addBtn.addEventListener('click', openOnboardModal);
+
+  const settingsBtn = document.getElementById('settings-btn');
+  if (settingsBtn) settingsBtn.addEventListener('click', showSettingsSection);
+
+  const selfUpdateBtn = document.getElementById('self-update-btn');
+  if (selfUpdateBtn) selfUpdateBtn.addEventListener('click', triggerSelfUpdate);
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', doLogout);
+
+  // Warning banner close
+  const warningClose = document.getElementById('warning-close-btn');
+  if (warningClose) warningClose.addEventListener('click', hideWarning);
+
+  // Caretaker degraded banner close
+  const caretakerClose = document.getElementById('caretaker-degraded-close-btn');
+  if (caretakerClose) caretakerClose.addEventListener('click', function() {
+    document.getElementById('caretaker-degraded-banner').style.display = 'none';
+  });
+
+  // Remove modal
+  const removeCancel = document.getElementById('remove-cancel-btn');
+  if (removeCancel) removeCancel.addEventListener('click', closeRemoveModal);
+
+  const removeClose = document.getElementById('remove-close-btn');
+  if (removeClose) removeClose.addEventListener('click', closeRemoveModal);
+
+  const removeConfirm = document.getElementById('remove-confirm-btn');
+  if (removeConfirm) removeConfirm.addEventListener('click', confirmRemove);
+
+  const removeDelVols = document.getElementById('remove-delete-volumes');
+  if (removeDelVols) removeDelVols.addEventListener('change', updateRemoveBtn);
+
+  // Env modal
+  const envSave = document.getElementById('env-save-btn');
+  if (envSave) envSave.addEventListener('click', saveEnvChanges);
+
+  const envCancel = document.getElementById('env-cancel-btn');
+  if (envCancel) envCancel.addEventListener('click', closeEnvModal);
+
+  const envClose = document.getElementById('env-close-btn');
+  if (envClose) envClose.addEventListener('click', closeEnvModal);
+
+  const envSync = document.getElementById('env-sync-keys-btn');
+  if (envSync) envSync.addEventListener('click', syncEnvKeys);
+
+  // Config modal
+  const configSave = document.getElementById('config-save-btn');
+  if (configSave) configSave.addEventListener('click', saveConfigValues);
+
+  const configCancel = document.getElementById('config-cancel-btn');
+  if (configCancel) configCancel.addEventListener('click', closeConfigModal);
+
+  const configRawToggle = document.getElementById('config-raw-toggle-btn');
+  if (configRawToggle) configRawToggle.addEventListener('click', toggleConfigMode);
+
+  const configRefreshSchema = document.getElementById('config-refresh-schema-btn');
+  if (configRefreshSchema) configRefreshSchema.addEventListener('click', refreshConfigSchema);
+
+  // Log modal
+  const logClose = document.getElementById('log-close-btn');
+  if (logClose) logClose.addEventListener('click', closeLogs);
+
+  // History modal
+  const historyClose = document.getElementById('history-close-btn');
+  if (historyClose) historyClose.addEventListener('click', closeHistoryModal);
+
+  const historyCancel = document.getElementById('history-cancel-btn');
+  if (historyCancel) historyCancel.addEventListener('click', closeHistoryModal);
+
+  // Onboard modal
+  const obCloseX = document.getElementById('ob-close-x');
+  if (obCloseX) obCloseX.addEventListener('click', closeOnboardModal);
+
+  const obFetch = document.getElementById('ob-fetch-btn');
+  if (obFetch) obFetch.addEventListener('click', onboardFetch);
+
+  const obDeploy = document.getElementById('ob-deploy-btn');
+  if (obDeploy) obDeploy.addEventListener('click', onboardDeploy);
+
+  const obBack = document.getElementById('ob-back-btn');
+  if (obBack) obBack.addEventListener('click', showStep1);
+
+  const obCancel = document.getElementById('ob-cancel-btn');
+  if (obCancel) obCancel.addEventListener('click', closeOnboardModal);
+
+  const obCancelStep1 = document.getElementById('ob-cancel-step1-btn');
+  if (obCancelStep1) obCancelStep1.addEventListener('click', closeOnboardModal);
+
+  // Settings
+  const settingsForm = document.getElementById('settings-form');
+  if (settingsForm) settingsForm.addEventListener('submit', saveSettings);
+
+  const caretakerCheck = document.getElementById('s-caretaker-enabled');
+  if (caretakerCheck) caretakerCheck.addEventListener('change', onCaretakerEnabledChange);
+
+  const settingsBack = document.getElementById('settings-back-btn');
+  if (settingsBack) settingsBack.addEventListener('click', hideSettingsSection);
+
+  // Volume browser
+  const vbClose = document.getElementById('vb-close-btn');
+  if (vbClose) vbClose.addEventListener('click', closeVolumeBrowser);
+}
+
 (async () => {
+  wireEventListeners();
   wireClaudeAuthPanel();
   await loadSettings();
   loadDashboard();

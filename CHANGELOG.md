@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Complete UI refactor: extract inline `<style>` and `<script>` blocks from `ui/login.html` into `ui/static/login.css` and `ui/static/login.js`; replace `get_deploy_contract()` inline HTML string concatenation with `ui/deploy-contract.html` template; replace ~110 inline `style="..."` attributes in `dashboard.html` with CSS classes defined in `dashboard.css`; replace all 31 inline event handlers (`onclick`, `onsubmit`, `onchange`) with `addEventListener` bindings in `dashboard.js` via `wireEventListeners()`.
 - Extract shared `_call_github_endpoint` helper in `chat_github.py` to eliminate duplicated try/except/raise boilerplate across 9 GitHub endpoint handlers. Read handlers use the helper directly; write handlers additionally pass an `audit_entry` for audit logging on success.
 - Extract shared `_read_and_parse_credentials` helper in `_auth_ops.py` to eliminate duplicated volume-exist → read → parse orchestration in `check_claude_auth` and `read_claude_credentials`.
 - Added `GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow` and `PUT` endpoints to read and set default workflow permissions (including `can_approve_pull_request_reviews`).
@@ -14,7 +15,7 @@ All notable changes to robotsix-central-deploy.
 - Add `POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge` endpoint for merging (or merge-queuing) pull requests via the GitHub App installation token. Optional `merge_method` and `sha` guard are passed through to GitHub. When the repository requires a merge queue, the endpoint falls back to a raw API requester to enqueue the PR. Returns 404 for repos the credential doesn't cover, 405 if merge is not allowed, 409 on conflicts, 422 for GitHub-side rejections, and 503 when the App is not configured. The github component skill doc now includes the endpoint with an explicit 🛑 confirmation-gate safety rule.
 - Extract duplicated volume-write boilerplate from ``write_config_to_volume`` and ``write_llmio_tier_config_to_volume`` into private ``_write_json_to_volume`` helper
 - Replace unmaintained `starlette-csrf` with actively maintained `asgi-csrf` (v0.11) for CSRF protection. The `GatewayAwareCSRFMiddleware` pattern (skipping CSRF for gateway-proxied subdomain requests) is preserved.
-- Extract ``_read_volume_credentials`` helper in ``_auth_ops.py``, deduplicating the busybox container-run boilerplate shared between ``check_claude_auth`` and ``read_claude_credentials``.
+- Extract ``_read_volume_credentials`` helper in ``_auth_ops.py``, deduplicating the busybox container-run boilerplate shared between ``check_claude_auth`` and ``read_claude_credentials``. (mill: robotsix-central-deploy: Complete UI refactoring — remaining inline code after initial extraction (20260714T052616Z-robotsix-central-deploy-complete-ui-refa-ac7e) [WIP])
 - Guard `starlette-csrf` and `itsdangerous` imports so the lifecycle server
   remains importable (and the CSRF feature degrades gracefully) when those
   optional packages are not installed in the environment.

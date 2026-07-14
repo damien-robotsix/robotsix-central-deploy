@@ -406,3 +406,254 @@
     color: var(--blue); cursor: pointer; text-decoration: none;
   }
   .volume-name-cell:hover { color: #93c5fd; text-decoration: underline; }
+
+/* Utility: hide element */
+.hidden { display: none; }
+
+/* Toast messages */
+.toast-row { margin-top:8px; font-size:0.85rem; min-height:1.2em; }
+
+/* Header action buttons (add-component, settings, logout, deploy, etc.) */
+.header-btn {
+  padding: 6px 14px; font-size: 0.85rem;
+  border: 1px solid #475569; border-radius: 4px;
+  background: #1e293b; color: #cbd5e1; cursor: pointer;
+}
+
+/* Settings table cell — label column */
+.settings-label {
+  padding: 6px 12px; color: #94a3b8; font-size: 0.9rem;
+}
+
+/* Settings table cell — value column */
+.settings-value {
+  padding: 6px 12px;
+}
+
+/* Settings form input/select base style */
+.settings-input {
+  background: #0f172a; border: 1px solid #475569; border-radius: 4px;
+  color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem;
+}
+
+/* Small hint text next to settings inputs */
+.settings-hint {
+  font-size: 0.75rem; color: #94a3b8; margin-left: 6px;
+}
+
+/* Warning/amber banner variant (same structure as error-banner but amber) */
+.warning-banner {
+  display: none; background: rgba(251,146,60,0.15);
+  color: #fb923c; border: 1px solid #fb923c;
+}
+
+/* Close button inside banners */
+.banner-close {
+  background: none; border: none; color: inherit;
+  cursor: pointer; float: right; font-size: 1.1rem;
+}
+
+/* Flex row with gap (used in several places) */
+.flex-row { display: flex; gap: 8px; }
+
+/* Form section label (like env-section label with checkbox) */
+.form-check-label {
+  display: flex; gap: 8px; align-items: center; cursor: pointer;
+}
+
+/* Highlighted warning box (e.g. delete-volumes warning) */
+.warning-box {
+  border: 1px solid #c0392b; border-radius: 4px;
+  padding: 10px 12px; background: #2a1013;
+}
+
+/* Red warning text */
+.text-danger { color: #f87171; }
+
+/* Small muted text */
+.text-muted-sm { color: #94a3b8; font-size: 0.78rem; }
+
+/* Small danger text */
+.text-danger-sm { color: #fca5a5; font-size: 0.8rem; }
+
+/* Blue link style */
+.link-blue { color: #60a5fa; text-decoration: underline; }
+
+/* Small button-like element (e.g. env modal mem-limit) */
+.input-sm { width: 120px; }
+
+/* Textarea for raw config */
+.config-textarea {
+  display: none; width: 100%; height: 300px;
+  font-family: monospace; font-size: 0.82rem;
+  background: #0f172a; color: #e2e8f0;
+  border: 1px solid #475569; border-radius: 4px;
+  padding: 10px; resize: vertical;
+}
+
+/* Onboard modal flex header */
+.onboard-header-row {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 12px;
+}
+
+/* Onboard step intro text */
+.onboard-step-intro {
+  margin: 0 0 10px; font-size: 0.82rem; color: #94a3b8;
+}
+
+/* Secrets hint text */
+.secrets-hint {
+  font-size: 0.85rem; color: var(--muted); margin: 4px 0 8px;
+}
+
+/* Section header with blue text */
+.section-header { margin-bottom: 16px; color: var(--blue); }
+
+/* Section sub-header */
+.section-subheader { margin-bottom: 8px; color: var(--blue); }
+
+/* Settings table */
+.settings-table { margin-bottom: 20px; }
+
+/* Tier config table */
+.tier-config-table { margin-bottom: 20px; }
+
+/* Tier config input width 140px */
+.tier-input-sm { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem; width: 140px; }
+
+/* Tier config input width 240px */
+.tier-input-md { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem; width: 240px; }
+
+/* Gateway domain input */
+.gateway-input { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem; width: 280px; }
+
+/* Number input small */
+.num-input-sm { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem; width: 100px; }
+
+/* Number input medium */
+.num-input-md { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem; width: 120px; }
+
+/* Tier description text */
+.tier-desc { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; }
+
+/* Checkbox accent */
+.accent-checkbox { accent-color: var(--blue); }
+
+/* Self-update button (green variant) */
+.self-update-btn {
+  display: none; padding: 6px 14px; font-size: 0.85rem;
+  border: 1px solid #16a34a; border-radius: 4px;
+  background: #14532d; color: #bbf7d0; cursor: pointer;
+}
+
+/* Button text margin */
+.btn-margin-left { margin-left: auto; }
+
+/* Clickable details summary */
+.details-summary { cursor: pointer; font-size: 0.82rem; color: #64748b; }
+
+/* Section with top margin */
+.mt-24 { margin-top: 24px; }
+
+/* Mill tracking note */
+.mill-tracking-note { font-size: 0.78rem; color: #94a3b8; margin: 2px 0 0 24px; }
+
+/* Env row inline label */
+.env-label-inline { font-size: 0.85rem; color: #94a3b8; flex-shrink: 0; }
+
+/* Auth URL box */
+.auth-url-box { margin-bottom: 8px; padding: 8px 12px; background: #1e1e1e; border-radius: 4px; word-break: break-all; }
+
+/* Auth step row */
+.auth-step-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+
+/* Paste textarea */
+.paste-textarea { width: 100%; padding: 8px; background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; font-size: 0.8rem; font-family: monospace; resize: vertical; }
+
+/* Paste button row margin */
+.paste-btn-margin { margin-top: 4px; font-size: 0.82rem; }
+
+/* Claude auth actions row */
+.auth-actions-row { margin-top: 10px; display: flex; gap: 8px; }
+
+/* Auth toast */
+.auth-toast { margin-top: 8px; font-size: 0.85rem; min-height: 1.2em; }
+
+/* Claude auth detail */
+.auth-detail { font-size: 0.82rem; color: #94a3b8; margin-bottom: 8px; }
+
+/* Settings toast */
+.settings-toast { margin-top: 12px; font-size: 0.85rem; }
+
+/* Input for mem-limit */
+.mem-limit-input { width: 120px; }
+
+/* Env mem-limit hint */
+.env-mem-hint { font-size: 0.85em; color: var(--text-muted); margin-left: 0.5rem; }
+
+/* Claude mount hint */
+.claude-mount-hint { font-size: 0.82em; color: var(--text-muted); margin-left: 0.5rem; }
+
+/* Log modal style already has .log-overlay etc. */
+
+/* Deploy progress */
+.deploy-progress { display: none; }
+
+/* Log overlay (already in CSS, these are display:none by default) */
+
+/* Alert close button */
+.alert-close-btn { font-size: 1.1rem; }
+
+/* Env modal constant */
+.env-panel-max-460 { max-width: 460px; }
+
+/* History panel width */
+.history-panel-width { max-width: 780px; }
+
+/* History scroll region */
+.history-scroll { max-height: 60vh; overflow-y: auto; }
+
+/* Feature note text (e.g. "Has no effect unless...") */
+.feature-note { font-size: 0.78rem; color: #94a3b8; margin: 2px 0 0 24px; }
+
+/* Loading cell (centered grey text in table) */
+.loading-cell { text-align: center; color: #9e9e9e; }
+
+/* Tier config label column width */
+.tier-label { width: 80px; }
+
+/* Tier config input cell */
+.tier-cell { padding: 6px 6px; }
+
+/* Margin utilities */
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.no-margin { margin: 0; }
+
+/* Small button variant */
+.btn-sm { font-size: 0.82rem; }
+
+/* Bright text (for labels in dark sections) */
+.text-bright { color: #e2e8f0; }
+
+/* Blue link small */
+.link-blue-sm { color: var(--blue); font-size: 0.82rem; }
+
+/* Auth code input (full-width flex input) */
+.auth-code-input { flex: 1; padding: 6px 10px; background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; font-size: 0.85rem; }
+
+/* Auth error message */
+.auth-error { padding: 8px 12px; background: var(--red-bg); color: var(--red); border-radius: 4px; font-size: 0.82rem; margin-bottom: 8px; }
+
+/* Paste status message */
+.paste-msg { margin-left: 8px; font-size: 0.82rem; }
+
+/* Slightly larger text */
+.text-sm { font-size: 0.85rem; }
+
+/* Button padding wide */
+.btn-pad { padding: 6px 16px; }
+
+/* Delete-volumes label (flex-start variant of form-check-label) */
+.form-check-label-start { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
