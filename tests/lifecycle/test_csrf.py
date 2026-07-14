@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("starlette_csrf")
+
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
