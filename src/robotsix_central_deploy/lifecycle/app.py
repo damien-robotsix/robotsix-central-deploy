@@ -21,7 +21,7 @@ try:
 except ImportError:
     _HAS_CSRF = False
     logging.getLogger(__name__).warning(
-        "starlette-csrf not installed; CSRF middleware disabled"
+        "asgi-csrf not installed; CSRF middleware disabled"
     )
 
 try:
@@ -98,7 +98,6 @@ if _HAS_CSRF:
         GatewayAwareCSRFMiddleware,
         secret=_initial_csrf_secret,
         cookie_secure=True,
-        cookie_httponly=True,
         cookie_samesite="lax",
         exempt_urls=_CSRF_EXEMPT_URLS,
     )

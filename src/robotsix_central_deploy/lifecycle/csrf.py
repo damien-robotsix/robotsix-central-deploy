@@ -1,11 +1,12 @@
 """CSRF protection helpers.
 
-Provides token generation / validation and a gateway-aware subclass of
-``starlette_csrf.CSRFMiddleware``.
+Provides token generation / validation and a gateway-aware wrapper around
+``asgi_csrf`` (Double Submit Cookie pattern).
 """
 
 from __future__ import annotations
 
+import re as _re
 import secrets as _secrets
 
 try:
@@ -22,13 +23,13 @@ except ImportError:
     )
 
 try:
+    from asgi_csrf import asgi_csrf as _asgi_csrf
     from starlette.datastructures import Headers
-    from starlette.types import Receive, Scope, Send
-    from starlette_csrf import CSRFMiddleware  # type: ignore[attr-defined]
+    from starlette.types import ASGIApp
 
-    _HAS_STARLETTE_CSRF = True
+    _HAS_ASGI_CSRF = True
 except ImportError:
-    _HAS_STARLETTE_CSRF = False
+    _HAS_ASGI_CSRF = False
 
 # Random secret if the operator doesn't supply one — regenerates on every
 # restart, which invalidates any outstanding CSRF cookies.  That's an
@@ -45,7 +46,7 @@ class CSRFHelper:
     """Generates and validates CSRF tokens (Double Submit Cookie pattern).
 
     Uses the same ``itsdangerous.URLSafeSerializer`` setup as
-    ``starlette_csrf.CSRFMiddleware`` so tokens are interoperable.
+    ``asgi_csrf`` so tokens are interoperable.
 
     When ``itsdangerous`` is not installed, operates in a no-op pass-through
     mode: ``generate`` returns a random token and ``validate`` always returns
@@ -81,9 +82,17 @@ class CSRFHelper:
             return False
 
 
-if _HAS_STARLETTE_CSRF:
+if _HAS_ASGI_CSRF:
 
-    class GatewayAwareCSRFMiddleware(CSRFMiddleware):
+    def GatewayAwareCSRFMiddleware(
+        app: ASGIApp,
+        *,
+        secret: str = "",
+        cookie_secure: bool = False,
+        cookie_httponly: bool = False,  # accepted for backward compat; ignored
+        cookie_samesite: str = "lax",
+        exempt_urls: list[_re.Pattern[str]] | None = None,
+    ) -> ASGIApp:
         """CSRF middleware that skips gateway-proxied component requests.
 
         ``exempt_urls`` only matches the request *path*, but the gateway
@@ -91,9 +100,14 @@ if _HAS_STARLETTE_CSRF:
         so unsafe-method requests to proxied apps (e.g. a chat message POST)
         would be rejected with a CSRF token those apps never receive.
         Proxied components are responsible for their own CSRF protection.
+
+        Returns an ASGI app wrapped with ``asgi_csrf``, configured to skip
+        CSRF for both gateway-proxied subdomain requests and explicitly
+        exempted URL patterns.
         """
 
-        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        def _should_skip(scope: dict[str, object]) -> bool:
+            # Gateway subdomain check — proxied components manage their own CSRF.
             if scope["type"] in ("http", "websocket"):
                 # Imported lazily: gateway.router pulls in lifecycle modules,
                 # and this module is imported during lifecycle.app start-up.
@@ -101,6 +115,20 @@ if _HAS_STARLETTE_CSRF:
 
                 headers = Headers(scope=scope)
                 if _extract_subdomain_name(headers, scope.get("app")) is not None:
-                    await self.app(scope, receive, send)
-                    return
-            await super().__call__(scope, receive, send)
+                    return True
+            # Exempt URL patterns — API routes authenticated via header-based
+            # auth (X-API-Key / Basic-Auth) not vulnerable to CSRF.
+            if exempt_urls and scope["type"] == "http":
+                path: str = str(scope.get("path", ""))
+                for pattern in exempt_urls:
+                    if pattern.match(path):
+                        return True
+            return False
+
+        return _asgi_csrf(  # type: ignore[no-any-return]
+            app,
+            signing_secret=secret,
+            cookie_secure=cookie_secure,
+            cookie_samesite=cookie_samesite,
+            skip_if_scope=_should_skip,
+        )

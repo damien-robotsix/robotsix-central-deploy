@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-pytest.importorskip("starlette_csrf")
+pytest.importorskip("asgi_csrf")
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
