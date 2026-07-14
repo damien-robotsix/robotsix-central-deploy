@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract duplicated volume-write boilerplate from ``write_config_to_volume`` and ``write_llmio_tier_config_to_volume`` into private ``_write_json_to_volume`` helper
 - Guard `starlette-csrf` and `itsdangerous` imports so the lifecycle server
   remains importable (and the CSRF feature degrades gracefully) when those
   optional packages are not installed in the environment.
