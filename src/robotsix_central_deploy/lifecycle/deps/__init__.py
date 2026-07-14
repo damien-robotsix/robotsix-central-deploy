@@ -32,7 +32,7 @@ from .dependencies import (
     _get_sibling_pairs,
     _get_store,
 )
-from .jobs import DeployJob, JobRegistry, OnboardJob
+from .jobs import DeployJob, Job, JobRegistry, OnboardJob
 from .lifespan import _seed_component_registry, lifespan
 from .seed import (
     _build_component_config_from_spec,
@@ -124,6 +124,7 @@ __all__ = [
     "_get_store",
     # jobs
     "DeployJob",
+    "Job",
     "JobRegistry",
     "OnboardJob",
     # lifespan

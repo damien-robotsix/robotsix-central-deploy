@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -715,7 +715,7 @@ async def onboard_job_status(
     return OnboardJobStatusResponse(
         job_id=job.job_id,
         component=job.component,
-        phase=job.phase,
+        phase=cast(OnboardJobPhase, job.phase),
         error=job.error,
         name=job.name,
         image=job.image,

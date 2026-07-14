@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.params import Body
@@ -278,7 +278,7 @@ async def _run_deploy_job(
 
         # Deploy — update job phase for health-wait visibility.
         if config.health_check is not None:
-            job_registry.update_deploy_phase(job_id, DeployJobPhase.WAITING_HEALTH)
+            job_registry.update_phase(job_id, DeployJobPhase.WAITING_HEALTH)
 
         outcome = await backend.deploy(record, config, image_ref)
 
@@ -310,7 +310,7 @@ async def _run_deploy_job(
             )
 
         # Deploy siblings
-        job_registry.update_deploy_phase(job_id, DeployJobPhase.DEPLOYING_SIBLINGS)
+        job_registry.update_phase(job_id, DeployJobPhase.DEPLOYING_SIBLINGS)
 
         async def _do_deploy_sibling(
             sib_config: ServiceConfig,
@@ -378,7 +378,7 @@ async def _run_deploy_job(
                 exc_info=True,
             )
 
-        job_registry.mark_deploy_done(
+        job_registry.mark_done(
             job_id,
             name=name,
             image=image_ref,
@@ -390,7 +390,7 @@ async def _run_deploy_job(
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
-        job_registry.mark_deploy_failed(job_id, str(exc))
+        job_registry.mark_failed(job_id, str(exc))
     finally:
         release_deploy_lock(name)
 
@@ -414,7 +414,7 @@ async def deploy_job_status(
     job_registry: JobRegistry = Depends(_get_job_registry),
 ) -> DeployJobStatusResponse:
     """Return the current phase of a background deploy job."""
-    job = job_registry.get_deploy(job_id)
+    job = job_registry.get(job_id)
     if job is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -423,7 +423,7 @@ async def deploy_job_status(
     return DeployJobStatusResponse(
         job_id=job.job_id,
         component=job.component,
-        phase=job.phase,
+        phase=cast(DeployJobPhase, job.phase),
         error=job.error,
         name=job.name,
         image=job.image,

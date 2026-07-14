@@ -249,7 +249,7 @@ class TestDeployEndpoint:
         # Manually create a deploy job to verify the polling endpoint.
         job_registry: JobRegistry = server_mod.app.state.job_registry
         job_id = job_registry.create_deploy("svc-a")
-        job_registry.update_deploy_phase(job_id, "waiting_health")
+        job_registry.update_phase(job_id, "waiting_health")
 
         resp = await client.get(f"/services/deploy-jobs/{job_id}", headers=auth_headers)
         assert resp.status_code == 200
