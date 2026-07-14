@@ -8,6 +8,7 @@ All notable changes to robotsix-central-deploy.
 
 - Extract duplicated volume-write boilerplate from ``write_config_to_volume`` and ``write_llmio_tier_config_to_volume`` into private ``_write_json_to_volume`` helper
 - Replace unmaintained `starlette-csrf` with actively maintained `asgi-csrf` (v0.11) for CSRF protection. The `GatewayAwareCSRFMiddleware` pattern (skipping CSRF for gateway-proxied subdomain requests) is preserved.
+- Extract ``_read_volume_credentials`` helper in ``_auth_ops.py``, deduplicating the busybox container-run boilerplate shared between ``check_claude_auth`` and ``read_claude_credentials``.
 - Guard `starlette-csrf` and `itsdangerous` imports so the lifecycle server
   remains importable (and the CSRF feature degrades gracefully) when those
   optional packages are not installed in the environment.

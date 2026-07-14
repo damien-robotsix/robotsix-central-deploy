@@ -1,0 +1,1 @@
+Extract duplicated busybox credential-read helper in _auth_ops.py (check_claude_auth / read_claude_credentials)
