@@ -99,7 +99,7 @@ function renderRow(svc) {
       <button onclick="doAction('${escAttr(svc.name)}', 'start')" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'stop')" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button onclick="doAction('${escAttr(svc.name)}', 'restart')" id="btn-restart-${escAttr(svc.name)}">Restart</button>
-      <button onclick="updateService('${escAttr(svc.name)}')" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container">Update</button>
+      <button onclick="updateService('${escAttr(svc.name)}')" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container"${_deployPhaseLabels[svc.name] ? ' disabled' : ''}>${_deployPhaseLabels[svc.name] ? escHtml(_deployPhaseLabels[svc.name]) : 'Update'}</button>
       <button onclick="openHistoryModal('${escAttr(svc.name)}')" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
       ${svc.has_config_yaml
         ? `<button onclick="openConfigModal('${escAttr(svc.name)}')" class="btn-primary" style="font-size:0.78rem;">Configure</button>
@@ -488,6 +488,24 @@ var DEPLOY_PHASE_LABELS = {
 
 var _deployJobPollTimers = {};
 
+// Current phase label per service while a deploy job is in flight.  The
+// periodic loadDashboard() refresh rewrites the whole table, so the Update
+// button must be re-rendered from this map (and re-queried by id) instead of
+// holding on to a DOM node that the refresh detaches.
+var _deployPhaseLabels = {};
+
+function setDeployInProgress(name, label) {
+  _deployPhaseLabels[name] = label;
+  const btn = document.getElementById(`btn-update-${name}`);
+  if (btn) { btn.disabled = true; btn.textContent = label; }
+}
+
+function clearDeployInProgress(name) {
+  delete _deployPhaseLabels[name];
+  const btn = document.getElementById(`btn-update-${name}`);
+  if (btn) { btn.disabled = false; btn.textContent = 'Update'; }
+}
+
 function stopDeployJobPoll(name) {
   if (_deployJobPollTimers[name] !== undefined) {
     clearTimeout(_deployJobPollTimers[name]);
@@ -495,7 +513,7 @@ function stopDeployJobPoll(name) {
   }
 }
 
-function pollDeployJob(name, jobId, btn, origText) {
+function pollDeployJob(name, jobId) {
   stopDeployJobPoll(name);
 
   function poll() {
@@ -508,23 +526,23 @@ function pollDeployJob(name, jobId, btn, origText) {
         if (res.status === 404) {
           stopDeployJobPoll(name);
           showRowError(name, 'Deploy job lost \u2014 server may have restarted.');
-          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          clearDeployInProgress(name);
           return;
         }
         if (!res.ok) {
           stopDeployJobPoll(name);
           var errData = await res.json().catch(function() { return {}; });
           showRowError(name, 'Deploy failed: ' + (errData.error || 'HTTP ' + res.status));
-          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          clearDeployInProgress(name);
           return;
         }
         var data = await res.json();
         var phase = data.phase;
-        if (btn) { btn.textContent = DEPLOY_PHASE_LABELS[phase] || phase; }
+        setDeployInProgress(name, DEPLOY_PHASE_LABELS[phase] || phase);
 
         if (phase === 'done') {
           stopDeployJobPoll(name);
-          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          clearDeployInProgress(name);
           // Refresh the row
           try {
             var svc = await fetchOneStatus(name);
@@ -537,14 +555,14 @@ function pollDeployJob(name, jobId, btn, origText) {
           }
         } else if (phase === 'failed') {
           stopDeployJobPoll(name);
-          showRowError(name, 'Deploy failed: ' + (data.error || 'unknown error'));
-          if (btn) { btn.disabled = false; btn.textContent = origText; }
-          // Try to refresh the row anyway
+          clearDeployInProgress(name);
+          // Refresh the row first — re-rendering it would wipe the error.
           try {
             var svc2 = await fetchOneStatus(name);
             var rowEl2 = document.getElementById('row-' + name);
             if (rowEl2) rowEl2.outerHTML = renderRow(svc2);
           } catch (e) { /* best-effort */ }
+          showRowError(name, 'Deploy failed: ' + (data.error || 'unknown error'));
           updateRefreshTime();
         } else {
           // Still in progress — keep polling.
@@ -553,7 +571,7 @@ function pollDeployJob(name, jobId, btn, origText) {
       } catch (err) {
         stopDeployJobPoll(name);
         showRowError(name, 'Deploy poll error: ' + err.message);
-        if (btn) { btn.disabled = false; btn.textContent = origText; }
+        clearDeployInProgress(name);
       }
     }, 1500);
   }
@@ -564,9 +582,7 @@ async function updateService(name) {
   if (!window.confirm(`Force-update "${name}" to the latest image?\n\nThis pulls the latest image from the registry and recreates the container (brief restart).`)) return;
   hideRowError(name);
   hideWarning();
-  const btn = document.getElementById(`btn-update-${name}`);
-  const orig = btn ? btn.textContent : 'Update';
-  if (btn) { btn.disabled = true; btn.textContent = 'Deploying\u2026'; }
+  setDeployInProgress(name, 'Deploying\u2026');
   try {
     const resp = await fetch(`/services/${encodeURIComponent(name)}/deploy`, {
       method: 'POST',
@@ -580,10 +596,10 @@ async function updateService(name) {
     }
     const body = await resp.json().catch(() => ({}));
     // 202 Accepted — poll the deploy job for progress.
-    pollDeployJob(name, body.job_id, btn, orig);
+    pollDeployJob(name, body.job_id);
   } catch (err) {
     showRowError(name, 'Update failed: ' + err.message);
-    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    clearDeployInProgress(name);
   }
 }
 
