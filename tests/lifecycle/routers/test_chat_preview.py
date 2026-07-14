@@ -565,7 +565,7 @@ class TestPreviewDeployEndpoint:
         server_mod._config = cfg
         server_mod.app.state.config = cfg
 
-        import robotsix_central_deploy.lifecycle.routers.chat_preview as cp_mod
+        cp_mod = sys.modules["robotsix_central_deploy.lifecycle.routers.chat_preview"]
 
         # Build a fake repo directory that the handler will clone into.
         real_preview_dir = tmp_path / "preview-repo-real"
