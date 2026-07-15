@@ -1,0 +1,1 @@
+ci_fix: out-of-scope CI failure — grep-lint (Trivy container CVE scan) in Dockerfile (update base image or .trivyignore to suppress pre-existing CVEs in perl/libsqlite3-0 Debian packages)
