@@ -277,10 +277,10 @@ class TestCspNoInlineScripts:
         html = (self._UI_DIR / "login.html").read_text(encoding="utf-8")
         # An inline <script> block has content between <script> and </script>.
         # <script src="..."></script> is fine (no inline body).
-        inline_script = re.search(r"<script[^>]*>[\s\S]*?</script>", html, re.IGNORECASE)
+        inline_script = re.search(r"(?i)<script[^>]*>[\s\S]*?</script>", html)
         if inline_script:
             tag = inline_script.group()
-            has_body = not re.match(r"<script\s+src=", tag, re.IGNORECASE)
+            has_body = not re.match(r"(?i)<script\s+src=", tag)
         else:
             has_body = False
         assert not has_body, "login.html must not contain inline <script> blocks"
