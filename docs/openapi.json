@@ -3405,6 +3405,133 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/actions/permissions/workflow": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Get default workflow permissions for a repository",
+        "description": "Get *owner*/*repo*'s default workflow permissions and whether Actions\ncan create and approve pull requests.",
+        "operationId": "get_workflow_permissions_chat_github_repos__owner___repo__actions_permissions_workflow_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Workflow Permissions Chat Github Repos  Owner   Repo  Actions Permissions Workflow Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Set default workflow permissions for a repository",
+        "description": "Set *owner*/*repo*'s default workflow permissions and whether Actions\ncan create and approve pull requests.",
+        "operationId": "set_workflow_permissions_chat_github_repos__owner___repo__actions_permissions_workflow_put",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowPermissionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Set Workflow Permissions Chat Github Repos  Owner   Repo  Actions Permissions Workflow Put"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "422": {
+            "description": "GitHub rejected the request"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/vulnerability-alerts": {
       "put": {
         "tags": [
@@ -6759,11 +6886,36 @@
             ],
             "title": "Has Wiki",
             "description": "Enable/disable the Wiki."
+          },
+          "allow_auto_merge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Auto Merge",
+            "description": "Allow auto-merge on pull requests."
+          },
+          "delete_branch_on_merge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delete Branch On Merge",
+            "description": "Automatically delete head branches after merge."
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "UpdateRepoRequest",
-        "description": "Body for ``PATCH /chat/github/repos/{owner}/{repo}``.\n\nAll fields are optional; only the ones provided are changed."
+        "description": "Body for ``PATCH /chat/github/repos/{owner}/{repo}``.\n\nAll fields are optional; only the ones provided are changed.\nUnknown keys are rejected with 422."
       },
       "UpdateState": {
         "type": "string",
@@ -7053,6 +7205,28 @@
         ],
         "title": "VolumeStat",
         "description": "Size of a single Docker volume (from ``docker system df``)."
+      },
+      "WorkflowPermissionsRequest": {
+        "properties": {
+          "default_workflow_permissions": {
+            "type": "string",
+            "pattern": "^(read|write)$",
+            "title": "Default Workflow Permissions",
+            "description": "Default workflow permissions: ``read`` or ``write``."
+          },
+          "can_approve_pull_request_reviews": {
+            "type": "boolean",
+            "title": "Can Approve Pull Request Reviews",
+            "description": "Allow GitHub Actions to create and approve pull requests."
+          }
+        },
+        "type": "object",
+        "required": [
+          "default_workflow_permissions",
+          "can_approve_pull_request_reviews"
+        ],
+        "title": "WorkflowPermissionsRequest",
+        "description": "Body for ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow``.\n\nBoth fields are required by GitHub's API."
       }
     }
   },
