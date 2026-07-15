@@ -107,6 +107,10 @@ modules:
       shallow git clone and parses it into a DerivedSpec against the
       central-deploy contract (v1).
     dependencies: []
+    paths:
+      - src/robotsix_central_deploy/onboard/**/*
+      - tests/onboard/**/*
+      - docs/onboard/**/*
 
   - id: volume-audit
     description: >

@@ -1,0 +1,1 @@
+Classify onboard: assign paths to existing module in docs/modules.yaml
