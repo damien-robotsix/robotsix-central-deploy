@@ -122,7 +122,11 @@ class AuthOps:
                 if "not valid JSON" in error:
                     return {"status": "error", "detail": error}
                 return {"status": "not-authenticated", "detail": error}
-            assert content is not None  # guard: error is None → content is str
+            if content is None:  # guard: error is None → content is str
+                return {
+                    "status": "error",
+                    "detail": "Internal error: credential content is None",
+                }
 
             creds = json.loads(content)
 
@@ -231,7 +235,8 @@ class AuthOps:
             content, error = self._read_and_parse_credentials(volume_name)
             if error is not None:
                 raise ValueError(error)
-            assert content is not None  # guard: error is None → content is str
+            if content is None:  # guard: error is None → content is str
+                raise ValueError("Internal error: credential content is None")
 
             result: Any = json.loads(content)
             if not isinstance(result, dict):
