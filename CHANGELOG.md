@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Enable `module_curator` periodic agent to keep `docs/modules.yaml` in sync with the live directory tree.
 - Extract shared `_call_github_endpoint` helper in `chat_github.py` to eliminate duplicated try/except/raise boilerplate across 9 GitHub endpoint handlers. Read handlers use the helper directly; write handlers additionally pass an `audit_entry` for audit logging on success.
 - Extract shared `_read_and_parse_credentials` helper in `_auth_ops.py` to eliminate duplicated volume-exist → read → parse orchestration in `check_claude_auth` and `read_claude_credentials`.
 - Added `GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow` and `PUT` endpoints to read and set default workflow permissions (including `can_approve_pull_request_reviews`).
