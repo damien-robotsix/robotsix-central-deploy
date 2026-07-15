@@ -58,6 +58,10 @@ modules:
       proxying. Legacy path URLs (deploy.robotsix.net/<name>/...) redirect
       to the component subdomain.
     dependencies: []
+    paths:
+      - src/robotsix_central_deploy/gateway/**/*
+      - tests/gateway/**/*
+      - docs/gateway/**/*
 
   - id: registry
     description: >
