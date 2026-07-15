@@ -89,7 +89,6 @@ if _HAS_ASGI_CSRF:
         *,
         secret: str = "",
         cookie_secure: bool = False,
-        cookie_httponly: bool = False,  # accepted for backward compat; ignored
         cookie_samesite: str = "lax",
         exempt_urls: list[_re.Pattern[str]] | None = None,
     ) -> ASGIApp:
