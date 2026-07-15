@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -49,6 +50,28 @@ class AuthOps:
 
         return content
 
+    def _read_and_parse_credentials(
+        self, volume_name: str
+    ) -> tuple[str | None, str | None]:
+        """Read and parse ``.credentials.json`` from *volume_name*.
+
+        Returns ``(content_str, error_str)`` — exactly one is ``None``.
+        """
+        import docker
+
+        try:
+            self._client.volumes.get(volume_name)
+        except docker.errors.NotFound:
+            return None, f"Volume '{volume_name}' does not exist."
+        content = self._read_volume_credentials(volume_name)
+        if content is None:
+            return None, "No credentials file found."
+        try:
+            json.loads(content)  # validate parseability
+        except json.JSONDecodeError as exc:
+            return None, f"Credentials file is not valid JSON: {exc}"
+        return content, None
+
     def check_claude_credentials(self) -> list[str]:
         """Validate that the ``claude-auth`` volume contains a readable
         ``.credentials.json``. Returns a list of warning strings (empty
@@ -91,36 +114,17 @@ class AuthOps:
 
     async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:
         """Check whether *volume_name* holds valid Claude credentials."""
-        import docker
-        import json as _json
-
         loop = asyncio.get_running_loop()
 
         def _check() -> dict[str, Any]:
-            # Ensure the volume exists.
-            try:
-                self._client.volumes.get(volume_name)
-            except docker.errors.NotFound:
-                return {
-                    "status": "not-authenticated",
-                    "detail": f"Volume '{volume_name}' does not exist.",
-                }
+            content, error = self._read_and_parse_credentials(volume_name)
+            if error is not None:
+                if "not valid JSON" in error:
+                    return {"status": "error", "detail": error}
+                return {"status": "not-authenticated", "detail": error}
+            assert content is not None  # guard: error is None → content is str
 
-            # Check for .credentials.json existence and parse it.
-            content = self._read_volume_credentials(volume_name)
-            if content is None:
-                return {
-                    "status": "not-authenticated",
-                    "detail": "No credentials file found.",
-                }
-
-            try:
-                creds = _json.loads(content)
-            except _json.JSONDecodeError:
-                return {
-                    "status": "error",
-                    "detail": "Credentials file exists but is not valid JSON.",
-                }
+            creds = json.loads(content)
 
             # Check for expiry information. Claude Code stores OAuth tokens
             # under "claudeAiOauth" with "expiresAt" as a ms epoch; older
@@ -221,27 +225,17 @@ class AuthOps:
 
     async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
         """Read and return the parsed ``.credentials.json`` from *volume_name*."""
-        import docker
-        import json as _json
-
         loop = asyncio.get_running_loop()
 
         def _read() -> dict[str, Any]:
-            try:
-                self._client.volumes.get(volume_name)
-            except docker.errors.NotFound:
-                raise ValueError(f"Volume '{volume_name}' does not exist.")
+            content, error = self._read_and_parse_credentials(volume_name)
+            if error is not None:
+                raise ValueError(error)
+            assert content is not None  # guard: error is None → content is str
 
-            content = self._read_volume_credentials(volume_name)
-            if content is None:
-                raise ValueError("No credentials file found.")
-
-            try:
-                result: Any = _json.loads(content)
-                if not isinstance(result, dict):
-                    raise ValueError("Credentials file is not a JSON object.")
-                return result
-            except _json.JSONDecodeError as exc:
-                raise ValueError(f"Credentials file is not valid JSON: {exc}")
+            result: Any = json.loads(content)
+            if not isinstance(result, dict):
+                raise ValueError("Credentials file is not a JSON object.")
+            return result
 
         return await loop.run_in_executor(None, _read)

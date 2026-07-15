@@ -1,0 +1,1 @@
+Extract shared _read_and_parse_credentials helper from _auth_ops.py duplication
