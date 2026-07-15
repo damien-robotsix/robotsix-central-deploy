@@ -66,6 +66,10 @@ modules:
       startup and populated from the dynamic component-config JSON store
       (onboarding adds entries); consumed by the Docker-API backend.
     dependencies: []
+    paths:
+      - src/robotsix_central_deploy/registry/**/*
+      - tests/registry/**/*
+      - docs/registry/**/*
 
   - id: ui
     description: >
