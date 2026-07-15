@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `paths:` block to the `caretaker` module entry in `docs/modules.yaml`, covering source, tests, and docs.
 - Remove unused `cookie_httponly` parameter from `GatewayAwareCSRFMiddleware` — it was accepted for backward compatibility but never forwarded to the underlying `asgi_csrf` call and had no callers.
 - Enable `module_curator` periodic agent to keep `docs/modules.yaml` in sync with the live directory tree.
 - Extract shared `_call_github_endpoint` helper in `chat_github.py` to eliminate duplicated try/except/raise boilerplate across 9 GitHub endpoint handlers. Read handlers use the helper directly; write handlers additionally pass an `audit_entry` for audit logging on success.
