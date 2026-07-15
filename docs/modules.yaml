@@ -85,6 +85,10 @@ modules:
       `GET/PUT/DELETE /services/{name}/env` API endpoints.
       Auth-gated via verify_auth.
     dependencies: []
+    paths:
+      - src/robotsix_central_deploy/ui/**/*
+      - tests/ui/**/*
+      - docs/ui/**/*
 
   - id: registry-check
     description: >

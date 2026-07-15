@@ -1,0 +1,1 @@
+Classify ui: assign paths to existing module in docs/modules.yaml
