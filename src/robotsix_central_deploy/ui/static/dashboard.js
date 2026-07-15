@@ -50,6 +50,9 @@ document.addEventListener('click', function(e) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
 
+  // Skip <form> elements — forms are dispatched by the submit listener
+  if (target.tagName === 'FORM') return;
+
   // Prevent default for anchor tags (e.g. Logs links)
   if (target.tagName === 'A') e.preventDefault();
 
