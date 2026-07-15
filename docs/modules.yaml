@@ -96,6 +96,10 @@ modules:
       disk monitoring. Orchestrated by a periodic scheduler; lifecycle exposes
       a /caretaker/status endpoint.
     dependencies: []
+    paths:
+      - src/robotsix_central_deploy/caretaker/**/*
+      - tests/caretaker/**/*
+      - docs/caretaker/**/*
 
   - id: onboard
     description: >
