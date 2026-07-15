@@ -1,0 +1,1 @@
+Add CycloneDX SBOM generation for Python dependencies to CI pipeline
