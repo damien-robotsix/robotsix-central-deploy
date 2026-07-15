@@ -1532,3 +1532,328 @@ class TestGitHubAppNotConfiguredError:
         except GitHubAppNotConfiguredError as exc:
             assert "github_app_id" in str(exc)
             assert "github_app_private_key" in str(exc)
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow
+# ---------------------------------------------------------------------------
+
+
+class TestGetWorkflowPermissions:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow"
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_gets_permissions(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client._requester = MagicMock()
+        fake_client._requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {
+                "default_workflow_permissions": "read",
+                "can_approve_pull_request_reviews": False,
+            },
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {
+            "default_workflow_permissions": "read",
+            "can_approve_pull_request_reviews": False,
+        }
+        fake_client._requester.requestJsonAndCheck.assert_called_once_with(
+            "GET", "/repos/acme/widget/actions/permissions/workflow"
+        )
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client._requester = MagicMock()
+        fake_client._requester.requestJsonAndCheck.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/ghost/actions/permissions/workflow",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow
+# ---------------------------------------------------------------------------
+
+
+class TestSetWorkflowPermissions:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            json={
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            json={
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_sets_permissions(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client._requester = MagicMock()
+        fake_client._requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            json={
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {
+            "default_workflow_permissions": "write",
+            "can_approve_pull_request_reviews": True,
+        }
+        fake_client._requester.requestJsonAndCheck.assert_called_once_with(
+            "PUT",
+            "/repos/acme/widget/actions/permissions/workflow",
+            input={
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+        )
+
+    async def test_records_audit_entry(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client._requester = MagicMock()
+        fake_client._requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            json={
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "set_workflow_permissions"
+        assert entries[0].key == "acme/widget"
+        assert entries[0].new_value == {
+            "default_workflow_permissions": "write",
+            "can_approve_pull_request_reviews": True,
+        }
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client._requester = MagicMock()
+        fake_client._requester.requestJsonAndCheck.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/ghost/actions/permissions/workflow",
+            json={
+                "default_workflow_permissions": "write",
+                "can_approve_pull_request_reviews": True,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_invalid_permissions_value_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            json={
+                "default_workflow_permissions": "admin",
+                "can_approve_pull_request_reviews": True,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_missing_required_fields_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/actions/permissions/workflow",
+            json={"default_workflow_permissions": "read"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# PATCH /chat/github/repos/{owner}/{repo} — extended tests for new fields
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateRepoExtended:
+    """Tests for the extended PATCH: allow_auto_merge, delete_branch_on_merge,
+    and unknown-key rejection."""
+
+    async def test_updates_allow_auto_merge(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo_after = _FakeRepo()
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = [fake_repo, fake_repo_after]
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"allow_auto_merge": True},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        fake_repo.edit.assert_called_once()
+        _, kwargs = fake_repo.edit.call_args
+        assert kwargs["allow_auto_merge"] is True
+
+    async def test_updates_delete_branch_on_merge(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo_after = _FakeRepo()
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = [fake_repo, fake_repo_after]
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"delete_branch_on_merge": True},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        fake_repo.edit.assert_called_once()
+        _, kwargs = fake_repo.edit.call_args
+        assert kwargs["delete_branch_on_merge"] is True
+
+    async def test_unknown_key_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"not_a_real_field": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422

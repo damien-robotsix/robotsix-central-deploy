@@ -3,6 +3,10 @@
 Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs`` — list recent runs
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}`` — a single run
+- ``GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
+  read default workflow permissions
+- ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
+  set default workflow permissions
 - ``GET /chat/github/repos/{owner}/{repo}`` — read repo details
 - ``PATCH /chat/github/repos/{owner}/{repo}`` — update repo settings
 - ``PUT /chat/github/repos/{owner}/{repo}/vulnerability-alerts`` — enable the
@@ -567,12 +571,21 @@ class UpdateRepoRequest(BaseModel):
     """Body for ``PATCH /chat/github/repos/{owner}/{repo}``.
 
     All fields are optional; only the ones provided are changed.
+    Unknown keys are rejected with 422.
     """
+
+    model_config = {"extra": "forbid"}
 
     description: str | None = Field(None, description="New description.")
     private: bool | None = Field(None, description="New visibility.")
     has_issues: bool | None = Field(None, description="Enable/disable Issues.")
     has_wiki: bool | None = Field(None, description="Enable/disable the Wiki.")
+    allow_auto_merge: bool | None = Field(
+        None, description="Allow auto-merge on pull requests."
+    )
+    delete_branch_on_merge: bool | None = Field(
+        None, description="Automatically delete head branches after merge."
+    )
 
 
 def _update_repo_sync(
@@ -590,6 +603,12 @@ def _update_repo_sync(
         if body.has_issues is not None
         else GithubObject.NotSet,
         has_wiki=body.has_wiki if body.has_wiki is not None else GithubObject.NotSet,
+        allow_auto_merge=body.allow_auto_merge
+        if body.allow_auto_merge is not None
+        else GithubObject.NotSet,
+        delete_branch_on_merge=body.delete_branch_on_merge
+        if body.delete_branch_on_merge is not None
+        else GithubObject.NotSet,
     )
     repo_obj = client.get_repo(f"{owner}/{repo}")  # re-fetch to return the new state
     return _repo_to_dict(repo_obj)
@@ -633,6 +652,132 @@ async def update_repo(
             key=f"{owner}/{repo}",
             new_value=body.model_dump(exclude_none=True),
             detail=f"Updated repository {result['full_name']}",
+        )
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GET  /chat/github/repos/{owner}/{repo}/actions/permissions/workflow — read
+#       workflow permissions (read; App installation token)
+# PUT  /chat/github/repos/{owner}/{repo}/actions/permissions/workflow — set
+#       workflow permissions (write; App installation token)
+# ---------------------------------------------------------------------------
+
+
+class WorkflowPermissionsRequest(BaseModel):
+    """Body for ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow``.
+
+    Both fields are required by GitHub's API.
+    """
+
+    default_workflow_permissions: str = Field(
+        ...,
+        description="Default workflow permissions: ``read`` or ``write``.",
+        pattern="^(read|write)$",
+    )
+    can_approve_pull_request_reviews: bool = Field(
+        ...,
+        description="Allow GitHub Actions to create and approve pull requests.",
+    )
+
+
+def _get_workflow_permissions_sync(
+    client: Any, owner: str, repo: str
+) -> dict[str, Any]:
+    _headers, data = client._requester.requestJsonAndCheck(
+        "GET", f"/repos/{owner}/{repo}/actions/permissions/workflow"
+    )
+    return {
+        "default_workflow_permissions": data["default_workflow_permissions"],
+        "can_approve_pull_request_reviews": data["can_approve_pull_request_reviews"],
+    }
+
+
+def _set_workflow_permissions_sync(
+    client: Any, owner: str, repo: str, body: WorkflowPermissionsRequest
+) -> dict[str, Any]:
+    _headers, data = client._requester.requestJsonAndCheck(
+        "PUT",
+        f"/repos/{owner}/{repo}/actions/permissions/workflow",
+        input=body.model_dump(),
+    )
+    return {
+        "default_workflow_permissions": data["default_workflow_permissions"],
+        "can_approve_pull_request_reviews": data["can_approve_pull_request_reviews"],
+    }
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/actions/permissions/workflow",
+    summary="Get default workflow permissions for a repository",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def get_workflow_permissions(
+    owner: str,
+    repo: str,
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Get *owner*/*repo*'s default workflow permissions and whether Actions
+    can create and approve pull requests."""
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        return await asyncio.to_thread(
+            _get_workflow_permissions_sync, client, owner, repo
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+
+@router.put(
+    "/chat/github/repos/{owner}/{repo}/actions/permissions/workflow",
+    summary="Set default workflow permissions for a repository",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository not found or App not installed on it"},
+        422: {"description": "GitHub rejected the request"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def set_workflow_permissions(
+    owner: str,
+    repo: str,
+    body: WorkflowPermissionsRequest,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Set *owner*/*repo*'s default workflow permissions and whether Actions
+    can create and approve pull requests."""
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(
+            _set_workflow_permissions_sync, client, owner, repo, body
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="set_workflow_permissions",
+            key=f"{owner}/{repo}",
+            new_value={
+                "default_workflow_permissions": body.default_workflow_permissions,
+                "can_approve_pull_request_reviews": body.can_approve_pull_request_reviews,
+            },
+            detail=(
+                f"Updated workflow permissions on {owner}/{repo}: "
+                f"default={body.default_workflow_permissions}, "
+                f"can_approve_prs={body.can_approve_pull_request_reviews}"
+            ),
         )
     )
     return result
