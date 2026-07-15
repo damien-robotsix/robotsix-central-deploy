@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract shared `_call_github_endpoint` helper in `chat_github.py` to eliminate duplicated try/except/raise boilerplate across 9 GitHub endpoint handlers. Read handlers use the helper directly; write handlers additionally pass an `audit_entry` for audit logging on success.
 - Added `GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow` and `PUT` endpoints to read and set default workflow permissions (including `can_approve_pull_request_reviews`).
 - Extended `PATCH /chat/github/repos/{owner}/{repo}` to accept `allow_auto_merge` and `delete_branch_on_merge`, and reject unknown keys with 422.
 - Rate-limit deploy-job and onboard-job poll intervals from 1.5 s to 5 s to reduce 404 noise when the server restarts and loses in-memory job state.

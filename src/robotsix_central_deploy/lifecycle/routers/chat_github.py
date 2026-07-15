@@ -42,7 +42,7 @@ endpoints in :mod:`.chat`).
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -208,6 +208,35 @@ def _reraise_github_errors(exc: Exception, owner: str, repo: str) -> None:
     raise exc
 
 
+_T = TypeVar("_T")
+
+
+async def _call_github_endpoint(
+    config: LifecycleConfig,
+    owner: str,
+    repo: str,
+    sync_fn: Any,
+    *args: Any,
+    audit_store: ChatAgentAuditStore | None = None,
+    audit_entry: ChatAgentAuditEntry | None = None,
+) -> _T:
+    """Call a sync GitHub function with client acquisition and error mapping.
+
+    Acquires the GitHub App installation client for *owner*/*repo*, runs
+    *sync_fn* in a thread, maps common GitHub exceptions to HTTP status
+    codes, and optionally appends an audit entry on success.
+    """
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(sync_fn, client, owner, repo, *args)
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+    if audit_store is not None and audit_entry is not None:
+        await audit_store.append(audit_entry)
+    return result  # type: ignore[no-any-return]  # asyncio.to_thread is untyped
+
+
 @router.get(
     "/chat/github/repos/{owner}/{repo}/actions/runs",
     summary="List recent GitHub Actions workflow runs for a repository",
@@ -232,14 +261,9 @@ async def list_workflow_runs(
     ``"in_progress"``, ``"completed"``, ``"queued"``) narrow the results.
     *per_page* is capped at 100 (GitHub's own page-size ceiling).
     """
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        return await asyncio.to_thread(
-            _list_runs_sync, client, owner, repo, branch, run_status, per_page
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    return await _call_github_endpoint(
+        config, owner, repo, _list_runs_sync, branch, run_status, per_page
+    )
 
 
 @router.get(
@@ -259,12 +283,7 @@ async def get_workflow_run(
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s workflow run *run_id* (status, conclusion, URL)."""
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        return await asyncio.to_thread(_get_run_sync, client, owner, repo, run_id)
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    return await _call_github_endpoint(config, owner, repo, _get_run_sync, run_id)
 
 
 @router.get(
@@ -283,12 +302,7 @@ async def get_repo(
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s details (visibility, description, settings)."""
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        return await asyncio.to_thread(_get_repo_sync, client, owner, repo)
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    return await _call_github_endpoint(config, owner, repo, _get_repo_sync)
 
 
 @router.get(
@@ -313,14 +327,9 @@ async def list_pulls(
     *state* is one of ``"open"`` (default), ``"closed"``, or ``"all"``.
     *per_page* is capped at 100 (GitHub's own page-size ceiling).
     """
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        return await asyncio.to_thread(
-            _list_pulls_sync, client, owner, repo, state, per_page
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    return await _call_github_endpoint(
+        config, owner, repo, _list_pulls_sync, state, per_page
+    )
 
 
 @router.get(
@@ -340,12 +349,7 @@ async def get_pull(
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s pull request *number* (status, mergeable, URL)."""
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        return await asyncio.to_thread(_get_pull_sync, client, owner, repo, number)
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    return await _call_github_endpoint(config, owner, repo, _get_pull_sync, number)
 
 
 # ---------------------------------------------------------------------------
@@ -638,23 +642,21 @@ async def update_repo(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one field to update must be provided",
         )
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        result = await asyncio.to_thread(_update_repo_sync, client, owner, repo, body)
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
-
-    await audit_store.append(
-        ChatAgentAuditEntry(
+    return await _call_github_endpoint(
+        config,
+        owner,
+        repo,
+        _update_repo_sync,
+        body,
+        audit_store=audit_store,
+        audit_entry=ChatAgentAuditEntry(
             component="github",
             action="update_repo",
             key=f"{owner}/{repo}",
             new_value=body.model_dump(exclude_none=True),
-            detail=f"Updated repository {result['full_name']}",
-        )
+            detail=f"Updated repository {owner}/{repo}",
+        ),
     )
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -725,14 +727,9 @@ async def get_workflow_permissions(
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s default workflow permissions and whether Actions
     can create and approve pull requests."""
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        return await asyncio.to_thread(
-            _get_workflow_permissions_sync, client, owner, repo
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    return await _call_github_endpoint(
+        config, owner, repo, _get_workflow_permissions_sync
+    )
 
 
 @router.put(
@@ -755,17 +752,14 @@ async def set_workflow_permissions(
 ) -> dict[str, Any]:
     """Set *owner*/*repo*'s default workflow permissions and whether Actions
     can create and approve pull requests."""
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        result = await asyncio.to_thread(
-            _set_workflow_permissions_sync, client, owner, repo, body
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
-
-    await audit_store.append(
-        ChatAgentAuditEntry(
+    return await _call_github_endpoint(
+        config,
+        owner,
+        repo,
+        _set_workflow_permissions_sync,
+        body,
+        audit_store=audit_store,
+        audit_entry=ChatAgentAuditEntry(
             component="github",
             action="set_workflow_permissions",
             key=f"{owner}/{repo}",
@@ -778,9 +772,8 @@ async def set_workflow_permissions(
                 f"default={body.default_workflow_permissions}, "
                 f"can_approve_prs={body.can_approve_pull_request_reviews}"
             ),
-        )
+        ),
     )
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -822,25 +815,20 @@ async def enable_vulnerability_alerts(
     New repos get this automatically via :func:`create_repo`; this endpoint
     covers repos that predate that, or ones created outside the chat agent.
     """
-    client = await _get_client_or_503(config, owner, repo)
-    try:
-        result = await asyncio.to_thread(
-            _enable_vulnerability_alerts_sync, client, owner, repo
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
-
-    await audit_store.append(
-        ChatAgentAuditEntry(
+    return await _call_github_endpoint(
+        config,
+        owner,
+        repo,
+        _enable_vulnerability_alerts_sync,
+        audit_store=audit_store,
+        audit_entry=ChatAgentAuditEntry(
             component="github",
             action="enable_vulnerability_alerts",
             key=f"{owner}/{repo}",
             new_value=True,
-            detail=f"Enabled Dependency graph/vulnerability alerts on {result['full_name']}",
-        )
+            detail=f"Enabled Dependency graph/vulnerability alerts on {owner}/{repo}",
+        ),
     )
-    return result
 
 
 # ---------------------------------------------------------------------------
