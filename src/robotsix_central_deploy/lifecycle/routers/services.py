@@ -645,6 +645,7 @@ async def refresh_contract(
         "tmpfs",
         "mem_limit",
         "claude_mount",
+        "claude_mount_path",
         "host_docker_sock",
         "named_volumes",
         "siblings",

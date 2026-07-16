@@ -82,6 +82,7 @@ async def _deploy_onboard_siblings(
             env=sib.env,
             health_check=sib.health_check,
             claude_mount=sib.claude_mount,
+            claude_mount_path=sib.claude_mount_path,
             host_docker_sock=sib.host_docker_sock,
             named_volumes=[m.host for m in sib.mounts],
             command=sib.command,

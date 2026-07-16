@@ -84,6 +84,7 @@ def _build_component_config_from_spec(
         tmpfs=spec.tmpfs,
         mem_limit=spec.mem_limit,
         claude_mount=spec.claude_mount,
+        claude_mount_path=spec.claude_mount_path,
         host_docker_sock=spec.host_docker_sock,
         named_volumes=[m.host for m in spec.volume_mounts]
         + [m.host for sib in spec.siblings for m in sib.mounts],

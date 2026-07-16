@@ -290,13 +290,28 @@ def _parse_one_service(
     health_check, hc_violations = _parse_healthcheck(svc.get("healthcheck"))
     violations.extend(f"{prefix}{v}" for v in hc_violations)
 
-    # Labels — claude-mount
+    # Labels — claude-mount. The value is either "true" (mount the
+    # claude-auth volume at the default /home/app/.claude) or an absolute
+    # container path ("/home/mill/.claude") for images whose user's HOME
+    # is not /home/app — the CLI only reads $HOME/.claude, so a wrong
+    # path silently yields "Not logged in" at runtime.
     claude_mount = False
+    claude_mount_path = "/home/app/.claude"
     labels = svc.get("labels")
     if isinstance(labels, dict):
         val = labels.get(CLAUDE_MOUNT_LABEL)
-        if isinstance(val, str) and val.strip().lower() == "true":
-            claude_mount = True
+        if isinstance(val, str):
+            stripped = val.strip()
+            if stripped.lower() == "true":
+                claude_mount = True
+            elif stripped.startswith("/"):
+                claude_mount = True
+                claude_mount_path = stripped
+            elif stripped and stripped.lower() != "false":
+                violations.append(
+                    f"{prefix}{CLAUDE_MOUNT_LABEL} must be \"true\", \"false\", "
+                    f"or an absolute container path — got {stripped!r}"
+                )
 
     # Labels — host-docker-sock
     host_docker_sock = False
@@ -435,6 +450,7 @@ def _parse_one_service(
         "mounts": volume_mounts,
         "health_check": health_check,
         "claude_mount": claude_mount,
+        "claude_mount_path": claude_mount_path,
         "host_docker_sock": host_docker_sock,
         "container_name": container_name,
         "command": command,
@@ -542,6 +558,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 mounts=sib_parsed["mounts"],
                 env=sib_parsed["env"],
                 claude_mount=sib_parsed["claude_mount"],
+                claude_mount_path=sib_parsed["claude_mount_path"],
                 host_docker_sock=sib_parsed["host_docker_sock"],
                 health_check=sib_parsed["health_check"],
                 command=sib_parsed["command"],
@@ -592,6 +609,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         volume_mounts=primary_parsed["mounts"],
         env=primary_parsed["env"],
         claude_mount=primary_parsed["claude_mount"],
+        claude_mount_path=primary_parsed["claude_mount_path"],
         host_docker_sock=primary_parsed["host_docker_sock"],
         health_check=primary_parsed["health_check"],
         command=primary_parsed["command"],

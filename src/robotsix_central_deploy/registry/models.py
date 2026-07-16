@@ -37,6 +37,9 @@ class ServiceConfig(BaseModel):
     mounts: list[VolumeMount] = []
     env: dict[str, str] = {}
     claude_mount: bool = False
+    claude_mount_path: str = (
+        "/home/app/.claude"  # container path of the claude-auth volume; must match the image user's $HOME/.claude
+    )
     host_docker_sock: bool = False
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None
@@ -69,6 +72,9 @@ class ComponentConfig(BaseModel):
     env: dict[str, str] = {}
     health_check: Optional[HealthCheck] = None
     claude_mount: bool = False
+    claude_mount_path: str = (
+        "/home/app/.claude"  # container path of the claude-auth volume; must match the image user's $HOME/.claude
+    )
     host_docker_sock: bool = False
     named_volumes: list[str] = []  # volume names to pre-create at deploy time
     siblings: list[ServiceConfig] = []  # empty = single-service (backward compat)
