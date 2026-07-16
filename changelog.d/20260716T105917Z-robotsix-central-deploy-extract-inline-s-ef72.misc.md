@@ -1,0 +1,1 @@
+robotsix-central-deploy: Extract inline style= and script block from login.html into dedicated login.css and login.js files
