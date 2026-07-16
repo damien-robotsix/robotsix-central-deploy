@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract inline HTML from `get_deploy_contract()` into a Jinja2 template (`ui/templates/deploy-contract.html`), using `_escape_html()` for pre-escaped content rendering.
 - refresh-schema regression test: current config values survive
   POST /services/{name}/config/refresh-schema byte-for-byte.
 - Fix `.hidden` CSS class conflict with JavaScript `style.display` manipulation in dashboard; replace `style.display` toggles with `classList` operations for all elements using the `hidden` class

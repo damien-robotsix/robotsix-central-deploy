@@ -1,0 +1,1 @@
+robotsix-central-deploy: Replace inline HTML string concatenation in router.py get_deploy_contract() with a static deploy-contract.html template
