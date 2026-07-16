@@ -309,7 +309,7 @@ def _parse_one_service(
                 claude_mount_path = stripped
             elif stripped and stripped.lower() != "false":
                 violations.append(
-                    f"{prefix}{CLAUDE_MOUNT_LABEL} must be \"true\", \"false\", "
+                    f'{prefix}{CLAUDE_MOUNT_LABEL} must be "true", "false", '
                     f"or an absolute container path — got {stripped!r}"
                 )
 
