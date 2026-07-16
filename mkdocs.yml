@@ -63,7 +63,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Deployment: deployment.md
-  - Configuration: configuration.md
-  - API Reference: api.md
+  - Configuration: lifecycle/configuration.md
+  - API Reference: lifecycle/api.md
   - Deploy Contract: ui/DEPLOY_CONTRACT.md
   - Changelog: changelog.md
