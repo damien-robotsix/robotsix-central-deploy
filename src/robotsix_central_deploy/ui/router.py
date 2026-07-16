@@ -22,7 +22,9 @@ _CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="u
 _LOGIN_HTML = (Path(__file__).parent / "login.html").read_text(encoding="utf-8")
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-_DEPLOY_CONTRACT_HTML = (_TEMPLATES_DIR / "deploy-contract.html").read_text(encoding="utf-8")
+_DEPLOY_CONTRACT_HTML = (_TEMPLATES_DIR / "deploy-contract.html").read_text(
+    encoding="utf-8"
+)
 
 
 @router.get("/ui/static/{filename:path}", include_in_schema=False)
