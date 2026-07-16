@@ -12,7 +12,7 @@ from fastapi.params import Body
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
-from .._config_utils import _sanitize_log, _write_llmio_tier_config
+from .._config_utils import _canonical_hash, _sanitize_log, _write_llmio_tier_config
 from ..deps import (
     JobRegistry,
     _get_backend,
@@ -253,6 +253,30 @@ async def _run_deploy_job(
     try:
         # Write merged config.json into the config volume before starting.
         if config.has_config_yaml and config.config_volume:
+            # --- drift guard ---
+            # If the live volume has been edited out-of-band (drift),
+            # auto-import it as current before proceeding so the deploy
+            # never silently overwrites operator changes with stale stored
+            # defaults.
+            stored_hash = await config_yaml_store.get_volume_hash(name)
+            if stored_hash is not None:
+                try:
+                    live_dict = await backend.read_config_from_volume(
+                        config.config_volume
+                    )
+                except Exception:
+                    live_dict = {}
+                if live_dict and _canonical_hash(live_dict) != stored_hash:
+                    logger.warning(
+                        "deploy %s: config volume drifted — "
+                        "auto-importing live volume as current",
+                        _sanitize_log(name),
+                    )
+                    await config_yaml_store.update_current_and_hash(
+                        name, live_dict, _canonical_hash(live_dict)
+                    )
+            # --- end drift guard ---
+
             merged_cfg = await config_yaml_store.get_current(
                 name
             ) or await config_yaml_store.get_template(name)
