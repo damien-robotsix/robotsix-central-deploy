@@ -266,14 +266,15 @@ async def _run_deploy_job(
                     )
                 except Exception:
                     live_dict = {}
-                if live_dict and _canonical_hash(live_dict) != stored_hash:
+                live_hash = _canonical_hash(live_dict)
+                if live_dict and live_hash != stored_hash:
                     logger.warning(
                         "deploy %s: config volume drifted — "
                         "auto-importing live volume as current",
                         _sanitize_log(name),
                     )
                     await config_yaml_store.update_current_and_hash(
-                        name, live_dict, _canonical_hash(live_dict)
+                        name, live_dict, live_hash
                     )
             # --- end drift guard ---
 

@@ -466,8 +466,6 @@ class TestDeployDriftGuard:
         tracking._volumes["chat-config"] = copy.deepcopy(real_config)
 
         # -- deploy --
-        from httpx import ASGITransport, AsyncClient
-
         transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/services/chat/deploy", headers=auth_headers)
