@@ -339,6 +339,18 @@
     padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow-y: auto;
     white-space: pre-wrap; margin-top: 0.5rem;
   }
+  .config-assist-bar {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 0.25rem 0; margin-top: 0.5rem;
+  }
+  .config-assist-spinner {
+    margin-left: 0.5rem;
+  }
+  .config-drift-banner {
+    background: rgba(251,146,60,0.15); color: #fb923c;
+    border: 1px solid #fb923c; padding: 10px 14px;
+    border-radius: 4px; margin-bottom: 12px; font-size: 0.82rem;
+  }
   /* ── Extracted inline style classes ──────────────────────────── */
 
   /* Utility */

@@ -25,12 +25,12 @@ function hideError() {
 function showWarning(msg) {
   const el = document.getElementById('warning-banner');
   document.getElementById('warning-banner-text').textContent = msg;
-  el.style.display = 'block';
+  el.classList.remove('hidden');
 }
 
 function hideWarning() {
   const el = document.getElementById('warning-banner');
-  el.style.display = 'none';
+  el.classList.add('hidden');
 }
 
 function dismissDeploySuccess() {
@@ -247,14 +247,14 @@ function showRowError(name, msg) {
   const el = document.getElementById(`err-${name}`);
   if (el) {
     el.textContent = msg;
-    el.style.display = 'block';
+    el.classList.remove('hidden');
   }
 }
 
 function hideRowError(name) {
   const el = document.getElementById(`err-${name}`);
   if (el) {
-    el.style.display = 'none';
+    el.classList.add('hidden');
   }
 }
 
@@ -892,7 +892,7 @@ function buildEnvRow(key, value) {
   div.innerHTML = `
     <input type="text" class="env-key" value="${escAttr(key)}" readonly>
     <input type="text" class="env-value" value="${escAttr(value)}">
-    <span class="inline-error" style="display:none;"></span>
+    <span class="inline-error hidden"></span>
   `;
   return div;
 }
@@ -905,7 +905,7 @@ function buildSecretRow(key) {
     <span class="env-key env-key-flex">${escHtml(key)}</span>
     <span class="secret-value-masked">***</span>
     <input type="password" class="secret-new-value" placeholder="enter new value to update" autocomplete="off">
-    <span class="inline-error" style="display:none;"></span>
+    <span class="inline-error hidden"></span>
   `;
   return div;
 }
@@ -918,7 +918,7 @@ function showRowInlineError(row, msg) {
   const errEl = row.querySelector('.inline-error');
   if (errEl) {
     errEl.textContent = msg;
-    errEl.style.display = 'block';
+    errEl.classList.remove('hidden');
   }
 }
 
@@ -1576,12 +1576,12 @@ function _injectConfigAssistUI() {
 
   const bar = document.createElement('div');
   bar.id = 'config-assist-bar';
-  bar.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:0.25rem 0;margin-top:0.5rem;';
+  bar.className = 'config-assist-bar';
   bar.innerHTML = `
     <button id="config-assist-btn" class="btn-secondary"
             data-action="runConfigAssist">Auto-detect / Assist</button>
     ${seedInputsHtml}
-    <span id="config-assist-spinner" style="display:none;margin-left:0.5rem;">&#x27F3; Running&hellip;</span>
+    <span id="config-assist-spinner" class="config-assist-spinner hidden">&#x27F3; Running&hellip;</span>
   `;
   document.getElementById('config-form-body').appendChild(bar);
 
@@ -1598,7 +1598,7 @@ async function runConfigAssist() {
   const spinner = document.getElementById('config-assist-spinner');
   const out = document.getElementById('config-assist-output');
   btn.disabled = true;
-  spinner.style.display = 'inline';
+  spinner.classList.remove('hidden');
   out.style.display = 'none';
 
   const values = collectConfigValues(_configSchema);
@@ -1640,7 +1640,7 @@ async function runConfigAssist() {
     const btn2 = document.getElementById('config-assist-btn');
     if (btn2) { btn2.disabled = false; }
     const sp2 = document.getElementById('config-assist-spinner');
-    if (sp2) { sp2.style.display = 'none'; }
+    if (sp2) { sp2.classList.add('hidden'); }
   }
 }
 
@@ -1738,10 +1738,7 @@ function _showDriftBanner(name) {
 
   const banner = document.createElement('div');
   banner.id = 'config-drift-banner';
-  banner.style.cssText =
-    'background: var(--amber-bg); color: var(--amber); ' +
-    'border: 1px solid var(--amber); padding: 10px 14px; ' +
-    'border-radius: 4px; margin-bottom: 12px; font-size: 0.82rem;';
+  banner.className = 'config-drift-banner';
 
   banner.innerHTML =
     '<strong>&#x26A0; Config was edited out-of-band since the last Save. ' +
@@ -2908,12 +2905,12 @@ async function completeClaudeLogin() {
       await fetchClaudeAuthStatus();
     } else {
       errorDiv.textContent = data.error || 'Login failed.';
-      errorDiv.style.display = '';
+      errorDiv.classList.remove('hidden');
       toast.textContent = '';
     }
   } catch (e) {
     errorDiv.textContent = `Login failed: ${e.message}`;
-    errorDiv.style.display = '';
+    errorDiv.classList.remove('hidden');
     toast.textContent = '';
   } finally {
     submitBtn.disabled = false;
