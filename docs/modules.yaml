@@ -18,14 +18,12 @@ modules:
       - tests/deploy_lock/**/*
       - tests/yaml_utils/**/*
       - docs/ARCHITECTURE.md
-      - docs/api.md
+      - docs/lifecycle/**/*
       - docs/changelog.md
-      - docs/configuration.md
       - docs/deployment.md
       - docs/index.md
       - docs/modules.yaml
       - docs/nginx-deploy.conf
-      - docs/openapi.json
       # Root-level repo infrastructure
       - .gitattributes
       - .gitignore

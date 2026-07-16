@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Reorganize lifecycle documentation into `docs/lifecycle/`: move `api.md`, `configuration.md`, and `openapi.json` from the `docs/` root into a dedicated per-module directory, matching the layout pattern of all other modules.
 - Extract inline HTML from `get_deploy_contract()` into a Jinja2 template (`ui/templates/deploy-contract.html`), using `_escape_html()` for pre-escaped content rendering.
 - refresh-schema regression test: current config values survive
   POST /services/{name}/config/refresh-schema byte-for-byte.
