@@ -164,8 +164,8 @@ function renderRow(svc) {
     : `/${escAttr(svc.name)}/`;
   const openLink = svc.state === 'running'
     ? `<a href="${gatewayHref}" target="_blank" rel="noopener"
-           style="font-size:0.8rem;color:var(--blue);">↗ Open</a>`
-    : '<span style="color:#666;">—</span>';
+           class="open-link">↗ Open</a>`
+    : '<span class="text-dimmed">—</span>';
 
   return `<tr id="row-${escAttr(svc.name)}">
     <td>${escHtml(svc.name)}${untrackedBadge}</td>
@@ -177,15 +177,15 @@ function renderRow(svc) {
       <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="start" id="btn-start-${escAttr(svc.name)}">Start</button>
       <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="stop" id="btn-stop-${escAttr(svc.name)}">Stop</button>
       <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="restart" id="btn-restart-${escAttr(svc.name)}">Restart</button>
-      <button data-action="updateService" data-arg-0="${escAttr(svc.name)}" id="btn-update-${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;" title="Force-pull the latest image and recreate the container"${_deployPhaseLabels[svc.name] ? ' disabled' : ''}>${_deployPhaseLabels[svc.name] ? escHtml(_deployPhaseLabels[svc.name]) : 'Update'}</button>
-      <button data-action="openHistoryModal" data-arg-0="${escAttr(svc.name)}" id="btn-history-${escAttr(svc.name)}" style="font-size:0.78rem;" title="View deploy history and rollback">History</button>
+      <button data-action="updateService" data-arg-0="${escAttr(svc.name)}" id="btn-update-${escAttr(svc.name)}" class="btn-primary text-xs" title="Force-pull the latest image and recreate the container"${_deployPhaseLabels[svc.name] ? ' disabled' : ''}>${_deployPhaseLabels[svc.name] ? escHtml(_deployPhaseLabels[svc.name]) : 'Update'}</button>
+      <button data-action="openHistoryModal" data-arg-0="${escAttr(svc.name)}" id="btn-history-${escAttr(svc.name)}" class="text-xs" title="View deploy history and rollback">History</button>
       ${svc.has_config_yaml
-        ? `<button data-action="openConfigModal" data-arg-0="${escAttr(svc.name)}" class="btn-primary" style="font-size:0.78rem;">Configure</button>
+        ? `<button data-action="openConfigModal" data-arg-0="${escAttr(svc.name)}" class="btn-primary text-xs">Configure</button>
            <button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Env &amp; Secrets</button>`
         : `<button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Config</button>`
       }
       <button class="btn-danger" data-action="doRemove" data-arg-0="${escAttr(svc.name)}">Remove</button>
-      <span class="inline-error" id="err-${escAttr(svc.name)}" style="display:none;"></span>
+      <span class="inline-error hidden" id="err-${escAttr(svc.name)}"></span>
     </td>
     <td>${openLink}</td>
     <td><a href="#" class="logs-link" data-action="openLogs" data-arg-0="${escAttr(svc.name)}">Logs</a></td>
@@ -221,8 +221,8 @@ function renderSiblingRow(svc) {
     : `/${escAttr(svc.name)}/`;
   const openLink = svc.state === 'running'
     ? `<a href="${gatewayHref}" target="_blank" rel="noopener"
-           style="font-size:0.8rem;color:var(--blue);">↗ Open</a>`
-    : '<span style="color:#666;">—</span>';
+           class="open-link">↗ Open</a>`
+    : '<span class="text-dimmed">—</span>';
 
   return `<tr class="sibling-row" id="row-${escAttr(svc.name)}">
     <td>↳ ${escHtml(svc.name)}</td>
@@ -332,7 +332,7 @@ function renderDiskPanel(data) {
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
-        `<tr><th style="font-weight:400;"><span class="volume-name-cell" data-action="openVolumeBrowser" data-arg-0="${escAttr(v.name)}">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span style="color:#64748b;">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
+        `<tr><th style="font-weight:400;"><span class="volume-name-cell" data-action="openVolumeBrowser" data-arg-0="${escAttr(v.name)}">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span class="text-subtle">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
     ).join('');
     const volTable = vols.length
         ? `<table style="margin-top:10px;"><tr><th colspan="2" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
@@ -2655,14 +2655,14 @@ async function loadVolumeFile(filePath, displayName) {
 
     let metaHtml = `<span>${escHtml(displayName || filePath)}</span>`;
     if (data.size_bytes !== undefined) {
-      metaHtml += ` <span style="color:#64748b;">(${fmt_bytes(data.size_bytes)})</span>`;
+      metaHtml += ` <span class="text-subtle">(${fmt_bytes(data.size_bytes)})</span>`;
     }
     if (data.truncated) {
-      metaHtml += ' <span style="color:#f59e0b;">[truncated \u2014 showing first ' + escHtml(String(data.size_bytes || 'N')) + ' bytes]</span>';
+      metaHtml += ' <span class="text-warning">[truncated \u2014 showing first ' + escHtml(String(data.size_bytes || 'N')) + ' bytes]</span>';
     }
 
     if (data.binary) {
-      contentArea.innerHTML = `<div class="vb-content-meta">${metaHtml}</div><pre style="color:#f59e0b;">Binary file \u2014 not displayed</pre>`;
+      contentArea.innerHTML = `<div class="vb-content-meta">${metaHtml}</div><pre class="text-warning">Binary file \u2014 not displayed</pre>`;
     } else {
       contentArea.innerHTML = `<div class="vb-content-meta">${metaHtml}</div><pre>${escHtml(data.content || '')}</pre>`;
     }

@@ -1,0 +1,1 @@
+robotsix-central-deploy: Extract inline style= attributes and onclick= handlers from dashboard.html into CSS classes + delegated data-action handlers

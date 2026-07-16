@@ -132,6 +132,8 @@
   .btn-secondary:hover { background: #475569; }
   .btn-danger { padding: 3px 10px; font-size: 0.78rem; border: 1px solid #c0392b; border-radius: 3px; background: #c0392b; color: #fff; cursor: pointer; }
   .btn-danger:hover { background: #a93226; }
+  .btn-danger-lg { padding: 6px 16px; font-size: 0.78rem; border: 1px solid #c0392b; border-radius: 3px; background: #c0392b; color: #fff; cursor: pointer; }
+  .btn-danger-lg:hover { background: #a93226; }
 
   /* Env modal */
   .env-overlay {
@@ -337,6 +339,205 @@
     padding: 0.5rem; border-radius: 4px; max-height: 200px; overflow-y: auto;
     white-space: pre-wrap; margin-top: 0.5rem;
   }
+  /* ── Extracted inline style classes ──────────────────────────── */
+
+  /* Utility */
+  .hidden { display: none; }
+
+  /* Header buttons (Add Component, Settings, Logout) */
+  .btn-header {
+    padding: 6px 14px; font-size: 0.85rem; border: 1px solid #475569;
+    border-radius: 4px; background: #1e293b; color: #cbd5e1; cursor: pointer;
+  }
+  /* Self-update button (green accent, initially hidden) */
+  .btn-update-server {
+    padding: 6px 14px; font-size: 0.85rem; border: 1px solid #16a34a;
+    border-radius: 4px; background: #14532d; color: #bbf7d0; cursor: pointer;
+  }
+
+  /* Warning banners (display:none + amber styling) */
+  .banner-warning {
+    background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid #fb923c;
+  }
+  /* Close button inside banners */
+  .banner-close-btn {
+    background: none; border: none; color: inherit; cursor: pointer;
+    float: right; font-size: 1.1rem;
+  }
+
+  /* Toast / status message line */
+  .toast-line {
+    margin-top: 8px; font-size: 0.85rem; min-height: 1.2em;
+  }
+
+  /* Loading placeholder cell */
+  .loading-cell { text-align: center; color: #9e9e9e; }
+
+  /* Settings table cell helpers */
+  .td-label {
+    padding: 6px 12px; color: #94a3b8; font-size: 0.9rem;
+  }
+  .td-label-w80 {
+    padding: 6px 12px; color: #94a3b8; font-size: 0.9rem; width: 80px;
+  }
+  .td-value { padding: 6px 12px; }
+  .td-compact { padding: 6px 6px; }
+
+  /* Help text next to settings inputs */
+  .help-text {
+    font-size: 0.75rem; color: #94a3b8; margin-left: 6px;
+  }
+
+  /* Base settings input style (used on most number/text inputs in Settings) */
+  .input-settings {
+    background: #0f172a; border: 1px solid #475569; border-radius: 4px;
+    color: #e2e8f0; padding: 5px 10px; font-size: 0.9rem;
+  }
+  .input-settings-w100 { width: 100px; }
+  .input-settings-w120 { width: 120px; }
+  .input-settings-w140 { width: 140px; }
+  .input-settings-w240 { width: 240px; }
+  .input-settings-w280 { width: 280px; }
+
+  /* Inline flex input (Claude auth code input) */
+  .input-inline {
+    flex: 1; padding: 6px 10px; background: #0f172a; border: 1px solid #475569;
+    border-radius: 4px; color: #e2e8f0; font-size: 0.85rem;
+  }
+
+  /* Code textarea (Claude credentials paste, config raw) */
+  .textarea-code {
+    width: 100%; padding: 8px; background: #0f172a; border: 1px solid #475569;
+    border-radius: 4px; color: #e2e8f0; font-size: 0.8rem;
+    font-family: monospace; resize: vertical;
+  }
+  .config-raw-textarea {
+    width: 100%; height: 300px; font-family: monospace; font-size: 0.82rem;
+    background: #0f172a; color: #e2e8f0; border: 1px solid #475569;
+    border-radius: 4px; padding: 10px; resize: vertical;
+  }
+
+  /* Accent checkbox */
+  .accent-blue { accent-color: var(--blue); }
+
+  /* Margin utilities */
+  .ml-auto { margin-left: auto; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-24 { margin-top: 24px; }
+  .mb-20 { margin-bottom: 20px; }
+
+  /* Modal width helpers */
+  .modal-sm { max-width: 460px; }
+  .modal-lg { max-width: 780px; }
+  .scrollable-panel { max-height: 60vh; overflow-y: auto; }
+
+  /* Text colour helpers */
+  .text-light { color: #e2e8f0; }
+  .text-danger { color: #f87171; }
+  .text-danger-muted { color: #fca5a5; font-size: 0.8rem; }
+  .text-muted-sm { color: #94a3b8; font-size: 0.78rem; }
+
+  /* Danger border block */
+  .danger-border-block {
+    border: 1px solid #c0392b; border-radius: 4px;
+    padding: 10px 12px; background: #2a1013;
+  }
+
+  /* Flex layout helpers */
+  .flex-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .flex-label {
+    display: flex; gap: 8px; align-items: center; cursor: pointer;
+  }
+  .flex-label-start {
+    display: flex; gap: 8px; align-items: flex-start; cursor: pointer;
+  }
+  .flex-gap-8 { display: flex; gap: 8px; }
+  .flex-gap-8-mt { margin-top: 10px; display: flex; gap: 8px; }
+  .flex-row-center {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+  }
+
+  /* Onboard modal helpers */
+  .ob-secrets-hint {
+    font-size: 0.85rem; color: var(--muted); margin: 4px 0 8px;
+  }
+  .onboard-desc {
+    margin: 0 0 10px; font-size: 0.82rem; color: #94a3b8;
+  }
+  .mill-note {
+    font-size: 0.78rem; color: #94a3b8; margin: 2px 0 0 24px;
+  }
+
+  /* Link accent */
+  .link-accent { color: #60a5fa; text-decoration: underline; }
+
+  /* Inline note next to inputs */
+  .note-inline {
+    font-size: 0.85em; color: var(--text-muted); margin-left: 0.5rem;
+  }
+  .note-inline-sm {
+    font-size: 0.82em; color: var(--text-muted); margin-left: 0.5rem;
+  }
+
+  /* Section headings */
+  .section-title { margin-bottom: 16px; color: var(--blue); }
+  .section-subtitle { margin-bottom: 8px; color: var(--blue); }
+  .section-desc {
+    font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px;
+  }
+
+  /* Claude auth OAuth URL box */
+  .oauth-url-box {
+    margin-bottom: 8px; padding: 8px 12px; background: #1e1e1e;
+    border-radius: 4px; word-break: break-all;
+  }
+
+  /* Details/summary cursor */
+  .details-summary { cursor: pointer; font-size: 0.82rem; color: #64748b; }
+
+  /* Small blue link */
+  .link-blue-sm { color: var(--blue); font-size: 0.82rem; }
+
+  /* Inline error box */
+  .error-inline-box {
+    padding: 8px 12px; background: var(--red-bg); color: var(--red);
+    border-radius: 4px; font-size: 0.82rem; margin-bottom: 8px;
+  }
+
+  /* Text size helpers */
+  .text-sm { font-size: 0.82rem; }
+  .text-xs { font-size: 0.78rem; }
+  .font-85 { font-size: 0.85rem; }
+  .m-0 { margin: 0; }
+
+  /* Row action link (Open) */
+  .open-link { font-size: 0.8rem; color: var(--blue); }
+  /* Muted fallback text */
+  .text-dimmed { color: #666; }
+  .text-subtle { color: #64748b; }
+  .text-warning { color: #f59e0b; }
+
+  /* Mem limit input */
+  .mem-limit-input { width: 120px; }
+
+  /* Label muted */
+  .label-muted {
+    font-size: 0.85rem; color: #94a3b8; flex-shrink: 0;
+  }
+  .detail-text {
+    font-size: 0.82rem; color: #94a3b8; margin-bottom: 8px;
+  }
+  .inline-msg {
+    margin-left: 8px; font-size: 0.82rem;
+  }
+  .toast-section {
+    margin-top: 12px; font-size: 0.85rem;
+  }
+
   /* Volume browser modal */
   .vb-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
