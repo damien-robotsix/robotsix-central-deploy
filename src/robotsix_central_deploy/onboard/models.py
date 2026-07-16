@@ -28,6 +28,7 @@ class DerivedSpec(BaseModel):
     volume_mounts: list[VolumeMount]  # host=volume_name (named volumes only)
     env: dict[str, str]  # keys from compose; "" for secrets, preset string for defaults
     claude_mount: bool
+    claude_mount_path: str = "/home/app/.claude"  # container path for the claude-auth volume (label value when a path)
     host_docker_sock: bool
     health_check: Optional[HealthCheck] = None
     command: Optional[list[str]] = None

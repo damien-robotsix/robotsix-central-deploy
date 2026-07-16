@@ -5376,6 +5376,11 @@
             "type": "boolean",
             "title": "Claude Mount"
           },
+          "claude_mount_path": {
+            "type": "string",
+            "title": "Claude Mount Path",
+            "default": "/home/app/.claude"
+          },
           "host_docker_sock": {
             "type": "boolean",
             "title": "Host Docker Sock"
@@ -6375,6 +6380,11 @@
             "type": "boolean",
             "title": "Claude Mount",
             "default": false
+          },
+          "claude_mount_path": {
+            "type": "string",
+            "title": "Claude Mount Path",
+            "default": "/home/app/.claude"
           },
           "host_docker_sock": {
             "type": "boolean",

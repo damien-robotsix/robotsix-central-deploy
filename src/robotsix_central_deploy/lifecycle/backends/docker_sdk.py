@@ -260,8 +260,13 @@ class DockerSdkBackend(ExecutionBackend):
             for m in config.mounts
         }
         if config.claude_mount:
+            # NOTE: the dict is keyed by volume name, so an explicit
+            # config.mounts entry for CLAUDE_AUTH_VOLUME would be silently
+            # clobbered here — claude_mount_path is the supported way to
+            # relocate the credentials (it must match the image user's
+            # $HOME/.claude; mill runs as `mill`, not `app`).
             volumes[CLAUDE_AUTH_VOLUME] = {
-                "bind": "/home/app/.claude",
+                "bind": config.claude_mount_path,
                 "mode": "rw",
             }
         if config.host_docker_sock:

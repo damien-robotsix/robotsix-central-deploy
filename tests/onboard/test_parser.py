@@ -312,6 +312,35 @@ services:
 """
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.claude_mount is True
+        assert spec.claude_mount_path == "/home/app/.claude"
+
+    def test_claude_mount_path_value(self):
+        """A path-valued claude-mount label mounts at that path (images whose
+        user's HOME is not /home/app, e.g. mill)."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.claude-mount: "/home/mill/.claude"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.claude_mount is True
+        assert spec.claude_mount_path == "/home/mill/.claude"
+
+    def test_claude_mount_invalid_value_is_violation(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.claude-mount: "yes please"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "claude-mount" in str(exc.value)
 
     def test_claude_mount_not_present(self):
         y = """\

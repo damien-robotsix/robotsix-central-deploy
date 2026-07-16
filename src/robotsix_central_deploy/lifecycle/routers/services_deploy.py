@@ -77,6 +77,7 @@ def _build_sibling_config(
         env=merged_env,
         health_check=sib_config.health_check,
         claude_mount=sib_config.claude_mount,
+        claude_mount_path=sib_config.claude_mount_path,
         host_docker_sock=sib_config.host_docker_sock,
         named_volumes=[m.host for m in sib_config.mounts],
         command=sib_config.command,

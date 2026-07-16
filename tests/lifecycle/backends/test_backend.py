@@ -676,6 +676,22 @@ class TestDockerSdkBackendUserInjection:
         assert "claude-auth" in volumes
         assert volumes["claude-auth"] == {"bind": "/home/app/.claude", "mode": "rw"}
 
+    def test_create_container_claude_mount_custom_path(self, backend):
+        """claude_mount_path relocates the claude-auth bind for images whose
+        user's HOME is not /home/app (e.g. mill runs as `mill`)."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            claude_mount=True,
+            claude_mount_path="/home/mill/.claude",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        volumes = kwargs["volumes"]
+        assert volumes["claude-auth"] == {"bind": "/home/mill/.claude", "mode": "rw"}
+
     def test_create_container_respects_explicit_user(self, backend):
         """When config.user is set, it overrides the host UID:GID."""
         b, client = backend
