@@ -17,7 +17,7 @@ from robotsix_central_deploy.lifecycle.models import (
     VolumeEntryType,
 )
 from robotsix_central_deploy.onboard.models import DerivedSpec  # noqa: TCH001
-from robotsix_central_deploy.registry.models import ConfigAssistSeed  # noqa: TCH001
+from robotsix_central_deploy.registry import ConfigAssistSeed  # noqa: TCH001
 
 
 # ---------------------------------------------------------------------------

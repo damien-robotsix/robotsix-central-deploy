@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `ServiceConfig` and `ConfigAssistSeed` to `registry/__init__.py` public API surface, and update internal consumers to import from the registry package rather than directly from `registry.models`.
 - Enable `completeness_check` periodic agent to surface wiring gaps across backends, abstract methods, and config consumers.
 - Add `src/robotsix_central_deploy/lifecycle/**/*` and `tests/lifecycle/**/*` globs to the lifecycle module in `docs/modules.yaml`, covering previously unclaimed source and test files.
 - Add `paths:` declaration to the `ui` module in `docs/modules.yaml` covering source, tests, and docs directories
