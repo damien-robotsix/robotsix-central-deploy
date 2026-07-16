@@ -10,6 +10,7 @@ All notable changes to robotsix-central-deploy.
   POST /services/{name}/config/refresh-schema byte-for-byte.
 - Fix `.hidden` CSS class conflict with JavaScript `style.display` manipulation in dashboard; replace `style.display` toggles with `classList` operations for all elements using the `hidden` class
   Extract remaining inline `style=` attributes from JS-generated HTML strings in `dashboard.js` into CSS classes in `dashboard.css`
+- Extract inline CSS from `login.html` into `static/login.css`
 - Deploy no longer silently overwrites a drifted config volume with stale
   stored defaults.  When the live volume hash differs from the stored
   ``volume_hash`` at deploy time, the server auto-imports the live volume
