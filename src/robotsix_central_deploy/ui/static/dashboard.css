@@ -607,3 +607,68 @@
     color: var(--blue); cursor: pointer; text-decoration: none;
   }
   .volume-name-cell:hover { color: #93c5fd; text-decoration: underline; }
+
+  /* ── JS-generated HTML inline style replacements ──────────────── */
+
+  /* Table helpers for JS-generated tables */
+  .th-vol { font-weight: 400; }
+  .th-vol-right { font-weight: 400; text-align: left; }
+  .td-right  { text-align: right; }
+  .th-sub    { text-align: left; color: #94a3b8; }
+  .th-sub-pad { text-align: left; color: #94a3b8; padding: 4px 12px; }
+  .table-vol { margin-top: 10px; }
+  .table-compact { border-collapse: collapse; min-width: 400px; }
+
+  /* Secret/enum badges in config form */
+  .badge-secret {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 0.75rem; background: rgba(251,146,60,0.18); color: var(--amber);
+  }
+  .hint-json { font-size: 0.75rem; color: var(--muted); margin-left: 4px; }
+
+  /* Config form helpers */
+  .config-empty { color: #94a3b8; padding: 1rem 0; }
+  .config-desc  { margin: 2px 0 8px; font-size: 0.78rem; color: var(--muted); }
+
+  /* Config assist */
+  .seed-label { font-size: 0.85rem; margin-left: 0.75rem; white-space: nowrap; }
+  .seed-input { width: 10rem; margin-left: 0.25rem; }
+
+  /* Port onboard input */
+  .port-host-input { width: 80px; }
+
+  /* Drift / warning boxes */
+  .warning-box {
+    background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px;
+    border-radius: 4px; margin-top: 8px;
+  }
+  .warning-box-mb {
+    background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px;
+    border-radius: 4px; margin-bottom: 8px;
+  }
+  .ml-list { margin: 4px 0 0 16px; }
+
+  /* Drift actions row */
+  .drift-actions { margin-top: 8px; display: flex; gap: 8px; }
+  .text-amber-mb { color: var(--amber); margin-bottom: 8px; }
+  .bg-amber-subtle { background: rgba(251,146,60,0.08); }
+
+  /* History / table cell helpers */
+  .td-cell    { border-bottom: 1px solid #334155; padding: 6px 8px; }
+  .td-center-muted  { text-align: center; padding: 2rem; color: #94a3b8; }
+  .td-center-error  { text-align: center; padding: 2rem; color: #f87171; }
+  .table-full-sm { width: 100%; font-size: 0.82rem; margin-top: 8px; }
+
+  /* Button / text misc */
+  .text-sm-blue { font-size: 0.78rem; color: var(--blue); }
+  .btn-xs { font-size: 0.75rem; padding: 3px 8px; }
+
+  /* Volume browser */
+  .vb-loading { color: #64748b; font-size: 0.82rem; }
+  .vb-empty   { color: #64748b; font-size: 0.82rem; }
+  .vb-sep     { color: #475569; }
+
+  /* env-key with flex alignment (used in buildSecretRow) */
+  .env-key-flex {
+    display: flex; align-items: center;
+  }

@@ -41,7 +41,7 @@ function dismissDeploySuccess() {
 
 function hideCaretakerDegradedBanner() {
   const el = document.getElementById('caretaker-degraded-banner');
-  if (el) el.style.display = 'none';
+  if (el) el.classList.add('hidden');
 }
 
 // Delegated click handler — dispatches data-action attributes so the
@@ -328,14 +328,14 @@ function renderDiskPanel(data) {
     const warn = freePct < data.warn_threshold_pct;
     document.getElementById('disk-warning').textContent =
       `⚠ Low disk space — free space is below ${data.warn_threshold_pct}%!`;
-    document.getElementById('disk-warning').style.display = warn ? '' : 'none';
+    document.getElementById('disk-warning').classList.toggle('hidden', !warn);
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
-        `<tr><th style="font-weight:400;"><span class="volume-name-cell" data-action="openVolumeBrowser" data-arg-0="${escAttr(v.name)}">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span class="text-subtle">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
+        `<tr><th class="th-vol"><span class="volume-name-cell" data-action="openVolumeBrowser" data-arg-0="${escAttr(v.name)}">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span class="text-subtle">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
     ).join('');
     const volTable = vols.length
-        ? `<table style="margin-top:10px;"><tr><th colspan="2" style="text-align:left;color:#94a3b8;">Docker volumes</th></tr>${volRows}</table>`
+        ? `<table class="table-vol"><tr><th colspan="2" class="th-sub">Docker volumes</th></tr>${volRows}</table>`
         : '';
     document.getElementById('disk-content').innerHTML = `
         <table>
@@ -360,10 +360,10 @@ async function fetchVolumeAudit() {
     const data = await resp.json();
     const panel = document.getElementById('volume-audit-panel');
     if (!data.enabled) {
-      panel.style.display = 'none';
+      panel.classList.add('hidden');
       return;
     }
-    panel.style.display = '';
+    panel.classList.remove('hidden');
     renderVolumeAuditPanel(data);
   } catch (_e) {
     // silently skip — audit panel is optional
@@ -415,13 +415,13 @@ function renderVolumeAuditPanel(data) {
   const findingsList = document.getElementById('volume-audit-findings-list');
   const findings = (data.recent_findings || []).slice(-5);
   if (findings.length > 0) {
-    findingsDiv.style.display = '';
+    findingsDiv.classList.remove('hidden');
     findingsList.innerHTML = findings.map(f =>
       `<li>${escHtml(f.finding_at ? new Date(f.finding_at).toLocaleString() : '')} \u2014
            ${escHtml(f.detail || f.volume_name)}</li>`
     ).join('');
   } else {
-    findingsDiv.style.display = 'none';
+    findingsDiv.classList.add('hidden');
   }
 }
 
@@ -442,16 +442,16 @@ function renderOrphanVolumes(data) {
   const panel = document.getElementById('orphan-volumes-panel');
   const vols = data.volumes || [];
   if (vols.length === 0) {
-    panel.style.display = 'none';
+    panel.classList.add('hidden');
     return;
   }
-  panel.style.display = '';
+  panel.classList.remove('hidden');
   const rows = vols.slice().sort((a, b) => b.size_bytes - a.size_bytes).map(v =>
-    `<tr><th style="font-weight:400;text-align:left;">${escHtml(v.name)}</th><td style="text-align:right;">${fmt_bytes(v.size_bytes)}</td></tr>`
+    `<tr><th class="th-vol-right">${escHtml(v.name)}</th><td class="td-right">${fmt_bytes(v.size_bytes)}</td></tr>`
   ).join('');
   document.getElementById('orphan-volumes-content').innerHTML = `
-    <table style="border-collapse:collapse;min-width:400px;">
-      <tr><th colspan="2" style="text-align:left;color:#94a3b8;padding:4px 12px;">
+    <table class="table-compact">
+      <tr><th colspan="2" class="th-sub-pad">
         ${vols.length} orphan volume${vols.length === 1 ? '' : 's'} &middot; ${fmt_bytes(data.total_bytes)}
         <button id="prune-vols-btn" class="reclaim-btn" data-action="pruneOrphanVolumes">Prune all</button>
       </th></tr>
@@ -902,7 +902,7 @@ function buildSecretRow(key) {
   div.className = 'env-row';
   div.dataset.key = key;
   div.innerHTML = `
-    <span class="env-key" style="display:flex;align-items:center;">${escHtml(key)}</span>
+    <span class="env-key env-key-flex">${escHtml(key)}</span>
     <span class="secret-value-masked">***</span>
     <input type="password" class="secret-new-value" placeholder="enter new value to update" autocomplete="off">
     <span class="inline-error" style="display:none;"></span>
@@ -1031,7 +1031,7 @@ function openConfigModal(name) {
   document.getElementById('config-modal-component').textContent = name;
   document.getElementById('config-modal-error').style.display = 'none';
   document.getElementById('config-form-body').innerHTML = '';
-  document.getElementById('config-raw-body').style.display = 'none';
+  document.getElementById('config-raw-body').classList.add('hidden');
   document.getElementById('config-raw-body').value = '';
   document.getElementById('config-form-body').style.display = '';
   document.getElementById('config-raw-toggle-btn').textContent = '{ } Raw';
@@ -1082,7 +1082,7 @@ function toggleConfigMode() {
     const currentValues = collectConfigValues(_configSchema);
     rawBody.value = JSON.stringify(currentValues, null, 2);
     formBody.style.display = 'none';
-    rawBody.style.display = '';
+    rawBody.classList.remove('hidden');
     toggleBtn.textContent = '📋 Form';
     saveBtn.disabled = false;
     // Hide drift UI in raw mode
@@ -1101,7 +1101,7 @@ function toggleConfigMode() {
     hideConfigModalError();
     generateConfigForm(_configSchema, parsed);
     _injectConfigAssistUI();
-    rawBody.style.display = 'none';
+    rawBody.classList.add('hidden');
     formBody.style.display = '';
     toggleBtn.textContent = '{ } Raw';
     saveBtn.disabled = false;
@@ -1140,7 +1140,7 @@ async function fetchConfigSchema(name) {
     });
     if (resp.status === 404) {
       document.getElementById('config-form-body').innerHTML =
-        '<p style="color:#94a3b8;padding:1rem 0;">No configuration schema available for this component.</p>';
+        '<p class="config-empty">No configuration schema available for this component.</p>';
       document.querySelector('#config-modal .btn-primary').disabled = true;
       return;
     }
@@ -1289,7 +1289,7 @@ function _renderConfigNode(schema, current, prefix, container) {
       const section = document.createElement('div');
       section.className = 'env-section';
       const sectionDesc = resolvedSchema.description
-        ? `<p style="margin:2px 0 8px;font-size:0.78rem;color:var(--muted);">${escHtml(resolvedSchema.description)}</p>`
+        ? `<p class="config-desc">${escHtml(resolvedSchema.description)}</p>`
         : '';
       section.innerHTML = `<h3>${escHtml(key)}</h3>${sectionDesc}`;
       const currentSub = (currentVal !== null && typeof currentVal === 'object'
@@ -1415,7 +1415,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     div.innerHTML = `
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
-      <span class="env-badge" style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:0.75rem;background:rgba(251,146,60,0.18);color:var(--amber);">secret</span>
+      <span class="badge-secret">secret</span>
     `;
     return div;
   }
@@ -1429,7 +1429,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     div.innerHTML = `
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
-      <span style="font-size:0.75rem;color:var(--muted);margin-left:4px;">JSON list</span>
+      <span class="hint-json">JSON list</span>
     `;
     return div;
   }
@@ -1564,12 +1564,12 @@ function _injectConfigAssistUI() {
     const derivedLabel = seed.key.split('.').filter(s => !/^\d+$/.test(s)).pop() || seed.key;
     const displayLabel = seed.label || derivedLabel;
     const isSecret = /password|secret|token|key/i.test(seed.key);
-    return `<label class="seed-label" style="font-size:0.85rem;margin-left:0.75rem;white-space:nowrap;">
+    return `<label class="seed-label">
       ${escHtml(displayLabel)}:
       <input id="seed-input-${escAttr(seed.key)}"
              type="${isSecret ? 'password' : 'text'}"
              placeholder="${escHtml(displayLabel)}"
-             style="width:10rem;margin-left:0.25rem;"
+             class="seed-input"
              aria-label="Seed value for ${escHtml(seed.key)}" />
     </label>`;
   }).join('');
@@ -1746,10 +1746,10 @@ function _showDriftBanner(name) {
   banner.innerHTML =
     '<strong>&#x26A0; Config was edited out-of-band since the last Save. ' +
     'The form shows the last saved values, not the current volume content.</strong>' +
-    '<div style="margin-top:8px;display:flex;gap:8px;">' +
-    '<button id="drift-import-btn" class="btn-secondary" style="font-size:0.78rem;">' +
+    '<div class="drift-actions">' +
+    '<button id="drift-import-btn" class="btn-secondary text-xs">' +
     'Import volume &rarr; store</button>' +
-    '<button id="drift-stale-btn" class="btn-secondary" style="font-size:0.78rem;">' +
+    '<button id="drift-stale-btn" class="btn-secondary text-xs">' +
     'Edit with stale values</button>' +
     '</div>';
 
@@ -1815,15 +1815,15 @@ function showConfigDriftConflict(body) {
   const panel = document.createElement('div');
   panel.id = 'config-drift-conflict';
   panel.innerHTML =
-    '<h3 style="color:var(--amber);margin-bottom:8px;">' +
+    '<h3 class="text-amber-mb">' +
     'Save blocked &mdash; config edited out-of-band</h3>' +
     renderConfigDiff(body.live_config, body.stored_config) +
-    '<div style="margin-top:12px;display:flex;gap:8px;">' +
-    '<button id="drift-conflict-import-btn" class="btn-primary" style="font-size:0.78rem;">' +
+    '<div class="drift-actions">' +
+    '<button id="drift-conflict-import-btn" class="btn-primary text-xs">' +
     'Import and re-edit</button>' +
-    '<button id="drift-conflict-overwrite-btn" class="btn-danger" style="font-size:0.78rem;">' +
+    '<button id="drift-conflict-overwrite-btn" class="btn-danger text-xs">' +
     'Overwrite (destructive)</button>' +
-    '<button id="drift-conflict-cancel-btn" class="btn-secondary" style="font-size:0.78rem;">' +
+    '<button id="drift-conflict-cancel-btn" class="btn-secondary text-xs">' +
     'Cancel</button>' +
     '</div>';
 
@@ -1870,7 +1870,7 @@ function confirmAndOverwrite() {
 
 function renderConfigDiff(liveConfig, storedConfig) {
   if (!liveConfig && !storedConfig) {
-    return '<p style="color:#94a3b8;padding:0.5rem 0;">No differing keys found.</p>';
+    return '<p class="config-empty">No differing keys found.</p>';
   }
 
   // Flatten both objects to dot-joined keys (one level of recursion)
@@ -1902,7 +1902,7 @@ function renderConfigDiff(liveConfig, storedConfig) {
   }
 
   if (diffRows.length === 0) {
-    return '<p style="color:#94a3b8;padding:0.5rem 0;">No differing keys found.</p>';
+    return '<p class="config-empty">No differing keys found.</p>';
   }
 
   const truncate = (v) => {
@@ -1917,11 +1917,11 @@ function renderConfigDiff(liveConfig, storedConfig) {
   };
 
   let html =
-    '<table style="width:100%;font-size:0.82rem;margin-top:8px;">' +
+    '<table class="table-full-sm">' +
     '<thead><tr>' +
-    '<th style="background:#243044;">Field</th>' +
-    '<th style="background:#243044;">In volume (live)</th>' +
-    '<th style="background:#243044;">Your form (stored)</th>' +
+    '<th>Field</th>' +
+    '<th>In volume (live)</th>' +
+    '<th>Your form (stored)</th>' +
     '</tr></thead><tbody>';
 
   for (const row of diffRows) {
@@ -1929,12 +1929,12 @@ function renderConfigDiff(liveConfig, storedConfig) {
     const liveDisplay = bothSecret ? '***' : fmtVal(row.live);
     const storedDisplay = bothSecret ? '***' : fmtVal(row.stored);
     html +=
-      '<tr style="background:rgba(251,146,60,0.08);">' +
-      '<td style="border-bottom:1px solid #334155;padding:6px 8px;">' +
+      '<tr class="bg-amber-subtle">' +
+      '<td class="td-cell">' +
       escHtml(row.key) + '</td>' +
-      '<td style="border-bottom:1px solid #334155;padding:6px 8px;">' +
+      '<td class="td-cell">' +
       liveDisplay + '</td>' +
-      '<td style="border-bottom:1px solid #334155;padding:6px 8px;">' +
+      '<td class="td-cell">' +
       storedDisplay + '</td>' +
       '</tr>';
   }
@@ -1952,7 +1952,7 @@ function openHistoryModal(name) {
   document.getElementById('history-modal-component').textContent = name;
   document.getElementById('history-modal-error').style.display = 'none';
   document.getElementById('history-tbody').innerHTML =
-    '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8;">Loading…</td></tr>';
+    '<tr><td colspan="5" class="td-center-muted">Loading…</td></tr>';
   document.getElementById('history-modal').classList.add('open');
   fetchHistory(name);
 }
@@ -1982,7 +1982,7 @@ async function fetchHistory(name) {
   } catch (err) {
     showHistoryError('Failed to load history: ' + err.message);
     document.getElementById('history-tbody').innerHTML =
-      '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#f87171;">Failed to load history.</td></tr>';
+      '<tr><td colspan="5" class="td-center-error">Failed to load history.</td></tr>';
   }
 }
 
@@ -1990,7 +1990,7 @@ function renderHistoryRows(entries, runningDigest) {
   const tbody = document.getElementById('history-tbody');
   if (!entries || entries.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8;">No deploy history recorded yet.</td></tr>';
+      '<tr><td colspan="5" class="td-center-muted">No deploy history recorded yet.</td></tr>';
     return;
   }
 
@@ -2009,8 +2009,8 @@ function renderHistoryRows(entries, runningDigest) {
       : '\u2014';
     const imageRef = entry.image_ref || '\u2014';
     const rollbackBtn = isCurrent
-      ? '<span style="font-size:0.78rem;color:var(--blue);">current</span>'
-      : `<button style="font-size:0.75rem;padding:3px 8px;" data-action="rollbackTo" data-arg-0="${escAttr(_historyModalName)}" data-arg-1="${escAttr(digest)}">Rollback</button>`;
+      ? '<span class="text-sm-blue">current</span>'
+      : `<button class="btn-xs" data-action="rollbackTo" data-arg-0="${escAttr(_historyModalName)}" data-arg-1="${escAttr(digest)}">Rollback</button>`;
 
     html += `<tr class="${rowClass}">
       <td><span title="${escAttr(digest)}">${escHtml(shortDigest)}</span></td>
@@ -2083,16 +2083,16 @@ function resetOnboardModal() {
   document.getElementById('ob-git-url').value = '';
   document.getElementById('ob-name').value = '';
   var progEl = document.getElementById('ob-deploy-progress');
-  progEl.style.display = 'none';
+  progEl.classList.add('hidden');
   progEl.innerHTML = '';
   showStep1();
 }
 
 function showStep1() {
   document.getElementById('onboard-step1').style.display = '';
-  document.getElementById('onboard-step2').style.display = 'none';
+  document.getElementById('onboard-step2').classList.add('hidden');
   var e = document.getElementById('ob-step1-error');
-  e.style.display = 'none';
+  e.classList.add('hidden');
   e.innerHTML = '';
 }
 
@@ -2106,7 +2106,7 @@ function showOnboardError(el, status, data) {
     html = '<p>' + escHtml(data.error || 'Unexpected error.') + '</p>';
   }
   el.innerHTML = html;
-  el.style.display = '';
+  el.classList.remove('hidden');
 }
 
 var ONBOARD_PHASE_LABELS = {
@@ -2158,7 +2158,7 @@ function pollOnboardJob(jobId, errEl) {
           showOnboardError(errEl, 404, { error: 'Job not found \u2014 server may have restarted.' });
           setOnboardInputsDisabled(false);
           document.getElementById('ob-deploy-btn').textContent = 'Deploy';
-          progEl.style.display = 'none';
+          progEl.classList.add('hidden');
           return;
         }
         if (!res.ok) {
@@ -2167,27 +2167,26 @@ function pollOnboardJob(jobId, errEl) {
           showOnboardError(errEl, res.status, errData);
           setOnboardInputsDisabled(false);
           document.getElementById('ob-deploy-btn').textContent = 'Deploy';
-          progEl.style.display = 'none';
+          progEl.classList.add('hidden');
           return;
         }
         var job = await res.json();
         var label = ONBOARD_PHASE_LABELS[job.phase] || job.phase;
         progEl.innerHTML = escHtml(label);
-        progEl.style.display = '';
+        progEl.classList.remove('hidden');
 
         if (job.phase === 'done') {
           if (job.warnings && job.warnings.length > 0) {
-            var warnHtml = '<div style="background:#fff3cd;border:1px solid #ffc107;padding:8px 12px;'
-              + 'border-radius:4px;margin-top:8px;">'
+            var warnHtml = '<div class="warning-box">'
               + '\u26a0\ufe0f <strong>Port-shift notifications not sent \u2014 mill was unreachable:</strong>'
-              + '<ul style="margin:4px 0 0 16px">' + job.warnings.map(function(w) {
+              + '<ul class="ml-list">' + job.warnings.map(function(w) {
                   return '<li>' + escHtml(w) + '</li>';
                 }).join('') + '</ul>'
               + '<small>Please manually notify the affected component maintainers to update their deploy/docker-compose.yml.</small>'
               + '<br><button data-action="dismissDeploySuccess">OK</button>'
               + '</div>';
             progEl.innerHTML = warnHtml;
-            progEl.style.display = '';
+            progEl.classList.remove('hidden');
             stopOnboardJobPoll();
             // closeOnboardModal() and loadDashboard() are deferred to the OK button above
             return;
@@ -2200,7 +2199,7 @@ function pollOnboardJob(jobId, errEl) {
           showOnboardError(errEl, 0, { error: job.error || 'Deploy failed.' });
           setOnboardInputsDisabled(false);
           document.getElementById('ob-deploy-btn').textContent = 'Deploy';
-          progEl.style.display = 'none';
+          progEl.classList.add('hidden');
         } else {
           // still in progress — keep polling
           poll();
@@ -2210,7 +2209,7 @@ function pollOnboardJob(jobId, errEl) {
         showOnboardError(errEl, 0, { error: 'Network error \u2014 check server logs.' });
         setOnboardInputsDisabled(false);
         document.getElementById('ob-deploy-btn').textContent = 'Deploy';
-        progEl.style.display = 'none';
+        progEl.classList.add('hidden');
       }
     }, DEPLOY_POLL_INTERVAL_MS);
   }
@@ -2222,7 +2221,7 @@ async function onboardFetch() {
   var gitUrl = document.getElementById('ob-git-url').value.trim();
   var name   = document.getElementById('ob-name').value.trim();
   var errEl  = document.getElementById('ob-step1-error');
-  errEl.style.display = 'none';
+  errEl.classList.add('hidden');
 
   var btn = document.getElementById('ob-fetch-btn');
   btn.disabled = true;
@@ -2244,7 +2243,7 @@ async function onboardFetch() {
     _obPortShifts = data.port_shifts || [];
     populateStep2(_obSpec, _obPortShifts);
     document.getElementById('onboard-step1').style.display = 'none';
-    document.getElementById('onboard-step2').style.display = '';
+    document.getElementById('onboard-step2').classList.remove('hidden');
   } catch (e) {
     showOnboardError(errEl, 0, { error: 'Network error — check server logs.' });
   } finally {
@@ -2268,16 +2267,15 @@ function populateStep2(spec, portShifts) {
         + (s.collision_component_id ? ' (collides with \u2018' + escHtml(s.collision_component_id) + '\u2019)' : '')
         + '</li>';
     }).join('');
-    shiftBanner = '<div style="background:#fff3cd;border:1px solid #ffc107;padding:8px 12px;'
-      + 'border-radius:4px;margin-bottom:8px;">'
-      + '\u26a0\ufe0f <strong>Port defaults adjusted:</strong><ul style="margin:4px 0 0 16px">'
+    shiftBanner = '<div class="warning-box-mb">'
+      + '\u26a0\ufe0f <strong>Port defaults adjusted:</strong><ul class="ml-list">'
       + items + '</ul>'
       + '<small>Host ports were auto-assigned to avoid collisions with existing components. '
       + 'You may override them below. Affected component maintainers will be notified via the mill (if reachable).</small>'
       + '</div>';
   }
   portsEl.innerHTML = shiftBanner + spec.ports.map(function(p, i) {
-    return '<div><label>Port ' + (i + 1) + ': <input class="ob-port-host" data-idx="' + i + '" type="number" value="' + escAttr(String(p.host)) + '" style="width:80px" /> → ' + escHtml(String(p.container)) + '/' + escHtml(p.protocol) + '</label></div>';
+    return '<div><label>Port ' + (i + 1) + ': <input class="ob-port-host port-host-input" data-idx="' + i + '" type="number" value="' + escAttr(String(p.host)) + '" /> → ' + escHtml(String(p.container)) + '/' + escHtml(p.protocol) + '</label></div>';
   }).join('');
 
   // Volumes
@@ -2299,12 +2297,12 @@ function populateStep2(spec, portShifts) {
   if (hasConfig) {
     // Hide env table; show the full config.yaml mirror
     envTable.style.display = 'none';
-    configSection.style.display = '';
+    configSection.classList.remove('hidden');
     generateConfigForm(spec.config_schema, {}, 'ob-config-form-body');
   } else {
     // Show env table; hide config section
     envTable.style.display = '';
-    configSection.style.display = 'none';
+    configSection.classList.add('hidden');
     var tbody = document.getElementById('ob-env-body');
     tbody.innerHTML = Object.entries(spec.env).map(function(entry) {
       var k = entry[0], v = entry[1];
@@ -2321,9 +2319,9 @@ function populateStep2(spec, portShifts) {
 
 async function onboardDeploy() {
   var errEl = document.getElementById('ob-step2-error');
-  errEl.style.display = 'none';
+  errEl.classList.add('hidden');
   var progEl = document.getElementById('ob-deploy-progress');
-  progEl.style.display = 'none';
+  progEl.classList.add('hidden');
   progEl.innerHTML = '';
 
   // Deep clone the spec
@@ -2412,13 +2410,13 @@ function showSettingsSection() {
   document.querySelector('header').style.display = 'none';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = 'none');
   document.querySelector('table').style.display = 'none';
-  document.getElementById('settings-section').style.display = '';
+  document.getElementById('settings-section').classList.remove('hidden');
   loadSettings();
   fetchClaudeAuthStatus();
 }
 
 function hideSettingsSection() {
-  document.getElementById('settings-section').style.display = 'none';
+  document.getElementById('settings-section').classList.add('hidden');
   document.querySelector('header').style.display = '';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = '');
   document.querySelector('table').style.display = '';
@@ -2452,8 +2450,8 @@ async function loadSettings() {
     document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
     document.getElementById('s-mill-component').value = s.mill_component_id || 'mill';
     document.getElementById('s-image-prune').checked = !!s.image_auto_prune;
-    document.getElementById('s-caretaker-interval-row').style.display = s.caretaker_enabled ? '' : 'none';
-    document.getElementById('s-mill-component-row').style.display = s.caretaker_enabled ? '' : 'none';
+    document.getElementById('s-caretaker-interval-row').classList.toggle('hidden', !s.caretaker_enabled);
+    document.getElementById('s-mill-component-row').classList.toggle('hidden', !s.caretaker_enabled);
     // LLMIO tier config
     if (s.llmio_tier_config) {
       for (var level = 1; level <= 4; level++) {
@@ -2516,8 +2514,8 @@ async function saveSettings() {
 
 function onCaretakerEnabledChange() {
   var enabled = document.getElementById('s-caretaker-enabled').checked;
-  document.getElementById('s-caretaker-interval-row').style.display = enabled ? '' : 'none';
-  document.getElementById('s-mill-component-row').style.display = enabled ? '' : 'none';
+  document.getElementById('s-caretaker-interval-row').classList.toggle('hidden', !enabled);
+  document.getElementById('s-mill-component-row').classList.toggle('hidden', !enabled);
 }
 
 async function checkCaretakerStatus() {
@@ -2527,9 +2525,9 @@ async function checkCaretakerStatus() {
     var data = await res.json();
     var banner = document.getElementById('caretaker-degraded-banner');
     if (data.enabled && !data.mill_reachable) {
-      banner.style.display = 'block';
+      banner.classList.remove('hidden');
     } else {
-      banner.style.display = 'none';
+      banner.classList.add('hidden');
     }
   } catch (_) { /* transient */ }
 }
@@ -2564,7 +2562,7 @@ async function loadVolumeDir(path) {
   errorEl.classList.remove('open');
   contentArea.classList.remove('open');
   contentArea.innerHTML = '';
-  listingEl.innerHTML = '<div style="color:#64748b;font-size:0.82rem;">Loading\u2026</div>';
+  listingEl.innerHTML = '<div class="vb-loading">Loading\u2026</div>';
 
   try {
     const resp = await fetch(
@@ -2599,7 +2597,7 @@ function renderBreadcrumb(path) {
   let accum = '';
   for (const p of parts) {
     accum += '/' + p;
-    html += ` <span style="color:#475569;">/</span> <button data-action="loadVolumeDir" data-arg-0="${escAttr(accum)}">${escHtml(p)}</button>`;
+    html += ` <span class="vb-sep">/</span> <button data-action="loadVolumeDir" data-arg-0="${escAttr(accum)}">${escHtml(p)}</button>`;
   }
   el.innerHTML = html;
 }
@@ -2607,7 +2605,7 @@ function renderBreadcrumb(path) {
 function renderVolumeListing(entries) {
   const el = document.getElementById('vb-listing');
   if (!entries || entries.length === 0) {
-    el.innerHTML = '<div style="color:#64748b;font-size:0.82rem;">(empty directory)</div>';
+    el.innerHTML = '<div class="vb-empty">(empty directory)</div>';
     return;
   }
 
@@ -2628,9 +2626,9 @@ function renderVolumeListing(entries) {
     const size = e.size_bytes !== undefined ? fmt_bytes(e.size_bytes) : '\u2014';
     const fullPath = (currentVolumePath ? currentVolumePath + '/' : '') + e.name;
     if (e.type === 'dir') {
-      return `<tr><td><span class="vb-entry vb-dir" data-action="loadVolumeDir" data-arg-0="${escAttr(fullPath)}">${name}</span></td><td style="color:#64748b;">\u2014</td></tr>`;
+      return `<tr><td><span class="vb-entry vb-dir" data-action="loadVolumeDir" data-arg-0="${escAttr(fullPath)}">${name}</span></td><td class="vb-sep">\u2014</td></tr>`;
     }
-    return `<tr><td><span class="vb-entry vb-file" data-action="loadVolumeFile" data-arg-0="${escAttr(fullPath)}" data-arg-1="${escAttr(e.name)}">${name}</span></td><td style="color:#94a3b8;">${size}</td></tr>`;
+    return `<tr><td><span class="vb-entry vb-file" data-action="loadVolumeFile" data-arg-0="${escAttr(fullPath)}" data-arg-1="${escAttr(e.name)}">${name}</span></td><td class="text-subtle">${size}</td></tr>`;
   }).join('');
 
   el.innerHTML = `<table>${parentRow}${rows}</table>`;
@@ -2821,7 +2819,7 @@ function renderClaudeAuthStatus(data) {
 
   if (data.status === 'authenticated') {
     loginBtn.style.display = '';
-    loginSection.style.display = 'none';
+    loginSection.classList.add('hidden');
   } else {
     loginBtn.style.display = '';
   }
@@ -2838,7 +2836,7 @@ async function startClaudeLogin() {
   const cancelBtn = document.getElementById('claude-auth-cancel-btn');
 
   if (btn) btn.disabled = true;
-  errorDiv.style.display = 'none';
+  errorDiv.classList.add('hidden');
   toast.textContent = 'Starting Claude login…';
   toast.style.color = 'var(--grey)';
 
@@ -2857,7 +2855,7 @@ async function startClaudeLogin() {
     urlLink.href = data.oauth_url;
     urlLink.textContent = data.oauth_url;
     codeInput.value = '';
-    loginSection.style.display = '';
+    loginSection.classList.remove('hidden');
     submitBtn.disabled = false;
     cancelBtn.disabled = false;
     toast.textContent = 'Visit the URL above, authorize, then paste the code below.';
@@ -2881,10 +2879,10 @@ async function completeClaudeLogin() {
   const authCode = codeInput.value.trim();
   if (!authCode) {
     errorDiv.textContent = 'Please paste the authorization code.';
-    errorDiv.style.display = '';
+    errorDiv.classList.remove('hidden');
     return;
   }
-  errorDiv.style.display = 'none';
+  errorDiv.classList.add('hidden');
   submitBtn.disabled = true;
   cancelBtn.disabled = true;
   toast.textContent = 'Completing login…';
@@ -2905,7 +2903,7 @@ async function completeClaudeLogin() {
     if (data.status === 'authenticated') {
       toast.textContent = '✓ Login successful!';
       toast.style.color = 'var(--green)';
-      loginSection.style.display = 'none';
+      loginSection.classList.add('hidden');
       claudeLoginId = '';
       await fetchClaudeAuthStatus();
     } else {
@@ -2943,7 +2941,7 @@ async function cancelClaudeLogin() {
     } catch (_) { /* best-effort */ }
   }
   claudeLoginId = '';
-  loginSection.style.display = 'none';
+  loginSection.classList.add('hidden');
   toast.textContent = '';
 }
 
@@ -3018,7 +3016,7 @@ async function checkSelfUpdate() {
     const btn = document.getElementById('self-update-btn');
     if (data.supported && data.update_available && !btn.disabled) {
       selfUpdateInitialDigest = data.running_digest;
-      btn.style.display = '';
+      btn.classList.remove('hidden');
     }
   } catch (_) { /* transient — retried on the next check */ }
 }
