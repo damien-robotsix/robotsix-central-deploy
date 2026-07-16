@@ -6,6 +6,8 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- refresh-schema regression test: current config values survive
+  POST /services/{name}/config/refresh-schema byte-for-byte.
 - Deploy no longer silently overwrites a drifted config volume with stale
   stored defaults.  When the live volume hash differs from the stored
   ``volume_hash`` at deploy time, the server auto-imports the live volume

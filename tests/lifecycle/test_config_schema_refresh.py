@@ -133,3 +133,38 @@ async def test_refresh_422_on_invalid_schema_json(
             "/services/legacy-comp/config/refresh-schema", headers=HEADERS
         )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_refresh_preserves_current_config_values(
+    client_with_legacy_component: AsyncClient,
+) -> None:
+    """Set current to non-default values, call refresh-schema,
+    assert current is unchanged byte-for-byte."""
+    config_yaml_store = server_mod.app.state.config_yaml_store
+
+    # Set current to non-default operator values (2026-07-16 scenario)
+    current_values = {
+        "host": "prod.example.com",
+        "port": 9443,
+        "api_key": "sk-real-operator-key",
+    }
+    await config_yaml_store.update_current("legacy-comp", current_values)
+
+    repo_files = RepoFiles(
+        compose_bytes=b"services: {}",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=json.dumps(FRESH_SCHEMA).encode(),
+    )
+    with patch(
+        "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+        return_value=repo_files,
+    ):
+        resp = await client_with_legacy_component.post(
+            "/services/legacy-comp/config/refresh-schema", headers=HEADERS
+        )
+    assert resp.status_code == 200
+
+    stored = await config_yaml_store.get_current("legacy-comp")
+    assert stored == current_values
