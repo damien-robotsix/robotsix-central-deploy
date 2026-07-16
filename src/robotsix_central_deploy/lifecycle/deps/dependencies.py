@@ -17,7 +17,7 @@ from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig, ServiceConfig
+from ...registry import ComponentConfig, ServiceConfig
 from ...registry_check import RegistryChecker
 from .jobs import JobRegistry
 

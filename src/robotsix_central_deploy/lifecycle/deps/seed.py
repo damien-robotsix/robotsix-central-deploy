@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from robotsix_central_deploy.onboard.fetcher import RepoFiles
     from robotsix_central_deploy.onboard.models import DerivedSpec
     from ...registry.config_store import ComponentConfigStore
-    from ...registry.models import ComponentConfig, ConfigAssistSeed
+    from ...registry import ComponentConfig, ConfigAssistSeed
 
 _ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 

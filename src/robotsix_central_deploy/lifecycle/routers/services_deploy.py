@@ -49,7 +49,7 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig, ServiceConfig
+from ...registry import ComponentConfig, ServiceConfig
 
 logger = logging.getLogger(__name__)
 
