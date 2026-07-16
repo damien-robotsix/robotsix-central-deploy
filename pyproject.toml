@@ -19,6 +19,7 @@ dependencies = [
     "PyGithub>=2.9.0",
     "asgi-csrf>=0.11",
     "secure>=2.0",
+    "jinja2>=3.1",
     "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@3b999fc697fd1112024160f6f5ba45bd89e7f5d0",
     "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@424f8ec5140e14e9699b92d5c3755d929625b570",
 ]
