@@ -1,0 +1,1 @@
+Extract shared CLAUDE_AUTH_VOLUME constant to eliminate 3-site string-literal duplication

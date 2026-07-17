@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 from ..backends import ExecutionBackend
-from ..models import ServiceRecord
+from ..models import CLAUDE_AUTH_VOLUME, ServiceRecord
 from ..store import ServiceStore
 from ...registry_check import RegistryChecker
 
@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 # -- Claude auth constants -------------------------------------------------
 
-CLAUDE_AUTH_VOLUME = "claude-auth"
 CLAUDE_AUTH_REFRESH_BEFORE_SECONDS = 3600  # refresh when ≤ 1 hour until expiry
 CLAUDE_AUTH_USER_AGENT = "claude-cli/2.1.199 (external, cli)"  # noqa: E501 — avoids Cloudflare 403
 CLAUDE_AUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL, not a password

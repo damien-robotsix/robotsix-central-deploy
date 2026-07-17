@@ -7,9 +7,11 @@ import json
 import logging
 from typing import Any
 
+from ..models import CLAUDE_AUTH_VOLUME
+
 logger = logging.getLogger(__name__)
 
-CLAUDE_AUTH_VOLUME = "claude-auth"
+__all__ = ["AuthOps", "CLAUDE_AUTH_VOLUME"]
 
 
 class AuthOps:
