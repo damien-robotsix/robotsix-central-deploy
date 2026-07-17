@@ -6,6 +6,8 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Parent Update button now cascades to all sub-component siblings (children), so the whole component group converges to a consistent revision set. The parent's "Up to date" badge aggregates the group — if any child has an update available the parent shows "update available (child)" instead of a misleading green badge. The ``POST /chat/services/{name}/update`` API endpoint also fans out to siblings.
+- Parent Update button now cascades to all sub-component siblings (children), so the whole component group converges to a consistent revision set. The parent's "Up to date" badge aggregates the group — if any child has an update available the parent shows "update available (child)" instead of a misleading green badge. The ``POST /chat/services/{name}/update`` API endpoint also fans out to siblings.
 - **Langfuse proxy:** restructured chat-accessible endpoints from a generic `GET /chat/langfuse/api/public/{path:path}?project=X` to structured routes with the project as a path parameter. Added `GET /chat/langfuse/projects` (list configured project aliases), and added `robotsix-mill` project support alongside existing `robotsix-chat` and `cognee` projects. The `limit` query parameter is now capped at 100 server-side, and unknown project aliases return 404 while unconfigured keys return 503.
 - Fix hadolint DL3008 inline ignore comments in Dockerfile: strip trailing
   text after rule name so hadolint v2.9.2+ correctly suppresses the warnings.

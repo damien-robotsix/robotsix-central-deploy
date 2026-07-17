@@ -28,6 +28,7 @@ from ..deps import (
     _get_env_store,
     _get_or_create_record,
     _get_registry,
+    _get_sibling_pairs,
     _get_store,
     _validate_config_or_422,
 )
@@ -700,6 +701,48 @@ async def chat_update_service(
     record.previous_image_digest = outcome.previous_digest
     await store.put(record)
 
+    # Deploy siblings (best-effort) so the whole component group converges.
+    updated_siblings: list[str] = []
+    if config.siblings:
+        for sib_cfg, sib_record in await _get_sibling_pairs(name, config, store):
+            sib_name = f"{name}-{sib_cfg.service_key}"
+            try:
+                sib_merged_env = await env_store.get_merged_env(sib_name, sib_cfg.env)
+                sib_effective = config.model_copy(
+                    update={
+                        "id": sib_name,
+                        "image": sib_cfg.image,
+                        "container_name": sib_cfg.container_name,
+                        "ports": sib_cfg.ports,
+                        "mounts": sib_cfg.mounts,
+                        "env": sib_merged_env,
+                        "health_check": sib_cfg.health_check,
+                        "claude_mount": sib_cfg.claude_mount,
+                        "claude_mount_path": sib_cfg.claude_mount_path,
+                        "host_docker_sock": sib_cfg.host_docker_sock,
+                        "named_volumes": [m.host for m in sib_cfg.mounts],
+                        "command": sib_cfg.command,
+                        "entrypoint": sib_cfg.entrypoint,
+                        "tmpfs": sib_cfg.tmpfs,
+                        "mem_limit": sib_cfg.mem_limit,
+                        "user": sib_cfg.user,
+                    }
+                )
+                sib_outcome = await backend.deploy(
+                    sib_record, sib_effective, sib_cfg.image
+                )
+                sib_record.state = sib_outcome.state
+                sib_record.image = sib_cfg.image
+                sib_record.deployed_image_digest = sib_outcome.deployed_digest
+                sib_record.previous_image_digest = sib_outcome.previous_digest
+                await store.put(sib_record)
+                updated_siblings.append(sib_name)
+            except Exception:
+                logger.warning(
+                    "chat update: deploy sibling '%s' failed",
+                    sib_name,
+                )
+
     await audit_store.append(
         ChatAgentAuditEntry(
             component=name,
@@ -708,6 +751,11 @@ async def chat_update_service(
                 f"Deployed {outcome.deployed_digest[:19]}… "
                 f"(previous: {outcome.previous_digest[:19]}…) "
                 f"→ {outcome.state.value}"
+                + (
+                    f"; siblings: {', '.join(updated_siblings)}"
+                    if updated_siblings
+                    else ""
+                )
             ),
         )
     )
@@ -717,7 +765,9 @@ async def chat_update_service(
         deployed_digest=outcome.deployed_digest,
         previous_digest=outcome.previous_digest,
         current_state=outcome.state.value,
-        detail="Update completed.",
+        detail="Update completed."
+        + (f" Also updated: {', '.join(updated_siblings)}" if updated_siblings else ""),
+        updated_siblings=updated_siblings,
     )
 
 

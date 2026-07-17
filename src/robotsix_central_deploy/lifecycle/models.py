@@ -208,6 +208,13 @@ class ContainerHealthSummary(BaseModel):
     state: ServiceState = ServiceState.UNKNOWN
 
 
+class SiblingUpdateSummary(BaseModel):
+    """Per-sibling update-state snapshot so the UI can aggregate the group badge."""
+
+    name: str
+    update_state: UpdateState = UpdateState.UNKNOWN
+
+
 class ServiceStatus(BaseModel):
     """Full status returned by ``GET /services/{name}``."""
 
@@ -224,6 +231,7 @@ class ServiceStatus(BaseModel):
     update_state: UpdateState = UpdateState.UNKNOWN
     has_config_yaml: bool = False
     sibling_health: list[ContainerHealthSummary] = []
+    sibling_update_states: list[SiblingUpdateSummary] = []
     overall_health: str = ""  # rollup: HealthStatus value or ""
 
 
