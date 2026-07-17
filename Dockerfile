@@ -10,7 +10,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
 WORKDIR /app
 
-# hadolint ignore=DL3008 — version pinning fragile across Debian releases (Bookworm→Trixie); base image digest is already pinned for reproducibility.
+# hadolint ignore=DL3008 # version pinning fragile across Debian releases (Bookworm→Trixie); base image digest is already pinned for reproducibility.
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
@@ -39,7 +39,7 @@ FROM python:3.14-slim@${BASE_DIGEST} AS production
 
 WORKDIR /app
 
-# hadolint ignore=DL3008 — version pinning fragile across Debian releases (Bookworm→Trixie); base image digest is already pinned for reproducibility.
+# hadolint ignore=DL3008 # version pinning fragile across Debian releases (Bookworm→Trixie); base image digest is already pinned for reproducibility.
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
