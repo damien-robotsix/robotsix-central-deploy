@@ -10,8 +10,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
 WORKDIR /app
 
+# hadolint ignore=DL3008 — version pinning fragile across Debian releases
+# (Bookworm→Trixie); base image digest is already pinned for reproducibility.
 RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends git=1:2.39.5-0+deb12u2 \
+    && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock _mill_build.py ./
@@ -38,8 +40,10 @@ FROM python:3.14-slim@${BASE_DIGEST} AS production
 
 WORKDIR /app
 
+# hadolint ignore=DL3008 — version pinning fragile across Debian releases
+# (Bookworm→Trixie); base image digest is already pinned for reproducibility.
 RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends git=1:2.39.5-0+deb12u2 \
+    && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/lib/python3.14/site-packages/ /usr/local/lib/python3.14/site-packages/
