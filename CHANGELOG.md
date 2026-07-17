@@ -6,6 +6,8 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix hadolint DL3008 inline ignore comments in Dockerfile: strip trailing
+  text after rule name so hadolint v2.9.2+ correctly suppresses the warnings.
 - Fix hadolint DL3008 ignore directives in Dockerfile: hadolint requires a `#` separator before explanatory text after the rule name (`# hadolint ignore=DL3008 # explanation`), not an em dash.
 - Fix hadolint DL3008 suppression by merging two-line ignore comments into single lines in Dockerfile
 - Pin git version in apt-get install commands in Dockerfile to satisfy hadolint DL3008
