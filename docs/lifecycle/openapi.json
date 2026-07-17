@@ -3783,35 +3783,54 @@
         }
       }
     },
-    "/chat/langfuse/api/public/{path}": {
+    "/chat/langfuse/projects": {
       "get": {
         "tags": [
           "chat-langfuse"
         ],
-        "summary": "Proxy a Langfuse public-API request with server-side auth",
-        "description": "Forward *path* to the configured Langfuse instance with Basic Auth.\n\nThe ``?project=`` query parameter is consumed by this proxy and is\n**not** forwarded upstream \u2014 it selects which key pair to inject.\nAll other query parameters are forwarded to Langfuse as-is.",
-        "operationId": "langfuse_proxy_chat_langfuse_api_public__path__get",
+        "summary": "List configured Langfuse project aliases",
+        "description": "Return the Langfuse project aliases whose key pairs are configured.\n\nOnly projects with both a public key and a secret key set are listed.",
+        "operationId": "list_projects_chat_langfuse_projects_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Projects Chat Langfuse Projects Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/chat/langfuse/{project}/traces": {
+      "get": {
+        "tags": [
+          "chat-langfuse"
+        ],
+        "summary": "List Langfuse traces for a project",
+        "description": "Proxy ``GET /api/public/traces`` to Langfuse.\n\nCommon query parameters (``limit``, ``page``, ``tags``, ``name``,\n``sessionId``, ``fromTimestamp``) are forwarded.  ``limit`` is capped\nat 100 server-side.",
+        "operationId": "list_traces_chat_langfuse__project__traces_get",
         "parameters": [
           {
-            "name": "path",
+            "name": "project",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Path"
-            }
-          },
-          {
-            "name": "project",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "Langfuse project to query: 'robotsix-chat' or 'cognee'.",
-              "default": "robotsix-chat",
+              "description": "Langfuse project alias",
               "title": "Project"
             },
-            "description": "Langfuse project to query: 'robotsix-chat' or 'cognee'."
+            "description": "Langfuse project alias"
           }
         ],
         "responses": {
@@ -3832,6 +3851,211 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Unknown project alias"
+          },
+          "503": {
+            "description": "Project keys not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/langfuse/{project}/traces/{trace_id}": {
+      "get": {
+        "tags": [
+          "chat-langfuse"
+        ],
+        "summary": "Get a single Langfuse trace",
+        "description": "Proxy ``GET /api/public/traces/{trace_id}`` to Langfuse.",
+        "operationId": "get_trace_chat_langfuse__project__traces__trace_id__get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Langfuse project alias",
+              "title": "Project"
+            },
+            "description": "Langfuse project alias"
+          },
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Langfuse trace ID",
+              "title": "Trace Id"
+            },
+            "description": "Langfuse trace ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown project alias or trace not found"
+          },
+          "503": {
+            "description": "Project keys not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/langfuse/{project}/observations": {
+      "get": {
+        "tags": [
+          "chat-langfuse"
+        ],
+        "summary": "List Langfuse observations for a project",
+        "description": "Proxy ``GET /api/public/observations`` to Langfuse.\n\nCommon query parameters (``limit``, ``page``, ``name``, ``type``,\n``traceId``, ``fromStartTime``) are forwarded.  ``limit`` is capped\nat 100 server-side.",
+        "operationId": "list_observations_chat_langfuse__project__observations_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Langfuse project alias",
+              "title": "Project"
+            },
+            "description": "Langfuse project alias"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown project alias"
+          },
+          "503": {
+            "description": "Project keys not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/langfuse/{project}/observations/{observation_id}": {
+      "get": {
+        "tags": [
+          "chat-langfuse"
+        ],
+        "summary": "Get a single Langfuse observation",
+        "description": "Proxy ``GET /api/public/observations/{observation_id}`` to Langfuse.",
+        "operationId": "get_observation_chat_langfuse__project__observations__observation_id__get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Langfuse project alias",
+              "title": "Project"
+            },
+            "description": "Langfuse project alias"
+          },
+          {
+            "name": "observation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Langfuse observation ID",
+              "title": "Observation Id"
+            },
+            "description": "Langfuse observation ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown project alias or observation not found"
+          },
+          "503": {
+            "description": "Project keys not configured"
           },
           "422": {
             "description": "Validation Error",

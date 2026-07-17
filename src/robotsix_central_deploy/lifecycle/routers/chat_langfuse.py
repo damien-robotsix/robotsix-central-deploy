@@ -7,11 +7,16 @@ the ``github`` virtual component (where the server mints GitHub App
 tokens).
 
 Exposes:
-- ``GET /chat/langfuse/api/public/{path:path}`` — proxy to Langfuse with
-  Basic Auth injected from server-side config.
+- ``GET /chat/langfuse/projects`` — list configured project aliases
+- ``GET /chat/langfuse/{project}/traces`` — proxy to Langfuse ``GET /api/public/traces``
+- ``GET /chat/langfuse/{project}/traces/{trace_id}`` — single trace detail
+- ``GET /chat/langfuse/{project}/observations`` — proxy to Langfuse ``GET /api/public/observations``
+- ``GET /chat/langfuse/{project}/observations/{observation_id}`` — single observation
 
-Two Langfuse trace projects are supported — ``robotsix-chat`` (default)
-and ``cognee`` — selected by the query parameter ``?project=``.
+Three Langfuse trace projects are supported — ``robotsix-chat``,
+``cognee``, and ``robotsix-mill`` — selected by the ``{project}``
+path parameter.  Unknown project aliases receive 404; a known alias
+whose keys are not configured receives 503.
 """
 
 from __future__ import annotations
@@ -20,7 +25,7 @@ import base64
 import urllib.parse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import Response
 
 from ..auth import verify_auth
@@ -29,7 +34,43 @@ from ..deps import _get_config
 
 logger = __import__("logging").getLogger(__name__)
 
-router = APIRouter(prefix="/chat/langfuse", tags=["chat-langfuse"])
+router = APIRouter(tags=["chat-langfuse"])
+
+# ---------------------------------------------------------------------------
+# Project → config-key resolution
+# ---------------------------------------------------------------------------
+
+# Known project aliases the chat agent can request.  Each alias maps to
+# the public-key and secret-key attribute names on ``LifecycleConfig``.
+_PROJECT_CONFIG_KEYS: dict[str, tuple[str, str]] = {
+    "robotsix-chat": ("langfuse_chat_public_key", "langfuse_chat_secret_key"),
+    "cognee": ("langfuse_cognee_public_key", "langfuse_cognee_secret_key"),
+    "robotsix-mill": ("langfuse_mill_public_key", "langfuse_mill_secret_key"),
+}
+
+
+def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, str]:
+    """Return ``(public_key, secret_key)`` for *project*.
+
+    Raises:
+        HTTPException(404): unknown project alias.
+        HTTPException(503): known alias but keys are not configured.
+    """
+    entry = _PROJECT_CONFIG_KEYS.get(project)
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown Langfuse project alias '{project}'.",
+        )
+    public_key_attr, secret_key_attr = entry
+    public_key: str = getattr(config, public_key_attr, "")
+    secret_key: str = getattr(config, secret_key_attr, "")
+    if not public_key or not secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Langfuse credentials for project '{project}' are not configured.",
+        )
+    return public_key, secret_key
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -39,63 +80,57 @@ def _basic_auth_header(username: str, password: str) -> str:
     return f"Basic {encoded}"
 
 
-@router.api_route(
-    "/api/public/{path:path}",
-    methods=["GET"],
-    summary="Proxy a Langfuse public-API request with server-side auth",
-)
-async def langfuse_proxy(
+# ---------------------------------------------------------------------------
+# Shared proxy helper
+# ---------------------------------------------------------------------------
+
+
+async def _proxy_to_langfuse(
     request: Request,
-    path: str,
-    project: str = Query(
-        "robotsix-chat",
-        description="Langfuse project to query: 'robotsix-chat' or 'cognee'.",
-    ),
-    _auth: None = Depends(verify_auth),
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig,
+    project: str,
+    api_path: str,
+    extra_params: dict[str, str] | None = None,
 ) -> Response:
-    """Forward *path* to the configured Langfuse instance with Basic Auth.
+    """Forward *api_path* to Langfuse with server-side Basic Auth.
 
-    The ``?project=`` query parameter is consumed by this proxy and is
-    **not** forwarded upstream — it selects which key pair to inject.
-    All other query parameters are forwarded to Langfuse as-is.
+    *api_path* is appended to the configured ``langfuse_base_url`` (e.g.
+    ``/api/public/traces``).  Query parameters from the original request
+    are forwarded as-is.  *extra_params* are merged in (and override
+    client-supplied params when keys collide).
+
+    The ``limit`` query parameter is capped at 100 server-side.
     """
-    # -- Choose credentials -------------------------------------------------
-    if project == "cognee":
-        username = config.langfuse_cognee_public_key
-        password = config.langfuse_cognee_secret_key
-    else:
-        username = config.langfuse_chat_public_key
-        password = config.langfuse_chat_secret_key
+    public_key, secret_key = _resolve_project_keys(config, project)
 
-    if not username or not password:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Langfuse credentials for project '{project}' are not configured.",
-        )
-
-    # -- Build target URL — preserve query string minus our ?project= param --
-    # Parse the configured Langfuse base URL for safe structured construction.
+    # -- Build target URL ---------------------------------------------------
     base_url = httpx.URL(config.langfuse_base_url.rstrip("/"))
 
-    # Sanitize the user-provided path to prevent path traversal.
-    _safe_path = path.lstrip("/")
+    # Forward every query param from the original request, capping limit.
+    params: dict[str, str] = {}
+    for key, value in request.query_params.multi_items():
+        if key == "limit":
+            try:
+                ival = int(value)
+            except ValueError, TypeError:
+                params[key] = value
+            else:
+                params[key] = str(min(ival, 100))
+        else:
+            params[key] = value
+
+    # Merge extra params (caller-supplied, e.g. for path-param extraction).
+    if extra_params:
+        params.update(extra_params)
+
+    # Sanitize the api_path against path traversal.
+    _safe_path = api_path.lstrip("/")
     if ".." in _safe_path.split("/"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid path"
         )
     _safe_path = urllib.parse.quote(_safe_path, safe="/")
 
-    # Forward every query param except "project" (which is ours).
-    params: dict[str, str] = {}
-    for key, value in request.query_params.multi_items():
-        if key != "project":
-            params[key] = value
-
-    # Construct the target URL safely using httpx.URL.copy_with(), which
-    # preserves scheme, host, and port from the configured base URL.
-    # User-controlled values only affect the path and query string,
-    # preventing SSRF.
     target_url = base_url.copy_with(
         path=f"/api/public/{_safe_path}",
         params=params if params else None,
@@ -103,15 +138,13 @@ async def langfuse_proxy(
 
     # -- Inject auth and forward --------------------------------------------
     headers: dict[str, str] = {}
-    # Only forward safe headers from the client — never pass hop-by-hop or
-    # auth-related headers through to the upstream.
     _SAFE_REQUEST_HEADERS: frozenset[str] = frozenset(
         {"accept", "accept-encoding", "accept-language", "user-agent"}
     )
     for key, value in request.headers.items():
         if key.lower() in _SAFE_REQUEST_HEADERS:
             headers[key] = value
-    headers["authorization"] = _basic_auth_header(username, password)
+    headers["authorization"] = _basic_auth_header(public_key, secret_key)
     headers["host"] = base_url.host
 
     logger.debug("langfuse proxy: %s → %s", request.url, target_url)
@@ -142,3 +175,134 @@ async def langfuse_proxy(
             status_code=upstream.status_code,
             headers=resp_headers,
         )
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/langfuse/projects
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/langfuse/projects",
+    summary="List configured Langfuse project aliases",
+    responses={401: {"description": "Unauthorized"}},
+)
+async def list_projects(
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> list[str]:
+    """Return the Langfuse project aliases whose key pairs are configured.
+
+    Only projects with both a public key and a secret key set are listed.
+    """
+    result: list[str] = []
+    for alias, (pk_attr, sk_attr) in _PROJECT_CONFIG_KEYS.items():
+        if getattr(config, pk_attr, "") and getattr(config, sk_attr, ""):
+            result.append(alias)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/langfuse/{project}/traces
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/langfuse/{project}/traces",
+    summary="List Langfuse traces for a project",
+    responses={
+        404: {"description": "Unknown project alias"},
+        503: {"description": "Project keys not configured"},
+    },
+)
+async def list_traces(
+    request: Request,
+    project: str = Path(..., description="Langfuse project alias"),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> Response:
+    """Proxy ``GET /api/public/traces`` to Langfuse.
+
+    Common query parameters (``limit``, ``page``, ``tags``, ``name``,
+    ``sessionId``, ``fromTimestamp``) are forwarded.  ``limit`` is capped
+    at 100 server-side.
+    """
+    return await _proxy_to_langfuse(request, config, project, "traces")
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/langfuse/{project}/traces/{trace_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/langfuse/{project}/traces/{trace_id}",
+    summary="Get a single Langfuse trace",
+    responses={
+        404: {"description": "Unknown project alias or trace not found"},
+        503: {"description": "Project keys not configured"},
+    },
+)
+async def get_trace(
+    request: Request,
+    project: str = Path(..., description="Langfuse project alias"),
+    trace_id: str = Path(..., description="Langfuse trace ID"),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> Response:
+    """Proxy ``GET /api/public/traces/{trace_id}`` to Langfuse."""
+    return await _proxy_to_langfuse(request, config, project, f"traces/{trace_id}")
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/langfuse/{project}/observations
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/langfuse/{project}/observations",
+    summary="List Langfuse observations for a project",
+    responses={
+        404: {"description": "Unknown project alias"},
+        503: {"description": "Project keys not configured"},
+    },
+)
+async def list_observations(
+    request: Request,
+    project: str = Path(..., description="Langfuse project alias"),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> Response:
+    """Proxy ``GET /api/public/observations`` to Langfuse.
+
+    Common query parameters (``limit``, ``page``, ``name``, ``type``,
+    ``traceId``, ``fromStartTime``) are forwarded.  ``limit`` is capped
+    at 100 server-side.
+    """
+    return await _proxy_to_langfuse(request, config, project, "observations")
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/langfuse/{project}/observations/{observation_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/langfuse/{project}/observations/{observation_id}",
+    summary="Get a single Langfuse observation",
+    responses={
+        404: {"description": "Unknown project alias or observation not found"},
+        503: {"description": "Project keys not configured"},
+    },
+)
+async def get_observation(
+    request: Request,
+    project: str = Path(..., description="Langfuse project alias"),
+    observation_id: str = Path(..., description="Langfuse observation ID"),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> Response:
+    """Proxy ``GET /api/public/observations/{observation_id}`` to Langfuse."""
+    return await _proxy_to_langfuse(
+        request, config, project, f"observations/{observation_id}"
+    )

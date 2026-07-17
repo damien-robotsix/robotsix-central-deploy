@@ -321,6 +321,18 @@
       "title": "Langfuse Cognee Secret Key",
       "type": "string"
     },
+    "langfuse_mill_public_key": {
+      "default": "",
+      "description": "Langfuse public key for the robotsix-mill trace project.",
+      "title": "Langfuse Mill Public Key",
+      "type": "string"
+    },
+    "langfuse_mill_secret_key": {
+      "default": "",
+      "description": "Langfuse secret key for the robotsix-mill trace project.",
+      "title": "Langfuse Mill Secret Key",
+      "type": "string"
+    },
     "caretaker_enabled": {
       "default": false,
       "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",
