@@ -1,0 +1,1 @@
+ci_fix: out-of-scope CI failure — DL3008 (grep-lint / hadolint-docker pre-commit hook) in Dockerfile — either pin apt package versions (e.g. apt-get install git=<version>) or fix the inline # hadolint ignore=DL3008 comments if they are not being recognized.
