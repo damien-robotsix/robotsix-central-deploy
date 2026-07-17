@@ -740,7 +740,7 @@ async def chat_update_service(
             except Exception:
                 logger.warning(
                     "chat update: deploy sibling '%s' failed",
-                    sib_name,
+                    sib_name.replace("\n", "\\n"),
                 )
 
     await audit_store.append(
