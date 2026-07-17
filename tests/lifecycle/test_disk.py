@@ -170,6 +170,46 @@ class TestDiskEndpoint:
         assert resp.status_code == 200
         assert resp.json()["space_reclaimed_bytes"] == 2_684_354_560
 
+    async def test_reclaim_includes_dangling_images(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        async def _fake_prune_builds(self) -> int:
+            return 1_000
+
+        async def _fake_prune_images(self, protected_refs: set[str]) -> int:
+            return 2_000
+
+        monkeypatch.setattr(server_mod.NoopBackend, "prune_builds", _fake_prune_builds)
+        monkeypatch.setattr(server_mod.NoopBackend, "prune_images", _fake_prune_images)
+        resp = await client.post("/disk/reclaim", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["space_reclaimed_bytes"] == 3_000
+
+    async def test_reclaim_protects_rollback_targets(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        from robotsix_central_deploy.lifecycle.models import ServiceRecord
+
+        store = server_mod.app.state.store
+        await store.put(
+            ServiceRecord(
+                name="svc",
+                image="repo:v1",
+                deployed_image_digest="sha256:current",
+                previous_image_digest="sha256:rollback",
+            )
+        )
+        seen: list[set[str]] = []
+
+        async def _fake_prune_images(self, protected_refs: set[str]) -> int:
+            seen.append(protected_refs)
+            return 0
+
+        monkeypatch.setattr(server_mod.NoopBackend, "prune_images", _fake_prune_images)
+        resp = await client.post("/disk/reclaim", headers=auth_headers)
+        assert resp.status_code == 200
+        assert seen and {"sha256:current", "sha256:rollback"} <= seen[0]
+
     async def test_reclaim_requires_auth(self, client: AsyncClient):
         resp = await client.post("/disk/reclaim")
         assert resp.status_code in (401, 403)

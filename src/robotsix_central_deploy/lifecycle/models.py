@@ -354,6 +354,7 @@ class DockerDfStats(BaseModel):
     """Docker storage breakdown from ``docker system df``."""
 
     images_size_bytes: int = 0
+    dangling_images_bytes: int = 0
     build_cache_size_bytes: int = 0
     build_cache_reclaimable_bytes: int = 0
     volumes: list[VolumeStat] = []
