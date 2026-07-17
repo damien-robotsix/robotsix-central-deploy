@@ -2,11 +2,15 @@
 # Digest-pinned python:3.14-slim, same base in both stages (docker standard).
 ARG BASE_DIGEST=sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1
 
+# Named stage for the uv image so COPY --from references a defined alias
+# (satisfies hadolint DL3022).
+FROM ghcr.io/astral-sh/uv:0.11.26 AS uv
+
 # Builder stage — uv and git resolve the frozen lockfile (including the
 # git-pinned first-party deps) and install the project. Build tooling stays
 # here; only installed packages are copied into the runtime image.
 FROM python:3.14-slim@${BASE_DIGEST} AS builder
-COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 
 WORKDIR /app
 
