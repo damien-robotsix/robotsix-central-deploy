@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ._settings_defaults import SETTINGS_DEFAULTS
 from .models import ExecutionBackendType, StoreBackend
 
 
@@ -52,14 +53,14 @@ class LifecycleConfig(BaseModel):
         ),
     )
     auth_username: str = Field(
-        "",
+        SETTINGS_DEFAULTS["auth_username"],
         description=(
             "Basic-auth username for the dashboard and API. Auth is enforced "
             "only when both username and password are set (or api_key is)."
         ),
     )
     auth_password: str = Field(
-        "",
+        SETTINGS_DEFAULTS["auth_password"],
         description="Basic-auth password paired with auth_username.",
     )
 
@@ -116,7 +117,7 @@ class LifecycleConfig(BaseModel):
         ),
     )
     disk_warn_pct: float = Field(
-        10.0,
+        SETTINGS_DEFAULTS["disk_warn_pct"],
         description="Warn on the dashboard when free disk space drops below this percentage.",
     )
 
@@ -163,7 +164,7 @@ class LifecycleConfig(BaseModel):
         description="Cache TTL (seconds) for registry manifest-digest lookups.",
     )
     registry_check_interval: int = Field(
-        300,
+        SETTINGS_DEFAULTS["registry_check_interval"],
         description=(
             "Interval (seconds) of the background update-available check; "
             "0 disables it."
@@ -176,12 +177,12 @@ class LifecycleConfig(BaseModel):
     )
 
     log_level: str = Field(
-        "INFO",
+        SETTINGS_DEFAULTS["log_level"],
         description="Root log level: DEBUG, INFO, WARNING, ERROR, or CRITICAL.",
     )
 
     gateway_base_domain: str = Field(
-        "",
+        SETTINGS_DEFAULTS["gateway_base_domain"],
         description=(
             "Base domain for the subdomain gateway (e.g. deploy.robotsix.net "
             "routes <component>.deploy.robotsix.net). Empty disables "
@@ -191,11 +192,11 @@ class LifecycleConfig(BaseModel):
 
     # Volume audit
     volume_audit_enabled: bool = Field(
-        False,
+        SETTINGS_DEFAULTS["volume_audit_enabled"],
         description="Master switch for the periodic volume-growth audit.",
     )
     volume_audit_interval_seconds: int = Field(
-        3600,
+        SETTINGS_DEFAULTS["volume_audit_interval_seconds"],
         description="Interval (seconds) between volume-audit scans.",
     )
     volume_audit_snapshot_path: str = Field(
@@ -207,13 +208,13 @@ class LifecycleConfig(BaseModel):
         description="Path of persisted volume-audit findings.",
     )
     volume_audit_growth_threshold_pct: float = Field(
-        10.0,
+        SETTINGS_DEFAULTS["volume_audit_growth_threshold_pct"],
         description=(
             "Volume growth (percent between scans) above which a finding is raised."
         ),
     )
     volume_audit_min_delta_bytes: int = Field(
-        10_485_760,
+        SETTINGS_DEFAULTS["volume_audit_min_delta_bytes"],
         description=(
             "Minimum absolute growth (bytes) before a finding is raised — "
             "filters noise on small volumes. Default 10 MiB."
@@ -291,28 +292,28 @@ class LifecycleConfig(BaseModel):
 
     # Caretaker
     caretaker_enabled: bool = Field(
-        False,
+        SETTINGS_DEFAULTS["caretaker_enabled"],
         description=(
             "Enable the periodic caretaker pass (auto-update, health, and "
             "volume checks)."
         ),
     )
     caretaker_interval_hours: int = Field(
-        24,
+        SETTINGS_DEFAULTS["caretaker_interval_hours"],
         description="Hours between caretaker passes.",
     )
     mill_component_id: str = Field(
-        "mill",
+        SETTINGS_DEFAULTS["mill_component_id"],
         description=(
             "Component id of the mill instance the caretaker reports findings to."
         ),
     )
     image_auto_prune: bool = Field(
-        False,
+        SETTINGS_DEFAULTS["image_auto_prune"],
         description=("After updates, remove dangling images not needed for rollback."),
     )
     llmio_tier_config: dict[str, Any] = Field(
-        default_factory=dict,
+        default=SETTINGS_DEFAULTS["llmio_tier_config"],
         description=(
             "Fleet-global mapping from llmio capability level (level1-4) to "
             "provider and model. Overridden by the System Settings store."
@@ -325,7 +326,7 @@ class LifecycleConfig(BaseModel):
     )
 
     claude_auth_refresh_interval: int = Field(
-        1800,
+        SETTINGS_DEFAULTS["claude_auth_refresh_interval"],
         description=(
             "Interval (seconds) between Claude auth credential refresh "
             "attempts; 0 disables background refresh."
@@ -334,11 +335,11 @@ class LifecycleConfig(BaseModel):
 
     # Rate limiting
     rate_limit_login_per_minute: int = Field(
-        10,
+        SETTINGS_DEFAULTS["rate_limit_login_per_minute"],
         description="Max POST /login requests per IP per minute.",
     )
     rate_limit_api_per_hour: int = Field(
-        20000,
+        SETTINGS_DEFAULTS["rate_limit_api_per_hour"],
         description=(
             "Max API requests per IP per hour. Must accommodate the "
             "dashboard UI, which polls several endpoints every few "
@@ -346,11 +347,11 @@ class LifecycleConfig(BaseModel):
         ),
     )
     rate_limit_login_max_attempts: int = Field(
-        20,
+        SETTINGS_DEFAULTS["rate_limit_login_max_attempts"],
         description="Failed login attempts before IP lockout.",
     )
     rate_limit_login_lockout_seconds: int = Field(
-        300,
+        SETTINGS_DEFAULTS["rate_limit_login_lockout_seconds"],
         description="Lockout duration (seconds) after too many failed logins.",
     )
 
