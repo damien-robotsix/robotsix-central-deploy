@@ -26,7 +26,8 @@ except ImportError:
 
 try:
     from secure import Secure, Preset
-    from secure.middleware import SecureASGIMiddleware
+
+    from .secure_headers import GatewayAwareSecureMiddleware
 
     _HAS_SECURE = True
 except ImportError:  # pragma: no cover — optional dep
@@ -109,8 +110,13 @@ if _HAS_SECURE:
     # The dashboard uses delegated event listeners (data-action) for
     # click, change, and submit, plus static .js files exclusively,
     # so the tight CSP works correctly.
+    #
+    # Applied via a gateway-aware wrapper so the strict CSP is NOT injected
+    # onto gateway-proxied component subdomains — those UIs (mill, chat, …)
+    # rely on inline handlers the CSP would break; they manage their own
+    # headers, exactly as with GatewayAwareCSRFMiddleware.
     secure_headers = Secure.from_preset(Preset.BALANCED)
-    app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
+    app.add_middleware(GatewayAwareSecureMiddleware, secure=secure_headers)
 
 app.include_router(ui_router)
 app.include_router(settings_router)

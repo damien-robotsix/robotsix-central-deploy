@@ -1,0 +1,1 @@
+Scope the strict Content-Security-Policy to central-deploy's own base-domain UI: gateway-proxied component subdomains (mill, chat, …) no longer receive `script-src-attr 'none'`, which had disabled every inline event handler in their frontends (dead buttons, unresponsive board selector, side panels stuck loading).
