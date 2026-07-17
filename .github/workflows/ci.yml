@@ -181,6 +181,29 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+  hadolint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5  # v3.3.0
+        with:
+          dockerfile: Dockerfile
+          format: sarif
+          output-file: hadolint.sarif
+          no-fail: true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a  # v4
+        if: always()
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+
   grep-lint:
     runs-on: ubuntu-latest
     permissions:
