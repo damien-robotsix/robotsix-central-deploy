@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
-from robotsix_central_deploy.volume_audit.growth import (
+from robotsix_central_deploy.caretaker.volume_audit.growth import (
     SIDECAR_SUFFIXES,
     compute_growth_records,
 )
-from robotsix_central_deploy.volume_audit.models import VolumeSizeSnapshot
+from robotsix_central_deploy.caretaker.volume_audit.models import VolumeSizeSnapshot
 
 NOW = datetime(2025, 1, 1, tzinfo=timezone.utc)
 

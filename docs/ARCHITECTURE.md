@@ -107,7 +107,7 @@ Docker volume growth over time.
 |------|------|
 | `checker.py` | `RegistryChecker` — fetches OCI/Docker manifest digests from GHCR, caches results with a configurable TTL. Returns `None` for unsupported registries. |
 
-### `volume_audit/` — Volume growth detection
+### `caretaker/volume_audit/` — Volume growth detection (caretaker sub-package)
 
 | File | Role |
 |------|------|

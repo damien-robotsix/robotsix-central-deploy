@@ -112,6 +112,9 @@ modules:
       - src/robotsix_central_deploy/caretaker/**/*
       - tests/caretaker/**/*
       - docs/caretaker/**/*
+      - src/robotsix_central_deploy/caretaker/volume_audit/**/*
+      - tests/caretaker/volume_audit/**/*
+      - docs/caretaker/volume_audit/**/*
 
   - id: onboard
     description: >
@@ -123,14 +126,3 @@ modules:
       - src/robotsix_central_deploy/onboard/**/*
       - tests/onboard/**/*
       - docs/onboard/**/*
-
-  - id: volume-audit
-    description: >
-      Docker volume audit subsystem — periodic scanning of managed named
-      volumes, growth-over-time tracking with percentile and absolute-delta
-      guards, and threshold-breach reporting via a pluggable report seam.
-    dependencies: []
-    paths:
-      - src/robotsix_central_deploy/volume_audit/**/*
-      - tests/volume_audit/**/*
-      - docs/volume_audit/**/*
