@@ -442,4 +442,3 @@ class TestLangfuseProxyErrorHandling:
             headers=auth_headers,
         )
         assert resp.status_code == 504
-
