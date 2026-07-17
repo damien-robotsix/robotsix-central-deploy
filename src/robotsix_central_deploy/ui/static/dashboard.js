@@ -144,7 +144,19 @@ function renderRow(svc) {
   // Update-state values: see UpdateState enum (lifecycle/models.py)
   const updateState = svc.update_state || 'unknown';
   let updateBadge = '';
-  if (updateState === 'up-to-date') {
+  // Check if any child has an update available — the parent badge must
+  // reflect the whole component group, not just the primary.
+  let childUpdateAvail = false;
+  const sibUpdates = svc.sibling_update_states || [];
+  for (let i = 0; i < sibUpdates.length; i++) {
+    if (sibUpdates[i].update_state === 'update-available') {
+      childUpdateAvail = true;
+      break;
+    }
+  }
+  if (updateState === 'up-to-date' && childUpdateAvail) {
+    updateBadge = '<span class="badge badge-update-avail">update available (child)</span>';
+  } else if (updateState === 'up-to-date') {
     updateBadge = '<span class="badge badge-update-ok">up to date</span>';
   } else if (updateState === 'update-available') {
     const runningShort = (svc.running_digest || '').replace(/^sha256:/, '').slice(0, 12);
@@ -624,11 +636,21 @@ function pollDeployJob(name, jobId) {
         if (phase === 'done') {
           stopDeployJobPoll(name);
           clearDeployInProgress(name);
-          // Refresh the row
+          // Refresh the primary row + any sibling rows beneath it.
           try {
             var svc = await fetchOneStatus(name);
             var rowEl = document.getElementById('row-' + name);
             if (rowEl) rowEl.outerHTML = renderRow(svc);
+            // Refresh sibling rows so their update badges reflect the deploy.
+            if (svc.sibling_health && svc.sibling_health.length > 0) {
+              for (var si = 0; si < svc.sibling_health.length; si++) {
+                try {
+                  var sibSvc = await fetchOneStatus(svc.sibling_health[si].name);
+                  var sibRowEl = document.getElementById('row-' + svc.sibling_health[si].name);
+                  if (sibRowEl) sibRowEl.outerHTML = renderSiblingRow(sibSvc);
+                } catch (e2) { /* best-effort */ }
+              }
+            }
           } catch (e) { /* best-effort */ }
           updateRefreshTime();
           if (data.warnings && data.warnings.length > 0) {

@@ -38,6 +38,8 @@ from ..models import (
     ServiceListResponse,
     ServiceState,
     ServiceStatus,
+    SiblingUpdateSummary,
+    UpdateState,
     can_transition,
 )
 from ..schemas import (
@@ -69,9 +71,10 @@ async def _gather_sibling_health(
     comp_config: ComponentConfig | None,
     store: ServiceStore,
     backend: ExecutionBackend,
-) -> list[ContainerHealthSummary]:
-    """Collect health summaries for all siblings of *name* (best-effort)."""
+) -> tuple[list[ContainerHealthSummary], list[SiblingUpdateSummary]]:
+    """Collect health and update-state summaries for all siblings of *name* (best-effort)."""
     sibling_summaries: list[ContainerHealthSummary] = []
+    sibling_update_states: list[SiblingUpdateSummary] = []
     if comp_config and comp_config.siblings:
         for _sib_config, sib_record in await _get_sibling_pairs(
             name, comp_config, store
@@ -98,7 +101,23 @@ async def _gather_sibling_health(
                     state=sib_inspect.state,
                 )
             )
-    return sibling_summaries
+            # Compute per-sibling update state from stored digest data
+            if (
+                not sib_record.deployed_image_digest
+                or not sib_record.latest_registry_digest
+            ):
+                sib_update = UpdateState.UNKNOWN
+            elif sib_record.deployed_image_digest == sib_record.latest_registry_digest:
+                sib_update = UpdateState.UP_TO_DATE
+            else:
+                sib_update = UpdateState.UPDATE_AVAILABLE
+            sibling_update_states.append(
+                SiblingUpdateSummary(
+                    name=sib_record.name,
+                    update_state=sib_update,
+                )
+            )
+    return sibling_summaries, sibling_update_states
 
 
 async def _delete_component_volumes(
@@ -258,8 +277,11 @@ async def get_service_status(
 
     # -- Sibling health fan-out ------------------------------------------
     comp_config = registry.get(name)  # ComponentConfig or None
-    sibling_summaries = await _gather_sibling_health(name, comp_config, store, backend)
+    sibling_summaries, sibling_update_states = await _gather_sibling_health(
+        name, comp_config, store, backend
+    )
     result.sibling_health = sibling_summaries
+    result.sibling_update_states = sibling_update_states
     result.overall_health = _compute_overall_health(inspect.health, sibling_summaries)
     # -------------------------------------------------------------------
 

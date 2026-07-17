@@ -4914,6 +4914,14 @@
             "type": "string",
             "title": "Detail",
             "default": ""
+          },
+          "updated_siblings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Updated Siblings",
+            "default": []
           }
         },
         "type": "object",
@@ -6846,6 +6854,14 @@
             "title": "Sibling Health",
             "default": []
           },
+          "sibling_update_states": {
+            "items": {
+              "$ref": "#/components/schemas/SiblingUpdateSummary"
+            },
+            "type": "array",
+            "title": "Sibling Update States",
+            "default": []
+          },
           "overall_health": {
             "type": "string",
             "title": "Overall Health",
@@ -6859,6 +6875,24 @@
         ],
         "title": "ServiceStatus",
         "description": "Full status returned by ``GET /services/{name}``."
+      },
+      "SiblingUpdateSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "update_state": {
+            "$ref": "#/components/schemas/UpdateState",
+            "default": "unknown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SiblingUpdateSummary",
+        "description": "Per-sibling update-state snapshot so the UI can aggregate the group badge."
       },
       "SystemSettingsResponse": {
         "properties": {

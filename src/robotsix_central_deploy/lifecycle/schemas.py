@@ -337,6 +337,7 @@ class ChatAgentUpdateResponse(BaseModel):
     previous_digest: str = ""
     current_state: str
     detail: str = ""
+    updated_siblings: list[str] = []
 
 
 class ChatAgentAuditEntryResponse(BaseModel):
