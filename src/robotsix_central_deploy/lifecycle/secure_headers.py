@@ -13,7 +13,10 @@ components are responsible for their own security headers, exactly as with CSRF
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 try:
+    from secure import Secure
     from secure.middleware import SecureASGIMiddleware
     from starlette.datastructures import Headers
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -36,13 +39,11 @@ if _HAS_SECURE_MW:
         full ``SecureASGIMiddleware`` header set.
         """
 
-        def __init__(self, app: ASGIApp, *, secure: object) -> None:
+        def __init__(self, app: ASGIApp, *, secure: Secure) -> None:
             self._app = app
             self._secured = SecureASGIMiddleware(app, secure=secure)
 
-        async def __call__(
-            self, scope: Scope, receive: Receive, send: Send
-        ) -> None:
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
             if scope["type"] in ("http", "websocket"):
                 # Imported lazily: gateway.router pulls in lifecycle modules,
                 # and this module is imported during lifecycle.app start-up.
@@ -52,4 +53,4 @@ if _HAS_SECURE_MW:
                 if _extract_subdomain_name(headers, scope.get("app")) is not None:
                     await self._app(scope, receive, send)
                     return
-            await self._secured(scope, receive, send)
+            await self._secured(scope, receive, cast(Any, send))
