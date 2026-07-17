@@ -267,8 +267,8 @@ class LifecycleConfig(BaseModel):
     # Langfuse auth (chat-agent "langfuse" virtual component — trace read
     # proxy).  The chat container never sees these credentials — the deploy
     # server injects Basic Auth server-side when proxying Langfuse public-API
-    # requests.  Two project key pairs are supported so the chat agent can
-    # query both the robotsix-chat and cognee trace projects.
+    # requests.  Three project key pairs are supported so the chat agent can
+    # query the robotsix-chat, cognee, and robotsix-mill trace projects.
     langfuse_base_url: str = Field(
         "https://langfuse.robotsix.net",
         description="Langfuse instance base URL (no trailing slash).",
@@ -288,6 +288,14 @@ class LifecycleConfig(BaseModel):
     langfuse_cognee_secret_key: str = Field(
         "",
         description="Langfuse secret key for the cognee trace project.",
+    )
+    langfuse_mill_public_key: str = Field(
+        "",
+        description="Langfuse public key for the robotsix-mill trace project.",
+    )
+    langfuse_mill_secret_key: str = Field(
+        "",
+        description="Langfuse secret key for the robotsix-mill trace project.",
     )
 
     # Caretaker
