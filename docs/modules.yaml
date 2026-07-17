@@ -31,6 +31,7 @@ modules:
       - .pre-commit-config.yaml
       - .secrets.baseline
       - .trivyignore
+      - .hadolint.yaml
       - .github/**/*
       - .robotsix-mill/**/*
       - AGENT.md
