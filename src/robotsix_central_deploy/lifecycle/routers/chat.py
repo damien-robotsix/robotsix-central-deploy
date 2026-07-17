@@ -402,7 +402,7 @@ async def chat_update_config(
         logging.getLogger().setLevel(raw_level)
         logger.info(
             "Chat agent set log_level to %s via /chat/config/%s", raw_level, name
-        )
+        )  # codeql[py/log-injection]: raw_level validated against VALID_LOG_LEVELS above
         if not body.values:
             # Only log_level was submitted — nothing to write to the
             # component config volume.
