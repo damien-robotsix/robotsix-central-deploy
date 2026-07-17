@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Extract duplicated `CLAUDE_AUTH_VOLUME` constant into `lifecycle/models.py` to eliminate three-site synchronization fragility.
+- Extract shared settings defaults into `lifecycle/_settings_defaults.py` so `SystemSettings` and `LifecycleConfig` share a single source of truth for their 20 common field defaults, eliminating the synchronization fragility that caused a 2026-07-05 production bug when `rate_limit_api_per_hour` defaults drifted apart. The `overlay()` method now derives its field set from the same shared keys.
 - Reorganize lifecycle documentation into `docs/lifecycle/`: move `api.md`, `configuration.md`, and `openapi.json` from the `docs/` root into a dedicated per-module directory, matching the layout pattern of all other modules.
 - Extract inline HTML from `get_deploy_contract()` into a Jinja2 template (`ui/templates/deploy-contract.html`), using `_escape_html()` for pre-escaped content rendering.
 - refresh-schema regression test: current config values survive

@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
+from ..lifecycle._settings_defaults import SETTINGS_DEFAULTS
+
 logger = logging.getLogger(__name__)
 
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
@@ -22,31 +24,48 @@ VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 class SystemSettings(BaseModel):
     """Operator-configurable runtime settings for central-deploy."""
 
-    auth_username: str = ""
-    auth_password: str = ""
-    disk_warn_pct: float = 10.0  # % free
-    registry_check_interval: int = 300  # seconds; 0 = disabled
-    log_level: str = "INFO"
-    gateway_base_domain: str = ""  # e.g. "deploy.robotsix.net"
-    caretaker_enabled: bool = False
-    caretaker_interval_hours: int = 24
-    mill_component_id: str = "mill"  # component id the caretaker reports to
-    image_auto_prune: bool = False  # prune dangling images after updates
-    llmio_tier_config: dict[str, Any] = {}
-    claude_auth_refresh_interval: int = 1800  # seconds; 0 = disabled
-    rate_limit_login_per_minute: int = 10
-    # Keep in sync with LifecycleConfig.rate_limit_api_per_hour: the settings
-    # overlay stamps this value over app.state.config, so a lower default
-    # here silently overrides the config-class default (bit us 2026-07-05:
-    # 1000 was below the dashboard's own polling rate and 429-locked the
-    # operator even after the config default was raised).
-    rate_limit_api_per_hour: int = 20000
-    rate_limit_login_max_attempts: int = 20
-    rate_limit_login_lockout_seconds: int = 300
-    volume_audit_enabled: bool = False
-    volume_audit_interval_seconds: int = 3600
-    volume_audit_growth_threshold_pct: float = 10.0
-    volume_audit_min_delta_bytes: int = 10_485_760
+    # All defaults sourced from SETTINGS_DEFAULTS — the single source of truth
+    # shared with LifecycleConfig.  See lifecycle/_settings_defaults.py.
+    auth_username: str = SETTINGS_DEFAULTS["auth_username"]
+    auth_password: str = SETTINGS_DEFAULTS["auth_password"]
+    disk_warn_pct: float = SETTINGS_DEFAULTS["disk_warn_pct"]  # % free
+    registry_check_interval: int = SETTINGS_DEFAULTS[
+        "registry_check_interval"
+    ]  # seconds; 0 = disabled
+    log_level: str = SETTINGS_DEFAULTS["log_level"]
+    gateway_base_domain: str = SETTINGS_DEFAULTS[
+        "gateway_base_domain"
+    ]  # e.g. "deploy.robotsix.net"
+    caretaker_enabled: bool = SETTINGS_DEFAULTS["caretaker_enabled"]
+    caretaker_interval_hours: int = SETTINGS_DEFAULTS["caretaker_interval_hours"]
+    mill_component_id: str = SETTINGS_DEFAULTS[
+        "mill_component_id"
+    ]  # component id the caretaker reports to
+    image_auto_prune: bool = SETTINGS_DEFAULTS[
+        "image_auto_prune"
+    ]  # prune dangling images after updates
+    llmio_tier_config: dict[str, Any] = SETTINGS_DEFAULTS["llmio_tier_config"]
+    claude_auth_refresh_interval: int = SETTINGS_DEFAULTS[
+        "claude_auth_refresh_interval"
+    ]  # seconds; 0 = disabled
+    rate_limit_login_per_minute: int = SETTINGS_DEFAULTS["rate_limit_login_per_minute"]
+    rate_limit_api_per_hour: int = SETTINGS_DEFAULTS["rate_limit_api_per_hour"]
+    rate_limit_login_max_attempts: int = SETTINGS_DEFAULTS[
+        "rate_limit_login_max_attempts"
+    ]
+    rate_limit_login_lockout_seconds: int = SETTINGS_DEFAULTS[
+        "rate_limit_login_lockout_seconds"
+    ]
+    volume_audit_enabled: bool = SETTINGS_DEFAULTS["volume_audit_enabled"]
+    volume_audit_interval_seconds: int = SETTINGS_DEFAULTS[
+        "volume_audit_interval_seconds"
+    ]
+    volume_audit_growth_threshold_pct: float = SETTINGS_DEFAULTS[
+        "volume_audit_growth_threshold_pct"
+    ]
+    volume_audit_min_delta_bytes: int = SETTINGS_DEFAULTS[
+        "volume_audit_min_delta_bytes"
+    ]
 
     @field_validator("volume_audit_interval_seconds")
     @classmethod
@@ -141,32 +160,15 @@ class SystemSettingsStore:
         When the settings file does not exist yet (first boot), the config
         is returned unchanged so that ``ROBOTSIX_LIFECYCLE_*`` environment
         variables are preserved.
+
+        The overlay field set is driven by ``SETTINGS_DEFAULTS`` keys, so
+        adding a shared field to ``_settings_defaults.py`` automatically
+        includes it in the overlay without a separate manual sync step.
         """
         if not self._path.exists():
             return config
 
         stored = self._load()
         return config.model_copy(
-            update={
-                "auth_username": stored.auth_username,
-                "auth_password": stored.auth_password,
-                "disk_warn_pct": stored.disk_warn_pct,
-                "registry_check_interval": stored.registry_check_interval,
-                "log_level": stored.log_level,
-                "gateway_base_domain": stored.gateway_base_domain,
-                "caretaker_enabled": stored.caretaker_enabled,
-                "caretaker_interval_hours": stored.caretaker_interval_hours,
-                "mill_component_id": stored.mill_component_id,
-                "image_auto_prune": stored.image_auto_prune,
-                "llmio_tier_config": stored.llmio_tier_config,
-                "claude_auth_refresh_interval": stored.claude_auth_refresh_interval,
-                "rate_limit_login_per_minute": stored.rate_limit_login_per_minute,
-                "rate_limit_api_per_hour": stored.rate_limit_api_per_hour,
-                "rate_limit_login_max_attempts": stored.rate_limit_login_max_attempts,
-                "rate_limit_login_lockout_seconds": stored.rate_limit_login_lockout_seconds,
-                "volume_audit_enabled": stored.volume_audit_enabled,
-                "volume_audit_interval_seconds": stored.volume_audit_interval_seconds,
-                "volume_audit_growth_threshold_pct": stored.volume_audit_growth_threshold_pct,
-                "volume_audit_min_delta_bytes": stored.volume_audit_min_delta_bytes,
-            }
+            update={key: getattr(stored, key) for key in SETTINGS_DEFAULTS}
         )
