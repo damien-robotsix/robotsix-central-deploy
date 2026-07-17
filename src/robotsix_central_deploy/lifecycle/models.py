@@ -121,6 +121,10 @@ def can_transition(current: ServiceState, target: ServiceState) -> bool:
     return target in TRANSITIONS.get(current, set())
 
 
+#: Name of the Docker named volume that holds Claude OAuth credentials.
+CLAUDE_AUTH_VOLUME: str = "claude-auth"
+
+
 # ---------------------------------------------------------------------------
 # Domain record (not a Pydantic model — used internally)
 # ---------------------------------------------------------------------------

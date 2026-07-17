@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import _get_backend, get_claude_auth_refresh_state
+from ..models import CLAUDE_AUTH_VOLUME
 from ..schemas import (
     ClaudeAuthStatusResponse,
     ClaudeAuthLoginResponse,
@@ -42,8 +43,6 @@ from ..schemas import (
 )
 
 router = APIRouter(tags=["claude-auth"])
-
-CLAUDE_AUTH_VOLUME = "claude-auth"
 
 # OAuth parameters mirroring what `claude setup-token` (Claude Code CLI)
 # uses for its device authorization flow.
