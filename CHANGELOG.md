@@ -11,6 +11,7 @@ All notable changes to robotsix-central-deploy.
 - Fix hadolint DL3008 ignore directives in Dockerfile: hadolint requires a `#` separator before explanatory text after the rule name (`# hadolint ignore=DL3008 # explanation`), not an em dash.
 - Fix hadolint DL3008 suppression by merging two-line ignore comments into single lines in Dockerfile
 - Pin git version in apt-get install commands in Dockerfile to satisfy hadolint DL3008
+- Add Hadolint Dockerfile linting (`.hadolint.yaml` config, CI job with SARIF upload, pre-commit hook)
 - Extract duplicated `CLAUDE_AUTH_VOLUME` constant into `lifecycle/models.py` to eliminate three-site synchronization fragility.
 - Extract shared settings defaults into `lifecycle/_settings_defaults.py` so `SystemSettings` and `LifecycleConfig` share a single source of truth for their 20 common field defaults, eliminating the synchronization fragility that caused a 2026-07-05 production bug when `rate_limit_api_per_hour` defaults drifted apart. The `overlay()` method now derives its field set from the same shared keys.
 - Reorganize lifecycle documentation into `docs/lifecycle/`: move `api.md`, `configuration.md`, and `openapi.json` from the `docs/` root into a dedicated per-module directory, matching the layout pattern of all other modules.

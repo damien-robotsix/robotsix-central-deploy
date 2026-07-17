@@ -1,0 +1,9 @@
+failure-threshold: warning
+override:
+  error:
+    - DL3006   # Always tag the version of an image explicitly
+    - DL3007   # Using latest tag is prone to errors
+    - DL3002   # Last USER should not be root
+    - DL3008   # Pin versions in apt-get install
+    - DL3009   # Delete apt-get lists after install
+    - DL3015   # Use --no-install-recommends
