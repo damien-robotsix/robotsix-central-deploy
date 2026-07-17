@@ -763,8 +763,17 @@ class DockerSdkBackend(ExecutionBackend):
             for v in (result.get("Volumes") or [])
             if (v.get("UsageData") or {}).get("Size", 0) >= 0
         ]
+        # Untagged (dangling) images — candidates for /disk/reclaim. Sums
+        # per-image ``Size`` so shared layers may be double-counted; this is
+        # an indicator, not an exact reclaim prediction.
+        dangling_size = sum(
+            img.get("Size", 0)
+            for img in images
+            if not [t for t in (img.get("RepoTags") or []) if t != "<none>:<none>"]
+        )
         return DockerDfStats(
             images_size_bytes=images_size,
+            dangling_images_bytes=dangling_size,
             build_cache_size_bytes=build_cache_size,
             build_cache_reclaimable_bytes=reclaimable,
             volumes=volumes,

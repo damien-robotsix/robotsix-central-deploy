@@ -129,7 +129,7 @@
           "health"
         ],
         "summary": "Reclaim Build Cache",
-        "description": "Prune Docker build cache and return bytes freed.",
+        "description": "Prune Docker build cache and dangling images, return bytes freed.\n\nDangling images that are rollback targets (deployed or previous digests\nrecorded in the service store) are protected from removal.",
         "operationId": "reclaim_build_cache_disk_reclaim_post",
         "responses": {
           "200": {
@@ -5583,6 +5583,11 @@
           "images_size_bytes": {
             "type": "integer",
             "title": "Images Size Bytes",
+            "default": 0
+          },
+          "dangling_images_bytes": {
+            "type": "integer",
+            "title": "Dangling Images Bytes",
             "default": 0
           },
           "build_cache_size_bytes": {

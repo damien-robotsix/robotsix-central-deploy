@@ -343,8 +343,9 @@ function renderDiskPanel(data) {
             <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
             ${usedPct}%</td></tr>
           <tr><th>Docker images (host total)</th><td>${fmt_bytes(data.docker.images_size_bytes)}</td></tr>
+          <tr><th>Dangling images</th><td>${fmt_bytes(data.docker.dangling_images_bytes || 0)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_bytes(data.docker.build_cache_size_bytes)}</td></tr>
-          <tr><th>Build cache reclaimable</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes)}${data.docker.build_cache_reclaimable_bytes > 0 ? ` <button id="reclaim-btn" class="reclaim-btn" data-action="reclaimBuildCache">Reclaim</button>` : ''}</td></tr>
+          <tr><th>Reclaimable (cache + dangling)</th><td>${fmt_bytes(data.docker.build_cache_reclaimable_bytes + (data.docker.dangling_images_bytes || 0))}${(data.docker.build_cache_reclaimable_bytes > 0 || data.docker.dangling_images_bytes > 0) ? ` <button id="reclaim-btn" class="reclaim-btn" data-action="reclaimBuildCache">Reclaim</button>` : ''}</td></tr>
         </table>${volTable}`;
 }
 

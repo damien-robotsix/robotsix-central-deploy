@@ -353,13 +353,13 @@ jobs:
         run: uv run python _gen_openapi.py
       - name: Check for OpenAPI drift
         run: |
-          if ! git diff --exit-code docs/openapi.json; then
-            echo "::error::docs/openapi.json is stale. Regenerate with:"
+          if ! git diff --exit-code docs/lifecycle/openapi.json; then
+            echo "::error::docs/lifecycle/openapi.json is stale. Regenerate with:"
             echo "  uv run python _gen_openapi.py"
             exit 1
           fi
       - name: Lint OpenAPI spec with Redocly
-        run: npx --yes @redocly/cli@1.27.0 lint docs/openapi.json
+        run: npx --yes @redocly/cli@1.27.0 lint docs/lifecycle/openapi.json
 
   dependency-review:
     # dependency-review-action diffs base..head and only supports

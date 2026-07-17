@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from .mill_client import MillClient
-from .models import CaretakerFinding, CaretakerReport, FindingKind
+from .models import CaretakerFinding, CaretakerReport
 from .phases import phase_health, phase_update, phase_volumes
 
 if TYPE_CHECKING:
@@ -131,10 +131,11 @@ class CaretakerScheduler:
             findings.extend(update_findings)
             phases_run.append("update")
 
-            # Auto-prune dangling images left behind by applied updates
-            # (opt-in setting); rollback targets in the store are protected.
-            applied = any(f.kind == FindingKind.UPDATE_APPLIED for f in update_findings)
-            if applied and settings.image_auto_prune:
+            # Auto-prune dangling images (opt-in setting); rollback targets
+            # in the store are protected. Runs every cycle, not only after
+            # applied updates: images also pile up from pulls that bypass the
+            # deploy path (self-updates, out-of-band container recreations).
+            if settings.image_auto_prune:
                 try:
                     # Imported lazily: the lifecycle package's __init__ chain
                     # imports this module, so a top-level import is circular.

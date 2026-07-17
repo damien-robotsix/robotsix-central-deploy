@@ -7,10 +7,11 @@ import shutil
 from fastapi import APIRouter, Depends
 
 from ..auth import verify_auth
-from ..backends import ExecutionBackend
+from ..backends import ExecutionBackend, collect_protected_image_refs
 from ..config import LifecycleConfig
-from ..deps import _get_backend, _get_config
+from ..deps import _get_backend, _get_config, _get_store
 from ..models import DiskUsageResponse, ReclaimResponse
+from ..store import ServiceStore
 
 router = APIRouter(tags=["health"])
 
@@ -42,7 +43,14 @@ async def get_disk_usage(
 async def reclaim_build_cache(
     _auth: None = Depends(verify_auth),
     backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),
 ) -> ReclaimResponse:
-    """Prune Docker build cache and return bytes freed."""
+    """Prune Docker build cache and dangling images, return bytes freed.
+
+    Dangling images that are rollback targets (deployed or previous digests
+    recorded in the service store) are protected from removal.
+    """
     space_reclaimed = await backend.prune_builds()
+    protected = await collect_protected_image_refs(store)
+    space_reclaimed += await backend.prune_images(protected)
     return ReclaimResponse(space_reclaimed_bytes=space_reclaimed)
