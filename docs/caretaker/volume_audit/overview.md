@@ -1,6 +1,6 @@
 # Volume Audit
 
-The volume audit subsystem (`src/robotsix_central_deploy/volume_audit/`)
+The volume audit subsystem (`src/robotsix_central_deploy/caretaker/volume_audit/`)
 tracks Docker named-volume growth over time, raising findings when volumes
 exceed configurable thresholds. Results are surfaced via `GET /volumes/audit`
 and can optionally file tickets on the robotsix board.

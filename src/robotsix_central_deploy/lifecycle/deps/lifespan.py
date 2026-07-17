@@ -26,7 +26,7 @@ from ...registry.models import ComponentConfig
 from ...registry.secret_key import SecretKeyManager
 from ...registry_check import RegistryChecker
 from ...caretaker.scheduler import CaretakerScheduler
-from ...volume_audit.scheduler import VolumeAuditScheduler
+from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
 from .background import _claude_auth_refresh_loop, _registry_check_loop
 from .jobs import JobRegistry
 

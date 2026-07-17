@@ -144,10 +144,11 @@ src/robotsix_central_deploy/
 ├── registry/         # Component config, env/secrets, settings stores
 ├── registry_check/   # GHCR digest polling
 ├── ui/               # Dashboard HTML + router
-└── volume_audit/     # Background named-volume growth scanner
+├── caretaker/        # Background maintenance agent
+│   └── volume_audit/ # Named-volume growth scanner (caretaker sub-package)
 ```
 
-**Rule:** Test files for module X belong under `tests/X/`, never at the `tests/` root. Every module already follows this convention (lifecycle, gateway, registry, ui, registry_check, volume_audit, onboard). Do not create new test files at the `tests/` root — place them in the corresponding `tests/<module>/` directory.
+**Rule:** Test files for module X belong under `tests/X/`, never at the `tests/` root. Every module already follows this convention (lifecycle, gateway, registry, ui, registry_check, caretaker, onboard). Do not create new test files at the `tests/` root — place them in the corresponding `tests/<module>/` directory.
 
 ## Documentation
 
