@@ -222,7 +222,10 @@ async def test_chat_config_update_happy_path(
     assert data["component"] == "chat"
     assert "restored" in data
     assert data["restored"]["debug"] is True
-    assert data["restored"]["log_level"] == "debug"
+    # log_level is intercepted and applied to the root logger — the
+    # submitted value ("debug") is not written to the component config;
+    # only the template default ("info") remains.
+    assert data["restored"]["log_level"] == "info"
     # Secrets must be masked
     assert data["restored"]["api_token"] == ""
 
