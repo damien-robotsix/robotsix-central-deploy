@@ -2464,7 +2464,6 @@ async function loadSettings() {
     var s = await res.json();
     document.getElementById('s-disk-warn').value = s.disk_warn_pct;
     document.getElementById('s-reg-interval').value = s.registry_check_interval;
-    document.getElementById('s-log-level').value = s.log_level;
     document.getElementById('s-gateway-domain').value = s.gateway_base_domain || '';
     document.getElementById('s-caretaker-enabled').checked = !!s.caretaker_enabled;
     document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
@@ -2494,7 +2493,6 @@ async function saveSettings() {
   var body = {
     disk_warn_pct: parseFloat(document.getElementById('s-disk-warn').value),
     registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
-    log_level: document.getElementById('s-log-level').value,
     gateway_base_domain: document.getElementById('s-gateway-domain').value,
     caretaker_enabled: document.getElementById('s-caretaker-enabled').checked,
     caretaker_interval_hours: parseInt(document.getElementById('s-caretaker-interval').value),

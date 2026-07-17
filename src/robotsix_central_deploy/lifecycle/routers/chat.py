@@ -54,6 +54,7 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
+from ...registry.settings_store import VALID_LOG_LEVELS
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +380,37 @@ async def chat_update_config(
     """
     _require_allowed_service(name)
     _check_rate_limit(request.app.state, name, "config_update")
+
+    # ------------------------------------------------------------------
+    # log_level is a system-wide setting that the chat agent can raise
+    # or lower during troubleshooting.  Apply it immediately to the root
+    # logger and strip it from the submitted values so it does not
+    # collide with component-level config schema validation.
+    # ------------------------------------------------------------------
+    if "log_level" in body.values:
+        raw_level = str(body.values.pop("log_level")).upper()
+        if raw_level not in VALID_LOG_LEVELS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": (
+                        f"Unknown log level '{raw_level}'. "
+                        f"Valid: {', '.join(sorted(VALID_LOG_LEVELS))}"
+                    )
+                },
+            )
+        logging.getLogger().setLevel(raw_level)
+        logger.info(
+            "Chat agent set log_level to %s via /chat/config/%s", raw_level, name
+        )
+        if not body.values:
+            # Only log_level was submitted — nothing to write to the
+            # component config volume.
+            return ChatAgentConfigRollbackResponse(
+                component=name,
+                restored={},
+                detail=f"log_level set to {raw_level}; no component config keys changed.",
+            )
 
     template = await config_yaml_store.get_template(name)
     if template is None:
