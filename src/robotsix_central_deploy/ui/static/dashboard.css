@@ -632,9 +632,14 @@
   .table-compact { border-collapse: collapse; min-width: 400px; }
 
   /* Secret/enum badges in config form */
-  .badge-secret {
+  .badge-secret,
+  .badge-secret-set {
     display: inline-block; padding: 2px 8px; border-radius: 10px;
     font-size: 0.75rem; background: rgba(251,146,60,0.18); color: var(--amber);
+  }
+  .badge-secret-unset {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 0.75rem; background: rgba(148,163,184,0.15); color: var(--muted);
   }
   .hint-json { font-size: 0.75rem; color: var(--muted); margin-left: 4px; }
 

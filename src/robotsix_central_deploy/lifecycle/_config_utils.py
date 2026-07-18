@@ -100,6 +100,27 @@ def _strip_secret_values(
                 and isinstance(val, dict)
             ):
                 result[key] = _recursive(resolved, val)
+            elif (
+                resolved is not None
+                and resolved.get("type") == "array"
+                and isinstance(val, list)
+            ):
+                items_schema = resolved.get("items", {})
+                resolved_items: dict[str, Any] | None = None
+                if isinstance(items_schema, dict):
+                    resolved_items = _resolve_ref(items_schema, schema)
+                if (
+                    isinstance(resolved_items, dict)
+                    and resolved_items.get("type") == "object"
+                ):
+                    result[key] = [
+                        _recursive(resolved_items, item)
+                        if isinstance(item, dict)
+                        else item
+                        for item in val
+                    ]
+                else:
+                    result[key] = val
             else:
                 result[key] = val
         return result
@@ -223,6 +244,24 @@ def _mask_secrets_json_schema(
                 result[key] = (
                     _recursive(resolved, cval) if isinstance(cval, dict) else {}
                 )
+            elif resolved.get("type") == "array":
+                items_schema = resolved.get("items", {})
+                resolved_items: dict[str, Any] | None = None
+                if isinstance(items_schema, dict):
+                    resolved_items = _resolve_ref(items_schema, schema)
+                if (
+                    isinstance(cval, list)
+                    and isinstance(resolved_items, dict)
+                    and resolved_items.get("type") == "object"
+                ):
+                    result[key] = [
+                        _recursive(resolved_items, item)
+                        if isinstance(item, dict)
+                        else item
+                        for item in cval
+                    ]
+                else:
+                    result[key] = cval if key in i_current else []
             else:
                 result[key] = cval if key in i_current else ""
         return result
@@ -282,8 +321,18 @@ def _merge_config_json_schema(
             # memory.llm), so the submitted sub-dict replaced the existing
             # one wholesale, dropping unsubmitted nested keys and secrets.
             resolved = _resolve_ref(prop, schema)
-            if _is_secret_prop(resolved) and i_submitted.get(key) == "***":
-                result[key] = i_existing.get(key, "")
+            if _is_secret_prop(resolved):
+                # Secrets always keep existing when unset — an omitted,
+                # blank, or sentinel ("***") value means "keep existing".
+                # Only an explicitly supplied non-empty, non-sentinel value
+                # overwrites the stored secret.
+                sub_val = i_submitted.get(key)
+                if sub_val and sub_val != "***" and sub_val is not None:
+                    result[key] = str(sub_val)
+                elif key in i_existing:
+                    result[key] = i_existing[key]
+                else:
+                    result[key] = ""
             elif resolved.get("type") == "object":
                 sub_existing = (
                     i_existing[key] if isinstance(i_existing.get(key), dict) else {}
@@ -292,6 +341,43 @@ def _merge_config_json_schema(
                     i_submitted[key] if isinstance(i_submitted.get(key), dict) else {}
                 )
                 result[key] = _recursive(resolved, sub_existing, sub_submitted)
+            elif resolved.get("type") == "array":
+                items_schema = resolved.get("items", {})
+                resolved_items: dict[str, Any] | None = None
+                if isinstance(items_schema, dict):
+                    resolved_items = _resolve_ref(items_schema, schema)
+                if (
+                    isinstance(resolved_items, dict)
+                    and resolved_items.get("type") == "object"
+                    and isinstance(i_submitted.get(key), list)
+                ):
+                    # Merge array-of-objects: iterate submitted items,
+                    # merge each against the corresponding existing item.
+                    submitted_list = i_submitted[key]
+                    existing_list: list[dict[str, Any]] = (
+                        i_existing[key] if isinstance(i_existing.get(key), list) else []
+                    )
+                    merged_items: list[dict[str, Any]] = []
+                    for i, sitem in enumerate(submitted_list):
+                        if isinstance(sitem, dict):
+                            eitem = (
+                                existing_list[i]
+                                if i < len(existing_list)
+                                and isinstance(existing_list[i], dict)
+                                else {}
+                            )
+                            merged_items.append(
+                                _recursive(resolved_items, eitem, sitem)
+                            )
+                        else:
+                            merged_items.append(sitem)
+                    result[key] = merged_items
+                elif key in i_submitted:
+                    result[key] = i_submitted[key]
+                elif prefer_existing_for_unset and key in i_existing:
+                    result[key] = i_existing[key]
+                else:
+                    result[key] = i_existing.get(key, [])
             elif key in i_submitted and i_submitted[key] is None:
                 # The form submits null for a field left empty (e.g. a
                 # cleared number input on a nullable field). Treat it like
@@ -375,6 +461,111 @@ def _merge_config_flat(
         return result
 
     return _recursive(template, existing, submitted)
+
+
+# ---------------------------------------------------------------------------
+# Secret-key path helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_key_secret(schema: dict[str, Any], dotted_path: str) -> bool:
+    """Return True when *dotted_path* resolves to a secret field in *schema*.
+
+    Walks the JSON Schema properties and resolves ``$ref`` references
+    against the root *schema*.  Returns ``False`` for legacy flat-dict
+    templates (no ``"properties"`` key).
+    """
+    if not _is_json_schema(schema):
+        return False
+    parts = dotted_path.split(".")
+    current_schema = schema
+    for part in parts:
+        props = current_schema.get("properties", {})
+        prop = props.get(part)
+        if prop is None:
+            # The path segment may index into an array (e.g. accounts.0.password).
+            # Try interpreting the part as an integer index and resolve
+            # the parent's items schema instead.
+            try:
+                int(part)
+            except ValueError:
+                return False
+            # Walk back: find the array property.  For simplicity we
+            # resolve the next non-index segment against the current
+            # schema's items, but dotted paths do not carry enough
+            # structural info to map indexes precisely — we treat any
+            # integer segment as "descend into array items" and
+            # continue with the next segment.
+            continue
+        resolved = _resolve_ref(prop, schema)
+        if _is_secret_prop(resolved):
+            return True
+        if resolved.get("type") == "object":
+            current_schema = resolved
+        elif resolved.get("type") == "array":
+            items = resolved.get("items", {})
+            if isinstance(items, dict):
+                items = _resolve_ref(items, schema)
+            if isinstance(items, dict):
+                current_schema = items
+            else:
+                return False
+        else:
+            return False
+    return False
+
+
+def _restore_secrets_from_current(
+    schema: dict[str, Any],
+    restored: dict[str, Any],
+    current: dict[str, Any],
+) -> dict[str, Any]:
+    """Copy secret leaf values from *current* into *restored*.
+
+    Walks the JSON Schema properties recursively (including arrays of
+    objects) and for every ``writeOnly``/``password`` field copies the
+    value from *current* into *restored*.  Non-secret keys already
+    present in *restored* are left unchanged.  Returns *restored*
+    (mutated in place).
+    """
+    if not _is_json_schema(schema):
+        return restored
+
+    def _walk(
+        i_schema: dict[str, Any],
+        i_restored: dict[str, Any],
+        i_current: dict[str, Any],
+    ) -> dict[str, Any]:
+        for key, prop in i_schema.get("properties", {}).items():
+            resolved = _resolve_ref(prop, schema)
+            if _is_secret_prop(resolved):
+                if key in i_current:
+                    i_restored[key] = i_current[key]
+            elif resolved.get("type") == "object":
+                if isinstance(i_restored.get(key), dict) and isinstance(
+                    i_current.get(key), dict
+                ):
+                    _walk(resolved, i_restored[key], i_current[key])
+            elif resolved.get("type") == "array":
+                items_schema = resolved.get("items", {})
+                resolved_items: dict[str, Any] | None = None
+                if isinstance(items_schema, dict):
+                    resolved_items = _resolve_ref(items_schema, schema)
+                if (
+                    isinstance(resolved_items, dict)
+                    and resolved_items.get("type") == "object"
+                ):
+                    r_list = i_restored.get(key)
+                    c_list = i_current.get(key)
+                    if isinstance(r_list, list) and isinstance(c_list, list):
+                        for i in range(min(len(r_list), len(c_list))):
+                            if isinstance(r_list[i], dict) and isinstance(
+                                c_list[i], dict
+                            ):
+                                _walk(resolved_items, r_list[i], c_list[i])
+        return i_restored
+
+    return _walk(schema, restored, current)
 
 
 # ---------------------------------------------------------------------------

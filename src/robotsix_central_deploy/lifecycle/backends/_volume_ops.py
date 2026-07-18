@@ -99,7 +99,7 @@ class VolumeOps:
         # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
         cmd = (
             f"mkdir -p /config && echo {encoded} | base64 -d > /config/{filename}"
-            f" && chmod 777 /config && chmod 666 /config/{filename}"
+            f" && chmod 700 /config && chmod 600 /config/{filename}"
         )
         loop = asyncio.get_running_loop()
 

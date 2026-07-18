@@ -1501,17 +1501,17 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   let urlSuggestHtml = '';
   if (isSecret) {
     const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
-    // One state, one message: an unset secret can be skipped now (onboard)
-    // but the component needs it to run; a set secret is only replaced.
     const placeholder = alreadySet
       ? '(already set — enter new value to change)'
       : '(not set — can be saved later, needed to run)';
+    const badgeClass = alreadySet ? 'badge-secret-set' : 'badge-secret-unset';
+    const badgeText = alreadySet ? 'set' : 'not set';
     inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
       value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
     div.innerHTML = `
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
-      <span class="badge-secret">secret</span>
+      <span class="${badgeClass}">${badgeText}</span>
       ${fieldHelpHtml}
     `;
     return div;
@@ -1622,7 +1622,11 @@ function _collectFromProperties(schema, result, container, prefix) {
           ? parseInt(el.value, 10)
           : parseFloat(el.value);
       } else if (el.type === 'password' || isSecret) {
-        result[key] = el.value === '' ? '***' : el.value;
+        // Only send secret keys the operator actually filled in —
+        // omitted/blank means "keep existing value" on the server.
+        if (el.value !== '') {
+          result[key] = el.value;
+        }
       } else if (el.value === '') {
         // Omit an empty optional text leaf rather than storing "" — mirrors the
         // empty-nested-object omission above. Lets a nullable-object field whose
