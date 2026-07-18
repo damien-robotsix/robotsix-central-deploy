@@ -1,0 +1,1 @@
+Add lifecycle.secure_headers to docs/lifecycle/api.md
