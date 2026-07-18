@@ -6,15 +6,21 @@ from types import SimpleNamespace
 
 import pytest
 
-pytest.importorskip("asgi_csrf")
-
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.csrf import (
     CSRFHelper,
-    GatewayAwareCSRFMiddleware,
+    _HAS_ITSDANGEROUS,
 )
+
+try:
+    from robotsix_central_deploy.lifecycle.csrf import GatewayAwareCSRFMiddleware
+
+    _HAS_ASGI_CSRF = True
+except ImportError:
+    GatewayAwareCSRFMiddleware = None  # type: ignore[assignment]
+    _HAS_ASGI_CSRF = False
 
 
 def _build_app(base_domain: str = "deploy.example") -> FastAPI:
@@ -38,6 +44,98 @@ def _client(app: FastAPI, host: str, cookies: dict[str, str]) -> AsyncClient:
     )
 
 
+class TestCSRFHelper:
+    """Unit tests for the core CSRFHelper token generation and validation."""
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_generate_returns_url_safe_token(self):
+        """generate() returns a signed, URL-safe token when itsdangerous is available."""
+        helper = CSRFHelper("test-secret")
+        token = helper.generate()
+        assert isinstance(token, str)
+        assert len(token) > 0
+        # itsdangerous-signed tokens contain a dot separator (payload.signature)
+        assert "." in token
+
+    def test_generate_returns_raw_token_when_itsdangerous_absent(self, monkeypatch):
+        """generate() returns a raw random token when itsdangerous is not installed."""
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.csrf._HAS_ITSDANGEROUS", False
+        )
+        helper = CSRFHelper("test-secret")
+        assert helper.serializer is None
+        token = helper.generate()
+        assert isinstance(token, str)
+        assert len(token) > 0
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_init_creates_serializer_when_itsdangerous_available(self):
+        """__init__ creates a URLSafeSerializer when itsdangerous is available."""
+        helper = CSRFHelper("test-secret")
+        assert helper.serializer is not None
+
+    def test_init_serializer_is_none_when_itsdangerous_absent(self, monkeypatch):
+        """__init__ leaves serializer as None when itsdangerous is not installed."""
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.csrf._HAS_ITSDANGEROUS", False
+        )
+        helper = CSRFHelper("test-secret")
+        assert helper.serializer is None
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_validate_matching_pair_returns_true(self):
+        """validate() returns True when cookie and token match."""
+        helper = CSRFHelper("test-secret")
+        token = helper.generate()
+        assert helper.validate(token, token) is True
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_validate_mismatched_pair_returns_false(self):
+        """validate() returns False when cookie and token differ."""
+        helper = CSRFHelper("test-secret")
+        cookie = helper.generate()
+        token = helper.generate()
+        assert helper.validate(cookie, token) is False
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_validate_empty_cookie_returns_false(self):
+        """validate() returns False when cookie_value is empty."""
+        helper = CSRFHelper("test-secret")
+        token = helper.generate()
+        assert helper.validate("", token) is False
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_validate_empty_token_returns_false(self):
+        """validate() returns False when token is empty."""
+        helper = CSRFHelper("test-secret")
+        cookie = helper.generate()
+        assert helper.validate(cookie, "") is False
+
+    def test_validate_pass_through_when_itsdangerous_absent(self, monkeypatch):
+        """validate() returns True (pass-through) when itsdangerous is not installed."""
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.csrf._HAS_ITSDANGEROUS", False
+        )
+        helper = CSRFHelper("test-secret")
+        assert helper.serializer is None
+        # Even with garbage or empty values, validate should pass through
+        assert helper.validate("anything", "whatever") is True
+        assert helper.validate("", "") is True
+
+    @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
+    def test_validate_tampered_token_returns_false(self):
+        """validate() returns False when one character in the token is flipped."""
+        helper = CSRFHelper("test-secret")
+        token = helper.generate()
+        # Flip a character in the middle of the token
+        idx = len(token) // 2
+        chars = list(token)
+        chars[idx] = "X" if chars[idx] != "X" else "Y"
+        tampered = "".join(chars)
+        assert helper.validate(token, tampered) is False
+
+
+@pytest.mark.skipif(not _HAS_ASGI_CSRF, reason="asgi_csrf not installed")
 class TestGatewayAwareCSRFMiddleware:
     async def test_component_subdomain_post_bypasses_csrf(self):
         """POSTs routed to a component subdomain must not require the panel's
