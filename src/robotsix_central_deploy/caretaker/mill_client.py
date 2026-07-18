@@ -41,16 +41,17 @@ class MillClient:
                     "repo_id": finding.repo_id,
                     "title": finding.title,
                     "body": finding.detail,
-                    "kind": finding.kind.value,
+                    "source_tag": f"caretaker/{finding.kind.value}",
                 },
             )
             if resp.is_success:
                 return True
             logger.warning(
-                "mill ingest returned %d for finding %s/%s",
+                "mill ingest returned %d for finding %s/%s: %s",
                 resp.status_code,
                 finding.repo_id,
                 finding.title,
+                resp.text,
             )
             return False
         except httpx.HTTPError as exc:
