@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `secure_headers` module to the Lifecycle Internals section of the API reference docs.
 - Add PR-review endpoints to the chat-facing GitHub proxy: list reviews (`GET .../pulls/{number}/reviews`), list inline review comments (`GET .../pulls/{number}/comments`), submit a review (`POST .../pulls/{number}/reviews` with APPROVE/REQUEST_CHANGES/COMMENT), and dismiss a review (`PUT .../pulls/{number}/reviews/{review_id}/dismissals`). Review submission falls back to the repo-creation PAT when the App identity is the PR author (GitHub rejects self-approval). The PR detail endpoint also now returns `mergeable_state` and `head_sha`. All endpoints use the existing GitHub App installation token minted server-side — no credential is exposed to the chat container. Chat-skill document updated accordingly.
 - Enable periodic `state_sync` agent (`.robotsix-mill/periodic/state_sync.yaml`) for cross-referencing state Enum members against string-literal reference sites
 - Consolidate `volume_audit` module into `caretaker/volume_audit/` as a sub-package, since it is exclusively consumed by caretaker. Move source from `src/robotsix_central_deploy/volume_audit/` to `src/robotsix_central_deploy/caretaker/volume_audit/`, tests from `tests/volume_audit/` to `tests/caretaker/volume_audit/`, and docs from `docs/volume_audit/` to `docs/caretaker/volume_audit/`. Update all imports, module registration, and documentation references.
