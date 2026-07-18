@@ -475,6 +475,41 @@ class TestDockerSdkBackendDeploy:
         outcome = await b.deploy(record, config, image_ref)
         assert outcome.deployed_digest == "sha256:deadbeefcafe"
 
+    async def test_deploy_protects_pulled_image_until_done(self, backend):
+        """The pulled image's refs are prune-protected during the deploy and
+        released afterwards — including when create/start fails."""
+        from robotsix_central_deploy.lifecycle.backends._util import (
+            inflight_image_refs,
+        )
+
+        b, client, dm = backend
+        config = self._make_config()
+        record = ServiceRecord(
+            name="test-svc", container_name="test-svc", state=ServiceState.STOPPED
+        )
+
+        image = self._make_image_mock(["ghcr.io/o/img@sha256:abc"], "sha256:new")
+        client.images.pull.return_value = image
+        client.containers.get.side_effect = dm.errors.NotFound("gone")
+
+        seen_during_create: set[str] = set()
+
+        def _create(**kwargs):
+            seen_during_create.update(inflight_image_refs())
+            return MagicMock()
+
+        client.containers.create.side_effect = _create
+
+        await b.deploy(record, config, "ghcr.io/o/img:main")
+        assert {"sha256:new", "sha256:abc"} <= seen_during_create
+        assert inflight_image_refs() == set()
+
+        # Failure path also releases (finally).
+        client.containers.create.side_effect = RuntimeError("create boom")
+        with pytest.raises(RuntimeError, match="create/start failed"):
+            await b.deploy(record, config, "ghcr.io/o/img:main")
+        assert inflight_image_refs() == set()
+
 
 # ---------------------------------------------------------------------------
 # Rollback flow

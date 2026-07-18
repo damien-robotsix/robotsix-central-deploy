@@ -337,6 +337,71 @@ class TestDockerSdkBackendPruneImages:
         client.images.list.side_effect = docker_mock.errors.APIError("boom")
         assert await b.prune_images(set()) == 0
 
+    async def test_prune_skips_inflight_deploy_images(self, backend):
+        from robotsix_central_deploy.lifecycle.backends._util import (
+            register_inflight_image_refs,
+            release_inflight_image_refs,
+        )
+
+        b, client, _ = backend
+        client.images.list.return_value = [
+            _make_image("sha256:just-pulled", 100),
+            _make_image(
+                "sha256:pinned-local-id",
+                200,
+                repo_digests=["robotsix/chat@sha256:pinned-digest"],
+            ),
+            _make_image("sha256:prunable", 50),
+        ]
+        refs = {"sha256:just-pulled", "sha256:pinned-digest"}
+        register_inflight_image_refs(refs)
+        try:
+            reclaimed = await b.prune_images(set())
+        finally:
+            release_inflight_image_refs(refs)
+        assert reclaimed == 50
+        removed = [c.args[0] for c in client.images.remove.call_args_list]
+        assert removed == ["sha256:prunable"]
+
+        # After release the same images are prunable again.
+        client.images.remove.reset_mock()
+        reclaimed = await b.prune_images(set())
+        assert reclaimed == 350
+        removed = [c.args[0] for c in client.images.remove.call_args_list]
+        assert removed == [
+            "sha256:just-pulled",
+            "sha256:pinned-local-id",
+            "sha256:prunable",
+        ]
+
+
+class TestInflightImageRefRegistry:
+    def test_refcounted_register_release(self):
+        from robotsix_central_deploy.lifecycle.backends._util import (
+            inflight_image_refs,
+            register_inflight_image_refs,
+            release_inflight_image_refs,
+        )
+
+        register_inflight_image_refs({"sha256:shared"})
+        register_inflight_image_refs({"sha256:shared"})
+        release_inflight_image_refs({"sha256:shared"})
+        assert "sha256:shared" in inflight_image_refs()
+        release_inflight_image_refs({"sha256:shared"})
+        assert "sha256:shared" not in inflight_image_refs()
+
+    def test_ignores_empty_refs_and_over_release(self):
+        from robotsix_central_deploy.lifecycle.backends._util import (
+            inflight_image_refs,
+            register_inflight_image_refs,
+            release_inflight_image_refs,
+        )
+
+        register_inflight_image_refs({""})
+        assert "" not in inflight_image_refs()
+        release_inflight_image_refs({"sha256:never-registered"})
+        assert inflight_image_refs() == set()
+
 
 class TestCollectProtectedImageRefs:
     async def test_collects_all_digest_fields(self):
@@ -367,6 +432,28 @@ class TestCollectProtectedImageRefs:
             "sha256:rev-a",
             "sha256:prev-b",
         }
+
+    async def test_includes_inflight_deploy_refs(self):
+        from robotsix_central_deploy.lifecycle.backends import (
+            collect_protected_image_refs,
+        )
+        from robotsix_central_deploy.lifecycle.backends._util import (
+            register_inflight_image_refs,
+            release_inflight_image_refs,
+        )
+
+        store = MagicMock()
+
+        async def _list_all():
+            return [ServiceRecord(name="a", deployed_image_digest="sha256:dep-a")]
+
+        store.list_all = _list_all
+        register_inflight_image_refs({"sha256:pulling-now"})
+        try:
+            protected = await collect_protected_image_refs(store)
+        finally:
+            release_inflight_image_refs({"sha256:pulling-now"})
+        assert protected == {"sha256:dep-a", "sha256:pulling-now"}
 
 
 # ---------------------------------------------------------------------------
