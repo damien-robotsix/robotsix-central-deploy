@@ -2527,6 +2527,63 @@
       }
     },
     "/chat/config/{name}": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Read the current config for an allowlisted service (secrets redacted)",
+        "description": "Return the current config for an allowlisted service.\n\nSecret values are redacted \u2014 the chat agent sees ``\"***\"`` for set\nsecrets and ``\"\"`` for unset secrets.",
+        "operationId": "chat_get_config_chat_config__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentConfigRollbackResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service has no config schema"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "tags": [
           "chat"
@@ -5133,7 +5190,7 @@
           "values"
         ],
         "title": "ChatAgentConfigUpdate",
-        "description": "Request body for PUT /chat/config/{name}.\n\nOnly non-secret keys are accepted; secret fields are rejected with 403."
+        "description": "Request body for PUT /chat/config/{name}.\n\nSecret keys are accepted with partial-update semantics: omitted or\nsentinel (``\"***\"``) values keep the stored secret; only an explicitly\nsupplied non-empty value overwrites it."
       },
       "ChatAgentPreviewDeployRequest": {
         "properties": {
