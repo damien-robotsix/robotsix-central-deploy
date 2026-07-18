@@ -1857,6 +1857,9 @@ class TestUpdateRepoExtended:
         _, kwargs = fake_repo.edit.call_args
         assert kwargs["delete_branch_on_merge"] is True
 
+    async def test_unknown_key_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
         resp = await client.patch(
             "/chat/github/repos/acme/widget",
             json={"not_a_real_field": True},
