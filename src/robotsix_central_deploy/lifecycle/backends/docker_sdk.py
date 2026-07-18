@@ -10,7 +10,12 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
-from ._util import docker_status_to_service_state
+from ._util import (
+    docker_status_to_service_state,
+    inflight_image_refs,
+    register_inflight_image_refs,
+    release_inflight_image_refs,
+)
 from ._volume_ops import VolumeOps
 from .base import ExecutionBackend
 from ...gateway.proxy import PROXY_NETWORK
@@ -486,30 +491,37 @@ class DockerSdkBackend(ExecutionBackend):
             image.id or "",
         )
 
-        # Step 2 — snapshot + remove old container (if present)
-        prior_digest = ""
-        existing = await self._get_container(name)
-        if existing is not None:
-            prior_digest = await self._remove_old_container(name, existing)
-
-        # Step 3 — create + start new container
-        deploy_warnings: list[str] = []
+        # The pulled image stays untagged (dangling) until its container
+        # exists — shield it from concurrent prunes until the deploy ends.
+        inflight_refs = {ref for ref in (image.id, new_digest) if ref}
+        register_inflight_image_refs(inflight_refs)
         try:
-            deploy_warnings = await self._prepare_volumes(config)
+            # Step 2 — snapshot + remove old container (if present)
+            prior_digest = ""
+            existing = await self._get_container(name)
+            if existing is not None:
+                prior_digest = await self._remove_old_container(name, existing)
 
-            new_container = await loop.run_in_executor(
-                None, lambda: self._create_container(config, image_ref)
-            )
-            await loop.run_in_executor(None, new_container.start)
-        except Exception as exc:
-            await self._try_restore(name, config, prior_digest)
-            raise RuntimeError(
-                f"Container create/start failed for {name!r}: {exc}"
-            ) from exc
+            # Step 3 — create + start new container
+            deploy_warnings: list[str] = []
+            try:
+                deploy_warnings = await self._prepare_volumes(config)
 
-        # Step 4 — health wait (if configured)
-        if config.health_check:
-            await self._wait_healthy(name, timeout=60.0)
+                new_container = await loop.run_in_executor(
+                    None, lambda: self._create_container(config, image_ref)
+                )
+                await loop.run_in_executor(None, new_container.start)
+            except Exception as exc:
+                await self._try_restore(name, config, prior_digest)
+                raise RuntimeError(
+                    f"Container create/start failed for {name!r}: {exc}"
+                ) from exc
+
+            # Step 4 — health wait (if configured)
+            if config.health_check:
+                await self._wait_healthy(name, timeout=60.0)
+        finally:
+            release_inflight_image_refs(inflight_refs)
 
         return DeployOutcome(
             deployed_digest=new_digest,
@@ -814,7 +826,11 @@ class DockerSdkBackend(ExecutionBackend):
                     for rd in img.attrs.get("RepoDigests", [])
                     if "@" in rd
                 }
-                if img.id in protected_refs or digests & protected_refs:
+                # Re-check in-flight refs per image: *protected_refs* is a
+                # snapshot from before this loop, but a deploy may pull (and
+                # register) an image while the prune is running.
+                live_refs = protected_refs | inflight_image_refs()
+                if img.id in live_refs or digests & live_refs:
                     continue
                 size = int(img.attrs.get("Size", 0))
                 try:
