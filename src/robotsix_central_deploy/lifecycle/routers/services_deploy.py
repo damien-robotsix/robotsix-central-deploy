@@ -26,7 +26,12 @@ from ..deps import (
     _get_sibling_pairs,
     _get_store,
 )
-from ...deploy_lock import release_deploy_lock, try_acquire_deploy_lock
+from ...deploy_lock import (
+    get_deploy_lock_info,
+    release_deploy_lock,
+    set_deploy_lock_job_id,
+    try_acquire_deploy_lock,
+)
 from ..models import (
     DeployHistoryEntry,
     DeployHistoryResponse,
@@ -194,13 +199,22 @@ async def deploy_service(
         return DeployAcceptedResponse(job_id=existing_job_id, name=name)
 
     # Serialise concurrent deploys of the same component (operator + caretaker).
-    if not await try_acquire_deploy_lock(name):
+    if not await try_acquire_deploy_lock(name, source="manual"):
+        lock_info = get_deploy_lock_info(name)
+        lock_source = lock_info.get("source", "unknown") if lock_info else "unknown"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Deploy already in progress for '{name}'",
+            detail={
+                "error": (
+                    f"Deploy already in progress for '{name}'"
+                    f" (started by {lock_source})"
+                ),
+                "detail": lock_info,
+            },
         )
 
     job_id = job_registry.create_deploy(name)
+    set_deploy_lock_job_id(name, job_id)
 
     # Schedule the deploy sequence as a background task.
     settings_store = getattr(request.app.state, "settings_store", None)

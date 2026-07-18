@@ -13,6 +13,7 @@ from robotsix_central_deploy import deploy_lock
 def _reset_deploy_locks():
     """Reset the module-level lock dict before each test so tests are isolated."""
     deploy_lock._deploy_locks.clear()
+    deploy_lock._lock_info.clear()
 
 
 class TestTryAcquireDeployLock:
@@ -108,3 +109,49 @@ class TestReacquireAfterRelease:
         result = await deploy_lock.try_acquire_deploy_lock("svc")
         assert result is True
         assert deploy_lock._deploy_locks["svc"].locked()
+
+
+class TestDeployLockInfo:
+    """Tests for lock metadata storage and retrieval."""
+
+    async def test_stores_source_and_started_at_on_acquire(self):
+        """Acquiring a lock records the source and a started_at timestamp."""
+        await deploy_lock.try_acquire_deploy_lock("svc", source="caretaker")
+        info = deploy_lock.get_deploy_lock_info("svc")
+        assert info is not None
+        assert info["source"] == "caretaker"
+        assert isinstance(info["started_at"], float)
+        assert info["job_id"] == ""
+
+    async def test_default_source_is_manual(self):
+        """When source is not passed, it defaults to 'manual'."""
+        await deploy_lock.try_acquire_deploy_lock("svc")
+        info = deploy_lock.get_deploy_lock_info("svc")
+        assert info["source"] == "manual"
+
+    async def test_get_info_returns_none_when_not_locked(self):
+        """get_deploy_lock_info returns None when the lock is not held."""
+        assert deploy_lock.get_deploy_lock_info("svc") is None
+
+    async def test_get_info_returns_none_after_release(self):
+        """After releasing, get_deploy_lock_info returns None."""
+        await deploy_lock.try_acquire_deploy_lock("svc")
+        deploy_lock.release_deploy_lock("svc")
+        assert deploy_lock.get_deploy_lock_info("svc") is None
+
+    async def test_set_job_id_updates_existing_info(self):
+        """set_deploy_lock_job_id patches the job_id on the lock metadata."""
+        await deploy_lock.try_acquire_deploy_lock("svc")
+        deploy_lock.set_deploy_lock_job_id("svc", "job-123")
+        info = deploy_lock.get_deploy_lock_info("svc")
+        assert info["job_id"] == "job-123"
+
+    async def test_set_job_id_noop_when_not_locked(self):
+        """set_deploy_lock_job_id is a no-op when no lock info exists."""
+        deploy_lock.set_deploy_lock_job_id("svc", "job-123")  # no error
+
+    async def test_info_cleared_on_release(self):
+        """Releasing the lock also removes the lock info entry."""
+        await deploy_lock.try_acquire_deploy_lock("svc")
+        deploy_lock.release_deploy_lock("svc")
+        assert "svc" not in deploy_lock._lock_info

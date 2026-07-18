@@ -267,7 +267,7 @@ class TestPhaseUpdate:
         dhs = MagicMock(spec=DeployHistoryStore)
 
         # Simulate lock already held by another deploy.
-        async def _fake_try_acquire(_name: str) -> bool:
+        async def _fake_try_acquire(_name: str, source: str = "manual") -> bool:
             return False
 
         phases_mod = sys.modules["robotsix_central_deploy.caretaker.phases"]
