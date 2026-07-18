@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Enable `survey` periodic agent for discovering and studying similar deployment/orchestration projects
 - Fix caretaker mill ingest 422 validation error: send ``source_tag`` (required by mill's TicketIngest schema) instead of unrecognised ``kind`` field. Also log response body on non-2xx ingest responses so future rejections are diagnosable.
 - Deploy 409 responses now include lock-holder metadata (source, started-at, job-id), and the dashboard surfaces it with the source and start time instead of a bare "already in progress" message.
 - Add `secure_headers` module to the Lifecycle Internals section of the API reference docs.
