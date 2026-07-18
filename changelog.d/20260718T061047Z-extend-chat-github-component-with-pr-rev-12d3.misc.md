@@ -1,0 +1,1 @@
+Extend chat github component with PR review endpoints (read + submit reviews)
