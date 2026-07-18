@@ -33,7 +33,14 @@ from ..deps import (
     _validate_config_or_422,
 )
 from ._sibling_utils import _fanout_siblings_best_effort
-from .._config_utils import _mask_secrets, _merge_config, _canonical_hash
+from .._config_utils import (
+    _canonical_hash,
+    _is_key_secret,
+    _mask_secrets,
+    _merge_config,
+    _restore_secrets_from_current,
+    _strip_secret_values,
+)
 from ..models import (
     ActionType,
     ServiceState,
@@ -206,36 +213,6 @@ def _require_allowed_service(name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Secret-free key guard
-# ---------------------------------------------------------------------------
-
-
-def _reject_secret_keys(schema: dict[str, Any], submitted: dict[str, Any]) -> None:
-    """Raise HTTP 403 when *submitted* contains any secret-typed keys.
-
-    Secrets are detected via ``"format": "password"`` + ``"writeOnly": true``
-    in the JSON Schema properties.
-    """
-    from .._config_utils import _is_json_schema, _is_secret_prop, _resolve_ref
-
-    if not _is_json_schema(schema):
-        return  # legacy flat template — no secret annotations
-
-    def _check(prop_schema: dict[str, Any], vals: dict[str, Any]) -> None:
-        for key, prop in prop_schema.get("properties", {}).items():
-            resolved = _resolve_ref(prop, schema)  # resolve against root schema
-            if _is_secret_prop(resolved) and key in vals:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Chat agent cannot mutate secret key '{key}'.",
-                )
-            if resolved.get("type") == "object" and isinstance(vals.get(key), dict):
-                _check(resolved, vals[key])
-
-    _check(schema, submitted)
-
-
-# ---------------------------------------------------------------------------
 # GET /chat/components
 # ---------------------------------------------------------------------------
 
@@ -346,6 +323,48 @@ async def list_chat_components(
 
 
 # ---------------------------------------------------------------------------
+# GET /chat/config/{name}
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/config/{name}",
+    response_model=ChatAgentConfigRollbackResponse,
+    summary="Read the current config for an allowlisted service (secrets redacted)",
+    responses={
+        403: {"description": "Service not allowlisted"},
+        404: {"description": "Service has no config schema"},
+    },
+)
+async def chat_get_config(
+    name: str,
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    _auth: None = Depends(verify_auth),
+) -> ChatAgentConfigRollbackResponse:
+    """Return the current config for an allowlisted service.
+
+    Secret values are redacted — the chat agent sees ``"***"`` for set
+    secrets and ``""`` for unset secrets.
+    """
+    _require_allowed_service(name)
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for component '{name}'",
+        )
+    current_raw = await config_yaml_store.get_current(name)
+    if current_raw is None:
+        current_raw = _merge_config(template, {}, {})
+    masked = _mask_secrets(template, current_raw)
+    return ChatAgentConfigRollbackResponse(
+        component=name,
+        restored=masked,
+        detail="Current config (secrets redacted).",
+    )
+
+
+# ---------------------------------------------------------------------------
 # PUT /chat/config/{name}
 # ---------------------------------------------------------------------------
 
@@ -419,18 +438,20 @@ async def chat_update_config(
             detail=f"No config schema for component '{name}'",
         )
 
-    # Reject any secret keys in the submitted values.
-    _reject_secret_keys(template, body.values)
-
     # Snapshot current config for rollback before mutating.
     existing = await config_yaml_store.get_current(name)
     if existing is not None:
-        await config_yaml_store.save_previous(name, existing)
+        # Strip secret values from the rollback snapshot so history
+        # never persists secrets.  Rollback will restore secrets from
+        # the live config when it runs.
+        safe_snapshot = _strip_secret_values(template, existing)
+        await config_yaml_store.save_previous(name, safe_snapshot)
     else:
         # No current config yet — snapshot the template defaults so the
         # operator can still roll back the first change.
         default_config = _merge_config(template, {}, {})
-        await config_yaml_store.save_previous(name, default_config)
+        safe_default = _strip_secret_values(template, default_config)
+        await config_yaml_store.save_previous(name, safe_default)
 
     # Merge submitted values over existing (or template defaults when no
     # current config exists yet). The chat agent submits PARTIAL updates, so
@@ -458,16 +479,32 @@ async def chat_update_config(
     else:
         await config_yaml_store.update_current(name, merged)
 
-    # Audit-log each changed key.
+    # Audit-log each changed key (secret values redacted recursively).
     for key, new_val in body.values.items():
         old_val = existing.get(key) if isinstance(existing, dict) else None
+        is_secret = _is_key_secret(template, key)
+        # If the value is a nested dict/object, mask any secrets within it
+        # so the audit log never records secret plaintext.
+        safe_old: Any = old_val
+        safe_new: Any = new_val
+        if isinstance(old_val, dict):
+            safe_old = _mask_secrets(template, {key: old_val}).get(key, old_val)
+        if isinstance(new_val, dict):
+            safe_new = _mask_secrets(template, {key: new_val}).get(key, new_val)
+        if isinstance(old_val, list):
+            safe_old = _mask_secrets(template, {key: old_val}).get(key, old_val)
+        if isinstance(new_val, list):
+            safe_new = _mask_secrets(template, {key: new_val}).get(key, new_val)
+        if is_secret:
+            safe_old = "***"
+            safe_new = "***"
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
                 action="config_update",
                 key=key,
-                old_value=old_val,
-                new_value=new_val,
+                old_value=safe_old,
+                new_value=safe_new,
             )
         )
 
@@ -527,6 +564,12 @@ async def chat_rollback_config(
         )
 
     _validate_config_or_422(template, previous)
+
+    # Restore current secret values into the snapshot — rollback must not
+    # clobber secrets the snapshot doesn't know about.
+    current = await config_yaml_store.get_current(name)
+    if current:
+        previous = _restore_secrets_from_current(template, previous, current)
 
     # Write the previous config back.
     comp_cfg = component_config_store.get(name)

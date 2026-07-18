@@ -273,43 +273,57 @@ async def test_chat_config_update_partial_keeps_unsubmitted_keys(
 
 
 @pytest.mark.asyncio
-async def test_chat_config_update_rejects_secret_keys(
+async def test_chat_config_update_accepts_and_updates_secret_keys(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
 ):
-    """PUT /chat/config with a secret key in the body returns 403."""
+    """PUT /chat/config with a secret key updates it."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.put(
         "/chat/config/chat",
-        json={"values": {"debug": True, "api_token": "leaked-secret"}},
+        json={"values": {"debug": True, "api_token": "new-secret-value"}},
         headers=auth_headers,
     )
-    assert resp.status_code == 403, resp.text
-    assert "api_token" in resp.json()["error"]
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Secret value is masked in the response
+    assert body["restored"]["api_token"] == "***"
+    assert body["restored"]["debug"] is True
+    # Verify the secret was actually stored
+    stored = await config_yaml_store.get_current("chat")
+    assert stored["api_token"] == "new-secret-value"
 
 
 @pytest.mark.asyncio
-async def test_chat_config_update_secret_in_nested_object(
+async def test_chat_config_update_nested_secret_keys_are_accepted(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
 ):
-    """Nested secret keys are also rejected with 403."""
+    """Nested secret keys are accepted and updated."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp = await client.put(
         "/chat/config/chat",
-        json={"values": {"nested": {"host": "newhost", "secret_key": "bad"}}},
+        json={
+            "values": {"nested": {"host": "newhost", "secret_key": "new-nested-secret"}}
+        },
         headers=auth_headers,
     )
-    assert resp.status_code == 403, resp.text
-    assert "secret_key" in resp.json()["error"]
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Secret value is masked in the response
+    assert body["restored"]["nested"]["secret_key"] == "***"
+    assert body["restored"]["nested"]["host"] == "newhost"
+    # Verify the secret was actually stored
+    stored = await config_yaml_store.get_current("chat")
+    assert stored["nested"]["secret_key"] == "new-nested-secret"
 
 
 @pytest.mark.asyncio

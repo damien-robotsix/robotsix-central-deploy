@@ -304,7 +304,9 @@ class ClaudeAuthCredentialsResponse(BaseModel):
 class ChatAgentConfigUpdate(BaseModel):
     """Request body for PUT /chat/config/{name}.
 
-    Only non-secret keys are accepted; secret fields are rejected with 403.
+    Secret keys are accepted with partial-update semantics: omitted or
+    sentinel (``"***"``) values keep the stored secret; only an explicitly
+    supplied non-empty value overwrites it.
     """
 
     values: dict[str, Any]

@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Chat config secrets support**: `PUT /chat/config/{name}` now accepts secret (`writeOnly`/`password`) fields with partial-update semantics — omitted or sentinel values keep the stored secret, only explicitly supplied values overwrite. Added `GET /chat/config/{name}` for reading config with secrets redacted. Rollback preserves current secret values, audit log redacts secret data, and config volume file permissions tightened to 0600.
 - Configure panel: render schema docstrings as inline markdown (code, bold, italic, links), collapse long section descriptions with a more/less toggle, show per-field help captions under each input, and group top-level scalar keys under a "General" section.
 - ops: Remove stale ungrouped Dependabot entries that were left on disk alongside the new grouped entries, reducing total entries from 8 to 4
 - Add docstrings to the five undocumented route handlers in the UI router (dashboard, login_page, login_submit, logout, get_deploy_contract).
