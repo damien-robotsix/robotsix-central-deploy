@@ -49,6 +49,11 @@ async def ui_static(filename: str) -> FileResponse:
 async def dashboard(
     request: Request, _auth: None = Depends(verify_session)
 ) -> Response:
+    """Serve the monitoring dashboard at ``GET /ui``.
+
+    Generates a CSRF token (stored in a cookie) if one is not already
+    present, injects it into the dashboard HTML, and returns an HTMLResponse.
+    """
     cfg = request.app.state.config
     from ..lifecycle.csrf import get_csrf_secret
 
@@ -77,6 +82,12 @@ async def dashboard(
 
 @router.get("/login", include_in_schema=False)
 async def login_page(request: Request, next: str = "/ui") -> Response:
+    """Serve the login form at ``GET /login``.
+
+    If authentication is not required or a valid session token is present,
+    redirects to *next*.  Otherwise renders the login page with a fresh
+    CSRF token set as a cookie.  Returns an HTMLResponse or RedirectResponse.
+    """
     cfg = request.app.state.config
     if not cfg.auth_required:
         return RedirectResponse(url=_safe_next(next), status_code=303)
@@ -111,6 +122,13 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
 
 @router.post("/login", include_in_schema=False)
 async def login_submit(request: Request) -> Response:
+    """Handle login form submission at ``POST /login``.
+
+    Validates the CSRF token and credentials (username/password or API key).
+    On success sets a session cookie and redirects to *next*; on failure
+    re-renders the login form with an error message and a fresh CSRF cookie.
+    Returns an HTMLResponse or RedirectResponse.
+    """
     body = await request.body()
     params = urllib.parse.parse_qs(
         body.decode("utf-8", errors="replace"), keep_blank_values=True
@@ -192,6 +210,11 @@ async def login_submit(request: Request) -> Response:
 
 @router.post("/logout", include_in_schema=False)
 async def logout(request: Request) -> Response:
+    """Handle logout at ``POST /logout``.
+
+    Deletes the session token from the store and clears the session cookie,
+    then redirects to ``/login``.  Returns a RedirectResponse.
+    """
     token = request.cookies.get("session_token")
     if token:
         store: SessionStore = request.app.state.session_store
@@ -205,6 +228,11 @@ async def logout(request: Request) -> Response:
 
 @router.get("/help/deploy-contract", include_in_schema=False)
 def get_deploy_contract() -> Response:
+    """Serve the deploy-contract help page at ``GET /help/deploy-contract``.
+
+    Renders the pre-loaded ``DEPLOY_CONTRACT.md`` into an HTML page with
+    escaped content.  Returns a ``Response`` with ``text/html`` media type.
+    """
     html = _DEPLOY_CONTRACT_HTML.replace("{{ contract }}", _escape_html(_CONTRACT))
     return Response(content=html, media_type="text/html; charset=utf-8")
 
