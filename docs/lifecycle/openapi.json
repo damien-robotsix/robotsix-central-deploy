@@ -3405,6 +3405,339 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/reviews": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "List reviews on a pull request",
+        "description": "List *owner*/*repo*'s pull request *pull_number*'s reviews,\nmost-recent first.\n\nReturns reviewer login, ``state`` (``APPROVED``, ``CHANGES_REQUESTED``,\n``COMMENTED``, ``DISMISSED``), ``submitted_at``, ``commit_id``, and\n``body``.  *per_page* is capped at 100.",
+        "operationId": "list_reviews_chat_github_repos__owner___repo__pulls__pull_number__reviews_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Reviews Chat Github Repos  Owner   Repo  Pulls  Pull Number  Reviews Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Submit a review on a pull request",
+        "description": "Submit a review on *owner*/*repo*'s pull request *pull_number*.\n\n*event* must be ``APPROVE``, ``REQUEST_CHANGES``, or ``COMMENT``.\n*body* is optional review text.\n\nUses the GitHub App installation token.  If the App identity is the PR\nauthor, GitHub rejects self-approval with 422; the endpoint then falls\nback to the repo-creation PAT when that token is configured.  Returns\n422 if neither credential can satisfy the request.\n\nRequires explicit in-conversation user confirmation before calling.",
+        "operationId": "create_review_chat_github_repos__owner___repo__pulls__pull_number__reviews_post",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Review Chat Github Repos  Owner   Repo  Pulls  Pull Number  Reviews Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "422": {
+            "description": "GitHub rejected the review (e.g. self-approval when the App identity is the PR author, and no PAT fallback is configured)"
+          },
+          "502": {
+            "description": "GitHub API returned an unexpected error"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/comments": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "List inline review comments on a pull request",
+        "description": "List *owner*/*repo*'s pull request *pull_number*'s inline review\ncomments.\n\nReturns ``path``, ``line``, ``body``, ``user``, ``in_reply_to_id``,\n``commit_id``, and ``created_at``.  *per_page* is capped at 100.\n\nThese are inline code comments, not general PR-conversation comments.",
+        "operationId": "list_review_comments_chat_github_repos__owner___repo__pulls__pull_number__comments_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Review Comments Chat Github Repos  Owner   Repo  Pulls  Pull Number  Comments Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals": {
+      "put": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Dismiss a pull request review",
+        "description": "Dismiss *review_id* on *owner*/*repo*'s pull request *pull_number*.\n\n*message* is required by GitHub as the reason for dismissal.\n\nRequires explicit in-conversation user confirmation before calling.",
+        "operationId": "dismiss_review_chat_github_repos__owner___repo__pulls__pull_number__reviews__review_id__dismissals_put",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          },
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Review dismissed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Dismiss Review Chat Github Repos  Owner   Repo  Pulls  Pull Number  Reviews  Review Id  Dismissals Put"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR, review, or repository not found"
+          },
+          "422": {
+            "description": "GitHub rejected the dismissal"
+          },
+          "502": {
+            "description": "GitHub API returned an unexpected error"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/actions/permissions/workflow": {
       "get": {
         "tags": [
@@ -5380,6 +5713,34 @@
         "title": "CreateRepoRequest",
         "description": "Body for ``POST /chat/github/repos``."
       },
+      "CreateReviewRequest": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "pattern": "^(APPROVE|REQUEST_CHANGES|COMMENT)$",
+            "title": "Event",
+            "description": "Review action: ``APPROVE``, ``REQUEST_CHANGES``, or ``COMMENT``."
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body",
+            "description": "Review body text (optional)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "title": "CreateReviewRequest",
+        "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews``."
+      },
       "DeployAcceptedResponse": {
         "properties": {
           "job_id": {
@@ -5809,6 +6170,22 @@
         ],
         "title": "DiskUsageResponse",
         "description": "Host disk usage + Docker storage breakdown."
+      },
+      "DismissReviewRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message",
+            "description": "Required reason for dismissal."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "DismissReviewRequest",
+        "description": "Body for ``PUT\n/chat/github/repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/dismissals``."
       },
       "DockerDfStats": {
         "properties": {

@@ -11,7 +11,10 @@ from httpx import AsyncClient
 pytest.importorskip("github")
 
 from robotsix_central_deploy.lifecycle import server as server_mod
-from robotsix_central_deploy.lifecycle.github_app import GitHubAppNotConfiguredError
+from robotsix_central_deploy.lifecycle.github_app import (
+    GitHubAppNotConfiguredError,
+    GitHubRepoCreateNotConfiguredError,
+)
 
 
 class _FakeRun:
@@ -972,8 +975,9 @@ class _FakeUser:
 
 
 class _FakeRef:
-    def __init__(self, ref: str) -> None:
+    def __init__(self, ref: str, sha: str = "abc123") -> None:
         self.ref = ref
+        self.sha = sha
 
 
 class _FakePull:
@@ -985,9 +989,11 @@ class _FakePull:
         *,
         title: str = "Fix the thing",
         state: str = "open",
+        mergeable_state: str = "clean",
         draft: bool = False,
         user_login: str | None = "octocat",
         head_ref: str = "feature-branch",
+        head_sha: str = "abc123",
         base_ref: str = "main",
         mergeable: bool | None = True,
         merged: bool = False,
@@ -997,10 +1003,11 @@ class _FakePull:
         self.number = number
         self.title = title
         self.state = state
+        self.mergeable_state = mergeable_state
         self.draft = draft
         self.user = _FakeUser(user_login) if user_login else None
         self.html_url = f"https://github.com/acme/widget/pull/{number}"
-        self.head = _FakeRef(head_ref)
+        self.head = _FakeRef(head_ref, sha=head_sha)
         self.base = _FakeRef(base_ref)
         self.mergeable = mergeable
         self.merged = merged
@@ -1049,10 +1056,12 @@ class TestListPulls:
             "number": 1,
             "title": "Fix the thing",
             "state": "open",
+            "mergeable_state": "clean",
             "draft": False,
             "user": "octocat",
             "html_url": "https://github.com/acme/widget/pull/1",
             "head_ref": "feature-branch",
+            "head_sha": "abc123",
             "base_ref": "main",
             "mergeable": True,
             "merged": False,
@@ -1857,3 +1866,618 @@ class TestUpdateRepoExtended:
             headers=auth_headers,
         )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Fake classes for reviews and review comments
+# ---------------------------------------------------------------------------
+
+
+class _FakeReview:
+    """Stand-in for a PyGithub ``PullRequestReview``."""
+
+    def __init__(
+        self,
+        review_id: int,
+        *,
+        user_login: str = "reviewer",
+        state: str = "APPROVED",
+        submitted_at: datetime | None = None,
+        commit_id: str = "abc123",
+        body: str = "LGTM",
+    ) -> None:
+        self.id = review_id
+        self.user = _FakeUser(user_login)
+        self.state = state
+        self.submitted_at = submitted_at or datetime(
+            2026, 7, 7, 12, 10, 0, tzinfo=timezone.utc
+        )
+        self.commit_id = commit_id
+        self.body = body
+
+
+class _FakeReviewComment:
+    """Stand-in for a PyGithub ``PullRequestComment`` (inline review comment)."""
+
+    def __init__(
+        self,
+        comment_id: int,
+        *,
+        path: str = "src/app.py",
+        line: int | None = 42,
+        body: str = "Consider using a constant here.",
+        user_login: str = "reviewer",
+        in_reply_to_id: int | None = None,
+        commit_id: str = "abc123",
+        created_at: datetime | None = None,
+    ) -> None:
+        self.id = comment_id
+        self.path = path
+        self.line = line
+        self.body = body
+        self.user = _FakeUser(user_login)
+        self.in_reply_to_id = in_reply_to_id
+        self.commit_id = commit_id
+        self.created_at = created_at or datetime(
+            2026, 7, 7, 12, 10, 0, tzinfo=timezone.utc
+        )
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews
+# ---------------------------------------------------------------------------
+
+
+class TestListReviews:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget/pulls/1/reviews")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/1/reviews", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_lists_reviews(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        fake_pr = MagicMock()
+        fake_pr.get_reviews.return_value = [
+            _FakeReview(1, state="APPROVED"),
+            _FakeReview(2, state="CHANGES_REQUESTED", body="Needs work"),
+        ]
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/1/reviews", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        assert body[0] == {
+            "id": 1,
+            "user": "reviewer",
+            "state": "APPROVED",
+            "submitted_at": "2026-07-07T12:10:00+00:00",
+            "commit_id": "abc123",
+            "body": "LGTM",
+        }
+        assert body[1]["state"] == "CHANGES_REQUESTED"
+        assert body[1]["body"] == "Needs work"
+
+    async def test_per_page_capped_at_100(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        fake_pr = MagicMock()
+        fake_pr.get_reviews.return_value = [_FakeReview(i) for i in range(5)]
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/1/reviews?per_page=999",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 5
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/ghost/pulls/1/reviews", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/github/repos/{owner}/{repo}/pulls/{number}/comments
+# ---------------------------------------------------------------------------
+
+
+class TestListReviewComments:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget/pulls/1/comments")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/1/comments", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_lists_comments(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        repo_obj = MagicMock()
+        fake_pr = MagicMock()
+        fake_pr.get_review_comments.return_value = [
+            _FakeReviewComment(1, path="src/app.py", line=42),
+            _FakeReviewComment(2, path="src/util.py", line=10, in_reply_to_id=1),
+        ]
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/1/comments", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        assert body[0] == {
+            "id": 1,
+            "path": "src/app.py",
+            "line": 42,
+            "body": "Consider using a constant here.",
+            "user": "reviewer",
+            "in_reply_to_id": None,
+            "commit_id": "abc123",
+            "created_at": "2026-07-07T12:10:00+00:00",
+        }
+        assert body[1]["in_reply_to_id"] == 1
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/ghost/pulls/1/comments", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews
+# ---------------------------------------------------------------------------
+
+
+class TestCreateReview:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "APPROVE"},
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "APPROVE"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_invalid_event_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "INVALID"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_creates_review(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_pr.create_review.return_value = _FakeReview(
+            1, state="APPROVED", body="Looks good!"
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "APPROVE", "body": "Looks good!"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["id"] == 1
+        assert body["state"] == "APPROVED"
+        assert body["body"] == "Looks good!"
+        fake_pr.create_review.assert_called_once_with(
+            event="APPROVE", body="Looks good!"
+        )
+
+    async def test_creates_comment_review(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_pr.create_review.return_value = _FakeReview(
+            2, state="COMMENTED", body="Just a note."
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "COMMENT", "body": "Just a note."},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "COMMENTED"
+
+    async def test_records_audit_entry(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_pr.create_review.return_value = _FakeReview(1, state="APPROVED")
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "APPROVE"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "create_review"
+        assert entries[0].key == "acme/widget#1"
+
+    async def test_self_approval_falls_back_to_pat(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+        enable_repo_create_token,
+    ):
+        """When the App token fails with a self-approval 422, fall back to PAT."""
+        from github import GithubException
+
+        fake_pr = MagicMock()
+        fake_pr.create_review.side_effect = GithubException(
+            422,
+            data={
+                "message": "You cannot approve your own pull request",
+                "errors": [{"message": "self-approval is not allowed"}],
+            },
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_app_client = _fake_client(repo_obj)
+
+        # PAT client — used for fallback via raw requester
+        fake_pat_client = MagicMock(name="fake-pat-client")
+        fake_pat_client._requester = MagicMock()
+        fake_pat_client._requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {
+                "id": 99,
+                "user": {"login": "pat-user"},
+                "state": "APPROVED",
+                "submitted_at": "2026-07-07T12:30:00Z",
+                "commit_id": "def456",
+                "body": "",
+            },
+        )
+
+        async def _fake_get_app_client(config, owner, repo):
+            return fake_app_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_app_client,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: fake_pat_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "APPROVE"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["id"] == 99
+        assert body["user"] == "pat-user"
+        assert body["state"] == "APPROVED"
+
+    async def test_self_approval_no_pat_fallback_returns_422(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """Self-approval 422 without a PAT configured returns 422."""
+        from github import GithubException
+
+        fake_pr = MagicMock()
+        fake_pr.create_review.side_effect = GithubException(
+            422,
+            data={
+                "message": "You cannot approve your own pull request",
+            },
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+        # Ensure no PAT is configured
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: (_ for _ in ()).throw(
+                GitHubRepoCreateNotConfiguredError("No PAT")
+            ),
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/1/reviews",
+            json={"event": "APPROVE"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/ghost/pulls/1/reviews",
+            json={"event": "APPROVE"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PUT /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/
+#     dismissals
+# ---------------------------------------------------------------------------
+
+
+class TestDismissReview:
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/pulls/1/reviews/1/dismissals",
+            json={"message": "Stale review"},
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/pulls/1/reviews/1/dismissals",
+            json={"message": "Stale review"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_missing_message_returns_422(
+        self, client: AsyncClient, auth_headers: dict, enable_github_app
+    ):
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/pulls/1/reviews/1/dismissals",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_dismisses_review(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_review = _FakeReview(1, state="DISMISSED", body="Stale review")
+        fake_review.dismiss = MagicMock()
+        fake_pr.get_review.return_value = fake_review
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/pulls/1/reviews/1/dismissals",
+            json={"message": "Stale review"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "DISMISSED"
+        fake_review.dismiss.assert_called_once_with("Stale review")
+
+    async def test_records_audit_entry(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_review = _FakeReview(1, state="DISMISSED")
+        fake_review.dismiss = MagicMock()
+        fake_pr.get_review.return_value = fake_review
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/pulls/1/reviews/1/dismissals",
+            json={"message": "Stale review"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "dismiss_review"
+        assert entries[0].key == "acme/widget#1/reviews/1"
+
+    async def test_unknown_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/ghost/pulls/1/reviews/1/dismissals",
+            json={"message": "Stale review"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
