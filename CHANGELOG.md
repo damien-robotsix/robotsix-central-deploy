@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Configure panel: render schema docstrings as inline markdown (code, bold, italic, links), collapse long section descriptions with a more/less toggle, show per-field help captions under each input, and group top-level scalar keys under a "General" section.
 - ops: Remove stale ungrouped Dependabot entries that were left on disk alongside the new grouped entries, reducing total entries from 8 to 4
 - Add docstrings to the five undocumented route handlers in the UI router (dashboard, login_page, login_submit, logout, get_deploy_contract).
 - Enable `survey` periodic agent for discovering and studying similar deployment/orchestration projects

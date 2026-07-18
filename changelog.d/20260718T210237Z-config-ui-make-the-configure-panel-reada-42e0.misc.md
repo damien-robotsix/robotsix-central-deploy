@@ -1,0 +1,1 @@
+Config UI: make the Configure panel readable — render inline markdown, collapse long section descriptions, group ungrouped keys

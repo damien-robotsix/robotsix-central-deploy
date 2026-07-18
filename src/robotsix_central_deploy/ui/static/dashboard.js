@@ -1304,6 +1304,22 @@ function _resolveRef(propSchema, defs) {
   return propSchema;
 }
 
+function _renderSectionDesc(description) {
+  const rendered = renderInlineMarkdown(description);
+  const isLong = description.length > 140 || description.indexOf('\n') !== -1;
+  if (!isLong) {
+    return '<p class="config-desc">' + rendered + '</p>';
+  }
+  var firstLine = description.split('\n')[0];
+  if (firstLine.length > 120) firstLine = firstLine.substring(0, 120) + '\u2026';
+  const shortRendered = renderInlineMarkdown(firstLine);
+  return '<div class="config-desc config-desc--collapsed">' +
+    '<span class="config-desc-short">' + shortRendered + '</span>' +
+    '<span class="config-desc-full">' + rendered + '</span>' +
+    '<button type="button" class="config-desc-toggle">more\u2026</button>' +
+    '</div>';
+}
+
 function _renderConfigNode(schema, current, prefix, container) {
   const properties = schema.properties;
   if (!properties) return;
@@ -1311,7 +1327,47 @@ function _renderConfigNode(schema, current, prefix, container) {
   const required = schema.required || [];
   const defs = schema.$defs || {};
 
-  for (const [key, propSchema] of Object.entries(properties)) {
+  // At the top level, collect scalar keys and render them under "General"
+  // before named object sections so they don't float between sections.
+  var entries = Object.entries(properties);
+  if (prefix === '') {
+    const scalars = [];
+    const objects = [];
+    for (var i = 0; i < entries.length; i++) {
+      const key = entries[i][0];
+      const propSchema = entries[i][1];
+      const resolved = _resolveRef(propSchema, defs);
+      if (resolved.type === 'object') {
+        objects.push(entries[i]);
+      } else {
+        scalars.push(entries[i]);
+      }
+    }
+    if (scalars.length > 0) {
+      const generalSection = document.createElement('div');
+      generalSection.className = 'env-section';
+      generalSection.innerHTML = '<h3>General</h3>';
+      for (var s = 0; s < scalars.length; s++) {
+        const key = scalars[s][0];
+        const propSchema = scalars[s][1];
+        const fullKey = key;
+        const currentVal = (current != null) ? current[key] : undefined;
+        const resolvedSchema = _resolveRef(propSchema, defs);
+        const isRequired = required.includes(key);
+        const defaultVal = resolvedSchema.default ?? currentVal ?? '';
+        const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
+        generalSection.appendChild(buildConfigRow(
+          fullKey, key, resolvedSchema, currentVal, isSecret, isRequired, defaultVal
+        ));
+      }
+      container.appendChild(generalSection);
+    }
+    entries = objects;
+  }
+
+  for (var i = 0; i < entries.length; i++) {
+    const key = entries[i][0];
+    const propSchema = entries[i][1];
     const fullKey = prefix ? prefix + '.' + key : key;
     const currentVal = (current != null) ? current[key] : undefined;
 
@@ -1325,9 +1381,9 @@ function _renderConfigNode(schema, current, prefix, container) {
       const section = document.createElement('div');
       section.className = 'env-section';
       const sectionDesc = resolvedSchema.description
-        ? `<p class="config-desc">${escHtml(resolvedSchema.description)}</p>`
+        ? _renderSectionDesc(resolvedSchema.description)
         : '';
-      section.innerHTML = `<h3>${escHtml(key)}</h3>${sectionDesc}`;
+      section.innerHTML = '<h3>' + escHtml(key) + '</h3>' + sectionDesc;
       const currentSub = (currentVal !== null && typeof currentVal === 'object'
                           && !Array.isArray(currentVal)) ? currentVal : {};
       _renderConfigNode(resolvedSchema, currentSub, fullKey, section);
@@ -1436,6 +1492,10 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   const helpText = propSchema.description
     ? `${propSchema.description}\n(${fullKey})`
     : fullKey;
+  // Visible field help rendered as inline markdown under the input.
+  const fieldHelpHtml = propSchema.description
+    ? '<span class="env-help">' + renderInlineMarkdown(propSchema.description) + '</span>'
+    : '';
 
   let inputHtml;
   let urlSuggestHtml = '';
@@ -1452,6 +1512,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
       <span class="badge-secret">secret</span>
+      ${fieldHelpHtml}
     `;
     return div;
   }
@@ -1466,6 +1527,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
       <span class="hint-json">JSON list</span>
+      ${fieldHelpHtml}
     `;
     return div;
   }
@@ -1501,6 +1563,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
     ${inputHtml}
     ${urlSuggestHtml || ''}
+    ${fieldHelpHtml}
   `;
   return div;
 }
@@ -2091,6 +2154,45 @@ function escHtml(s) {
 
 function escAttr(s) {
   return String(s).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+}
+
+// ── Inline Markdown renderer ───────────────────────────────────
+// Renders only inline spans: `code`, **bold**, *italic*, [links](url).
+// Input is fully HTML-escaped first — never injects raw input.
+// Only http(s) link targets are kept; everything else dropped.
+function renderInlineMarkdown(text) {
+  if (!text) return '';
+  var s = escHtml(text);
+  // code (backticks) first — preserve literal content inside
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // bold: **text** or __text__
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  // italic: *text* or _text_
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+  // links: [label](url) — only allow http(s) targets
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, label, url) {
+    if (/^https?:\/\//i.test(url)) {
+      return '<a href="' + url + '" target="_blank" rel="noopener">' + label + '</a>';
+    }
+    return label; // drop non-http(s) links
+  });
+  return s;
+}
+
+// Toggle a collapsible config-desc block between collapsed / expanded.
+function _toggleConfigDesc(btn) {
+  var p = btn.parentElement;
+  if (p.classList.contains('config-desc--collapsed')) {
+    p.classList.remove('config-desc--collapsed');
+    p.classList.add('config-desc--expanded');
+    btn.textContent = 'less';
+  } else {
+    p.classList.remove('config-desc--expanded');
+    p.classList.add('config-desc--collapsed');
+    btn.textContent = 'more\u2026';
+  }
 }
 
 // ── Onboard modal ──────────────────────────────────────────────
@@ -3101,6 +3203,12 @@ async function pollSelfUpdateRecovery(startedAt) {
 }
 
 (async () => {
+  // Delegated click for collapsible config description toggle
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('config-desc-toggle')) {
+      _toggleConfigDesc(e.target);
+    }
+  });
   wireClaudeAuthPanel();
   await loadSettings();
   loadDashboard();
