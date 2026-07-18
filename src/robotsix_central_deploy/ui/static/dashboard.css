@@ -642,6 +642,29 @@
   .config-empty { color: #94a3b8; padding: 1rem 0; }
   .config-desc  { margin: 2px 0 8px; font-size: 0.78rem; color: var(--muted); }
 
+  /* Collapsible config descriptions */
+  .config-desc-toggle {
+    background: none; border: none; color: var(--blue);
+    cursor: pointer; font-size: 0.75rem; padding: 0; margin-left: 4px;
+    text-decoration: underline;
+  }
+  .config-desc-toggle:hover { color: #60a5fa; }
+  .config-desc--collapsed .config-desc-full { display: none; }
+  .config-desc--expanded .config-desc-short { display: none; }
+
+  /* Field-level help caption */
+  .env-help {
+    display: block; width: 100%; margin-top: 2px;
+    font-size: 0.72rem; color: var(--muted);
+  }
+
+  /* Inline code in descriptions and help */
+  .config-desc code, .env-help code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.85em; background: rgba(148,163,184,0.12);
+    border-radius: 3px; padding: 1px 4px;
+  }
+
   /* Config assist */
   .seed-label { font-size: 0.85rem; margin-left: 0.75rem; white-space: nowrap; }
   .seed-input { width: 10rem; margin-left: 0.25rem; }
