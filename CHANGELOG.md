@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix caretaker mill ingest 422 validation error: send ``source_tag`` (required by mill's TicketIngest schema) instead of unrecognised ``kind`` field. Also log response body on non-2xx ingest responses so future rejections are diagnosable.
 - Deploy 409 responses now include lock-holder metadata (source, started-at, job-id), and the dashboard surfaces it with the source and start time instead of a bare "already in progress" message.
 - Add `secure_headers` module to the Lifecycle Internals section of the API reference docs.
 - Add PR-review endpoints to the chat-facing GitHub proxy: list reviews (`GET .../pulls/{number}/reviews`), list inline review comments (`GET .../pulls/{number}/comments`), submit a review (`POST .../pulls/{number}/reviews` with APPROVE/REQUEST_CHANGES/COMMENT), and dismiss a review (`PUT .../pulls/{number}/reviews/{review_id}/dismissals`). Review submission falls back to the repo-creation PAT when the App identity is the PR author (GitHub rejects self-approval). The PR detail endpoint also now returns `mergeable_state` and `head_sha`. All endpoints use the existing GitHub App installation token minted server-side — no credential is exposed to the chat container. Chat-skill document updated accordingly.

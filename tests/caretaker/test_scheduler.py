@@ -245,7 +245,7 @@ class TestScheduler:
             json_body = kwargs.get("json", {})
             if json_body.get("repo_id") == "specific-repo":
                 found = True
-                assert json_body["kind"] == "health"
+                assert json_body["source_tag"] == "caretaker/health"
                 break
         assert found, "Expected ingest call with repo_id='specific-repo'"
 

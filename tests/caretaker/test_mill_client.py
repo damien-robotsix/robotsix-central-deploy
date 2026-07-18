@@ -30,12 +30,42 @@ class TestMillClient:
             detail="detail",
         )
         assert await client.ingest_finding(finding) is True
-        http.post.assert_called_once()
+        http.post.assert_called_once_with(
+            "http://localhost:8080/tickets/ingest",
+            json={
+                "repo_id": "my-repo",
+                "title": "test",
+                "body": "detail",
+                "source_tag": "caretaker/health",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_ingest_payload_includes_source_tag_not_kind(self):
+        """The mill's TicketIngest model requires 'source_tag', not 'kind'."""
+        http = MagicMock(spec=httpx.AsyncClient)
+        http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        client = MillClient("http://localhost:8080", http)
+        finding = CaretakerFinding(
+            component_id="svc",
+            repo_id="my-repo",
+            kind=FindingKind.UPDATE_FAILED,
+            title="Auto-update failed for chat",
+            detail="ConnectionError: ...",
+            severity="error",
+        )
+        await client.ingest_finding(finding)
+        call_kwargs = http.post.call_args.kwargs
+        assert call_kwargs["json"]["source_tag"] == "caretaker/update_failed"
+        assert "kind" not in call_kwargs["json"]
 
     @pytest.mark.asyncio
     async def test_ingest_4xx_returns_false(self):
         http = MagicMock(spec=httpx.AsyncClient)
-        http.post = AsyncMock(return_value=MagicMock(is_success=False, status_code=422))
+        mock_resp = MagicMock(
+            is_success=False, status_code=422, text="validation error"
+        )
+        http.post = AsyncMock(return_value=mock_resp)
         client = MillClient("http://localhost:8080", http)
         finding = CaretakerFinding(
             component_id="svc",
