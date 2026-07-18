@@ -231,6 +231,48 @@ async def test_chat_config_update_happy_path(
 
 
 @pytest.mark.asyncio
+async def test_chat_config_update_partial_keeps_unsubmitted_keys(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    config_yaml_store: ConfigYamlStore,
+):
+    """A partial update must not reset unsubmitted keys to template defaults.
+
+    Regression test for the 2026-07-18 chat outage: the chat agent submitted
+    only two keys and every other field (server port, API keys, integration
+    URLs) was silently reset to its schema default, taking the service down.
+    """
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+    # Seed a current config with non-default values, including secrets.
+    await config_yaml_store.update_current(
+        "chat",
+        {
+            "debug": True,
+            "log_level": "info",
+            "api_token": "real-secret",
+            "nested": {"host": "prod.example.com", "secret_key": "nested-secret"},
+        },
+    )
+
+    resp = await client.put(
+        "/chat/config/chat",
+        json={"values": {"debug": False}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    current = await config_yaml_store.get_current("chat")
+    assert current is not None
+    assert current["debug"] is False
+    # Unsubmitted keys keep their existing values instead of template defaults.
+    assert current["api_token"] == "real-secret"
+    assert current["nested"]["host"] == "prod.example.com"
+    assert current["nested"]["secret_key"] == "nested-secret"
+
+
+@pytest.mark.asyncio
 async def test_chat_config_update_rejects_secret_keys(
     client: AsyncClient,
     auth_headers: dict[str, str],

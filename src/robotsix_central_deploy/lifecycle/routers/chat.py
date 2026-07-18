@@ -433,9 +433,14 @@ async def chat_update_config(
         await config_yaml_store.save_previous(name, default_config)
 
     # Merge submitted values over existing (or template defaults when no
-    # current config exists yet).
+    # current config exists yet). The chat agent submits PARTIAL updates, so
+    # keys absent from the payload must keep their existing values — without
+    # prefer_existing_for_unset every unsubmitted key (ports, API keys,
+    # integration URLs) is silently reset to its template default.
     try:
-        merged = _merge_config(template, existing or {}, body.values)
+        merged = _merge_config(
+            template, existing or {}, body.values, prefer_existing_for_unset=True
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
