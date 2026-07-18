@@ -37,21 +37,3 @@ updates:
       docker-images:
         patterns:
           - "*"
-      interval: weekly
-    allow:
-      - dependency-type: direct
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: monthly
-
-  - package-ecosystem: pre-commit
-    directory: /
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: docker
-    directory: /
-    schedule:
-      interval: weekly
