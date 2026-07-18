@@ -88,7 +88,10 @@ def _strip_secret_values(
         props = i_schema.get("properties", {})
         for key, val in i_values.items():
             prop = props.get(key)
-            resolved = _resolve_ref(prop, i_schema) if isinstance(prop, dict) else None
+            # $refs must resolve against the ROOT schema — $defs only exists
+            # there, so resolving against the current sub-schema silently
+            # fails for objects nested two or more $ref levels deep.
+            resolved = _resolve_ref(prop, schema) if isinstance(prop, dict) else None
             if resolved is not None and _is_secret_prop(resolved):
                 continue  # drop secret leaves — the operator supplies them
             if (
@@ -208,7 +211,8 @@ def _mask_secrets_json_schema(
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, prop in i_schema.get("properties", {}).items():
-            resolved = _resolve_ref(prop, i_schema)
+            # Resolve against the ROOT schema — $defs only exists there.
+            resolved = _resolve_ref(prop, schema)
             cval = i_current.get(key)
             if _is_secret_prop(resolved):
                 if isinstance(cval, str) and cval and cval != "***":
@@ -272,7 +276,12 @@ def _merge_config_json_schema(
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, prop in i_schema.get("properties", {}).items():
-            resolved = _resolve_ref(prop, i_schema)
+            # Resolve against the ROOT schema — $defs only exists there.
+            # Resolving against the current sub-schema silently fails for
+            # objects nested two or more $ref levels deep (e.g.
+            # memory.llm), so the submitted sub-dict replaced the existing
+            # one wholesale, dropping unsubmitted nested keys and secrets.
+            resolved = _resolve_ref(prop, schema)
             if _is_secret_prop(resolved) and i_submitted.get(key) == "***":
                 result[key] = i_existing.get(key, "")
             elif resolved.get("type") == "object":
