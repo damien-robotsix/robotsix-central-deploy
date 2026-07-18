@@ -327,7 +327,7 @@ def _merge_config_json_schema(
                 # Only an explicitly supplied non-empty, non-sentinel value
                 # overwrites the stored secret.
                 sub_val = i_submitted.get(key)
-                if sub_val and sub_val != "***" and sub_val is not None:
+                if sub_val and sub_val != "***":
                     result[key] = str(sub_val)
                 elif key in i_existing:
                     result[key] = i_existing[key]

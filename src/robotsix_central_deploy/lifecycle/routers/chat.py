@@ -491,6 +491,10 @@ async def chat_update_config(
             safe_old = _mask_secrets(template, {key: old_val}).get(key, old_val)
         if isinstance(new_val, dict):
             safe_new = _mask_secrets(template, {key: new_val}).get(key, new_val)
+        if isinstance(old_val, list):
+            safe_old = _mask_secrets(template, {key: old_val}).get(key, old_val)
+        if isinstance(new_val, list):
+            safe_new = _mask_secrets(template, {key: new_val}).get(key, new_val)
         if is_secret:
             safe_old = "***"
             safe_new = "***"
