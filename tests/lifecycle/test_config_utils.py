@@ -797,3 +797,94 @@ class TestMergeConfigFlat:
         submitted: dict[str, object] = {}
         result = _merge_config_flat(template, existing, submitted)
         assert result == {"version": "1.0.0"}
+
+
+# ---------------------------------------------------------------------------
+# Nested $ref resolution (two $ref levels deep, mirroring chat's memory.llm)
+# ---------------------------------------------------------------------------
+
+# Pydantic-style schema: memory -> $defs/MemoryConfig, whose llm property is
+# itself a $ref to $defs/LlmConfig. $defs only exists at the ROOT, so any
+# walker resolving refs against the current sub-schema fails at level 2.
+_NESTED_REF_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "memory": {"$ref": "#/$defs/MemoryConfig"},
+    },
+    "$defs": {
+        "MemoryConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {"type": "boolean", "default": False},
+                "llm": {"$ref": "#/$defs/LlmConfig"},
+            },
+        },
+        "LlmConfig": {
+            "type": "object",
+            "properties": {
+                "endpoint": {"type": "string", "default": ""},
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+            },
+        },
+    },
+}
+
+
+class TestNestedRefResolution:
+    """Regression tests for the 2026-07-18 chat outage (second clobber).
+
+    A partial update touching memory.llm replaced the nested object
+    wholesale because the level-2 $ref failed to resolve against the
+    sub-schema, dropping the unsubmitted nested secret.
+    """
+
+    def test_merge_preserves_nested_secret_behind_double_ref(self):
+        existing = {
+            "memory": {
+                "enabled": True,
+                "llm": {"endpoint": "https://api.example.com", "api_key": "sk-real"},
+            },
+        }
+        submitted = {"memory": {"llm": {"endpoint": "https://other.example.com"}}}
+        result = _merge_config(
+            _NESTED_REF_SCHEMA, existing, submitted, prefer_existing_for_unset=True
+        )
+        assert result["memory"]["llm"]["endpoint"] == "https://other.example.com"
+        assert result["memory"]["llm"]["api_key"] == "sk-real"
+        assert result["memory"]["enabled"] is True
+
+    def test_merge_recurses_into_double_ref_object(self):
+        # Without prefer_existing_for_unset the nested object must still be
+        # MERGED per-key (defaults for absent keys), never replaced by the
+        # submitted dict verbatim.
+        submitted = {"memory": {"llm": {"endpoint": "https://x.example.com"}}}
+        result = _merge_config(_NESTED_REF_SCHEMA, {}, submitted)
+        assert result["memory"]["llm"]["endpoint"] == "https://x.example.com"
+        # Secret key present (empty), not missing from the dict entirely.
+        assert "api_key" in result["memory"]["llm"]
+
+    def test_mask_secrets_masks_secret_behind_double_ref(self):
+        current = {
+            "memory": {
+                "enabled": True,
+                "llm": {"endpoint": "https://api.example.com", "api_key": "sk-real"},
+            },
+        }
+        masked = _mask_secrets(_NESTED_REF_SCHEMA, current)
+        assert masked["memory"]["llm"]["api_key"] == "***"
+        assert masked["memory"]["llm"]["endpoint"] == "https://api.example.com"
+
+    def test_strip_secret_values_strips_secret_behind_double_ref(self):
+        values = {
+            "memory": {
+                "enabled": True,
+                "llm": {"endpoint": "https://api.example.com", "api_key": "sk-seed"},
+            },
+        }
+        stripped = _strip_secret_values(_NESTED_REF_SCHEMA, values)
+        assert "api_key" not in stripped["memory"]["llm"]
+        assert stripped["memory"]["llm"]["endpoint"] == "https://api.example.com"
