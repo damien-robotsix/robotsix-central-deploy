@@ -211,20 +211,28 @@ class TestDeployEndpoint:
     async def test_deploy_returns_409_when_lock_held_no_job(
         self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
     ):
-        """When the deploy lock is held and no active deploy job exists, return 409."""
+        """When the deploy lock is held and no active deploy job exists, return 409
+        with lock-holder metadata."""
         await self._seed("svc-a")
 
-        async def _fake_try_acquire(_name: str) -> bool:
+        async def _fake_try_acquire(_name: str, source: str = "manual") -> bool:
             return False
+
+        def _fake_get_lock_info(_name: str):
+            return {"source": "caretaker", "started_at": 1721312460.0, "job_id": ""}
 
         import robotsix_central_deploy.lifecycle.routers.services_deploy as svc_deploy
 
         monkeypatch.setattr(svc_deploy, "try_acquire_deploy_lock", _fake_try_acquire)
+        monkeypatch.setattr(svc_deploy, "get_deploy_lock_info", _fake_get_lock_info)
 
         resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
         assert resp.status_code == 409
         data = resp.json()
         assert "already in progress" in data["error"]
+        assert "caretaker" in data["error"]
+        assert data["detail"]["source"] == "caretaker"
+        assert data["detail"]["started_at"] == 1721312460.0
 
     async def test_deploy_returns_existing_job_id_when_active_job_exists(
         self, client: AsyncClient, auth_headers: dict, registry

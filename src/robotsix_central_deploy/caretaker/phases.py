@@ -79,7 +79,7 @@ async def phase_update(
             image_ref = record.image or config.image
 
         # Serialise concurrent deploys of the same component (operator + caretaker).
-        if not await try_acquire_deploy_lock(record.name):
+        if not await try_acquire_deploy_lock(record.name, source="caretaker"):
             logger.info(
                 "phase_update: deploy already in progress for %s, skipping",
                 record.name,

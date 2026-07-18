@@ -695,6 +695,19 @@ async function updateService(name) {
     });
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
+      if (resp.status === 409 && body.detail) {
+        const info = body.detail;
+        const sourceLabel = (info.source === 'caretaker') ? 'caretaker auto-update' : (info.source || 'another deploy');
+        let msg = `Update already in progress \u2014 ${sourceLabel}`;
+        if (info.started_at) {
+          msg += ` (started ${new Date(info.started_at * 1000).toLocaleTimeString()})`;
+        }
+        msg += '.';
+        if (info.job_id) {
+          msg += ` Job: ${info.job_id}`;
+        }
+        throw new Error(msg);
+      }
       throw new Error(body.error || `HTTP ${resp.status}`);
     }
     const body = await resp.json().catch(() => ({}));
