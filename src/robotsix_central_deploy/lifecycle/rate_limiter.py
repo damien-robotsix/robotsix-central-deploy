@@ -177,6 +177,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: object) -> Response:
+        """Enforce per-IP rate limits on the incoming request.
+
+        The middleware applies two tiers of rate limiting:
+
+        - **Login POST** (``/login``): strict per-minute limit + lockout after
+          ``rate_limit_login_max_attempts`` consecutive failures.
+        - **API paths** (``/services``, ``/settings``, …): broader per-hour limit.
+
+        Requests proxied through the gateway for a component subdomain are
+        excluded from all limits (``_is_gateway_host`` check). Non-matching
+        paths pass through untouched.
+
+        Returns the upstream ``Response``, or a ``429 JSONResponse`` when
+        limits are exceeded.
+        """
         # Gateway-proxied component traffic is out of scope: the limiter
         # protects central-deploy's own login/API, and a component's
         # ``/login`` or ``/chat`` path colliding with these prefixes must
