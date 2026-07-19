@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `mill` to the chat-agent service allowlist, permitting the chat agent to restart and update the mill service via the scoped `/chat/services/mill/restart` and `/chat/services/mill/update` endpoints.
 - Add docstring to ``CaretakerScheduler.__init__`` constructor documenting all 11 dependency-injection parameters.
 - Add generic credential-sharing mechanism: scope-tag env vars and secrets in any component's settings, then declare `consumed_scopes` patterns on consumer components. On deploy, the server resolves matching credentials across all EnvStores and injects them into the consumer's container — no manual key duplication needed.
 - Added docstring to `gateway_http` in `src/robotsix_central_deploy/gateway/router.py` documenting the two routing strategies (subdomain and legacy path-prefix redirect).
