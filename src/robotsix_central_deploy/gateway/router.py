@@ -186,6 +186,18 @@ async def gateway_http(
     path: str,
     _auth: None = Depends(verify_session),
 ) -> Response:
+    """Route an HTTP proxy request to the correct component container.
+
+    Two routing strategies are tried in order:
+
+    1. **Subdomain** — if ``Host`` matches ``<name>.<gateway_base_domain>``,
+       proxy directly to the component's container.
+    2. **Legacy path-prefix** — ``/<name>/...`` redirects (307) to the
+       component subdomain (path-prefix proxying was removed because it
+       broke absolute asset URLs).
+
+    Raises ``HTTPException 404`` when no component matches.
+    """
     # 1. Subdomain routing: Host = <name>.<gateway_base_domain>
     name = _extract_subdomain_name(request.headers, request.app)
     if name:

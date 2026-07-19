@@ -1,0 +1,1 @@
+docstring gap: add docstring to gateway_http in gateway/router.py:184
