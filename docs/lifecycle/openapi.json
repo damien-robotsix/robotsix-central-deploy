@@ -3093,14 +3093,14 @@
         }
       }
     },
-    "/chat/github/repos/{owner}/{repo}": {
+    "/chat/github/repos/{owner}/{repo}/actions/permissions/workflow": {
       "get": {
         "tags": [
           "chat-github"
         ],
-        "summary": "Get GitHub repository details",
-        "description": "Get *owner*/*repo*'s details (visibility, description, settings).",
-        "operationId": "get_repo_chat_github_repos__owner___repo__get",
+        "summary": "Get default workflow permissions for a repository",
+        "description": "Get *owner*/*repo*'s default workflow permissions and whether Actions\ncan create and approve pull requests.",
+        "operationId": "get_workflow_permissions_chat_github_repos__owner___repo__actions_permissions_workflow_get",
         "parameters": [
           {
             "name": "owner",
@@ -3129,7 +3129,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Get Repo Chat Github Repos  Owner   Repo  Get"
+                  "title": "Response Get Workflow Permissions Chat Github Repos  Owner   Repo  Actions Permissions Workflow Get"
                 }
               }
             }
@@ -3155,13 +3155,13 @@
           }
         }
       },
-      "patch": {
+      "put": {
         "tags": [
           "chat-github"
         ],
-        "summary": "Update GitHub repository settings",
-        "description": "Update *owner*/*repo*'s settings \u2014 only provided fields are changed.",
-        "operationId": "update_repo_chat_github_repos__owner___repo__patch",
+        "summary": "Set default workflow permissions for a repository",
+        "description": "Set *owner*/*repo*'s default workflow permissions and whether Actions\ncan create and approve pull requests.",
+        "operationId": "set_workflow_permissions_chat_github_repos__owner___repo__actions_permissions_workflow_put",
         "parameters": [
           {
             "name": "owner",
@@ -3187,7 +3187,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateRepoRequest"
+                "$ref": "#/components/schemas/WorkflowPermissionsRequest"
               }
             }
           }
@@ -3200,7 +3200,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Update Repo Chat Github Repos  Owner   Repo  Patch"
+                  "title": "Response Set Workflow Permissions Chat Github Repos  Owner   Repo  Actions Permissions Workflow Put"
                 }
               }
             }
@@ -3212,168 +3212,10 @@
             "description": "Repository not found or App not installed on it"
           },
           "422": {
-            "description": "No fields provided, or GitHub rejected the request"
+            "description": "GitHub rejected the request"
           },
           "503": {
             "description": "GitHub App not configured"
-          }
-        }
-      }
-    },
-    "/chat/github/repos/{owner}/{repo}/pulls": {
-      "get": {
-        "tags": [
-          "chat-github"
-        ],
-        "summary": "List pull requests for a repository",
-        "description": "List *owner*/*repo*'s pull requests, most-recently-updated first.\n\n*state* is one of ``\"open\"`` (default), ``\"closed\"``, or ``\"all\"``.\n*per_page* is capped at 100 (GitHub's own page-size ceiling).",
-        "operationId": "list_pulls_chat_github_repos__owner___repo__pulls_get",
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Owner"
-            }
-          },
-          {
-            "name": "repo",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Repo"
-            }
-          },
-          {
-            "name": "state",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "open",
-              "title": "State"
-            }
-          },
-          {
-            "name": "per_page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 10,
-              "title": "Per Page"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": true
-                  },
-                  "title": "Response List Pulls Chat Github Repos  Owner   Repo  Pulls Get"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Repository not found or App not installed on it"
-          },
-          "503": {
-            "description": "GitHub App not configured"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/chat/github/repos/{owner}/{repo}/pulls/{number}": {
-      "get": {
-        "tags": [
-          "chat-github"
-        ],
-        "summary": "Get a single pull request",
-        "description": "Get *owner*/*repo*'s pull request *number* (status, mergeable, URL).",
-        "operationId": "get_pull_chat_github_repos__owner___repo__pulls__number__get",
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Owner"
-            }
-          },
-          {
-            "name": "repo",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Repo"
-            }
-          },
-          {
-            "name": "number",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Pull Chat Github Repos  Owner   Repo  Pulls  Number  Get"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Pull request (or repository) not found"
-          },
-          "503": {
-            "description": "GitHub App not configured"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       }
@@ -3795,14 +3637,172 @@
         }
       }
     },
-    "/chat/github/repos/{owner}/{repo}/actions/permissions/workflow": {
+    "/chat/github/repos/{owner}/{repo}/pulls": {
       "get": {
         "tags": [
           "chat-github"
         ],
-        "summary": "Get default workflow permissions for a repository",
-        "description": "Get *owner*/*repo*'s default workflow permissions and whether Actions\ncan create and approve pull requests.",
-        "operationId": "get_workflow_permissions_chat_github_repos__owner___repo__actions_permissions_workflow_get",
+        "summary": "List pull requests for a repository",
+        "description": "List *owner*/*repo*'s pull requests, most-recently-updated first.\n\n*state* is one of ``\"open\"`` (default), ``\"closed\"``, or ``\"all\"``.\n*per_page* is capped at 100 (GitHub's own page-size ceiling).",
+        "operationId": "list_pulls_chat_github_repos__owner___repo__pulls_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "open",
+              "title": "State"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Pulls Chat Github Repos  Owner   Repo  Pulls Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls/{number}": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Get a single pull request",
+        "description": "Get *owner*/*repo*'s pull request *number* (status, mergeable, URL).",
+        "operationId": "get_pull_chat_github_repos__owner___repo__pulls__number__get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Pull Chat Github Repos  Owner   Repo  Pulls  Number  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Pull request (or repository) not found"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Get GitHub repository details",
+        "description": "Get *owner*/*repo*'s details (visibility, description, settings).",
+        "operationId": "get_repo_chat_github_repos__owner___repo__get",
         "parameters": [
           {
             "name": "owner",
@@ -3831,7 +3831,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Get Workflow Permissions Chat Github Repos  Owner   Repo  Actions Permissions Workflow Get"
+                  "title": "Response Get Repo Chat Github Repos  Owner   Repo  Get"
                 }
               }
             }
@@ -3857,13 +3857,13 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
           "chat-github"
         ],
-        "summary": "Set default workflow permissions for a repository",
-        "description": "Set *owner*/*repo*'s default workflow permissions and whether Actions\ncan create and approve pull requests.",
-        "operationId": "set_workflow_permissions_chat_github_repos__owner___repo__actions_permissions_workflow_put",
+        "summary": "Update GitHub repository settings",
+        "description": "Update *owner*/*repo*'s settings \u2014 only provided fields are changed.",
+        "operationId": "update_repo_chat_github_repos__owner___repo__patch",
         "parameters": [
           {
             "name": "owner",
@@ -3889,7 +3889,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkflowPermissionsRequest"
+                "$ref": "#/components/schemas/UpdateRepoRequest"
               }
             }
           }
@@ -3902,7 +3902,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Set Workflow Permissions Chat Github Repos  Owner   Repo  Actions Permissions Workflow Put"
+                  "title": "Response Update Repo Chat Github Repos  Owner   Repo  Patch"
                 }
               }
             }
@@ -3914,10 +3914,56 @@
             "description": "Repository not found or App not installed on it"
           },
           "422": {
-            "description": "GitHub rejected the request"
+            "description": "No fields provided, or GitHub rejected the request"
           },
           "503": {
             "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
+    "/chat/github/repos": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Create a new GitHub repository",
+        "description": "Create a new repository under the configured account.\n\nUses ``github_repo_create_token`` (a PAT), not the GitHub App\ninstallation token \u2014 GitHub Apps cannot create repositories under a\npersonal account. The repository is always created under that token's\nown account; there is no way to target an arbitrary owner.\n\nAlso enables the Dependency graph / Dependabot alerts (see\n:func:`enable_vulnerability_alerts`) so CI checks that depend on it\n(e.g. ``dependency-review-action``) don't fail on day one.",
+        "operationId": "create_repo_chat_github_repos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRepoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Repo Chat Github Repos Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "Repository already exists"
+          },
+          "422": {
+            "description": "GitHub rejected the request (e.g. invalid name)"
+          },
+          "503": {
+            "description": "Repo creation not configured"
           }
         }
       }
@@ -4047,52 +4093,6 @@
           },
           "503": {
             "description": "Neither GitHub App nor PAT configured for this operation"
-          }
-        }
-      }
-    },
-    "/chat/github/repos": {
-      "post": {
-        "tags": [
-          "chat-github"
-        ],
-        "summary": "Create a new GitHub repository",
-        "description": "Create a new repository under the configured account.\n\nUses ``github_repo_create_token`` (a PAT), not the GitHub App\ninstallation token \u2014 GitHub Apps cannot create repositories under a\npersonal account. The repository is always created under that token's\nown account; there is no way to target an arbitrary owner.\n\nAlso enables the Dependency graph / Dependabot alerts (see\n:func:`enable_vulnerability_alerts`) so CI checks that depend on it\n(e.g. ``dependency-review-action``) don't fail on day one.",
-        "operationId": "create_repo_chat_github_repos_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateRepoRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Create Repo Chat Github Repos Post"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "409": {
-            "description": "Repository already exists"
-          },
-          "422": {
-            "description": "GitHub rejected the request (e.g. invalid name)"
-          },
-          "503": {
-            "description": "Repo creation not configured"
           }
         }
       }
