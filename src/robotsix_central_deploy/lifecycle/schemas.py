@@ -46,9 +46,7 @@ class PortShift(BaseModel):
 
 class OnboardPreflightRequest(BaseModel):
     git_url: str = Field(description="Git clone URL of the repository to onboard")
-    name: str = Field(
-        description="Component name; must match ^[a-z0-9][a-z0-9-]*$"
-    )
+    name: str = Field(description="Component name; must match ^[a-z0-9][a-z0-9-]*$")
 
 
 class OnboardPreflightResponse(BaseModel):
@@ -244,9 +242,7 @@ class VolumeEntry(BaseModel):
 
 
 class VolumeListResponse(BaseModel):
-    entries: list[VolumeEntry] = Field(
-        description="Volume entries for the component"
-    )
+    entries: list[VolumeEntry] = Field(description="Volume entries for the component")
 
 
 class VolumeFileResponse(BaseModel):
@@ -447,9 +443,7 @@ class ClaudeAuthStatusResponse(BaseModel):
     status: str = Field(
         description="Auth status: 'authenticated', 'not-authenticated', 'expiring', or 'error'"
     )
-    detail: str = Field(
-        default="", description="Human-readable status detail"
-    )
+    detail: str = Field(default="", description="Human-readable status detail")
     refresh_status: str = Field(
         default="",
         description="Token refresh status: 'ok', 'failed', 'never', or empty",
@@ -462,18 +456,14 @@ class ClaudeAuthStatusResponse(BaseModel):
 
 class ClaudeAuthLoginResponse(BaseModel):
     login_id: str = Field(description="Opaque login session identifier")
-    oauth_url: str = Field(
-        description="OAuth URL the user must visit to authorize"
-    )
+    oauth_url: str = Field(description="OAuth URL the user must visit to authorize")
 
 
 class ClaudeAuthCompleteRequest(BaseModel):
     login_id: str = Field(
         description="Login session identifier from the initiate-login response"
     )
-    auth_code: str = Field(
-        description="Authorization code from the OAuth callback"
-    )
+    auth_code: str = Field(description="Authorization code from the OAuth callback")
 
 
 class ClaudeAuthCancelRequest(BaseModel):
@@ -481,12 +471,8 @@ class ClaudeAuthCancelRequest(BaseModel):
 
 
 class ClaudeAuthCompleteResponse(BaseModel):
-    status: str = Field(
-        description="'authenticated' on success, 'error' on failure"
-    )
-    error: str = Field(
-        default="", description="Error message when status is 'error'"
-    )
+    status: str = Field(description="'authenticated' on success, 'error' on failure")
+    error: str = Field(default="", description="Error message when status is 'error'")
 
 
 class ClaudeAuthCredentialsRequest(BaseModel):
@@ -496,12 +482,8 @@ class ClaudeAuthCredentialsRequest(BaseModel):
 
 
 class ClaudeAuthCredentialsResponse(BaseModel):
-    status: str = Field(
-        description="'authenticated' on success, 'error' on failure"
-    )
-    error: str = Field(
-        default="", description="Error message when status is 'error'"
-    )
+    status: str = Field(description="'authenticated' on success, 'error' on failure")
+    error: str = Field(default="", description="Error message when status is 'error'")
 
 
 # ---------------------------------------------------------------------------
@@ -541,12 +523,8 @@ class ChatAgentRestartResponse(BaseModel):
     action: ActionType = Field(
         default=ActionType.RESTART, description="Always ActionType.RESTART"
     )
-    previous_state: str = Field(
-        description="Container state before restart"
-    )
-    current_state: str = Field(
-        description="Container state after restart"
-    )
+    previous_state: str = Field(description="Container state before restart")
+    current_state: str = Field(description="Container state after restart")
     detail: str = Field(default="", description="Human-readable summary")
 
 
@@ -562,9 +540,7 @@ class ChatAgentUpdateResponse(BaseModel):
     previous_digest: str = Field(
         default="", description="Digest of the previously deployed image"
     )
-    current_state: str = Field(
-        description="Container state after update"
-    )
+    current_state: str = Field(description="Container state after update")
     detail: str = Field(default="", description="Human-readable summary")
     updated_siblings: list[str] = Field(
         default=[],
@@ -626,9 +602,7 @@ class ChatAgentPreviewDeployResponse(BaseModel):
     preview_url: str = Field(
         description="URL where the preview deployment is accessible"
     )
-    detail: str = Field(
-        default="", description="Human-readable status message"
-    )
+    detail: str = Field(default="", description="Human-readable status message")
 
 
 class ChatAgentPreviewTeardownResponse(BaseModel):

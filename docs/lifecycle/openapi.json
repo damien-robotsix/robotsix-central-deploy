@@ -5097,19 +5097,23 @@
         "properties": {
           "timestamp": {
             "type": "number",
-            "title": "Timestamp"
+            "title": "Timestamp",
+            "description": "Unix timestamp of the audit event"
           },
           "agent_id": {
             "type": "string",
-            "title": "Agent Id"
+            "title": "Agent Id",
+            "description": "Identifier of the chat agent that performed the action"
           },
           "component": {
             "type": "string",
-            "title": "Component"
+            "title": "Component",
+            "description": "Target component name"
           },
           "action": {
             "type": "string",
-            "title": "Action"
+            "title": "Action",
+            "description": "Action performed: 'set', 'delete', 'restart', 'update'"
           },
           "key": {
             "anyOf": [
@@ -5120,17 +5124,21 @@
                 "type": "null"
               }
             ],
-            "title": "Key"
+            "title": "Key",
+            "description": "Config key affected; None for non-config actions"
           },
           "old_value": {
-            "title": "Old Value"
+            "title": "Old Value",
+            "description": "Previous value; None when the key did not exist"
           },
           "new_value": {
-            "title": "New Value"
+            "title": "New Value",
+            "description": "New value written; None for deletes"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable event summary",
             "default": ""
           }
         },
@@ -5152,6 +5160,7 @@
             },
             "type": "array",
             "title": "Entries",
+            "description": "Audit log entries, most recent first",
             "default": []
           }
         },
@@ -5163,16 +5172,19 @@
         "properties": {
           "component": {
             "type": "string",
-            "title": "Component"
+            "title": "Component",
+            "description": "Component name"
           },
           "restored": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Restored"
+            "title": "Restored",
+            "description": "Secret-masked snapshot of the restored config"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable summary of the rollback result",
             "default": ""
           }
         },
@@ -5189,7 +5201,8 @@
           "values": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Values"
+            "title": "Values",
+            "description": "Key-value pairs to write; sentinel '***' values preserve existing secrets"
           }
         },
         "type": "object",
@@ -5203,11 +5216,13 @@
         "properties": {
           "repo_url": {
             "type": "string",
-            "title": "Repo Url"
+            "title": "Repo Url",
+            "description": "Git clone URL of the repository to preview-deploy"
           },
           "branch": {
             "type": "string",
-            "title": "Branch"
+            "title": "Branch",
+            "description": "Git branch to check out for the preview"
           }
         },
         "type": "object",
@@ -5222,11 +5237,13 @@
         "properties": {
           "preview_url": {
             "type": "string",
-            "title": "Preview Url"
+            "title": "Preview Url",
+            "description": "URL where the preview deployment is accessible"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable status message",
             "default": ""
           }
         },
@@ -5242,6 +5259,7 @@
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable teardown status message",
             "default": ""
           }
         },
@@ -5253,23 +5271,28 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "action": {
             "$ref": "#/components/schemas/ActionType",
+            "description": "Always ActionType.RESTART",
             "default": "restart"
           },
           "previous_state": {
             "type": "string",
-            "title": "Previous State"
+            "title": "Previous State",
+            "description": "Container state before restart"
           },
           "current_state": {
             "type": "string",
-            "title": "Current State"
+            "title": "Current State",
+            "description": "Container state after restart"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable summary",
             "default": ""
           }
         },
@@ -5286,30 +5309,36 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "action": {
             "type": "string",
             "title": "Action",
+            "description": "Always 'update'",
             "default": "update"
           },
           "deployed_digest": {
             "type": "string",
             "title": "Deployed Digest",
+            "description": "Digest of the newly deployed image; empty when unchanged",
             "default": ""
           },
           "previous_digest": {
             "type": "string",
             "title": "Previous Digest",
+            "description": "Digest of the previously deployed image",
             "default": ""
           },
           "current_state": {
             "type": "string",
-            "title": "Current State"
+            "title": "Current State",
+            "description": "Container state after update"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable summary",
             "default": ""
           },
           "updated_siblings": {
@@ -5318,6 +5347,7 @@
             },
             "type": "array",
             "title": "Updated Siblings",
+            "description": "Names of sibling components that were also redeployed",
             "default": []
           }
         },
@@ -5333,7 +5363,8 @@
         "properties": {
           "login_id": {
             "type": "string",
-            "title": "Login Id"
+            "title": "Login Id",
+            "description": "Login session identifier to cancel"
           }
         },
         "type": "object",
@@ -5346,11 +5377,13 @@
         "properties": {
           "login_id": {
             "type": "string",
-            "title": "Login Id"
+            "title": "Login Id",
+            "description": "Login session identifier from the initiate-login response"
           },
           "auth_code": {
             "type": "string",
-            "title": "Auth Code"
+            "title": "Auth Code",
+            "description": "Authorization code from the OAuth callback"
           }
         },
         "type": "object",
@@ -5364,11 +5397,13 @@
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "'authenticated' on success, 'error' on failure"
           },
           "error": {
             "type": "string",
             "title": "Error",
+            "description": "Error message when status is 'error'",
             "default": ""
           }
         },
@@ -5382,7 +5417,8 @@
         "properties": {
           "credentials_json": {
             "type": "string",
-            "title": "Credentials Json"
+            "title": "Credentials Json",
+            "description": "Raw credentials JSON blob from the OAuth provider"
           }
         },
         "type": "object",
@@ -5395,11 +5431,13 @@
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "'authenticated' on success, 'error' on failure"
           },
           "error": {
             "type": "string",
             "title": "Error",
+            "description": "Error message when status is 'error'",
             "default": ""
           }
         },
@@ -5413,11 +5451,13 @@
         "properties": {
           "login_id": {
             "type": "string",
-            "title": "Login Id"
+            "title": "Login Id",
+            "description": "Opaque login session identifier"
           },
           "oauth_url": {
             "type": "string",
-            "title": "Oauth Url"
+            "title": "Oauth Url",
+            "description": "OAuth URL the user must visit to authorize"
           }
         },
         "type": "object",
@@ -5431,21 +5471,25 @@
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "Auth status: 'authenticated', 'not-authenticated', 'expiring', or 'error'"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable status detail",
             "default": ""
           },
           "refresh_status": {
             "type": "string",
             "title": "Refresh Status",
+            "description": "Token refresh status: 'ok', 'failed', 'never', or empty",
             "default": ""
           },
           "last_refresh_error": {
             "type": "string",
             "title": "Last Refresh Error",
+            "description": "Error message from the most recent failed refresh attempt",
             "default": ""
           }
         },
@@ -5459,11 +5503,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "Component ID"
           },
           "container_name": {
             "type": "string",
-            "title": "Container Name"
+            "title": "Container Name",
+            "description": "Docker container name"
           },
           "container_port": {
             "anyOf": [
@@ -5474,14 +5520,14 @@
                 "type": "null"
               }
             ],
-            "title": "Container Port"
+            "title": "Container Port",
+            "description": "First exposed container port; None when no ports are defined"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "container_name",
-          "container_port"
+          "container_name"
         ],
         "title": "ComponentSuggestItem",
         "description": "Lightweight component info for the config-form URL suggest feature."
@@ -5493,7 +5539,8 @@
               "$ref": "#/components/schemas/ComponentSuggestItem"
             },
             "type": "array",
-            "title": "Components"
+            "title": "Components",
+            "description": "Matching component suggestions"
           }
         },
         "type": "object",
@@ -5507,7 +5554,8 @@
           "values": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Values"
+            "title": "Values",
+            "description": "Current (partial) form values to seed the assist command"
           },
           "target_account_index": {
             "anyOf": [
@@ -5518,7 +5566,8 @@
                 "type": "null"
               }
             ],
-            "title": "Target Account Index"
+            "title": "Target Account Index",
+            "description": "Optional target account index for multi-account configs"
           },
           "account_name": {
             "anyOf": [
@@ -5529,7 +5578,8 @@
                 "type": "null"
               }
             ],
-            "title": "Account Name"
+            "title": "Account Name",
+            "description": "Optional account name for account-scoped config assist"
           }
         },
         "type": "object",
@@ -5543,11 +5593,13 @@
           "config": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Config"
+            "title": "Config",
+            "description": "Auto-filled config dict read back from the volume after the command ran"
           },
           "output": {
             "type": "string",
-            "title": "Output"
+            "title": "Output",
+            "description": "Captured stdout and stderr from the one-shot container"
           }
         },
         "type": "object",
@@ -5586,11 +5638,13 @@
           "current": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Current"
+            "title": "Current",
+            "description": "Imported config values; secrets masked"
           },
           "volume_hash": {
             "type": "string",
-            "title": "Volume Hash"
+            "title": "Volume Hash",
+            "description": "Canonical hash of the imported content for drift tracking"
           }
         },
         "type": "object",
@@ -5606,16 +5660,19 @@
           "schema": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Schema"
+            "title": "Schema",
+            "description": "JSON Schema describing the config.json structure for the component"
           },
           "current": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Current"
+            "title": "Current",
+            "description": "Current config values read from the volume; secrets masked"
           },
           "drift": {
             "type": "boolean",
             "title": "Drift",
+            "description": "True when the volume content differs from the last stored hash",
             "default": false
           },
           "config_assist_command": {
@@ -5627,7 +5684,8 @@
                 "type": "null"
               }
             ],
-            "title": "Config Assist Command"
+            "title": "Config Assist Command",
+            "description": "One-shot container command for config auto-fill; None when unavailable"
           },
           "config_assist_seeds": {
             "items": {
@@ -5635,6 +5693,7 @@
             },
             "type": "array",
             "title": "Config Assist Seeds",
+            "description": "ConfigAssistSeed entries registered for this component",
             "default": []
           }
         },
@@ -5650,7 +5709,8 @@
           "schema": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Schema"
+            "title": "Schema",
+            "description": "Refreshed JSON Schema for the component's config.json"
           }
         },
         "type": "object",
@@ -5665,11 +5725,13 @@
           "values": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Values"
+            "title": "Values",
+            "description": "Key-value pairs to write to the component's config volume"
           },
           "force_overwrite": {
             "type": "boolean",
             "title": "Force Overwrite",
+            "description": "When True, overwrite even when config drift is detected",
             "default": false
           }
         },
@@ -5706,7 +5768,8 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "changed_fields": {
             "items": {
@@ -5714,18 +5777,21 @@
             },
             "type": "array",
             "title": "Changed Fields",
+            "description": "Top-level keys whose values changed after the refresh",
             "default": []
           },
           "previous": {
             "additionalProperties": true,
             "type": "object",
             "title": "Previous",
+            "description": "Snapshot of the contract before refresh",
             "default": {}
           },
           "current": {
             "additionalProperties": true,
             "type": "object",
             "title": "Current",
+            "description": "Snapshot of the contract after refresh",
             "default": {}
           }
         },
@@ -5809,11 +5875,13 @@
         "properties": {
           "job_id": {
             "type": "string",
-            "title": "Job Id"
+            "title": "Job Id",
+            "description": "Unique identifier for the queued deploy job"
           },
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           }
         },
         "type": "object",
@@ -5895,14 +5963,17 @@
         "properties": {
           "job_id": {
             "type": "string",
-            "title": "Job Id"
+            "title": "Job Id",
+            "description": "Unique identifier of the deploy job"
           },
           "component": {
             "type": "string",
-            "title": "Component"
+            "title": "Component",
+            "description": "Component ID"
           },
           "phase": {
-            "$ref": "#/components/schemas/DeployJobPhase"
+            "$ref": "#/components/schemas/DeployJobPhase",
+            "description": "Current phase of the deploy workflow"
           },
           "error": {
             "anyOf": [
@@ -5913,7 +5984,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Error",
+            "description": "Error message when phase is 'failed'; None otherwise"
           },
           "name": {
             "anyOf": [
@@ -5924,7 +5996,8 @@
                 "type": "null"
               }
             ],
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "image": {
             "anyOf": [
@@ -5935,7 +6008,8 @@
                 "type": "null"
               }
             ],
-            "title": "Image"
+            "title": "Image",
+            "description": "Selected OCI image reference; None before image resolution"
           },
           "state": {
             "anyOf": [
@@ -5946,7 +6020,8 @@
                 "type": "null"
               }
             ],
-            "title": "State"
+            "title": "State",
+            "description": "Deployment state string; None if not yet deployed"
           },
           "warnings": {
             "items": {
@@ -5954,6 +6029,7 @@
             },
             "type": "array",
             "title": "Warnings",
+            "description": "Warnings encountered during deploy (e.g. pre-pull failures)",
             "default": []
           }
         },
@@ -6298,14 +6374,16 @@
               "type": "string"
             },
             "type": "object",
-            "title": "Env"
+            "title": "Env",
+            "description": "Plain-text environment variables (key \u2192 value)"
           },
           "secrets": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object",
-            "title": "Secrets"
+            "title": "Secrets",
+            "description": "Secret environment variables; values are always masked as '***'"
           },
           "env_scopes": {
             "additionalProperties": {
@@ -6313,6 +6391,7 @@
             },
             "type": "object",
             "title": "Env Scopes",
+            "description": "Visibility scope per env key ('global', 'component', or repo URL)",
             "default": {}
           },
           "secret_scopes": {
@@ -6321,21 +6400,25 @@
             },
             "type": "object",
             "title": "Secret Scopes",
+            "description": "Visibility scope per secret key ('global', 'component', or repo URL)",
             "default": {}
           },
           "mem_limit": {
             "type": "string",
             "title": "Mem Limit",
+            "description": "Docker memory limit string (e.g. '2g')",
             "default": "2g"
           },
           "allow_chat_access": {
             "type": "boolean",
             "title": "Allow Chat Access",
+            "description": "Whether chat-agent mutation is permitted for this component",
             "default": false
           },
           "claude_mount": {
             "type": "boolean",
             "title": "Claude Mount",
+            "description": "Whether the Claude code mount is enabled for this component",
             "default": false
           }
         },
@@ -6353,21 +6436,24 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Added Env"
+            "title": "Added Env",
+            "description": "Newly declared plain env keys, seeded with default values"
           },
           "added_secrets": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Added Secrets"
+            "title": "Added Secrets",
+            "description": "Newly declared secret slots; stored with empty values"
           },
           "undeclared": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Undeclared"
+            "title": "Undeclared",
+            "description": "Stored keys that the compose contract no longer declares"
           }
         },
         "type": "object",
@@ -6387,6 +6473,7 @@
             },
             "type": "object",
             "title": "Env",
+            "description": "Plain-text environment variables to set (key \u2192 value)",
             "default": {}
           },
           "secrets": {
@@ -6395,6 +6482,7 @@
             },
             "type": "object",
             "title": "Secrets",
+            "description": "Secret environment variables to set (key \u2192 value)",
             "default": {}
           },
           "env_scopes": {
@@ -6403,6 +6491,7 @@
             },
             "type": "object",
             "title": "Env Scopes",
+            "description": "Visibility scope overrides for env keys",
             "default": {}
           },
           "secret_scopes": {
@@ -6411,6 +6500,7 @@
             },
             "type": "object",
             "title": "Secret Scopes",
+            "description": "Visibility scope overrides for secret keys",
             "default": {}
           },
           "mem_limit": {
@@ -6422,7 +6512,8 @@
                 "type": "null"
               }
             ],
-            "title": "Mem Limit"
+            "title": "Mem Limit",
+            "description": "Docker memory limit; None leaves the current value unchanged"
           },
           "allow_chat_access": {
             "anyOf": [
@@ -6433,7 +6524,8 @@
                 "type": "null"
               }
             ],
-            "title": "Allow Chat Access"
+            "title": "Allow Chat Access",
+            "description": "Toggle chat-agent mutability; None leaves the current value unchanged"
           },
           "claude_mount": {
             "anyOf": [
@@ -6444,7 +6536,8 @@
                 "type": "null"
               }
             ],
-            "title": "Claude Mount"
+            "title": "Claude Mount",
+            "description": "Toggle Claude code mount; None leaves the current value unchanged"
           }
         },
         "type": "object",
@@ -6553,11 +6646,13 @@
         "properties": {
           "job_id": {
             "type": "string",
-            "title": "Job Id"
+            "title": "Job Id",
+            "description": "Unique identifier for the queued onboard job"
           },
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           }
         },
         "type": "object",
@@ -6571,7 +6666,8 @@
       "OnboardConfirmRequest": {
         "properties": {
           "spec": {
-            "$ref": "#/components/schemas/DerivedSpec"
+            "$ref": "#/components/schemas/DerivedSpec",
+            "description": "Final DerivedSpec with user-supplied environment values"
           },
           "config_values": {
             "anyOf": [
@@ -6583,11 +6679,13 @@
                 "type": "null"
               }
             ],
-            "title": "Config Values"
+            "title": "Config Values",
+            "description": "Optional config.json key-value overrides"
           },
           "register_with_mill": {
             "type": "boolean",
             "title": "Register With Mill",
+            "description": "Whether to register the component with the mill after onboarding",
             "default": true
           },
           "port_shifts": {
@@ -6596,6 +6694,7 @@
             },
             "type": "array",
             "title": "Port Shifts",
+            "description": "Port shift list echoed from preflight; used for collision ticket filing",
             "default": []
           }
         },
@@ -6622,14 +6721,17 @@
         "properties": {
           "job_id": {
             "type": "string",
-            "title": "Job Id"
+            "title": "Job Id",
+            "description": "Unique identifier of the onboard job"
           },
           "component": {
             "type": "string",
-            "title": "Component"
+            "title": "Component",
+            "description": "Component ID returned by the mill after registration"
           },
           "phase": {
-            "$ref": "#/components/schemas/OnboardJobPhase"
+            "$ref": "#/components/schemas/OnboardJobPhase",
+            "description": "Current phase of the onboarding workflow"
           },
           "error": {
             "anyOf": [
@@ -6640,7 +6742,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Error",
+            "description": "Error message when phase is 'failed'; None otherwise"
           },
           "name": {
             "anyOf": [
@@ -6651,7 +6754,8 @@
                 "type": "null"
               }
             ],
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "image": {
             "anyOf": [
@@ -6662,7 +6766,8 @@
                 "type": "null"
               }
             ],
-            "title": "Image"
+            "title": "Image",
+            "description": "Selected OCI image reference; None before image resolution"
           },
           "state": {
             "anyOf": [
@@ -6673,7 +6778,8 @@
                 "type": "null"
               }
             ],
-            "title": "State"
+            "title": "State",
+            "description": "Deployment state string; None if not yet deployed"
           },
           "warnings": {
             "items": {
@@ -6681,6 +6787,7 @@
             },
             "type": "array",
             "title": "Warnings",
+            "description": "Non-empty when the mill was unreachable during port-shift ticket filing",
             "default": []
           }
         },
@@ -6697,11 +6804,13 @@
         "properties": {
           "git_url": {
             "type": "string",
-            "title": "Git Url"
+            "title": "Git Url",
+            "description": "Git clone URL of the repository to onboard"
           },
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name; must match ^[a-z0-9][a-z0-9-]*$"
           }
         },
         "type": "object",
@@ -6714,7 +6823,8 @@
       "OnboardPreflightResponse": {
         "properties": {
           "spec": {
-            "$ref": "#/components/schemas/DerivedSpec"
+            "$ref": "#/components/schemas/DerivedSpec",
+            "description": "Derived deployment specification for the component"
           },
           "port_shifts": {
             "items": {
@@ -6722,6 +6832,7 @@
             },
             "type": "array",
             "title": "Port Shifts",
+            "description": "Port remappings needed to avoid collisions; empty when no shifts required",
             "default": []
           }
         },
@@ -6735,11 +6846,13 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Docker volume name"
           },
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes",
+            "description": "Disk usage in bytes; 0 when unknown",
             "default": 0
           }
         },
@@ -6758,11 +6871,13 @@
             },
             "type": "array",
             "title": "Volumes",
+            "description": "List of orphan Docker volume candidates",
             "default": []
           },
           "total_bytes": {
             "type": "integer",
             "title": "Total Bytes",
+            "description": "Sum of all orphan volume sizes in bytes",
             "default": 0
           }
         },
@@ -6796,27 +6911,33 @@
         "properties": {
           "container_port": {
             "type": "integer",
-            "title": "Container Port"
+            "title": "Container Port",
+            "description": "Container-side port from the service's docker-compose.yml"
           },
           "protocol": {
             "type": "string",
-            "title": "Protocol"
+            "title": "Protocol",
+            "description": "Transport protocol: 'tcp' or 'udp'"
           },
           "original_host": {
             "type": "integer",
-            "title": "Original Host"
+            "title": "Original Host",
+            "description": "Host port from the repo's docker-compose.yml"
           },
           "assigned_host": {
             "type": "integer",
-            "title": "Assigned Host"
+            "title": "Assigned Host",
+            "description": "Auto-assigned free host port during onboarding"
           },
           "collision_component_id": {
             "type": "string",
-            "title": "Collision Component Id"
+            "title": "Collision Component Id",
+            "description": "Component whose stored port collided; 'central-deploy' for lifecycle-assigned ports"
           },
           "collision_repo_id": {
             "type": "string",
-            "title": "Collision Repo Id"
+            "title": "Collision Repo Id",
+            "description": "Repo ID of the colliding component; empty string when unknown"
           }
         },
         "type": "object",
@@ -6844,7 +6965,8 @@
                 "type": "null"
               }
             ],
-            "title": "Names"
+            "title": "Names",
+            "description": "Volume names to prune; None means prune every orphan candidate"
           }
         },
         "type": "object",
@@ -6858,6 +6980,7 @@
             },
             "type": "array",
             "title": "Removed",
+            "description": "Volumes confirmed gone after the prune",
             "default": []
           },
           "skipped": {
@@ -6866,6 +6989,7 @@
             },
             "type": "array",
             "title": "Skipped",
+            "description": "Requested names that were not eligible orphans",
             "default": []
           },
           "failed": {
@@ -6874,11 +6998,13 @@
             },
             "type": "array",
             "title": "Failed",
+            "description": "Eligible orphans that were still present after the prune attempt",
             "default": []
           },
           "space_reclaimed_bytes": {
             "type": "integer",
             "title": "Space Reclaimed Bytes",
+            "description": "Total bytes freed by successfully removed volumes",
             "default": 0
           }
         },
@@ -7764,14 +7890,17 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Volume name as reported by Docker"
           },
           "type": {
-            "$ref": "#/components/schemas/VolumeEntryType"
+            "$ref": "#/components/schemas/VolumeEntryType",
+            "description": "Volume category: named-volume, bind-mount, or tmpfs"
           },
           "size_bytes": {
             "type": "integer",
-            "title": "Size Bytes"
+            "title": "Size Bytes",
+            "description": "Disk usage of the volume in bytes"
           }
         },
         "type": "object",
@@ -7795,7 +7924,8 @@
         "properties": {
           "size_bytes": {
             "type": "integer",
-            "title": "Size Bytes"
+            "title": "Size Bytes",
+            "description": "Total file size in bytes"
           },
           "content": {
             "anyOf": [
@@ -7806,21 +7936,23 @@
                 "type": "null"
               }
             ],
-            "title": "Content"
+            "title": "Content",
+            "description": "File content as UTF-8 text; None when binary or too large"
           },
           "binary": {
             "type": "boolean",
-            "title": "Binary"
+            "title": "Binary",
+            "description": "True when the file is detected as binary (not valid UTF-8)"
           },
           "truncated": {
             "type": "boolean",
-            "title": "Truncated"
+            "title": "Truncated",
+            "description": "True when content exceeds the display limit and was cut"
           }
         },
         "type": "object",
         "required": [
           "size_bytes",
-          "content",
           "binary",
           "truncated"
         ],
@@ -7901,7 +8033,8 @@
               "$ref": "#/components/schemas/VolumeEntry"
             },
             "type": "array",
-            "title": "Entries"
+            "title": "Entries",
+            "description": "Volume entries for the component"
           }
         },
         "type": "object",
