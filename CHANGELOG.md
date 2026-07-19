@@ -6,6 +6,11 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Split ``chat_github.py`` (1,416-line monolith) into a shared-plumbing module
+  (``_github_common.py``) and four domain-specific routers:
+  ``chat_github_actions.py``, ``chat_github_pulls.py``, ``chat_github_repos.py``,
+  ``chat_github_security.py``.  The original ``chat_github.py`` is now a thin
+  aggregator (≤ 25 lines).  No behavioural changes.
 - Declare the full set of mail configuration keys (SMTP host/port/username/password/TLS, sender identity, IMAP, polling) as environment variables in the auto-mail deploy contract example. This makes mail follow the same secret-store / Env & Secrets pattern as mill and chat, retiring the config-file-based approach.
 - Add `mill` to the chat-agent service allowlist, permitting the chat agent to restart and update the mill service via the scoped `/chat/services/mill/restart` and `/chat/services/mill/update` endpoints.
 - Add docstring to ``CaretakerScheduler.__init__`` constructor documenting all 11 dependency-injection parameters.
