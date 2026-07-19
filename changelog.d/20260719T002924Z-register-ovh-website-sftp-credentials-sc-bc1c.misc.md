@@ -1,0 +1,1 @@
+Register OVH website SFTP credentials (scope website:ovh) in the credential registry

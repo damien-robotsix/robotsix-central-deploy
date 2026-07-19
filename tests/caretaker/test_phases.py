@@ -68,6 +68,7 @@ def _make_env_store(overrides=None):
         return merged
 
     env_store.get_merged_env = AsyncMock(side_effect=_merge)
+    env_store.resolve_consumed_credentials = AsyncMock(return_value={})
     return env_store
 
 

@@ -92,7 +92,11 @@ async def put_service_env(
     """
     await _get_or_create_record(name, store)
     await env_store.upsert(
-        name, body.env, body.secrets, body.env_scopes, body.secret_scopes
+        name,
+        body.env,
+        body.secrets,
+        env_scopes=body.env_scopes,
+        secret_scopes=body.secret_scopes,
     )
     if body.mem_limit is not None:
         comp_cfg = component_config_store.get(name)

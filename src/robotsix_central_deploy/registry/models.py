@@ -116,6 +116,7 @@ class ComponentConfig(BaseModel):
     auth_username_env: str = ""  # env var holding Basic-Auth username
     auth_password_env: str = ""  # env var holding Basic-Auth password
     auth_token_env: str = ""  # env var holding a bearer/header token
+    # --- Credential scoping ---
     consumed_scopes: list[
         str
-    ] = []  # scope patterns this component is allowed to consume from others (e.g. ["langfuse:project:*"])
+    ] = []  # scope glob patterns (e.g. "website:ovh") — resolved at deploy time
