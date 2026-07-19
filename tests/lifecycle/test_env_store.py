@@ -245,3 +245,251 @@ class TestEnvStoreSurvivesRestart:
 
         merged = await store2.get_merged_env("chat", {})
         assert merged == {"A": "1", "S": "val"}
+
+
+# ---------------------------------------------------------------------------
+# Scope tag support
+# ---------------------------------------------------------------------------
+
+
+class TestEnvStoreScopeUpsert:
+    async def test_upsert_with_scopes_preserves_env_scopes(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {"LANGFUSE_PUBLIC_KEY": "pk-xxx"},
+            {},
+            env_scopes={"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"},
+        )
+        config = await store.get("mill")
+        assert config.env == {"LANGFUSE_PUBLIC_KEY": "pk-xxx"}
+        assert config.env_scopes == {"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"}
+
+    async def test_upsert_with_secret_scopes(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {},
+            {"LANGFUSE_SECRET_KEY": "sk-secret"},
+            secret_scopes={"LANGFUSE_SECRET_KEY": "langfuse:project:abc"},
+        )
+        config = await store.get("mill")
+        assert config.secret_scopes == {"LANGFUSE_SECRET_KEY": "langfuse:project:abc"}
+        assert "LANGFUSE_SECRET_KEY" in config.secret_tokens
+
+    async def test_upsert_scopes_merge_not_replace(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {"A": "1"}, {}, env_scopes={"A": "scope:a"})
+        await store.upsert("mill", {"B": "2"}, {}, env_scopes={"B": "scope:b"})
+        config = await store.get("mill")
+        assert config.env_scopes == {"A": "scope:a", "B": "scope:b"}
+
+    async def test_upsert_without_scopes_does_not_clobber_existing(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {"A": "1"}, {}, env_scopes={"A": "scope:a"})
+        # Second upsert does not pass scopes — existing scopes persist
+        await store.upsert("mill", {"B": "2"}, {})
+        config = await store.get("mill")
+        assert config.env_scopes == {"A": "scope:a"}
+
+
+class TestEnvStoreScopeDelete:
+    async def test_delete_scoped_key_cleans_up_scope(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {"A": "1"}, {}, env_scopes={"A": "scope:a"})
+        await store.delete_key("mill", "A")
+        config = await store.get("mill")
+        assert config.env == {}
+        assert config.env_scopes == {}
+
+    async def test_delete_scoped_secret_cleans_up_scope(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {}, {"S": "v"}, secret_scopes={"S": "scope:x"})
+        await store.delete_key("mill", "S")
+        config = await store.get("mill")
+        assert config.secret_tokens == {}
+        assert config.secret_scopes == {}
+
+
+class TestScopeMatching:
+    def test_exact_match(self):
+        assert EnvStore._scope_matches("langfuse:project:abc", "langfuse:project:abc")
+
+    def test_wildcard_match(self):
+        assert EnvStore._scope_matches("langfuse:project:*", "langfuse:project:abc")
+        assert EnvStore._scope_matches("langfuse:project:*", "langfuse:project:xyz")
+
+    def test_wildcard_no_match_wrong_segment(self):
+        assert not EnvStore._scope_matches("langfuse:project:*", "langfuse:other:abc")
+
+    def test_wildcard_no_match_different_length(self):
+        assert not EnvStore._scope_matches(
+            "langfuse:project:*", "langfuse:project:abc:extra"
+        )
+        assert not EnvStore._scope_matches("langfuse:*", "langfuse:project:abc")
+
+    def test_multi_wildcard(self):
+        assert EnvStore._scope_matches("api:*:*", "api:provider:openrouter")
+        assert EnvStore._scope_matches("*:*:*", "a:b:c")
+
+    def test_empty_scope_no_match(self):
+        # Empty string splits to [""] — a single empty segment.
+        # Two empty strings match because both segments are "".
+        assert EnvStore._scope_matches("", "") is True
+
+
+class TestResolveConsumedCredentials:
+    async def test_empty_scopes_returns_empty(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        result = await store.resolve_consumed_credentials("chat", [])
+        assert result == {}
+
+    async def test_no_matching_components_returns_empty(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {"A": "1"}, {}, env_scopes={"A": "scope:x"})
+        result = await store.resolve_consumed_credentials(
+            "chat", ["langfuse:project:*"]
+        )
+        assert result == {}
+
+    async def test_resolves_scoped_env_from_other_component(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {"LANGFUSE_PUBLIC_KEY": "pk-abc"},
+            {},
+            env_scopes={"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"},
+        )
+        result = await store.resolve_consumed_credentials(
+            "chat", ["langfuse:project:*"]
+        )
+        assert result == {"LANGFUSE_PUBLIC_KEY": "pk-abc"}
+
+    async def test_resolves_scoped_secret_from_other_component(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {},
+            {"LANGFUSE_SECRET_KEY": "sk-secret"},
+            secret_scopes={"LANGFUSE_SECRET_KEY": "langfuse:project:abc"},
+        )
+        result = await store.resolve_consumed_credentials(
+            "chat", ["langfuse:project:*"]
+        )
+        assert result == {"LANGFUSE_SECRET_KEY": "sk-secret"}
+
+    async def test_does_not_share_unscoped_keys(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {"PRIVATE": "secret"}, {})
+        result = await store.resolve_consumed_credentials(
+            "chat", ["langfuse:project:*"]
+        )
+        assert "PRIVATE" not in result
+
+    async def test_does_not_share_keys_with_null_scope(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert("mill", {"A": "1"}, {}, env_scopes={"A": ""})
+        result = await store.resolve_consumed_credentials("chat", ["*:*:*"])
+        assert result == {}
+
+    async def test_excludes_consumer_own_credentials(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "chat",
+            {"OWN": "val"},
+            {},
+            env_scopes={"OWN": "langfuse:project:*"},
+        )
+        result = await store.resolve_consumed_credentials(
+            "chat", ["langfuse:project:*"]
+        )
+        assert "OWN" not in result
+
+    async def test_resolves_multiple_providers(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {"KEY_A": "a"},
+            {},
+            env_scopes={"KEY_A": "scope:x"},
+        )
+        await store.upsert(
+            "mail",
+            {"KEY_B": "b"},
+            {},
+            env_scopes={"KEY_B": "scope:y"},
+        )
+        result = await store.resolve_consumed_credentials("chat", ["scope:*"])
+        assert result == {"KEY_A": "a", "KEY_B": "b"}
+
+    async def test_multiple_consumed_scope_patterns(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {"LF_KEY": "lf-val", "OR_KEY": "or-val"},
+            {},
+            env_scopes={
+                "LF_KEY": "langfuse:project:abc",
+                "OR_KEY": "api:provider:openrouter",
+            },
+        )
+        result = await store.resolve_consumed_credentials(
+            "chat", ["langfuse:project:*", "api:provider:*"]
+        )
+        assert result == {"LF_KEY": "lf-val", "OR_KEY": "or-val"}
+
+    async def test_key_collision_later_provider_wins(
+        self, store_path: Path, key_manager: SecretKeyManager
+    ):
+        """When two providers share the same key name, the later-loaded one wins."""
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "mill",
+            {"KEY": "mill-val"},
+            {},
+            env_scopes={"KEY": "scope:x"},
+        )
+        # Simulate that mail is stored after mill in the JSON (sort_keys=True
+        # means "mail" < "mill", so mail comes first in iteration).
+        # Actually with sort_keys=True, iteration order is sorted, so "mail" < "mill".
+        # The "later" one in sorted order is "mill".
+        await store.upsert(
+            "mail",
+            {"KEY": "mail-val"},
+            {},
+            env_scopes={"KEY": "scope:x"},
+        )
+        result = await store.resolve_consumed_credentials("chat", ["scope:*"])
+        # Since JSON keys are sorted, "mail" iterates before "mill",
+        # so "mill" overwrites "mail".
+        assert result == {"KEY": "mill-val"}

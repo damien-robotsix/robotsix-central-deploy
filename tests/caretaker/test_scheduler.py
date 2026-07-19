@@ -79,6 +79,7 @@ def scheduler_fixtures(tmp_path):
     env_store.get_merged_env = AsyncMock(
         side_effect=lambda name, base: dict(base) if isinstance(base, dict) else {}
     )
+    env_store.resolve_consumed_credentials = AsyncMock(return_value={})
 
     scheduler = CaretakerScheduler(
         config=config,

@@ -57,6 +57,8 @@ class TestEnvEndpoints:
         assert data == {
             "env": {},
             "secrets": {},
+            "env_scopes": {},
+            "secret_scopes": {},
             "mem_limit": "2g",
             "allow_chat_access": False,
             "claude_mount": False,
@@ -257,6 +259,253 @@ class TestEnvEndpoints:
         assert r.status_code == 200
         data = r.json()
         assert data["mem_limit"] == "512m"
+
+
+class TestEnvScopeEndpoints:
+    """Integration tests for scope-tag support on env/secrets."""
+
+    async def test_put_then_get_returns_env_scopes(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("mill")
+        put_body = {
+            "env": {"LANGFUSE_PUBLIC_KEY": "pk-xxx"},
+            "env_scopes": {"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"},
+        }
+        r = await client.put("/services/mill/env", json=put_body, headers=auth_headers)
+        assert r.status_code == 204
+
+        r = await client.get("/services/mill/env", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["env"] == {"LANGFUSE_PUBLIC_KEY": "pk-xxx"}
+        assert data["env_scopes"] == {"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"}
+        assert data["secret_scopes"] == {}
+
+    async def test_put_then_get_returns_secret_scopes(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("mill")
+        put_body = {
+            "secrets": {"API_KEY": "secret-val"},
+            "secret_scopes": {"API_KEY": "api:provider:openrouter"},
+        }
+        r = await client.put("/services/mill/env", json=put_body, headers=auth_headers)
+        assert r.status_code == 204
+
+        r = await client.get("/services/mill/env", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["secrets"] == {"API_KEY": "***"}
+        assert data["secret_scopes"] == {"API_KEY": "api:provider:openrouter"}
+
+    async def test_put_scopes_merge_not_replace(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("mill")
+        await client.put(
+            "/services/mill/env",
+            json={
+                "env": {"A": "1"},
+                "env_scopes": {"A": "scope:a"},
+            },
+            headers=auth_headers,
+        )
+        await client.put(
+            "/services/mill/env",
+            json={
+                "env": {"B": "2"},
+                "env_scopes": {"B": "scope:b"},
+            },
+            headers=auth_headers,
+        )
+        r = await client.get("/services/mill/env", headers=auth_headers)
+        data = r.json()
+        assert data["env_scopes"] == {"A": "scope:a", "B": "scope:b"}
+
+    async def test_delete_scoped_key_clears_scope(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        await _seed_store("mill")
+        await client.put(
+            "/services/mill/env",
+            json={
+                "env": {"A": "1"},
+                "env_scopes": {"A": "scope:a"},
+            },
+            headers=auth_headers,
+        )
+        r = await client.delete("/services/mill/env/A", headers=auth_headers)
+        assert r.status_code == 204
+        r = await client.get("/services/mill/env", headers=auth_headers)
+        data = r.json()
+        assert data["env"] == {}
+        assert data["env_scopes"] == {}
+
+    async def test_deploy_resolves_consumed_credentials(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When chat has consumed_scopes, deploy injects scoped creds from mill."""
+        await _seed_store("chat", image="ghcr.io/o/chat:main")
+        await _seed_store("mill", image="ghcr.io/o/mill:main")
+
+        # Register both components — chat consumes langfuse scopes
+        from robotsix_central_deploy.registry.loader import ComponentRegistry
+
+        cfg_chat = ComponentConfig(
+            id="chat",
+            image="ghcr.io/o/chat:main",
+            container_name="chat",
+            consumed_scopes=["langfuse:project:*"],
+        )
+        cfg_mill = ComponentConfig(
+            id="mill",
+            image="ghcr.io/o/mill:main",
+            container_name="mill",
+        )
+        registry = ComponentRegistry([cfg_chat, cfg_mill])
+        server_mod.app.state.registry = registry
+
+        # Seed mill's env store with scoped credentials
+        env_store = server_mod.app.state.env_store
+        await env_store.upsert(
+            "mill",
+            {"LANGFUSE_PUBLIC_KEY": "pk-mill"},
+            {"LANGFUSE_SECRET_KEY": "sk-mill"},
+            env_scopes={"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"},
+            secret_scopes={"LANGFUSE_SECRET_KEY": "langfuse:project:abc"},
+        )
+
+        # Also seed a config so that deploy can proceed
+        config_store = server_mod.app.state.component_config_store
+        await config_store.put(cfg_chat)
+        await config_store.put(cfg_mill)
+
+        # Monkeypatch backend.deploy to capture the config
+        captured_configs: list = []
+        original_deploy = server_mod.app.state.backend.deploy
+
+        async def _fake_deploy(service, config, image_ref):
+            captured_configs.append(config)
+            return await original_deploy(service, config, image_ref)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "deploy", _fake_deploy)
+
+        r = await client.post("/services/chat/deploy", headers=auth_headers)
+        assert r.status_code == 202
+
+        # Let the background task run to completion.
+        await asyncio.sleep(0)
+
+        assert len(captured_configs) == 1
+        deployed_env = captured_configs[0].env
+        assert deployed_env["LANGFUSE_PUBLIC_KEY"] == "pk-mill"
+        assert deployed_env["LANGFUSE_SECRET_KEY"] == "sk-mill"
+
+    async def test_deploy_without_consumed_scopes_does_not_inject(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When chat has NO consumed_scopes, scoped creds are not injected."""
+        await _seed_store("chat", image="ghcr.io/o/chat:main")
+        await _seed_store("mill", image="ghcr.io/o/mill:main")
+
+        from robotsix_central_deploy.registry.loader import ComponentRegistry
+
+        cfg_chat = ComponentConfig(
+            id="chat",
+            image="ghcr.io/o/chat:main",
+            container_name="chat",
+            # NO consumed_scopes
+        )
+        cfg_mill = ComponentConfig(
+            id="mill",
+            image="ghcr.io/o/mill:main",
+            container_name="mill",
+        )
+        registry = ComponentRegistry([cfg_chat, cfg_mill])
+        server_mod.app.state.registry = registry
+
+        env_store = server_mod.app.state.env_store
+        await env_store.upsert(
+            "mill",
+            {"LANGFUSE_PUBLIC_KEY": "pk-mill"},
+            {},
+            env_scopes={"LANGFUSE_PUBLIC_KEY": "langfuse:project:abc"},
+        )
+
+        config_store = server_mod.app.state.component_config_store
+        await config_store.put(cfg_chat)
+        await config_store.put(cfg_mill)
+
+        captured_configs: list = []
+        original_deploy = server_mod.app.state.backend.deploy
+
+        async def _fake_deploy(service, config, image_ref):
+            captured_configs.append(config)
+            return await original_deploy(service, config, image_ref)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "deploy", _fake_deploy)
+
+        r = await client.post("/services/chat/deploy", headers=auth_headers)
+        assert r.status_code == 202
+        await asyncio.sleep(0)
+
+        assert len(captured_configs) == 1
+        deployed_env = captured_configs[0].env
+        assert "LANGFUSE_PUBLIC_KEY" not in deployed_env
+
+    async def test_deploy_unscoped_credentials_not_shared(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Untagged secrets are never exposed to other services."""
+        await _seed_store("chat", image="ghcr.io/o/chat:main")
+        await _seed_store("mill", image="ghcr.io/o/mill:main")
+
+        from robotsix_central_deploy.registry.loader import ComponentRegistry
+
+        cfg_chat = ComponentConfig(
+            id="chat",
+            image="ghcr.io/o/chat:main",
+            container_name="chat",
+            consumed_scopes=["*:*:*"],
+        )
+        cfg_mill = ComponentConfig(
+            id="mill",
+            image="ghcr.io/o/mill:main",
+            container_name="mill",
+        )
+        registry = ComponentRegistry([cfg_chat, cfg_mill])
+        server_mod.app.state.registry = registry
+
+        env_store = server_mod.app.state.env_store
+        await env_store.upsert(
+            "mill",
+            {"PRIVATE_KEY": "do-not-share"},
+            {"PRIVATE_SECRET": "also-private"},
+            # NO scopes set — these keys are private
+        )
+
+        config_store = server_mod.app.state.component_config_store
+        await config_store.put(cfg_chat)
+        await config_store.put(cfg_mill)
+
+        captured_configs: list = []
+        original_deploy = server_mod.app.state.backend.deploy
+
+        async def _fake_deploy(service, config, image_ref):
+            captured_configs.append(config)
+            return await original_deploy(service, config, image_ref)
+
+        monkeypatch.setattr(server_mod.app.state.backend, "deploy", _fake_deploy)
+
+        r = await client.post("/services/chat/deploy", headers=auth_headers)
+        assert r.status_code == 202
+        await asyncio.sleep(0)
+
+        assert len(captured_configs) == 1
+        deployed_env = captured_configs[0].env
+        assert "PRIVATE_KEY" not in deployed_env
+        assert "PRIVATE_SECRET" not in deployed_env
 
 
 # ---------------------------------------------------------------------------

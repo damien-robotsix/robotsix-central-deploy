@@ -57,6 +57,8 @@ async def get_service_env(
     return EnvResponse(
         env=config.env,
         secrets=secrets_masked,
+        env_scopes=config.env_scopes,
+        secret_scopes=config.secret_scopes,
         mem_limit=mem_limit,
         allow_chat_access=allow_chat_access,
         claude_mount=claude_mount,
@@ -89,7 +91,9 @@ async def put_service_env(
     Returns 204 No Content on success. Raises 404 if the service is not found.
     """
     await _get_or_create_record(name, store)
-    await env_store.upsert(name, body.env, body.secrets)
+    await env_store.upsert(
+        name, body.env, body.secrets, body.env_scopes, body.secret_scopes
+    )
     if body.mem_limit is not None:
         comp_cfg = component_config_store.get(name)
         if comp_cfg is not None:

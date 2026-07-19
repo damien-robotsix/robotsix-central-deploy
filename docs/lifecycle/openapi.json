@@ -6302,6 +6302,22 @@
             "type": "object",
             "title": "Secrets"
           },
+          "env_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env Scopes",
+            "default": {}
+          },
+          "secret_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secret Scopes",
+            "default": {}
+          },
           "mem_limit": {
             "type": "string",
             "title": "Mem Limit",
@@ -6374,6 +6390,22 @@
             },
             "type": "object",
             "title": "Secrets",
+            "default": {}
+          },
+          "env_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env Scopes",
+            "default": {}
+          },
+          "secret_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secret Scopes",
             "default": {}
           },
           "mem_limit": {
