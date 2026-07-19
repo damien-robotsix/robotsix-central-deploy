@@ -164,7 +164,7 @@ async def deploy_chat_skill() -> str:
 # the wrong name here silently 404'd the agent's own documented self-restart
 # path (POST /chat/services/robotsix-chat/restart) while the correct name
 # ("chat") was rejected as not-allowlisted (403), so neither ever worked.
-_CHAT_ALLOWED_SERVICES: frozenset[str] = frozenset({"chat", "cognee"})
+_CHAT_ALLOWED_SERVICES: frozenset[str] = frozenset({"chat", "cognee", "mill"})
 
 # Rate-limit cooldowns (seconds) per action type.
 _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
