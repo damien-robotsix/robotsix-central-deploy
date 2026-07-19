@@ -10,6 +10,25 @@
       "title": "ExecutionBackendType",
       "type": "string"
     },
+    "LangfuseProjectCreds": {
+      "description": "Credentials for one Langfuse trace project.",
+      "properties": {
+        "public_key": {
+          "default": "",
+          "description": "Langfuse public key for the project.",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "secret_key": {
+          "default": "",
+          "description": "Langfuse secret key for the project.",
+          "title": "Secret Key",
+          "type": "string"
+        }
+      },
+      "title": "LangfuseProjectCreds",
+      "type": "object"
+    },
     "StoreBackend": {
       "description": "Persistence backend for the lifecycle service store.",
       "enum": [
@@ -287,12 +306,20 @@
     },
     "github_repo_create_token": {
       "default": "",
-      "description": "A GitHub Personal Access Token (classic 'repo' scope, or fine-grained with Administration:read-and-write) used only for POST /chat/github/repos. GitHub App installation tokens cannot create repositories under a personal account ('Resource not accessible by integration'), so repo creation needs a separate PAT \u2014 shares the same token as robotsix-mill's forge_repo_create_token. Empty disables repo creation (the Actions-status endpoints are unaffected).",
+      "description": "A GitHub Personal Access Token (classic 'repo' scope, or fine-grained with Administration:read-and-write) used only for POST /chat/github/repos. GitHub App installation tokens cannot create repositories under a personal account ('Resource not accessible by integration'), so repo creation needs a separate PAT. Empty disables repo creation (the Actions-status endpoints are unaffected).",
       "title": "Github Repo Create Token",
       "type": "string"
     },
+    "langfuse_projects": {
+      "additionalProperties": {
+        "$ref": "#/$defs/LangfuseProjectCreds"
+      },
+      "description": "Langfuse project alias \u2192 credentials mapping.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}. Preferred over the legacy per-project config fields.",
+      "title": "Langfuse Projects",
+      "type": "object"
+    },
     "langfuse_base_url": {
-      "default": "https://langfuse.robotsix.net",
+      "default": "",
       "description": "Langfuse instance base URL (no trailing slash).",
       "title": "Langfuse Base Url",
       "type": "string"
@@ -346,7 +373,7 @@
       "type": "integer"
     },
     "mill_component_id": {
-      "default": "mill",
+      "default": "",
       "description": "Component id of the mill instance the caretaker reports findings to.",
       "title": "Mill Component Id",
       "type": "string"

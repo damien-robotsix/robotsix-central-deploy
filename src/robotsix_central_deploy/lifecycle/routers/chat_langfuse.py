@@ -13,10 +13,11 @@ Exposes:
 - ``GET /chat/langfuse/{project}/observations`` — proxy to Langfuse ``GET /api/public/observations``
 - ``GET /chat/langfuse/{project}/observations/{observation_id}`` — single observation
 
-Three Langfuse trace projects are supported — ``robotsix-chat``,
-``cognee``, and ``robotsix-mill`` — selected by the ``{project}``
-path parameter.  Unknown project aliases receive 404; a known alias
-whose keys are not configured receives 503.
+Project aliases and credentials are configured via
+``LifecycleConfig.langfuse_projects`` (dict of alias → {public_key,
+secret_key}).  A legacy fallback reads the six per-project config fields
+(``langfuse_chat_public_key``, …) for backward compatibility with
+existing deployments that haven't migrated to the dict form yet.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import Response
 
 from ..auth import verify_auth
-from ..config import LifecycleConfig
+from ..config import LangfuseProjectCreds, LifecycleConfig
 from ..deps import _get_config
 
 logger = __import__("logging").getLogger(__name__)
@@ -40,13 +41,30 @@ router = APIRouter(tags=["chat-langfuse"])
 # Project → config-key resolution
 # ---------------------------------------------------------------------------
 
-# Known project aliases the chat agent can request.  Each alias maps to
-# the public-key and secret-key attribute names on ``LifecycleConfig``.
-_PROJECT_CONFIG_KEYS: dict[str, tuple[str, str]] = {
-    "robotsix-chat": ("langfuse_chat_public_key", "langfuse_chat_secret_key"),
-    "cognee": ("langfuse_cognee_public_key", "langfuse_cognee_secret_key"),
-    "robotsix-mill": ("langfuse_mill_public_key", "langfuse_mill_secret_key"),
-}
+
+def _build_project_creds(config: LifecycleConfig) -> dict[str, LangfuseProjectCreds]:
+    """Build the full project-alias → credentials map from config.
+
+    Reads ``langfuse_projects`` first (the data-driven form).  Falls back
+    to the six legacy per-project config fields for backward compatibility
+    with existing deployments that haven't migrated yet.
+    """
+    result: dict[str, LangfuseProjectCreds] = dict(config.langfuse_projects)
+
+    # Legacy fallback: per-project fields for robotsix-chat, cognee, robotsix-mill.
+    _LEGACY_MAP: dict[str, tuple[str, str]] = {
+        "robotsix-chat": ("langfuse_chat_public_key", "langfuse_chat_secret_key"),
+        "cognee": ("langfuse_cognee_public_key", "langfuse_cognee_secret_key"),
+        "robotsix-mill": ("langfuse_mill_public_key", "langfuse_mill_secret_key"),
+    }
+    for alias, (pk_attr, sk_attr) in _LEGACY_MAP.items():
+        if alias in result:
+            continue  # new-style entry takes precedence
+        pk: str = getattr(config, pk_attr, "")
+        sk: str = getattr(config, sk_attr, "")
+        result[alias] = LangfuseProjectCreds(public_key=pk, secret_key=sk)
+
+    return result
 
 
 def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, str]:
@@ -56,21 +74,18 @@ def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, s
         HTTPException(404): unknown project alias.
         HTTPException(503): known alias but keys are not configured.
     """
-    entry = _PROJECT_CONFIG_KEYS.get(project)
-    if entry is None:
+    creds = _build_project_creds(config).get(project)
+    if creds is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown Langfuse project alias '{project}'.",
         )
-    public_key_attr, secret_key_attr = entry
-    public_key: str = getattr(config, public_key_attr, "")
-    secret_key: str = getattr(config, secret_key_attr, "")
-    if not public_key or not secret_key:
+    if not creds.public_key or not creds.secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Langfuse credentials for project '{project}' are not configured.",
         )
-    return public_key, secret_key
+    return creds.public_key, creds.secret_key
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -102,6 +117,12 @@ async def _proxy_to_langfuse(
     The ``limit`` query parameter is capped at 100 server-side.
     """
     public_key, secret_key = _resolve_project_keys(config, project)
+
+    if not config.langfuse_base_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="langfuse_base_url is not configured",
+        )
 
     # -- Build target URL ---------------------------------------------------
     base_url = httpx.URL(config.langfuse_base_url.rstrip("/"))
@@ -195,11 +216,12 @@ async def list_projects(
 
     Only projects with both a public key and a secret key set are listed.
     """
-    result: list[str] = []
-    for alias, (pk_attr, sk_attr) in _PROJECT_CONFIG_KEYS.items():
-        if getattr(config, pk_attr, "") and getattr(config, sk_attr, ""):
-            result.append(alias)
-    return result
+    projects = _build_project_creds(config)
+    return [
+        alias
+        for alias, creds in projects.items()
+        if creds.public_key and creds.secret_key
+    ]
 
 
 # ---------------------------------------------------------------------------

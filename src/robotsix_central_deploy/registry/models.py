@@ -100,6 +100,7 @@ class ComponentConfig(BaseModel):
     allow_chat_access: bool = (
         False  # true = component exposes GET /chat-skill for the chat agent
     )
+    chat_agent_mutatable: bool = False  # true = chat agent may restart / deploy / update config for this component
     is_virtual: bool = False  # true = non-Docker component; must never get a ServiceRecord/dashboard row
     chat_base_url: str | None = (
         None  # override base URL for virtual (non-Docker) components; None → derived from container:port

@@ -7,6 +7,27 @@
 
 `robotsix-central-deploy` is a **FastAPI** lifecycle server that manages Docker containers for the robotsix fleet. It acts as a single control plane to start, stop, restart, deploy, rollback, and inspect every managed component. It also provides a **reverse-proxy gateway** so each component is reachable at a well-known URL under the deploy domain, an **onboarding pipeline** for adding new services from docker-compose repos, a **settings API** for operator runtime configuration, and a **registry checker** that monitors GHCR for newer image versions.
 
+## Repo-Agnostic Rule (CRITICAL)
+
+`central-deploy` is a **generic deployment engine**.  Its source code MUST NOT contain
+any service-specific or repo-specific references:
+- No hard-coded service names (e.g. `"chat"`, `"cognee"`, `"mill"`)
+- No per-service allowlists, project aliases, or special-case branches
+- No hard-coded hostnames or deployment-specific URLs as defaults
+
+Service definitions belong in **declarative data**, never in engine code:
+
+| Data plane | Location |
+|---|---|
+| Component configs (per-service Docker/image/port/volume specs) | `component_config_store` — persisted at `data/component_configs.json` and populated via the onboarding API (`POST /onboard/preflight` + `POST /onboard/confirm`) or the seed module at startup |
+| Virtual components (non-Docker chat-accessible services) | `LifecycleConfig.virtual_components` in `config/config.json` |
+| Langfuse project credentials | `LifecycleConfig.langfuse_projects` (dict of alias → `{public_key, secret_key}`) in `config/config.json` |
+| Chat-agent mutation permissions | `ComponentConfig.chat_agent_mutatable` — set per-component via the `robotsix.deploy.chat-agent-mutatable` compose label at onboard time |
+| Gateway routes / TLS | Derived automatically from onboarded component ids + `gateway_base_domain` — no per-service routing rules exist |
+
+**When adding a new managed service:** onboard it via the self-service API
+(or declarative manifest), never by editing `central-deploy` engine code.
+
 ## Key Concepts
 
 ### Service State Machine

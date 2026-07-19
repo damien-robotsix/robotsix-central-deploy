@@ -94,10 +94,7 @@ class SystemSettings(BaseModel):
     @field_validator("mill_component_id")
     @classmethod
     def _validate_mill_component_id(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("mill_component_id must not be empty")
-        return stripped
+        return v.strip()
 
 
 class SystemSettingsStore:

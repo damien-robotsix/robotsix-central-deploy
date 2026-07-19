@@ -106,12 +106,12 @@ class MillClient:
     def derive_url_from_registry(
         registry: ComponentRegistry,
         component_config_store: ComponentConfigStore,
-        mill_component_id: str = "mill",
+        mill_component_id: str = "",
     ) -> str | None:
         """Find the mill component in the registry and derive its URL.
 
         The component id to look up comes from the ``mill_component_id``
-        system setting (default ``"mill"``).  Returns
+        system setting.  Returns
         ``http://{container_name}:{container_port}`` for the mill's first
         port mapping — managed components publish no host ports (the
         gateway reaches them over the shared proxy network by container

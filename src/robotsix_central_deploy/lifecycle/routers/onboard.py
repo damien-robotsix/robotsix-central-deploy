@@ -408,7 +408,7 @@ async def _run_onboard_deploy_job(
         # Best-effort mill repo registration
         from ...caretaker.mill_client import MillClient  # noqa: PLC0415
 
-        mill_component_id = "mill"
+        mill_component_id = ""
         if settings_store is not None:
             mill_component_id = (await settings_store.get()).mill_component_id
         mill_url = MillClient.derive_url_from_registry(

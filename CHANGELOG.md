@@ -12,6 +12,11 @@ All notable changes to robotsix-central-deploy.
   ``chat_github_security.py``.  The original ``chat_github.py`` is now a thin
   aggregator (≤ 25 lines).  No behavioural changes.
 - Declare the full set of mail configuration keys (SMTP host/port/username/password/TLS, sender identity, IMAP, polling) as environment variables in the auto-mail deploy contract example. This makes mail follow the same secret-store / Env & Secrets pattern as mill and chat, retiring the config-file-based approach.
+- **Repo-agnostic refactor:** removed all hard-coded service names from engine code.
+  - Chat-agent mutation allowlist replaced with data-driven `chat_agent_mutatable` flag (`robotsix.deploy.chat-agent-mutatable` compose label).
+  - Langfuse project aliases moved from hard-coded dict to `langfuse_projects` config field (with legacy fallback for backward compatibility).
+  - Service-specific defaults (`langfuse_base_url`, `mill_component_id`) changed to empty strings — operators configure per deployment.
+  - AGENT.md now documents the repo-agnostic rule and where service definitions belong.
 - Add `mill` to the chat-agent service allowlist, permitting the chat agent to restart and update the mill service via the scoped `/chat/services/mill/restart` and `/chat/services/mill/update` endpoints.
 - Add docstring to ``CaretakerScheduler.__init__`` constructor documenting all 11 dependency-injection parameters.
 - Add generic credential-sharing mechanism: scope-tag env vars and secrets in any component's settings, then declare `consumed_scopes` patterns on consumer components. On deploy, the server resolves matching credentials across all EnvStores and injects them into the consumer's container — no manual key duplication needed.

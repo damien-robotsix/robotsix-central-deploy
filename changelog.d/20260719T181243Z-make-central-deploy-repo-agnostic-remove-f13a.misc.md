@@ -1,0 +1,1 @@
+Make central-deploy repo-agnostic: remove per-service code, document in AGENT.md, add standard if needed

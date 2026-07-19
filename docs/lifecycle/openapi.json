@@ -6176,6 +6176,11 @@
             "title": "Allow Chat Access",
             "default": false
           },
+          "chat_agent_mutatable": {
+            "type": "boolean",
+            "title": "Chat Agent Mutatable",
+            "default": false
+          },
           "user": {
             "anyOf": [
               {
@@ -7412,7 +7417,7 @@
           "mill_component_id": {
             "type": "string",
             "title": "Mill Component Id",
-            "default": "mill"
+            "default": ""
           },
           "image_auto_prune": {
             "type": "boolean",
@@ -7520,7 +7525,7 @@
           "mill_component_id": {
             "type": "string",
             "title": "Mill Component Id",
-            "default": "mill"
+            "default": ""
           },
           "image_auto_prune": {
             "type": "boolean",

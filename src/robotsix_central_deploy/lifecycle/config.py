@@ -36,6 +36,19 @@ class VirtualComponentEntry(BaseModel):
     auth_token_env: str = ""  # env var holding a bearer/header token
 
 
+class LangfuseProjectCreds(BaseModel):
+    """Credentials for one Langfuse trace project."""
+
+    public_key: str = Field(
+        "",
+        description="Langfuse public key for the project.",
+    )
+    secret_key: str = Field(
+        "",
+        description="Langfuse secret key for the project.",
+    )
+
+
 class LifecycleConfig(BaseModel):
     """Configuration for the lifecycle server."""
 
@@ -236,9 +249,9 @@ class LifecycleConfig(BaseModel):
     )
 
     # GitHub App auth (chat-agent "github" virtual component — GitHub Actions
-    # workflow-run status). Shares the same GitHub App installation as
-    # robotsix-mill; the chat container never sees these credentials — the
-    # deploy server mints short-lived installation tokens server-side.
+    # workflow-run status). Shares the same GitHub App installation as the
+    # fleet's CI/CD pipeline; the chat container never sees these credentials —
+    # the deploy server mints short-lived installation tokens server-side.
     github_app_id: str = Field(
         "",
         description=(
@@ -258,8 +271,7 @@ class LifecycleConfig(BaseModel):
             "POST /chat/github/repos. GitHub App installation tokens cannot "
             "create repositories under a personal account ('Resource not "
             "accessible by integration'), so repo creation needs a separate "
-            "PAT — shares the same token as robotsix-mill's "
-            "forge_repo_create_token. Empty disables repo creation (the "
+            "PAT. Empty disables repo creation (the "
             "Actions-status endpoints are unaffected)."
         ),
     )
@@ -267,10 +279,23 @@ class LifecycleConfig(BaseModel):
     # Langfuse auth (chat-agent "langfuse" virtual component — trace read
     # proxy).  The chat container never sees these credentials — the deploy
     # server injects Basic Auth server-side when proxying Langfuse public-API
-    # requests.  Three project key pairs are supported so the chat agent can
-    # query the robotsix-chat, cognee, and robotsix-mill trace projects.
+    # requests.
+    #
+    # New deployments should use ``langfuse_projects`` (a dict of project
+    # alias → {public_key, secret_key}).  The six legacy per-project fields
+    # below (langfuse_chat_public_key, …) are still read as a fallback for
+    # backward compatibility with existing deployments that haven't migrated
+    # to the dict form yet.
+    langfuse_projects: dict[str, LangfuseProjectCreds] = Field(
+        default_factory=dict,
+        description=(
+            "Langfuse project alias → credentials mapping.  Example: "
+            '{"my-project": {"public_key": "pk-...", "secret_key": "sk-..."}}. '
+            "Preferred over the legacy per-project config fields."
+        ),
+    )
     langfuse_base_url: str = Field(
-        "https://langfuse.robotsix.net",
+        "",
         description="Langfuse instance base URL (no trailing slash).",
     )
     langfuse_chat_public_key: str = Field(

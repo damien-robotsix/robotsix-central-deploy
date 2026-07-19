@@ -96,6 +96,7 @@ def _build_component_config_from_spec(
         config_assist_seeds=spec.config_assist_seeds,
         llmio_tier_level=spec.llmio_tier_level,
         allow_chat_access=spec.allow_chat_access,
+        chat_agent_mutatable=spec.chat_agent_mutatable,
         user=spec.user,
         **overrides,
     )
