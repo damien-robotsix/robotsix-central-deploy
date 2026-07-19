@@ -313,9 +313,7 @@ class TestResolveConsumedCredentials:
             secrets={},
             env_scopes={"HOST": "website:ovh", "PORT": "website:ovh"},
         )
-        result = await store.resolve_consumed_credentials(
-            "consumer", ["website:ovh"]
-        )
+        result = await store.resolve_consumed_credentials("consumer", ["website:ovh"])
         assert result == {"HOST": "example.com", "PORT": "22"}
 
     async def test_resolves_scoped_secrets(self, store_path, key_manager):
@@ -326,9 +324,7 @@ class TestResolveConsumedCredentials:
             secrets={"PASSWORD": "s3cret"},
             secret_scopes={"PASSWORD": "website:ovh"},
         )
-        result = await store.resolve_consumed_credentials(
-            "consumer", ["website:ovh"]
-        )
+        result = await store.resolve_consumed_credentials("consumer", ["website:ovh"])
         assert result == {"PASSWORD": "s3cret"}
 
     async def test_resolves_mixed_env_and_secrets(self, store_path, key_manager):
@@ -340,9 +336,7 @@ class TestResolveConsumedCredentials:
             env_scopes={"HOST": "website:ovh"},
             secret_scopes={"PASSWORD": "website:ovh"},
         )
-        result = await store.resolve_consumed_credentials(
-            "consumer", ["website:ovh"]
-        )
+        result = await store.resolve_consumed_credentials("consumer", ["website:ovh"])
         assert result == {"HOST": "example.com", "PASSWORD": "s3cret"}
 
     async def test_only_matches_requested_scopes(self, store_path, key_manager):
@@ -353,9 +347,7 @@ class TestResolveConsumedCredentials:
             secrets={},
             env_scopes={"HOST": "website:ovh", "OTHER": "other:scope"},
         )
-        result = await store.resolve_consumed_credentials(
-            "consumer", ["website:ovh"]
-        )
+        result = await store.resolve_consumed_credentials("consumer", ["website:ovh"])
         assert result == {"HOST": "example.com"}
         assert "OTHER" not in result
 
@@ -379,9 +371,7 @@ class TestResolveConsumedCredentials:
             env_scopes={"HOST": "website:ovh"},
             # UNSCOPED has no scope tag
         )
-        result = await store.resolve_consumed_credentials(
-            "consumer", ["website:ovh"]
-        )
+        result = await store.resolve_consumed_credentials("consumer", ["website:ovh"])
         assert "UNSCOPED" not in result
 
     async def test_multiple_providers_aggregated(self, store_path, key_manager):
@@ -398,9 +388,7 @@ class TestResolveConsumedCredentials:
             secrets={},
             env_scopes={"KEY_B": "website:ovh"},
         )
-        result = await store.resolve_consumed_credentials(
-            "consumer", ["website:ovh"]
-        )
+        result = await store.resolve_consumed_credentials("consumer", ["website:ovh"])
         assert result == {"KEY_A": "val_a", "KEY_B": "val_b"}
 
     async def test_secret_plaintext_not_in_stored_json(self, store_path, key_manager):
