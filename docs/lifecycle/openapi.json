@@ -4664,6 +4664,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__get",
         "parameters": [
           {
@@ -4712,6 +4713,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__post",
         "parameters": [
           {
@@ -4760,6 +4762,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__put",
         "parameters": [
           {
@@ -4808,6 +4811,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__delete",
         "parameters": [
           {
@@ -4856,6 +4860,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__patch",
         "parameters": [
           {
@@ -4904,6 +4909,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__head",
         "parameters": [
           {
@@ -4952,6 +4958,7 @@
           "gateway"
         ],
         "summary": "Gateway Http",
+        "description": "Route an HTTP proxy request to the correct component container.\n\nTwo routing strategies are tried in order:\n\n1. **Subdomain** \u2014 if ``Host`` matches ``<name>.<gateway_base_domain>``,\n   proxy directly to the component's container.\n2. **Legacy path-prefix** \u2014 ``/<name>/...`` redirects (307) to the\n   component subdomain (path-prefix proxying was removed because it\n   broke absolute asset URLs).\n\nRaises ``HTTPException 404`` when no component matches.",
         "operationId": "gateway_http__path__options",
         "parameters": [
           {
