@@ -1,16 +1,12 @@
 """GitHub App client for the chat-agent ``github`` component.
 
 Wraps PyGithub's ``GithubIntegration``/``Auth.AppAuth`` rather than
-hand-rolling JWT signing and installation-token minting — see
-robotsix-mill's ``forge/auth.py`` for the hand-rolled version this
-deliberately avoids duplicating (mill ticket
-``20260707T131937Z-migrate-github-app-auth-forge-auth-py-to-e1c9`` tracks
-migrating mill to PyGithub too).
+hand-rolling JWT signing and installation-token minting.
 
-Shares the same GitHub App installation as robotsix-mill. The deploy server
-mints the installation token server-side and never exposes the App private
-key to the chat container — the chat agent only ever sees this server's own
-``X-API-Key`` (same as the ``deploy`` component).
+Shares the same GitHub App installation as the fleet's CI/CD pipeline.
+The deploy server mints the installation token server-side and never
+exposes the App private key to the chat container — the chat agent only
+ever sees this server's own ``X-API-Key`` (same as the ``deploy`` component).
 
 The authenticated ``Github`` client is cached per ``(app_id, owner, repo)``:
 PyGithub's own ``AppInstallationAuth.token`` property lazily re-mints the
@@ -89,10 +85,10 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
     client from :func:`get_github_client`. Synchronous and non-blocking —
     ``Github(auth=...)`` does no network I/O at construction time.
 
-    Sends ``Authorization: Bearer <token>`` (matching robotsix-mill's own
-    ``forge/github.py``), not PyGithub's ``Auth.Token`` default of
-    ``Authorization: token <token>`` — fine-grained PATs (as opposed to
-    classic PATs) reject the ``token`` scheme with a 401 "Bad credentials".
+    Sends ``Authorization: Bearer <token>`` rather than PyGithub's
+    ``Auth.Token`` default of ``Authorization: token <token>`` —
+    fine-grained PATs (as opposed to classic PATs) reject the ``token``
+    scheme with a 401 "Bad credentials".
 
     Raises :class:`GitHubRepoCreateNotConfiguredError` when the token is unset.
     """

@@ -43,7 +43,7 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "gateway_base_domain": "",
     "caretaker_enabled": False,
     "caretaker_interval_hours": 24,
-    "mill_component_id": "mill",
+    "mill_component_id": "",
     "image_auto_prune": False,
     "llmio_tier_config": {},
     "claude_auth_refresh_interval": 1800,

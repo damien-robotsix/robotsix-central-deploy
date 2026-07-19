@@ -325,7 +325,7 @@ async def _seed_component_registry(
     if virtual_components:
         logger.info(
             "Virtual components seeded into the chat-agent roster. "
-            "The robotsix-chat agent must be restarted to pick up the "
+            "The chat agent must be restarted to pick up the "
             "updated roster (POST /chat/services/chat/restart)."
         )
 

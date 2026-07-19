@@ -47,9 +47,9 @@ class TestSystemSettingsModel:
         ):
             SystemSettings(volume_audit_interval_seconds=0)
 
-    def test_mill_component_id_not_empty(self):
-        with pytest.raises(ValueError, match="mill_component_id must not be empty"):
-            SystemSettings(mill_component_id="   ")
+    def test_mill_component_id_empty_accepted(self):
+        s = SystemSettings(mill_component_id="   ")
+        assert s.mill_component_id == ""
 
     def test_mill_component_id_stripped(self):
         s = SystemSettings(mill_component_id="  foo  ")

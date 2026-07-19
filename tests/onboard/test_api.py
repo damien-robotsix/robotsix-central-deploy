@@ -2057,7 +2057,7 @@ class TestOnboardMillIntegration:
     ):
         """Component with id=='mill' always gets caretaker_auto_update=False."""
         ss = SystemSettingsStore(tmp_path / "settings4.json")
-        await ss.put(SystemSettings(caretaker_enabled=True))
+        await ss.put(SystemSettings(caretaker_enabled=True, mill_component_id="mill"))
         server_mod.app.state.settings_store = ss
 
         spec = _make_derived_spec(name="mill")

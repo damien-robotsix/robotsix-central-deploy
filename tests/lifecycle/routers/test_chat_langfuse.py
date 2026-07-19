@@ -400,6 +400,7 @@ class TestLangfuseProxyErrorHandling:
         """A ConnectError from httpx becomes 502 Bad Gateway."""
         server_mod.app.state.config.langfuse_chat_public_key = "pk"
         server_mod.app.state.config.langfuse_chat_secret_key = "sk"
+        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
 
         async def _fake_get(url, headers=None, **kwargs):
             raise httpx.ConnectError("connection refused")
@@ -426,6 +427,7 @@ class TestLangfuseProxyErrorHandling:
         """A TimeoutException from httpx becomes 504 Gateway Timeout."""
         server_mod.app.state.config.langfuse_chat_public_key = "pk"
         server_mod.app.state.config.langfuse_chat_secret_key = "sk"
+        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
 
         async def _fake_get(url, headers=None, **kwargs):
             raise httpx.TimeoutException("timed out")

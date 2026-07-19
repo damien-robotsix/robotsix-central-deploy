@@ -148,8 +148,8 @@ async def deploy_chat_skill() -> str:
         "- `POST /chat/services/{name}/restart` — restart a service\n"
         "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n\n"
         "## Agent self-restart\n"
-        "The robotsix-chat agent can restart itself via:\n"
-        "`POST /chat/services/chat/restart`\n"
+        "The chat agent can restart itself via its registered component id:\n"
+        "`POST /chat/services/{name}/restart`\n"
         "This is needed after the component roster is updated so the agent "
         "picks up newly registered virtual components."
     )
@@ -158,13 +158,6 @@ async def deploy_chat_skill() -> str:
 # ---------------------------------------------------------------------------
 # Server-side allowlists
 # ---------------------------------------------------------------------------
-
-# Services the chat agent is permitted to mutate. The chat service's real
-# registered name is "chat" (see GET /services), not "robotsix-chat" — using
-# the wrong name here silently 404'd the agent's own documented self-restart
-# path (POST /chat/services/robotsix-chat/restart) while the correct name
-# ("chat") was rejected as not-allowlisted (403), so neither ever worked.
-_CHAT_ALLOWED_SERVICES: frozenset[str] = frozenset({"chat", "cognee", "mill"})
 
 # Rate-limit cooldowns (seconds) per action type.
 _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
@@ -203,9 +196,18 @@ def _check_rate_limit(app_state: Any, service: str, action: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _require_allowed_service(name: str) -> None:
-    """Raise HTTP 403 when *name* is not in the chat-agent service allowlist."""
-    if name not in _CHAT_ALLOWED_SERVICES:
+async def _require_allowed_service(
+    name: str, component_config_store: ComponentConfigStore
+) -> None:
+    """Raise HTTP 403 when *name* is not chat-agent mutatable.
+
+    A component is mutatable when its ``chat_agent_mutatable`` flag is set
+    in the component config — this is a declarative, per-service setting,
+    not a hard-coded allowlist.  Virtual components are never mutatable
+    (they have no Docker containers to restart/deploy).
+    """
+    comp_cfg = component_config_store.get(name)
+    if comp_cfg is None or not comp_cfg.chat_agent_mutatable:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Chat agent is not permitted to mutate service '{name}'.",
@@ -339,6 +341,7 @@ async def list_chat_components(
 async def chat_get_config(
     name: str,
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Return the current config for an allowlisted service.
@@ -346,7 +349,7 @@ async def chat_get_config(
     Secret values are redacted — the chat agent sees ``"***"`` for set
     secrets and ``""`` for unset secrets.
     """
-    _require_allowed_service(name)
+    await _require_allowed_service(name, component_config_store)
     template = await config_yaml_store.get_template(name)
     if template is None:
         raise HTTPException(
@@ -397,7 +400,7 @@ async def chat_update_config(
     to the service's config volume and records an audit entry for every
     changed key.
     """
-    _require_allowed_service(name)
+    await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "config_update")
 
     # ------------------------------------------------------------------
@@ -546,7 +549,7 @@ async def chat_rollback_config(
     Returns 404 when no previous snapshot exists (e.g. no config update
     has been performed yet through the chat surface).
     """
-    _require_allowed_service(name)
+    await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "config_rollback")
 
     previous = await config_yaml_store.get_previous(name)
@@ -618,6 +621,7 @@ async def chat_restart_service(
     store: ServiceStore = Depends(_get_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentRestartResponse:
@@ -626,7 +630,7 @@ async def chat_restart_service(
     Raises 403 if the service is not in the chat-agent allowlist.
     Rate-limited to one restart per 60 seconds per service.
     """
-    _require_allowed_service(name)
+    await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "restart")
 
     record = await _get_or_create_record(name, store)
@@ -733,7 +737,7 @@ async def chat_update_service(
     Synchronous — waits for the deploy to complete before returning.
     Rate-limited to one update per 300 seconds per service.
     """
-    _require_allowed_service(name)
+    await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "update")
 
     record = await _get_or_create_record(name, store)

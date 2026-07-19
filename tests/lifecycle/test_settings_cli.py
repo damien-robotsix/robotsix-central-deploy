@@ -351,7 +351,7 @@ class TestSettingsRouter:
         assert "caretaker_interval_hours" in data
         assert data["caretaker_enabled"] is False
         assert data["caretaker_interval_hours"] == 24
-        assert data["mill_component_id"] == "mill"
+        assert data["mill_component_id"] == ""
 
     async def test_put_settings_mill_component_id_persisted(
         self, client: AsyncClient, auth_headers, settings_store
@@ -367,7 +367,7 @@ class TestSettingsRouter:
         stored = await settings_store.get()
         assert stored.mill_component_id == "my-mill"
 
-    async def test_put_settings_empty_mill_component_id_rejected(
+    async def test_put_settings_empty_mill_component_id_accepted(
         self, client: AsyncClient, auth_headers, settings_store
     ):
         resp = await client.put(
@@ -375,7 +375,7 @@ class TestSettingsRouter:
             json={"log_level": "INFO", "mill_component_id": "  "},
             headers=auth_headers,
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 200
 
     async def test_put_settings_image_auto_prune_persisted(
         self, client: AsyncClient, auth_headers, settings_store

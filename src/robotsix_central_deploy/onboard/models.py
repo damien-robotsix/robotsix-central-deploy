@@ -58,6 +58,9 @@ class DerivedSpec(BaseModel):
         None  # "level1"–"level4" from robotsix.deploy.llmio-tier-level label
     )
     allow_chat_access: bool = False  # from robotsix.deploy.chat-access label
+    chat_agent_mutatable: bool = (
+        False  # from robotsix.deploy.chat-agent-mutatable label
+    )
     user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
 
 

@@ -130,8 +130,12 @@ def audit_store(state_dir: Path) -> ChatAgentAuditStore:
 @pytest.fixture
 def component_config_store(state_dir: Path) -> ComponentConfigStore:
     store = ComponentConfigStore(state_dir / "component_configs.json")
-    store.register(_make_config("chat", "ghcr.io/test/robotsix-chat:main"))
-    store.register(_make_config("cognee", "ghcr.io/test/cognee:main"))
+    cfg_chat = _make_config("chat", "ghcr.io/test/robotsix-chat:main")
+    cfg_chat.chat_agent_mutatable = True
+    store.register(cfg_chat)
+    cfg_cognee = _make_config("cognee", "ghcr.io/test/cognee:main")
+    cfg_cognee.chat_agent_mutatable = True
+    store.register(cfg_cognee)
     store.register(_make_config("other-svc", "ghcr.io/test/other:main"))
     return store
 
