@@ -1,25 +1,17 @@
-"""Chat-agent GitHub router — thin aggregator.
+"""Chat-agent GitHub router — re-exports for test monkeypatching.
 
-See the domain modules for the implementations:
-- chat_github_actions.py  — GitHub Actions
-- chat_github_pulls.py    — PRs & Reviews
-- chat_github_repos.py    — Repository CRUD
-- chat_github_security.py — Security features
+The domain modules import ``get_github_client`` and
+``get_repo_create_client`` from here (not directly from ``..github_app``)
+so that the test suite can monkeypatch ``chat_github.get_github_client``
+and have the patch take effect everywhere.
+
+Router aggregation is done in ``app.py``, which imports each domain
+router directly — that avoids a top-level import cycle between this
+module and the domain routers.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from ..github_app import get_github_client, get_repo_create_client  # noqa: F401
 
-from ..github_app import get_github_client, get_repo_create_client
-from .chat_github_actions import router as _actions_router
-from .chat_github_pulls import router as _pulls_router
-from .chat_github_repos import router as _repos_router
-from .chat_github_security import router as _security_router
-
-__all__ = ["get_github_client", "get_repo_create_client", "router"]
-router = APIRouter()
-router.include_router(_actions_router)
-router.include_router(_pulls_router)
-router.include_router(_repos_router)
-router.include_router(_security_router)
+__all__ = ["get_github_client", "get_repo_create_client"]
