@@ -90,15 +90,13 @@ async def phase_update(
             # silently drop EnvStore-provisioned variables (API keys, secrets),
             # so merge them exactly like the manual deploy path does.
             merged_env = await env_store.get_merged_env(record.name, config.env)
-
             # Resolve credentials shared by other components via scope tags.
             if config.consumed_scopes:
-                consumed = await env_store.resolve_consumed_credentials(
+                cred_env = await env_store.resolve_consumed_credentials(
                     record.name, config.consumed_scopes
                 )
-                if consumed:
-                    merged_env.update(consumed)
-
+                if cred_env:
+                    merged_env = {**cred_env, **merged_env}
             deploy_config = config.model_copy(update={"env": merged_env})
             outcome = await backend.deploy(record, deploy_config, image_ref)
             record.state = outcome.state

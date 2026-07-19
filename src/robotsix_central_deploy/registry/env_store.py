@@ -15,14 +15,19 @@ from .secret_key import SecretKeyManager
 
 
 class ComponentEnvConfig(BaseModel):
-    """Per-component stored environment and encrypted secret tokens."""
+    """Per-component stored environment and encrypted secret tokens.
+
+    Scope fields map individual keys to colon-segmented scope tags
+    (e.g. ``"OVH_SFTP_HOST": "website:ovh"``).  Consumers declare
+    ``consumed_scopes`` glob patterns on their ``ComponentConfig``
+    and the deploy/rollback paths call ``EnvStore.resolve_consumed_credentials``
+    to receive matching scoped values at injection time.
+    """
 
     env: dict[str, str] = {}
     secret_tokens: dict[str, str] = {}
-    env_scopes: dict[str, str] = {}  # maps env key → scope tag (None/absent = private)
-    secret_scopes: dict[
-        str, str
-    ] = {}  # maps secret key → scope tag (None/absent = private)
+    env_scopes: dict[str, str] = {}
+    secret_scopes: dict[str, str] = {}
 
 
 class EnvStore(JsonFileStore):
@@ -48,10 +53,11 @@ class EnvStore(JsonFileStore):
         name: str,
         env: dict[str, str],
         secrets: dict[str, str],
+        *,
         env_scopes: dict[str, str] | None = None,
         secret_scopes: dict[str, str] | None = None,
     ) -> None:
-        """Merge *env*, *secrets*, and scope tags into the stored config for *name*.
+        """Merge *env*, *secrets*, and optional scope tags into the stored config for *name*.
 
         Overwrites matching keys; does not wipe keys not mentioned.
         Encrypts each secret value before storing.
@@ -100,21 +106,15 @@ class EnvStore(JsonFileStore):
             entry = data.get(name)
             if entry is None:
                 return
-            if key in entry.get("env", {}):
-                del entry["env"][key]
-                entry.get("env_scopes", {}).pop(key, None)
-                found = True
-            if key in entry.get("secret_tokens", {}):
-                del entry["secret_tokens"][key]
-                entry.get("secret_scopes", {}).pop(key, None)
-                found = True
+            for field in ("env", "secret_tokens", "env_scopes", "secret_scopes"):
+                if key in entry.get(field, {}):
+                    del entry[field][key]
+                    found = True
             if found:
                 # Remove the component entry entirely if all dicts are empty
-                if (
-                    not entry.get("env")
-                    and not entry.get("secret_tokens")
-                    and not entry.get("env_scopes")
-                    and not entry.get("secret_scopes")
+                if all(
+                    not entry.get(f)
+                    for f in ("env", "secret_tokens", "env_scopes", "secret_scopes")
                 ):
                     del data[name]
 
@@ -129,41 +129,39 @@ class EnvStore(JsonFileStore):
 
         await self._update(_mutate)
 
-    async def get_merged_env(
-        self, name: str, base_env: dict[str, str]
-    ) -> dict[str, str]:
-        """Return the effective environment for *name*.
-
-        Merging order (later wins):
-        1. *base_env* (static YAML ``ComponentConfig.env``)
-        2. Stored env overrides (user-supplied plaintext)
-        3. Decrypted secrets
-
-        Stored user values always override static YAML on key collision.
-        """
-        config = await self.get(name)
-        merged: dict[str, str] = dict(base_env)
-        merged.update(config.env)
-        for key, token in config.secret_tokens.items():
-            merged[key] = self._key_manager.decrypt(token)
-        return merged
+    # -- scope matching & credential resolution ---------------------------
 
     @staticmethod
-    def _scope_matches(pattern: str, candidate: str) -> bool:
-        """Return True if *candidate* matches the colon-segmented glob *pattern*.
+    def _scope_matches(pattern: str, scope: str) -> bool:
+        """Colon-segmented glob match.
 
-        Each segment of the pattern is compared to the candidate: ``*``
-        matches any segment value; otherwise the segments must be equal.
-        The candidate must have the same number of segments as the pattern.
+        ``*`` matches any single segment; ``**`` matches zero or more
+        segments.  A plain ``*`` at the top level matches everything.
         """
+        if pattern == "*":
+            return True
         pattern_parts = pattern.split(":")
-        candidate_parts = candidate.split(":")
-        if len(pattern_parts) != len(candidate_parts):
-            return False
-        for p, c in zip(pattern_parts, candidate_parts):
-            if p != "*" and p != c:
+        scope_parts = scope.split(":")
+
+        # Recursive match with backtracking for ``**``.
+        def _match(pi: int, si: int) -> bool:
+            if pi == len(pattern_parts):
+                return si == len(scope_parts)
+            pp = pattern_parts[pi]
+            if pp == "**":
+                # ``**`` matches zero or more scope segments.
+                # Try consuming 0, 1, ..., remaining segments from scope.
+                for n in range(si, len(scope_parts) + 1):
+                    if _match(pi + 1, n):
+                        return True
                 return False
-        return True
+            if si >= len(scope_parts):
+                return False
+            if pp == "*" or pp == scope_parts[si]:
+                return _match(pi + 1, si + 1)
+            return False
+
+        return _match(0, 0)
 
     async def resolve_consumed_credentials(
         self, consumer_name: str, consumed_scopes: list[str]
@@ -210,3 +208,22 @@ class EnvStore(JsonFileStore):
                         resolved[key] = self._key_manager.decrypt(token)
 
         return resolved
+
+    async def get_merged_env(
+        self, name: str, base_env: dict[str, str]
+    ) -> dict[str, str]:
+        """Return the effective environment for *name*.
+
+        Merging order (later wins):
+        1. *base_env* (static YAML ``ComponentConfig.env``)
+        2. Stored env overrides (user-supplied plaintext)
+        3. Decrypted secrets
+
+        Stored user values always override static YAML on key collision.
+        """
+        config = await self.get(name)
+        merged: dict[str, str] = dict(base_env)
+        merged.update(config.env)
+        for key, token in config.secret_tokens.items():
+            merged[key] = self._key_manager.decrypt(token)
+        return merged

@@ -103,6 +103,7 @@ async def _fanout_sibling_action(
         [ServiceConfig, ServiceRecord, str, ComponentConfig], Awaitable[None]
     ],
     action_label: str,
+    consumed_scopes: list[str] | None = None,
 ) -> None:
     """Fan out an action to all siblings of *name* (best-effort per sibling).
 
@@ -117,15 +118,13 @@ async def _fanout_sibling_action(
     for sib_config, sib_record in await _get_sibling_pairs(name, config_fresh, store):
         sib_name = f"{name}-{sib_config.service_key}"
         merged_env = await env_store.get_merged_env(sib_name, sib_config.env)
-
         # Siblings inherit the parent's consumed-scope resolution.
-        if config_fresh.consumed_scopes:
-            consumed = await env_store.resolve_consumed_credentials(
-                sib_name, config_fresh.consumed_scopes
+        if consumed_scopes:
+            cred_env = await env_store.resolve_consumed_credentials(
+                sib_name, consumed_scopes
             )
-            if consumed:
-                merged_env.update(consumed)
-
+            if cred_env:
+                merged_env = {**cred_env, **merged_env}
         effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
             await action(sib_config, sib_record, sib_name, effective_sib)
@@ -197,15 +196,13 @@ async def deploy_service(
 
     env_store: EnvStore = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(name, config.env)
-
     # Resolve credentials shared by other components via scope tags.
     if config.consumed_scopes:
-        consumed = await env_store.resolve_consumed_credentials(
+        cred_env = await env_store.resolve_consumed_credentials(
             name, config.consumed_scopes
         )
-        if consumed:
-            merged_env.update(consumed)
-
+        if cred_env:
+            merged_env = {**cred_env, **merged_env}
     config = config.model_copy(update={"env": merged_env})
 
     image_ref = body.image or config.image
@@ -410,6 +407,7 @@ async def _run_deploy_job(
             env_store,
             action=_do_deploy_sibling,
             action_label="deploy",
+            consumed_scopes=config.consumed_scopes,
         )
 
         # Auto-prune dangling images left behind by the update (opt-in setting);
@@ -538,15 +536,13 @@ async def rollback_service(
 
     env_store: EnvStore = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(name, config.env)
-
     # Resolve credentials shared by other components via scope tags.
     if config.consumed_scopes:
-        consumed = await env_store.resolve_consumed_credentials(
+        cred_env = await env_store.resolve_consumed_credentials(
             name, config.consumed_scopes
         )
-        if consumed:
-            merged_env.update(consumed)
-
+        if cred_env:
+            merged_env = {**cred_env, **merged_env}
     config = config.model_copy(update={"env": merged_env})
 
     if body is None:
@@ -643,6 +639,7 @@ async def rollback_service(
             env_store,
             action=_do_rollback_sibling,
             action_label="rollback",
+            consumed_scopes=config.consumed_scopes,
         )
 
         return RollbackResponse(
@@ -691,6 +688,7 @@ async def rollback_service(
         env_store,
         action=_do_rollback_sibling,
         action_label="rollback",
+        consumed_scopes=config.consumed_scopes,
     )
 
     return RollbackResponse(

@@ -30,6 +30,7 @@ def _register_mill(ccs, mill_id="mill", port=9999):
     default_cfg = MagicMock()
     default_cfg.repo_id = "my-repo"
     default_cfg.caretaker_auto_update = True
+    default_cfg.consumed_scopes = []
     ccs.get = MagicMock(
         side_effect=lambda cid: mill_cfg if cid == mill_id else default_cfg
     )
