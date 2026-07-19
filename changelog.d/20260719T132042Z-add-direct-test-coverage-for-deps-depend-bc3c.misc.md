@@ -1,0 +1,1 @@
+Add direct test coverage for deps/dependencies.py — 14 untested FastAPI dependency providers
