@@ -120,6 +120,26 @@ class TestVolumeOpsWriteConfig:
         assert call_kwargs["volumes"]["data-vol"]["mode"] == "rw"
         assert call_kwargs["remove"] is True
 
+    async def test_write_config_chowns_to_component_uid_before_tightening_perms(
+        self, client
+    ):
+        """The busybox writer runs as root but components run as 1000:1000 —
+        without the chown, the 700/600 tightening locks the component out of
+        its own config.json (chat crash-looped on PermissionError)."""
+        vo = VolumeOps(client)
+        client.containers.run.return_value = b""
+
+        docker_mock = self._make_docker_mock()
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            await vo.write_config_to_volume("cfg-vol", {"a": 1})
+
+        cmd = client.containers.run.call_args[1]["command"][2]
+        assert "chown 1000:1000 /config /config/config.json" in cmd
+        assert "chmod 700 /config" in cmd
+        assert "chmod 600 /config/config.json" in cmd
+        # ownership must be fixed before permissions are tightened
+        assert cmd.index("chown 1000:1000") < cmd.index("chmod 700")
+
     async def test_write_llmio_tier_config_raises_on_api_error(self, client):
         vo = VolumeOps(client)
 

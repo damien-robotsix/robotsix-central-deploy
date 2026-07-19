@@ -97,8 +97,13 @@ class VolumeOps:
         json_content = json.dumps(config_dict, indent=2, sort_keys=True)
         encoded = base64.b64encode(json_content.encode()).decode()
         # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
+        # The busybox helper runs as root while fleet components run as
+        # 1000:1000, so the tightened 700/600 permissions must come with a
+        # chown or the component is locked out of its own config (chat
+        # crash-looped on PermissionError after the 777/666 → 700/600 change).
         cmd = (
             f"mkdir -p /config && echo {encoded} | base64 -d > /config/{filename}"
+            f" && chown 1000:1000 /config /config/{filename}"
             f" && chmod 700 /config && chmod 600 /config/{filename}"
         )
         loop = asyncio.get_running_loop()

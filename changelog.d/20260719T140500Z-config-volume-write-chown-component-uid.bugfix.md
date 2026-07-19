@@ -1,0 +1,1 @@
+Config-volume writes now `chown 1000:1000` before tightening permissions to 700/600. The busybox writer runs as root while components run as 1000:1000, so the 777/666 → 700/600 hardening locked components out of their own `config.json` — chat crash-looped with `PermissionError` on the first deploy after the change.
