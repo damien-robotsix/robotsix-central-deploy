@@ -1,0 +1,1 @@
+Added `Field(description=...)` to all 65 Pydantic model fields in `registry/models.py`, populating the generated OpenAPI schema with field-level documentation. Descriptions follow the existing pattern in `lifecycle/config.py` and avoid trivially restating field names.
