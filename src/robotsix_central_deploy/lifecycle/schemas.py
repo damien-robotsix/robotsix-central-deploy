@@ -108,6 +108,8 @@ class DeployJobStatusResponse(BaseModel):
 class EnvResponse(BaseModel):
     env: dict[str, str]
     secrets: dict[str, str]  # values are always "***"
+    env_scopes: dict[str, str] = {}
+    secret_scopes: dict[str, str] = {}
     mem_limit: str = "2g"
     allow_chat_access: bool = False
     claude_mount: bool = False
@@ -124,6 +126,8 @@ class EnvSyncResponse(BaseModel):
 class EnvUpdate(BaseModel):
     env: dict[str, str] = {}
     secrets: dict[str, str] = {}
+    env_scopes: dict[str, str] = {}
+    secret_scopes: dict[str, str] = {}
     mem_limit: str | None = None
     allow_chat_access: bool | None = None
     claude_mount: bool | None = None

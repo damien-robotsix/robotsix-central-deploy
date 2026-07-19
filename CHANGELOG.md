@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add generic credential-sharing mechanism: scope-tag env vars and secrets in any component's settings, then declare `consumed_scopes` patterns on consumer components. On deploy, the server resolves matching credentials across all EnvStores and injects them into the consumer's container — no manual key duplication needed.
 - Added docstring to `gateway_http` in `src/robotsix_central_deploy/gateway/router.py` documenting the two routing strategies (subdomain and legacy path-prefix redirect).
 - Enable `docstring_coverage` periodic workflow for automated docstring gap detection.
 - **Chat config secrets support**: `PUT /chat/config/{name}` now accepts secret (`writeOnly`/`password`) fields with partial-update semantics — omitted or sentinel values keep the stored secret, only explicitly supplied values overwrite. Added `GET /chat/config/{name}` for reading config with secrets redacted. Rollback preserves current secret values, audit log redacts secret data, and config volume file permissions tightened to 0600.
