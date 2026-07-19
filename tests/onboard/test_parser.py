@@ -122,7 +122,14 @@ services:
       - "8202:8080"
     environment:
       SMTP_HOST: ""
+      SMTP_PORT: ""
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      SMTP_USE_TLS: ""
       AUTH_TOKEN: ""
+      SENDER_EMAIL: ""
+      SENDER_NAME: ""
+      LOG_LEVEL: ""
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -133,7 +140,12 @@ services:
     image: ghcr.io/damien-robotsix/auto-mail-ingester:main
     environment:
       BOARD_URL: ""
+      IMAP_HOST: ""
+      IMAP_PORT: ""
+      IMAP_USERNAME: ""
       IMAP_PASSWORD: ""
+      IMAP_USE_TLS: ""
+      POLL_INTERVAL: ""
     volumes:
       - mail-spool:/data
 volumes:
@@ -591,7 +603,15 @@ class TestMultiServiceParse:
         assert sib.service_key == "ingester"
         assert sib.container_name == "auto-mail-ingester"
         assert sib.image == "ghcr.io/damien-robotsix/auto-mail-ingester:main"
-        assert sib.env == {"BOARD_URL": "", "IMAP_PASSWORD": ""}
+        assert sib.env == {
+            "BOARD_URL": "",
+            "IMAP_HOST": "",
+            "IMAP_PORT": "",
+            "IMAP_USERNAME": "",
+            "IMAP_PASSWORD": "",
+            "IMAP_USE_TLS": "",
+            "POLL_INTERVAL": "",
+        }
         assert sib.mounts == [
             VolumeMount(host="mail-spool", container="/data", read_only=False)
         ]
