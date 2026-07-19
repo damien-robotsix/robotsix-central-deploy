@@ -50,6 +50,23 @@ class CaretakerScheduler:
         deploy_history_store: DeployHistoryStore,
         env_store: EnvStore,
     ) -> None:
+        """Initialise the caretaker scheduler.
+
+        Stores all injected dependencies as private attributes and
+        resolves the local findings file path from the config.
+
+        Args:
+            config: Full lifecycle configuration.
+            backend: Execution backend for container actions.
+            registry: Component registry for service lookups.
+            service_store: Persistent service state store.
+            component_config_store: Component configuration store.
+            volume_audit_scheduler: Optional volume audit background scanner.
+            settings_store: System settings (caretaker interval, etc.).
+            http_client: Shared async HTTP client.
+            deploy_history_store: Deployment history store.
+            env_store: Environment variable store.
+        """
         self._config = config
         self._backend = backend
         self._registry = registry
