@@ -33,7 +33,7 @@ for local development builds from the checkout).
     a post-migration image (values mirror the old env vars — full field list
     in the committed `config/config.json`):
 
-    ```bash
+```bash
     docker run --rm -i -v central_deploy_data:/data alpine sh -c \
       'cat > /data/config.json && chmod 600 /data/config.json && chown 1000:1000 /data/config.json' << 'EOF'
     {
@@ -61,7 +61,7 @@ for local development builds from the checkout).
     holds root-owned files the new image cannot write. Before the first
     non-root start, run:
 
-    ```bash
+```bash
     docker compose down
     docker run --rm -v central_deploy_data:/data alpine chown -R 1000:1000 /data
     ```
@@ -96,7 +96,7 @@ dashboard settings).
 Deployed files (see [`nginx-deploy.conf`](nginx-deploy.conf) for contents):
 
 | File | Role |
-|------|------|
+| ------ | ------ |
 | `/etc/nginx/conf.d/websocket-upgrade.conf` | `map $http_upgrade $connection_upgrade` — WebSocket upgrade support for the gateway relay |
 | `/etc/nginx/sites-available/deploy.robotsix.net` | Main vhost: dashboard, `/health` open |
 | `/etc/nginx/sites-available/wildcard.deploy.robotsix.net` | Catch-all `*.deploy.robotsix.net` vhost for component subdomains |

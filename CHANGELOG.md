@@ -6,6 +6,9 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add markdownlint-cli2 and codespell hooks to pre-commit config, plus
+  `.markdownlint-cli2.yaml` and `[tool.codespell]` in `pyproject.toml`, for
+  automated Markdown documentation quality checks.
 - Added module overview pages and ARCHITECTURE.md to the mkdocs navigation, making existing package documentation discoverable from the built docs site.
 - Split `chat.py` (1,035-line monolith) into `_chat_common.py` + `chat_components.py`, `chat_config.py`, `chat_self.py`, `chat_services.py`, `chat_audit.py` (structural extraction, no behavioural changes).
 - Enable `triage_boilerplate` periodic workflow to scan triage tickets for recurring patterns and propose boilerplate response templates.

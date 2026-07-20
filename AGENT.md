@@ -11,6 +11,7 @@
 
 `central-deploy` is a **generic deployment engine**.  Its source code MUST NOT contain
 any service-specific or repo-specific references:
+
 - No hard-coded service names (e.g. `"chat"`, `"cognee"`, `"mill"`)
 - No per-service allowlists, project aliases, or special-case branches
 - No hard-coded hostnames or deployment-specific URLs as defaults
@@ -18,7 +19,7 @@ any service-specific or repo-specific references:
 Service definitions belong in **declarative data**, never in engine code:
 
 | Data plane | Location |
-|---|---|
+| --- | --- |
 | Component configs (per-service Docker/image/port/volume specs) | `component_config_store` — persisted at `data/component_configs.json` and populated via the onboarding API (`POST /onboard/preflight` + `POST /onboard/confirm`) or the seed module at startup |
 | Virtual components (non-Docker chat-accessible services) | `LifecycleConfig.virtual_components` in `config/config.json` |
 | Langfuse project credentials | `LifecycleConfig.langfuse_projects` (dict of alias → `{public_key, secret_key}`) in `config/config.json` |
@@ -33,9 +34,11 @@ Service definitions belong in **declarative data**, never in engine code:
 ### Service State Machine
 
 Every managed service follows a strict state machine with seven states:
+
 - **STOPPED** / **STARTING** / **RUNNING** / **STOPPING** / **RESTARTING** / **FAILED** / **UNKNOWN**
 
 Allowed transitions are defined in `lifecycle/models.py`:
+
 - STOPPED → STARTING
 - STARTING → RUNNING | FAILED
 - RUNNING → STOPPING | RESTARTING
@@ -49,6 +52,7 @@ Endpoints enforce these transitions via `can_transition()` and return **409 Conf
 ### Component Model
 
 A **component** is a managed service defined by a `ComponentConfig` (`registry/models.py`):
+
 - `id` — stable slug matching `^[a-z0-9][a-z0-9-]*$`
 - `image` — container image reference (e.g. `ghcr.io/org/service:main`)
 - `container_name` — Docker container name
@@ -71,7 +75,7 @@ When a component has siblings, lifecycle actions (start/stop/restart/deploy/roll
 ### Health & System
 
 | Method | Path | Auth | Description |
-|--------|------|------|-------------|
+| -------- | ------ | ------ | ------------- |
 | GET | `/health` | **No** | Liveness probe |
 | GET | `/disk` | Yes | Host disk usage + Docker storage breakdown |
 | GET | `/system/update` | Yes | Is a newer server image available on the registry? |
@@ -86,7 +90,7 @@ When a component has siblings, lifecycle actions (start/stop/restart/deploy/roll
 All service endpoints require auth when configured.
 
 | Method | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | GET | `/services` | List all managed services |
 | GET | `/services/{name}` | Full status — state, image, health, digests |
 | GET | `/services/{name}/health` | Health status string |
@@ -109,7 +113,7 @@ Two-phase process:
 ### Config & Environment
 
 | Method | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | GET | `/services/{name}/config` | Config schema and current values |
 | PUT | `/services/{name}/config` | Merge and save config.yaml values |
 | GET | `/services/{name}/env` | Env and secrets (secrets masked) |
@@ -130,7 +134,7 @@ Registered **last** on the FastAPI app. Routes by Host subdomain: `{name}.{gatew
 ## Execution Backends
 
 | Backend | Config value | Description |
-|---------|-------------|-------------|
+| --------- | ------------- | ------------- |
 | `DockerSdkBackend` | `docker_sdk` | Uses `docker` Python SDK (default). Full deploy/rollback/log streaming. |
 | `DockerBackend` | `docker` | Uses `docker` CLI via subprocess. Limited — deploy/rollback raise `NotImplementedError`. |
 | `NoopBackend` | `noop` | All ops succeed silently. No Docker required. For testing. |
@@ -138,6 +142,7 @@ Registered **last** on the FastAPI app. Routes by Host subdomain: `{name}.{gatew
 ## Authentication
 
 Configured via environment variables (`ROBOTSIX_LIFECYCLE_` prefix):
+
 - `API_KEY` — `X-API-Key` header
 - `AUTH_USERNAME` + `AUTH_PASSWORD` — HTTP Basic Auth
 
@@ -148,7 +153,7 @@ Auth is **off** when no credentials are configured (dev mode). `/health` is alwa
 All settings loaded via `pydantic-settings` from environment or `.env.lifecycle`. Key variables:
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `HOST` | `0.0.0.0` | Server bind host |
 | `PORT` | `8100` | Server bind port |
 | `STORE_BACKEND` | `memory` | `memory` or `file` |

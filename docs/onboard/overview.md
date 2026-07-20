@@ -9,7 +9,7 @@ persisted as a `ComponentConfig`.
 ## Architecture
 
 | File | Purpose |
-|------|---------|
+| ------ | --------- |
 | `models.py` | Data types — `DerivedSpec` (primary parsed output), `SiblingDerivedSpec` (non-primary services), and error types (`FetchError`, `ParseError`, `ConfigParseError`). |
 | `fetcher.py` | Git-fetch layer — `fetch_repo_files()` shallow-clones an HTTPS repo, reads `deploy/docker-compose.yml`, optionally grabs `config/config.json`, and falls back to `config.example.json` or label-declared templates. `fetch_compose_bytes()` is a convenience wrapper. When a GitHub App installation token is provided, the clone URL is rewritten with `x-access-token` authentication to support private repos. |
 | `parser.py` | Core compose parser — `parse_compose()` validates a docker-compose.yml against the deploy contract and returns a `DerivedSpec`. Also exports `parse_config_json()` for companion config files. |

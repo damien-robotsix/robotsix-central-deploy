@@ -47,7 +47,7 @@ CaretakerScheduler.loop()  (scheduler.py)
 A `CaretakerFinding` describes a single issue discovered during a pass:
 
 | Field | Type | Purpose |
-|-------|------|---------|
+| ------- | ------ | --------- |
 | `component_id` | `str \| None` | Affected component (or `None` for system-wide) |
 | `repo_id` | `str \| None` | Board repo id for ticket filing |
 | `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION` |
@@ -61,7 +61,7 @@ All settings are managed via the settings API (`PUT /settings`) or
 environment variables (prefix `ROBOTSIX_LIFECYCLE_`).
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| ---------- | ------ | --------- | ------------- |
 | `caretaker_enabled` | `bool` | `False` | Master switch for the caretaker loop |
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |
 | `mill_component_id` | `str` | `"mill"` | Component id of the mill to report findings to |

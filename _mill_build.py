@@ -53,7 +53,7 @@ if _tomllib is not None:
         _project = _data.get("project", {})
         _NAME = _project.get("name", _NAME)
         _VERSION = _project.get("version", _VERSION)
-    except Exception:  # noqa: S110 — best-effort; pyproject.toml may be absent/unparseable
+    except Exception:  # noqa: S110 — best-effort; pyproject.toml may be absent/unparsable
         pass
 
 _NAME_NORMALIZED = _NAME.replace("-", "_")

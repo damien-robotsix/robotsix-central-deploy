@@ -1,4 +1,4 @@
-"""Unit tests for lifecyle.backends._auth_ops AuthOps."""
+"""Unit tests for lifecycle.backends._auth_ops AuthOps."""
 
 from __future__ import annotations
 
