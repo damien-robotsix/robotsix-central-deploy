@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import os
 import shutil
-from os.path import isabs, realpath
 
 from fastapi import APIRouter, Depends
 
@@ -29,8 +29,8 @@ async def get_disk_usage(
     config: LifecycleConfig = Depends(_get_config),
 ) -> DiskUsageResponse:
     """Host disk usage and Docker storage breakdown."""
-    disk_path = realpath(str(config.disk_path))
-    if not isabs(disk_path):
+    disk_path = os.path.realpath(str(config.disk_path))
+    if not os.path.isabs(disk_path):
         raise ValueError(f"disk_path must be absolute: {disk_path!r}")
     usage = shutil.disk_usage(disk_path)
     docker_df = await backend.disk_df()

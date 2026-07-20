@@ -111,11 +111,11 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     """
     cfg = request.app.state.config
     if not cfg.auth_required:
-        return RedirectResponse(url=_safe_redirect_target(next), status_code=303)
+        return RedirectResponse(url=_safe_next(next), status_code=303)
     token = request.cookies.get("session_token")
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
-        return RedirectResponse(url=_safe_redirect_target(next), status_code=303)
+        return RedirectResponse(url=_safe_next(next), status_code=303)
 
     # --- CSRF token -------------------------------------------------------
     from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
