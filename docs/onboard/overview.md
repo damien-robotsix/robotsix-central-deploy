@@ -11,7 +11,7 @@ persisted as a `ComponentConfig`.
 | File | Purpose |
 |------|---------|
 | `models.py` | Data types — `DerivedSpec` (primary parsed output), `SiblingDerivedSpec` (non-primary services), and error types (`FetchError`, `ParseError`, `ConfigParseError`). |
-| `fetcher.py` | Git-fetch layer — `fetch_repo_files()` shallow-clones an HTTPS repo, reads `deploy/docker-compose.yml`, optionally grabs `config/config.json`, and falls back to `config.example.json` or label-declared templates. `fetch_compose_bytes()` is a convenience wrapper. |
+| `fetcher.py` | Git-fetch layer — `fetch_repo_files()` shallow-clones an HTTPS repo, reads `deploy/docker-compose.yml`, optionally grabs `config/config.json`, and falls back to `config.example.json` or label-declared templates. `fetch_compose_bytes()` is a convenience wrapper. When a GitHub App installation token is provided, the clone URL is rewritten with `x-access-token` authentication to support private repos. |
 | `parser.py` | Core compose parser — `parse_compose()` validates a docker-compose.yml against the deploy contract and returns a `DerivedSpec`. Also exports `parse_config_json()` for companion config files. |
 | `port_utils.py` | Preflight helpers — `collect_occupied_host_ports()` scans deployed components for claimed ports; `find_free_host_port()` finds the lowest available port in a range. |
 
@@ -20,6 +20,10 @@ persisted as a `ComponentConfig`.
 1. **Preflight** (`POST /onboard/preflight`) — clones the repo, parses the compose
    file, and returns a `DerivedSpec` (including any sibling services) without
    persisting anything. The caller can review the derived spec before confirming.
+   When the GitHub App is configured (`github_app_id` / `github_app_private_key`)
+   and the git URL points to GitHub, an installation token is minted and injected
+   into the clone command so private repos clone successfully. Token retrieval
+   failures fall back to unauthenticated clone (public repos only).
 
 2. **Confirm** (`POST /onboard/confirm`) — accepts the `DerivedSpec` (possibly
    modified by the caller), persists a `ComponentConfig`, and deploys the primary
