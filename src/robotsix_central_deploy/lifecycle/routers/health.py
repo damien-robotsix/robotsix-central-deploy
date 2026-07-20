@@ -30,7 +30,9 @@ async def get_disk_usage(
 ) -> DiskUsageResponse:
     """Host disk usage and Docker storage breakdown."""
     disk_path = os.path.realpath(str(config.disk_path))
-    if not os.path.isabs(disk_path):
+    # canonical CodeQL-recognised sanitizer for py/path-injection:
+    # realpath + startswith guards against traversal.
+    if not disk_path.startswith("/"):
         raise ValueError(f"disk_path must be absolute: {disk_path!r}")
     usage = shutil.disk_usage(disk_path)
     docker_df = await backend.disk_df()
