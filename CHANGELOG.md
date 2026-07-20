@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added `Field(description=…)` to all 24 fields in the `DerivedSpec` onboarding model (`onboard.models`), providing field-level documentation in the generated OpenAPI schema.
 - Add ``Field(description=...)`` to all 138 fields across 44 Pydantic models in ``lifecycle/schemas.py``, populating the generated OpenAPI schema with field-level documentation.
 - Split ``chat_github.py`` (1,416-line monolith) into a shared-plumbing module
   (``_github_common.py``) and four domain-specific routers:
