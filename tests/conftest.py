@@ -9,7 +9,7 @@ server module before each test, and a function-scoped ``client``
 from __future__ import annotations
 
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 # ---------------------------------------------------------------------------
 # structlog may not be installed in lightweight test environments (e.g.
@@ -42,8 +42,6 @@ except ImportError:
     sys.modules["structlog.stdlib"] = _s.stdlib
     sys.modules["structlog.processors"] = _s.processors
 # ---------------------------------------------------------------------------
-
-from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -136,6 +134,31 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.settings_store = settings_store
     server_mod.app.state.rate_limit_store = rate_limit_store
     server_mod.app.state.http_client = MagicMock(spec=AsyncClient)
+
+
+@pytest.fixture(autouse=True)
+def _mock_structlog(monkeypatch):
+    """Ensure ``structlog`` is available as a mock in ``sys.modules``.
+
+    The ``lifecycle.cli`` module imports ``_logging``, which does a
+    top-level ``import structlog``.  In environments where structlog
+    is not installed (including the test sandbox), this fixture
+    prevents a ``ModuleNotFoundError`` during CLI argument-parsing
+    tests.  When structlog *is* installed (e.g. CI) the real module
+    is left untouched.
+    """
+    try:
+        import structlog  # noqa: F401
+    except ImportError:
+        mock = MagicMock()
+        # Provide the minimal surface that _logging.py references.
+        mock.stdlib.ProcessorFormatter = MagicMock()
+        monkeypatch.setitem(sys.modules, "structlog", mock)
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"X-API-Key": "test-key"}
 
 
 @pytest.fixture
