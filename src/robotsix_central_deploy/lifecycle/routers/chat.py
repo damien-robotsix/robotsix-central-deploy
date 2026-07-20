@@ -425,7 +425,7 @@ async def chat_update_config(
         logging.getLogger().setLevel(raw_level)
         logger.info(
             "Chat agent set log_level to %s via /chat/config/%s",
-            raw_level,  # codeql[py/log-injection]: validated against VALID_LOG_LEVELS above
+            raw_level,  # lgtm[py/log-injection]: validated against VALID_LOG_LEVELS above
             _sanitize_log(name),
         )
         if not body.values:
