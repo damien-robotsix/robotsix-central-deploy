@@ -14,6 +14,27 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from ..lifecycle.auth import verify_session, _safe_next
 from ..lifecycle.session import SessionStore
 
+
+def _safe_redirect_target(raw: str) -> str:
+    """Return a safe redirect target (open-redirect guard).
+
+    Parses the raw URL, rejects any target with a scheme or netloc
+    (authority), and reconstructs the safe URL from parsed components
+    so that CodeQL taint tracking recognises the sanitizer.
+    """
+    if not raw:
+        return "/ui"
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme or parsed.netloc:
+        return "/ui"
+    path = parsed.path or "/ui"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    if parsed.fragment:
+        path = f"{path}#{parsed.fragment}"
+    return path
+
+
 router = APIRouter()
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -190,6 +211,8 @@ async def login_submit(request: Request) -> Response:
 
     store: SessionStore = request.app.state.session_store
     token = store.create()
+    if not next_url.startswith("/"):
+        next_url = "/ui"
     response = RedirectResponse(url=next_url, status_code=303)
     # Share the session cookie across component subdomains so a login on the
     # base domain also authorizes subdomain-routed component UIs

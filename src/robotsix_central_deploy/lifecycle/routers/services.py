@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from .._config_utils import _sanitize_log
 from ..deps import (
     _compute_overall_health,
     _fetch_component_repo_files,
@@ -83,7 +84,8 @@ async def _gather_sibling_health(
                 sib_inspect = await backend.status(sib_record)
             except Exception:
                 logger.warning(
-                    "failed to inspect sibling '%s'; skipping", sib_record.name
+                    "failed to inspect sibling '%s'; skipping",
+                    _sanitize_log(sib_record.name),
                 )
                 continue
             sib_changed = (
@@ -135,14 +137,18 @@ async def _delete_component_volumes(
         if vol in seen:
             continue
         seen.add(vol)
-        logger.info("delete %s: removing volume %s (remove_volumes=true)", name, vol)
+        logger.info(
+            "delete %s: removing volume %s (remove_volumes=true)",
+            _sanitize_log(name),
+            _sanitize_log(vol),
+        )
         try:
             await backend.remove_volume(vol)
         except Exception:
             logger.warning(
                 "remove_volume failed for %s during delete of %s",
-                vol,
-                name,
+                _sanitize_log(vol),
+                _sanitize_log(name),
                 exc_info=True,
             )
 
@@ -425,7 +431,7 @@ async def _lifecycle_action(
     try:
         final_state = await getattr(backend, action_type)(record)
     except Exception as exc:
-        logger.exception("%s %s failed", action_type, name.replace("\n", "\\n"))
+        logger.exception("%s %s failed", action_type, _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -720,7 +726,7 @@ async def refresh_contract(
 
     logger.info(
         "Refreshed contract for %s from repo: %d field(s) changed (%s)",
-        name.replace("\n", "\\n"),
+        _sanitize_log(name),
         len(changed),
         ", ".join(changed) if changed else "none",
     )
@@ -790,13 +796,17 @@ async def delete_service(
             try:
                 await backend.stop(record)
             except Exception:
-                logger.warning("stop failed for %s during delete", name, exc_info=True)
+                logger.warning(
+                    "stop failed for %s during delete",
+                    _sanitize_log(name),
+                    exc_info=True,
+                )
             try:
                 await backend.remove_container(record)
             except Exception:
                 logger.warning(
                     "remove_container failed for %s during delete",
-                    name,
+                    _sanitize_log(name),
                     exc_info=True,
                 )
         for _sib_cfg, sib_record in pairs:
@@ -805,7 +815,7 @@ async def delete_service(
             except Exception:
                 logger.warning(
                     "stop failed for %s during delete",
-                    sib_record.name,
+                    _sanitize_log(sib_record.name),
                     exc_info=True,
                 )
             try:
@@ -813,7 +823,7 @@ async def delete_service(
             except Exception:
                 logger.warning(
                     "remove_container failed for %s during delete",
-                    sib_record.name,
+                    _sanitize_log(sib_record.name),
                     exc_info=True,
                 )
 
