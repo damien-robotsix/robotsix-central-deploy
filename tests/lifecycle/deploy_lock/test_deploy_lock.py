@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from robotsix_central_deploy import deploy_lock
+from robotsix_central_deploy.lifecycle import deploy_lock
 
 
 @pytest.fixture(autouse=True)

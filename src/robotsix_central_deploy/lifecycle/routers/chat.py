@@ -55,7 +55,7 @@ from ..schemas import (
     ChatAgentUpdateResponse,
 )
 from ..store import ServiceStore
-from ...deploy_lock import release_deploy_lock, try_acquire_deploy_lock
+from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore

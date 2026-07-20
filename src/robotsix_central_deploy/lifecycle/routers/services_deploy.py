@@ -26,7 +26,7 @@ from ..deps import (
     _get_sibling_pairs,
     _get_store,
 )
-from ...deploy_lock import (
+from ..deploy_lock import (
     get_deploy_lock_info,
     release_deploy_lock,
     set_deploy_lock_job_id,

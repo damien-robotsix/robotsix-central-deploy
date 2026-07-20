@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from robotsix_central_deploy._yaml_utils import (
+from robotsix_central_deploy.lifecycle._yaml_utils import (
     InvalidConfigStructureError,
     YamlParseError,
     YamlReadError,

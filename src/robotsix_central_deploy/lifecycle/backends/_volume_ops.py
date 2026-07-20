@@ -10,7 +10,7 @@ import asyncio
 import logging
 from typing import Any
 
-from robotsix_central_deploy._yaml_utils import (
+from robotsix_central_deploy.lifecycle._yaml_utils import (
     InvalidConfigStructureError,
     YamlParseError,
 )
