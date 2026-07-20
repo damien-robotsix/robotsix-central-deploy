@@ -1,3 +1,5 @@
+"""docker-compose.yml parser for the onboarding pipeline."""
+
 from __future__ import annotations
 
 import json

@@ -1,3 +1,5 @@
+"""Pydantic models for the registry layer: ComponentConfig, PortMapping, VolumeMount, etc."""
+
 from __future__ import annotations
 
 from typing import Optional

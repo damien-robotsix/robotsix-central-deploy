@@ -1,3 +1,5 @@
+"""Volume growth measurement helpers for the caretaker volume-audit subsystem."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

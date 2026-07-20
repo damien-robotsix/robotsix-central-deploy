@@ -1,3 +1,5 @@
+"""Audit-finding reporter that persists volume-audit results to a JSON log."""
+
 from __future__ import annotations
 
 import json
