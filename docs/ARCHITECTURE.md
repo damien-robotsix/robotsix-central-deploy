@@ -72,14 +72,7 @@ Docker volume growth over time.
 | `auth.py` | Authentication — API key + HTTP Basic Auth via FastAPI dependencies. |
 | `disk.py` | Host disk usage + `docker system df` breakdown (`GET /disk`). |
 
-**Public API surface**: `GET /services`, `GET /services/{name}`,
-`GET /services/{name}/health`, `GET /services/{name}/logs`,
-`POST /services/{name}/start`, `POST /services/{name}/stop`,
-`POST /services/{name}/restart`, `POST /services/{name}/deploy`,
-`POST /services/{name}/rollback`, `DELETE /services/{name}`,
-`GET /services/{name}/config`, `PUT /services/{name}/config`,
-`GET /services/{name}/env`, `PUT /services/{name}/env`,
-`DELETE /services/{name}/env/{key}`.
+**Public API surface**: `GET /services`, `GET /services/{name}`, `GET /services/{name}/health`, `GET /services/{name}/logs`, `POST /services/{name}/start`, `POST /services/{name}/stop`, `POST /services/{name}/restart`, `POST /services/{name}/deploy`, `POST /services/{name}/rollback`, `DELETE /services/{name}`, `GET /services/{name}/config` (secrets redacted to `"***"`), `PUT /services/{name}/config` (sentinel `"***"` preserves stored secret), `POST /services/{name}/config/assist` (secrets redacted in response), `POST /services/{name}/config/import`, `POST /services/{name}/config/refresh-schema`, `GET /services/{name}/env`, `PUT /services/{name}/env`, `DELETE /services/{name}/env/{key}`.
 
 ### `gateway/` — Reverse proxy
 
