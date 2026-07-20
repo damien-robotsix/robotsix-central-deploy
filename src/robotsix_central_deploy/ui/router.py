@@ -14,6 +14,22 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from ..lifecycle.auth import verify_session, _safe_next
 from ..lifecycle.session import SessionStore
 
+
+def _safe_redirect_target(raw: str) -> str:
+    """Return a safe redirect target (open-redirect guard).
+
+    Parses the raw URL and rejects any target with a scheme or netloc
+    (authority).  Returns the original string unmodified when safe so
+    that CodeQL taint tracking recognises the guard.
+    """
+    if not raw:
+        return "/ui"
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme or parsed.netloc:
+        return "/ui"
+    return raw
+
+
 router = APIRouter()
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -90,23 +106,11 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     """
     cfg = request.app.state.config
     if not cfg.auth_required:
-        parsed = urllib.parse.urlparse(next)
-        if parsed.scheme or parsed.netloc:
-            target = "/ui"
-        else:
-            target = parsed.path or "/ui"
-            if parsed.query:
-                target = f"{target}?{parsed.query}"
-        return RedirectResponse(url=target, status_code=303)
+        return RedirectResponse(url=_safe_redirect_target(next), status_code=303)
     token = request.cookies.get("session_token")
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
-        parsed = urllib.parse.urlparse(next)
-        if parsed.scheme or parsed.netloc:
-            target = "/ui"
-        else:
-            target = next or "/ui"
-        return RedirectResponse(url=target, status_code=303)
+        return RedirectResponse(url=_safe_redirect_target(next), status_code=303)
 
     # --- CSRF token -------------------------------------------------------
     from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
