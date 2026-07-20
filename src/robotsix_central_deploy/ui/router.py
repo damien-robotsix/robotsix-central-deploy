@@ -92,17 +92,15 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     """
     cfg = request.app.state.config
     if not cfg.auth_required:
-        # lgtm[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
         return RedirectResponse(
-            url=_safe_next(next),
+            url=_safe_next(next),  # codeql[py/url-redirection]: sanitized by _safe_next
             status_code=303,
         )
     token = request.cookies.get("session_token")
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
-        # lgtm[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
         return RedirectResponse(
-            url=_safe_next(next),
+            url=_safe_next(next),  # codeql[py/url-redirection]: sanitized by _safe_next
             status_code=303,
         )
 
@@ -200,9 +198,8 @@ async def login_submit(request: Request) -> Response:
 
     store: SessionStore = request.app.state.session_store
     token = store.create()
-    # lgtm[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
     response = RedirectResponse(
-        url=next_url,
+        url=next_url,  # codeql[py/url-redirection]: sanitized by _safe_next above
         status_code=303,
     )
     # Share the session cookie across component subdomains so a login on the

@@ -29,7 +29,7 @@ async def get_disk_usage(
 ) -> DiskUsageResponse:
     """Host disk usage and Docker storage breakdown."""
     usage = shutil.disk_usage(
-        config.disk_path  # lgtm[py/path-injection]: operator-configured path, not request-derived
+        config.disk_path  # codeql[py/path-injection]: operator-configured path, not request-derived
     )
     docker_df = await backend.disk_df()
     return DiskUsageResponse(
