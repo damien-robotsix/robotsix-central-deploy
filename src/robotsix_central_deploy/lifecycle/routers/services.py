@@ -84,7 +84,8 @@ async def _gather_sibling_health(
                 sib_inspect = await backend.status(sib_record)
             except Exception:
                 logger.warning(
-                    "failed to inspect sibling '%s'; skipping", _sanitize_log(sib_record.name)
+                    "failed to inspect sibling '%s'; skipping",
+                    _sanitize_log(sib_record.name),
                 )
                 continue
             sib_changed = (
@@ -136,7 +137,11 @@ async def _delete_component_volumes(
         if vol in seen:
             continue
         seen.add(vol)
-        logger.info("delete %s: removing volume %s (remove_volumes=true)", _sanitize_log(name), _sanitize_log(vol))
+        logger.info(
+            "delete %s: removing volume %s (remove_volumes=true)",
+            _sanitize_log(name),
+            _sanitize_log(vol),
+        )
         try:
             await backend.remove_volume(vol)
         except Exception:
@@ -791,7 +796,11 @@ async def delete_service(
             try:
                 await backend.stop(record)
             except Exception:
-                logger.warning("stop failed for %s during delete", _sanitize_log(name), exc_info=True)
+                logger.warning(
+                    "stop failed for %s during delete",
+                    _sanitize_log(name),
+                    exc_info=True,
+                )
             try:
                 await backend.remove_container(record)
             except Exception:
