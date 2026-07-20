@@ -18,16 +18,21 @@ from ..lifecycle.session import SessionStore
 def _safe_redirect_target(raw: str) -> str:
     """Return a safe redirect target (open-redirect guard).
 
-    Parses the raw URL and rejects any target with a scheme or netloc
-    (authority).  Returns the original string unmodified when safe so
-    that CodeQL taint tracking recognises the guard.
+    Parses the raw URL, rejects any target with a scheme or netloc
+    (authority), and reconstructs the safe URL from parsed components
+    so that CodeQL taint tracking recognises the sanitizer.
     """
     if not raw:
         return "/ui"
     parsed = urllib.parse.urlparse(raw)
     if parsed.scheme or parsed.netloc:
         return "/ui"
-    return raw
+    path = parsed.path or "/ui"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    if parsed.fragment:
+        path = f"{path}#{parsed.fragment}"
+    return path
 
 
 router = APIRouter()
