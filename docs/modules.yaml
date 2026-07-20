@@ -23,9 +23,7 @@ modules:
       # Root-level repo infrastructure
       - .gitattributes
       - .gitignore
-      - .gitleaksignore
       - .pre-commit-config.yaml
-      - .secrets.baseline
       - .trivyignore
       - .hadolint.yaml
       - .github/**/*

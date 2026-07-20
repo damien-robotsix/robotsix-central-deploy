@@ -1,0 +1,1 @@
+Replace gitleaks-action with TruffleHog in CI (no license, platform-agnostic secret scanning)

@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Replace gitleaks secret scanning with TruffleHog in CI (`.github/workflows/ci.yml`) and pre-commit (`.pre-commit-config.yaml`).  TruffleHog uses verified-only detection, requires no license key, and is platform-agnostic.  Removes the gitleaks-specific `.gitleaksignore` and the orphaned `.secrets.baseline` left over from a prior detect-secrets removal.
 - Onboard private repos: the preflight clone now authenticates via the
   GitHub App installation token when the App is configured and the git
   URL points to GitHub. Public repos and non-GitHub URLs are unaffected;

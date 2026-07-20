@@ -37,6 +37,14 @@ repos:
         types: [python]
         pass_filenames: false
 
+      - id: trufflehog
+        name: TruffleHog
+        description: Detect secrets in your data (verified only).
+        entry: bash -c 'trufflehog git file://. --since-commit HEAD --only-verified --fail'
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+
       - id: robotsix-modules-validate
         name: Module taxonomy validation
         entry: uv run robotsix-modules-validate docs/modules.yaml
