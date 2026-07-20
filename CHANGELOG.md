@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Split `chat.py` (1,035-line monolith) into `_chat_common.py` + `chat_components.py`, `chat_config.py`, `chat_self.py`, `chat_services.py`, `chat_audit.py` (structural extraction, no behavioural changes).
 - Enable `triage_boilerplate` periodic workflow to scan triage tickets for recurring patterns and propose boilerplate response templates.
 - Add chat-allowlisted self-update and self-restart for central-deploy itself: `POST /chat/services/central-deploy/update` (pull latest image + recreate via watchtower) and `POST /chat/services/central-deploy/restart`. Both return 202 immediately so the API can respond before the process is replaced. Central-deploy is automatically registered in `GET /services` at startup.
 - Caretaker: stop filing `caretaker/update_applied` draft tickets on routine digest-only redeploys. The digest change remains recorded in deploy history and service status; only `UPDATE_FAILED` (and health/volume/disk findings) still generate board tickets.
