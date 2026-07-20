@@ -18,6 +18,14 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_github
 
+::: robotsix_central_deploy.lifecycle.routers.chat_github_repos
+
+::: robotsix_central_deploy.lifecycle.routers.chat_github_security
+
+::: robotsix_central_deploy.lifecycle.routers.chat_github_pulls
+
+::: robotsix_central_deploy.lifecycle.routers.chat_github_actions
+
 ::: robotsix_central_deploy.lifecycle.routers.chat_preview
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_langfuse
