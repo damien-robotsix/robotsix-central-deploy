@@ -5052,32 +5052,39 @@
         "properties": {
           "volume_name": {
             "type": "string",
-            "title": "Volume Name"
+            "title": "Volume Name",
+            "description": "Docker volume name as reported by the daemon"
           },
           "component_id": {
             "type": "string",
-            "title": "Component Id"
+            "title": "Component Id",
+            "description": "Managed-component slug this volume belongs to"
           },
           "finding_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Finding At"
+            "title": "Finding At",
+            "description": "UTC timestamp when the threshold breach was detected"
           },
           "size_bytes": {
             "type": "integer",
-            "title": "Size Bytes"
+            "title": "Size Bytes",
+            "description": "Bytes consumed by the volume at finding time"
           },
           "delta_bytes": {
             "type": "integer",
-            "title": "Delta Bytes"
+            "title": "Delta Bytes",
+            "description": "Absolute growth since the previous audit"
           },
           "growth_pct": {
             "type": "number",
-            "title": "Growth Pct"
+            "title": "Growth Pct",
+            "description": "Percentage growth since the previous audit"
           },
           "detail": {
             "type": "string",
-            "title": "Detail"
+            "title": "Detail",
+            "description": "Human-readable description of the breach with context"
           }
         },
         "type": "object",
@@ -7848,7 +7855,8 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "title": "Enabled"
+            "title": "Enabled",
+            "description": "Whether the volume audit subsystem is active"
           },
           "last_scan_at": {
             "anyOf": [
@@ -7860,7 +7868,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Scan At"
+            "title": "Last Scan At",
+            "description": "UTC timestamp of the most recent scan; None if never scanned"
           },
           "volumes": {
             "items": {
@@ -7868,7 +7877,7 @@
             },
             "type": "array",
             "title": "Volumes",
-            "default": []
+            "description": "Growth records for all tracked volumes from the latest scan"
           },
           "recent_findings": {
             "items": {
@@ -7876,7 +7885,7 @@
             },
             "type": "array",
             "title": "Recent Findings",
-            "default": []
+            "description": "Recent threshold-breach findings from the latest scan"
           }
         },
         "type": "object",
@@ -7962,20 +7971,24 @@
         "properties": {
           "volume_name": {
             "type": "string",
-            "title": "Volume Name"
+            "title": "Volume Name",
+            "description": "Docker volume name as reported by the daemon"
           },
           "component_id": {
             "type": "string",
-            "title": "Component Id"
+            "title": "Component Id",
+            "description": "Managed-component slug this volume belongs to"
           },
           "measured_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Measured At"
+            "title": "Measured At",
+            "description": "UTC timestamp of the current snapshot"
           },
           "size_bytes": {
             "type": "integer",
-            "title": "Size Bytes"
+            "title": "Size Bytes",
+            "description": "Bytes consumed by the volume in the current snapshot"
           },
           "prev_size_bytes": {
             "anyOf": [
@@ -7986,7 +7999,8 @@
                 "type": "null"
               }
             ],
-            "title": "Prev Size Bytes"
+            "title": "Prev Size Bytes",
+            "description": "Bytes consumed in the previous snapshot; None on first measurement"
           },
           "delta_bytes": {
             "anyOf": [
@@ -7997,7 +8011,8 @@
                 "type": "null"
               }
             ],
-            "title": "Delta Bytes"
+            "title": "Delta Bytes",
+            "description": "Difference between current and previous size; None on first measurement"
           },
           "growth_pct": {
             "anyOf": [
@@ -8008,11 +8023,13 @@
                 "type": "null"
               }
             ],
-            "title": "Growth Pct"
+            "title": "Growth Pct",
+            "description": "Percentage growth since the previous snapshot; None on first measurement"
           },
           "flagged": {
             "type": "boolean",
             "title": "Flagged",
+            "description": "True when both the absolute and percentage growth thresholds are breached",
             "default": false
           }
         },
