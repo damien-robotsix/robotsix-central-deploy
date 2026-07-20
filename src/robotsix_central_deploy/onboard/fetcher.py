@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -57,7 +58,10 @@ def fetch_repo_files(
     # error output (since 2.26), but we redact anyway as a defence-
     # in-depth measure.
     clone_url = git_url
-    if github_token and "github.com" in git_url:
+    if github_token and urlparse(git_url).hostname in (
+        "github.com",
+        "www.github.com",
+    ):
         clone_url = git_url.replace(
             "https://github.com/",
             f"https://x-access-token:{github_token}@github.com/",

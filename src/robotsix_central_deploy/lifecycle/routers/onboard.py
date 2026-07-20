@@ -254,11 +254,15 @@ async def onboard_preflight(
                 repo,
             )
         except Exception:
+            # owner/repo come from a regex match on a user-supplied URL;
+            # sanitise to prevent log-injection (newline forgery).
+            safe_owner = owner.replace("\n", "_").replace("\r", "_")
+            safe_repo = repo.replace("\n", "_").replace("\r", "_")
             logger.warning(
                 "Cannot get GitHub App installation token for %s/%s; "
                 "cloning unauthenticated (public repos only)",
-                owner,
-                repo,
+                safe_owner,
+                safe_repo,
             )
 
     try:
