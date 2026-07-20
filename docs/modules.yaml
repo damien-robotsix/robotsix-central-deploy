@@ -9,14 +9,10 @@ modules:
     dependencies: []
     paths:
       - src/robotsix_central_deploy/__init__.py
-      - src/robotsix_central_deploy/_yaml_utils.py
-      - src/robotsix_central_deploy/deploy_lock.py
       - src/robotsix_central_deploy/lifecycle/**/*
       - tests/lifecycle/**/*
       - tests/conftest.py
       - tests/__init__.py
-      - tests/deploy_lock/**/*
-      - tests/yaml_utils/**/*
       - docs/ARCHITECTURE.md
       - docs/lifecycle/**/*
       - docs/changelog.md

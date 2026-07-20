@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from robotsix_central_deploy._yaml_utils import YamlParseError
+from robotsix_central_deploy.lifecycle._yaml_utils import YamlParseError
 from robotsix_central_deploy.lifecycle.backends._volume_ops import VolumeOps
 
 

@@ -1,0 +1,1 @@
+Reorganize module lifecycle: align deploy_lock and _yaml_utils to per-module layout (src/docs/tests)
