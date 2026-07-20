@@ -198,6 +198,18 @@ class ExecutionBackend(ABC):
         """
         pass
 
+    @abstractmethod
+    async def trigger_self_restart(self, target: SelfInspect) -> str:
+        """Restart the container identified by *target* via the Docker API.
+
+        The Docker daemon accepts the restart command and returns
+        immediately, then sends SIGTERM to the container asynchronously.
+        This allows the HTTP response to flush before the process is
+        killed. Returns the container id. Raises ``RuntimeError`` on
+        failure.
+        """
+        pass
+
     # -- claude-auth --------------------------------------------------------
 
     @abstractmethod

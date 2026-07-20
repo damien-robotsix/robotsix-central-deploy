@@ -2717,6 +2717,88 @@
         }
       }
     },
+    "/chat/services/central-deploy/restart": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Restart central-deploy itself (allowlisted)",
+        "description": "Restart the central-deploy container itself.\n\nReturns 202 immediately \u2014 the Docker daemon handles the restart\nasynchronously so the response can flush before SIGTERM.",
+        "operationId": "chat_self_restart_chat_services_central_deploy_restart_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentSelfRestartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Self-restart unsupported (backend or environment)"
+          }
+        }
+      }
+    },
+    "/chat/services/central-deploy/update": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Pull + recreate central-deploy itself (allowlisted)",
+        "description": "Pull the latest image and recreate the central-deploy container itself.\n\nLaunches a one-shot watchtower container that pulls the new image,\nstops the old container, and recreates it \u2014 from outside this process,\nwhich is the only safe way for the server to replace itself.  Returns\n202 immediately.",
+        "operationId": "chat_self_update_chat_services_central_deploy_update_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentSelfUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Self-update unsupported (backend or environment)"
+          }
+        }
+      }
+    },
     "/chat/services/{name}/restart": {
       "post": {
         "tags": [
@@ -5384,6 +5466,72 @@
         ],
         "title": "ChatAgentRestartResponse",
         "description": "Response body for POST /chat/services/{name}/restart."
+      },
+      "ChatAgentSelfRestartResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name",
+            "default": "central-deploy"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'self-restart'",
+            "default": "self-restart"
+          },
+          "container_id": {
+            "type": "string",
+            "title": "Container Id",
+            "description": "Container id of the restarted server"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": "Container restart triggered; the server will be back shortly."
+          }
+        },
+        "type": "object",
+        "required": [
+          "container_id"
+        ],
+        "title": "ChatAgentSelfRestartResponse",
+        "description": "Response body for POST /chat/services/central-deploy/restart."
+      },
+      "ChatAgentSelfUpdateResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name",
+            "default": "central-deploy"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'self-update'",
+            "default": "self-update"
+          },
+          "updater_container_id": {
+            "type": "string",
+            "title": "Updater Container Id",
+            "description": "Container id of the one-shot updater that performs the update"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": "Self-update triggered; the server will restart with the new image shortly."
+          }
+        },
+        "type": "object",
+        "required": [
+          "updater_container_id"
+        ],
+        "title": "ChatAgentSelfUpdateResponse",
+        "description": "Response body for POST /chat/services/central-deploy/update."
       },
       "ChatAgentUpdateResponse": {
         "properties": {

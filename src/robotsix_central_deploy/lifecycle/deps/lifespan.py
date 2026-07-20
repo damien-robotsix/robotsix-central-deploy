@@ -360,6 +360,36 @@ async def _init_component_registry(app: FastAPI) -> None:
         _store, component_config_store, registry, _config.virtual_components
     )
 
+    # -- Self-managed central-deploy service ---------------------------------
+    # Register central-deploy itself so it appears in GET /services and the
+    # chat agent can restart/update it through the allowlisted chat endpoints.
+    if component_config_store.get("central-deploy") is None:
+        try:
+            self_info = await _backend.inspect_self()
+        except NotImplementedError:
+            self_info = None
+        if self_info is not None:
+            central_deploy_cfg = ComponentConfig(
+                id="central-deploy",
+                image=self_info.image_ref,
+                container_name=self_info.container_name,
+                chat_agent_mutatable=True,
+                is_virtual=False,
+                allow_chat_access=False,
+            )
+            component_config_store.register(central_deploy_cfg)
+            registry.register(central_deploy_cfg)
+            existing = await _store.get("central-deploy")
+            if existing is None:
+                await _store.put(
+                    ServiceRecord(
+                        name="central-deploy",
+                        container_name=self_info.container_name,
+                        image=self_info.image_ref,
+                    )
+                )
+            logger.info("Registered self-managed 'central-deploy' service")
+
     # --- Volume audit subsystem ---
     _volume_audit_task: asyncio.Task[Any] | None = None
     if _config.volume_audit_enabled:

@@ -548,6 +548,32 @@ class ChatAgentUpdateResponse(BaseModel):
     )
 
 
+class ChatAgentSelfRestartResponse(BaseModel):
+    """Response body for POST /chat/services/central-deploy/restart."""
+
+    name: str = Field(default="central-deploy", description="Component name")
+    action: str = Field(default="self-restart", description="Always 'self-restart'")
+    container_id: str = Field(description="Container id of the restarted server")
+    detail: str = Field(
+        default="Container restart triggered; the server will be back shortly.",
+        description="Human-readable summary",
+    )
+
+
+class ChatAgentSelfUpdateResponse(BaseModel):
+    """Response body for POST /chat/services/central-deploy/update."""
+
+    name: str = Field(default="central-deploy", description="Component name")
+    action: str = Field(default="self-update", description="Always 'self-update'")
+    updater_container_id: str = Field(
+        description="Container id of the one-shot updater that performs the update"
+    )
+    detail: str = Field(
+        default="Self-update triggered; the server will restart with the new image shortly.",
+        description="Human-readable summary",
+    )
+
+
 class ChatAgentAuditEntryResponse(BaseModel):
     """One audit-log entry exposed by GET /chat/audit-log."""
 
