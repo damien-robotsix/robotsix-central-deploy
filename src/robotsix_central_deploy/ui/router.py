@@ -97,10 +97,14 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     token = request.cookies.get("session_token")
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
-        safe = _safe_next(next)
-        if not safe.startswith("/"):
-            safe = "/ui"
-        return RedirectResponse(url=safe, status_code=303)
+        parsed = urllib.parse.urlparse(next)
+        if parsed.scheme or parsed.netloc:
+            target = "/ui"
+        else:
+            target = parsed.path or "/ui"
+            if parsed.query:
+                target = f"{target}?{parsed.query}"
+        return RedirectResponse(url=target, status_code=303)
 
     # --- CSRF token -------------------------------------------------------
     from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
