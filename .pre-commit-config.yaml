@@ -28,6 +28,18 @@ repos:
     hooks:
       - id: hadolint-docker
 
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.17.2
+    hooks:
+      - id: markdownlint-cli2
+        args: ["#fix"]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        args: ["--ignore-words-list", "hist,ist,te,nd,vas", "--skip", "*.lock,uv.lock,*.css,*.map,*.min.*,.git/,node_modules/,site/,vendor/"]
+
   - repo: local
     hooks:
       - id: mypy

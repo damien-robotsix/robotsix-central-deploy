@@ -37,7 +37,7 @@ All settings are loaded from environment variables (or a `.env.lifecycle` file).
 Key variables:
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `ROBOTSIX_LIFECYCLE_HOST` | `0.0.0.0` | Server bind host |
 | `ROBOTSIX_LIFECYCLE_PORT` | `8100` | Server bind port |
 | `ROBOTSIX_LIFECYCLE_STORE_BACKEND` | `memory` | `memory` or `file` |

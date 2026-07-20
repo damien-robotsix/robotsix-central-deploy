@@ -37,3 +37,4 @@ _gen_openapi_tmp.py
 # local pip installs
 .local/
 .deps/
+node_modules/

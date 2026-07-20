@@ -172,7 +172,7 @@ class AuthOps:
                             "detail": f"Credentials expire in {remaining / 3600:.1f} hours.",
                         }
                 except ValueError, TypeError, OSError, OverflowError:
-                    pass  # unparseable expiry → treat as valid
+                    pass  # unparsable expiry → treat as valid
 
             return {"status": "authenticated"}
 

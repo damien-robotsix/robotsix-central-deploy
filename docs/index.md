@@ -27,7 +27,7 @@ Langfuse.
 
 - **[Architecture](ARCHITECTURE.md)** — system design, subpackage responsibilities,
   data flow, state machine, and gateway routing rules.
-- **[Module overviews](#)** — each subsystem is documented in its own
+- **Module overviews** — each subsystem is documented in its own
   `docs/<module>/overview.md`: Gateway, Onboarding, Registry, Registry Check,
   Caretaker (including Volume Audit).
 
@@ -72,15 +72,15 @@ layer.
 
 ### Enabled API scopes
 
-| Scope        | Env         | Reason |
-|-------------|-------------|--------|
-| CONTAINERS  | `CONTAINERS=1` | List, inspect, start, stop, restart, remove, create containers; stream logs |
-| POST        | `POST=1`       | Required for any mutating HTTP method (start/stop/restart/create) |
-| DELETE      | `DELETE=1`     | Required for container removal during deploy |
-| IMAGES      | `IMAGES=1`     | Required for `docker pull` |
-| VOLUMES     | `VOLUMES=1`    | Create, list, inspect, and remove named volumes for managed services |
-| BUILD       | `BUILD=1`      | Required for the dashboard's "Reclaim build cache" action (`POST /build/prune`) — central-deploy never builds images |
-| SYSTEM      | `SYSTEM=1`     | Required for `/system/df` Docker disk-usage reporting |
+| Scope | Env | Reason |
+| ------------- | ------------- | -------- |
+| CONTAINERS | `CONTAINERS=1` | List, inspect, start, stop, restart, remove, create containers; stream logs |
+| POST | `POST=1` | Required for any mutating HTTP method (start/stop/restart/create) |
+| DELETE | `DELETE=1` | Required for container removal during deploy |
+| IMAGES | `IMAGES=1` | Required for `docker pull` |
+| VOLUMES | `VOLUMES=1` | Create, list, inspect, and remove named volumes for managed services |
+| BUILD | `BUILD=1` | Required for the dashboard's "Reclaim build cache" action (`POST /build/prune`) — central-deploy never builds images |
+| SYSTEM | `SYSTEM=1` | Required for `/system/df` Docker disk-usage reporting |
 
 All other scopes (`EXEC`, `NETWORKS`, `SWARM`, …) are explicitly disabled
 (`=0`). `EXEC` remains off — central-deploy pulls pre-built images from GHCR

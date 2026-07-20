@@ -64,7 +64,7 @@ Docker volume growth over time.
 ### `lifecycle/` — Lifecycle control API
 
 | File | Role |
-|------|------|
+| ------ | ------ |
 | `app.py` | FastAPI application factory. Wires routers, middleware, background tasks. |
 | `models.py` | **Service state machine** — `ServiceState` enum, `TRANSITIONS` dict, `can_transition()`, plus all API Pydantic schemas (`ServiceStatus`, `ServiceListItem`, …). |
 | `backend.py` | **Execution backends** — `DockerSdkBackend` (default, full-featured), `DockerBackend` (CLI subprocess, limited), `NoopBackend` (testing). Each implements the same abstract interface (`start`, `stop`, `restart`, `deploy`, `rollback`, `status`). |
@@ -72,7 +72,14 @@ Docker volume growth over time.
 | `auth.py` | Authentication — API key + HTTP Basic Auth via FastAPI dependencies. |
 | `disk.py` | Host disk usage + `docker system df` breakdown (`GET /disk`). |
 
-**Public API surface**: `GET /services`, `GET /services/{name}`, `GET /services/{name}/health`, `GET /services/{name}/logs`, `POST /services/{name}/start`, `POST /services/{name}/stop`, `POST /services/{name}/restart`, `POST /services/{name}/deploy`, `POST /services/{name}/rollback`, `DELETE /services/{name}`, `GET /services/{name}/config`, `PUT /services/{name}/config`, `GET /services/{name}/env`, `PUT /services/{name}/env`, `DELETE /services/{name}/env/{key}`.
+**Public API surface**: `GET /services`, `GET /services/{name}`,
+`GET /services/{name}/health`, `GET /services/{name}/logs`,
+`POST /services/{name}/start`, `POST /services/{name}/stop`,
+`POST /services/{name}/restart`, `POST /services/{name}/deploy`,
+`POST /services/{name}/rollback`, `DELETE /services/{name}`,
+`GET /services/{name}/config`, `PUT /services/{name}/config`,
+`GET /services/{name}/env`, `PUT /services/{name}/env`,
+`DELETE /services/{name}/env/{key}`.
 
 ### `gateway/` — Reverse proxy
 
@@ -92,7 +99,7 @@ Docker volume growth over time.
 ### `registry/` — Persistence stores
 
 | File | Store class | Purpose |
-|------|-------------|---------|
+| ------ | ------------- | --------- |
 | `models.py` | *(data types)* | `ComponentConfig`, `ServiceConfig`, `PortMapping`, `VolumeMount`, `HealthCheck` — Pydantic models defining the shape of a deployed component. |
 | `loader.py` | `ComponentRegistry` | Reads **static** YAML manifest (`registry.yaml`) into an in-memory index. Backs the gateway's component name resolution. |
 | `config_store.py` | `ComponentConfigStore` | JSON store for **dynamically onboarded** components. Async-locked, atomic write (tmp + rename). |
@@ -110,7 +117,7 @@ Docker volume growth over time.
 ### `caretaker/volume_audit/` — Volume growth detection (caretaker sub-package)
 
 | File | Role |
-|------|------|
+| ------ | ------ |
 | `models.py` | Pydantic schemas: `VolumeSizeSnapshot`, `VolumeGrowthRecord`, `AuditFinding`, `VolumeAuditResponse`. |
 | `growth.py` | `compute_growth_records()` — compares two snapshots; flags a finding when both absolute and percentage thresholds are breached. |
 | `reporter.py` | `report_finding()` — logs at WARNING, appends to a local JSON file, optionally creates a board ticket. |
@@ -119,21 +126,25 @@ Docker volume growth over time.
 ### `caretaker/` — Background maintenance agent
 
 | File | Role |
-|------|------|
+| ------ | ------ |
 | `models.py` | Domain models: `FindingKind` enum (7 kinds — `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION`), `CaretakerFinding` Pydantic model for individual issues, and `CaretakerReport` for aggregate pass results. |
 | `mill_client.py` | `MillClient` — async HTTP wrapper for the mill component (`/tickets/ingest`, `/health`, `/repos`). Every method returns `bool` and never raises, so caretaker passes never fail on mill unavailability. |
 | `phases.py` | Three independent async phase functions: `phase_update` (deploys updated images for opted-in components), `phase_health` (checks container status), and `phase_volumes` (volume growth, orphan detection, disk usage). Each emits `CaretakerFinding` records. |
 | `scheduler.py` | `CaretakerScheduler` — orchestrator that runs the three-phase pass on a configurable `caretaker_interval_hours`. Public methods: `run_once() → CaretakerReport`, `get_status() → dict`, and `loop()` (async infinite loop, cancellable, re-reads settings each iteration). |
 
 **Key behaviours:**
-- Findings are reported to the mill when available; otherwise they fall back to local JSONL logging (`local_only` flag on the report).
-- The caretaker starts on a delay so the Docker backend and stores are fully initialised before the first pass.
-- Phase functions are independent of the scheduler and mill client — they receive all dependencies as parameters.
+
+- Findings are reported to the mill when available; otherwise they fall back
+  to local JSONL logging (`local_only` flag on the report).
+- The caretaker starts on a delay so the Docker backend and stores are fully
+  initialised before the first pass.
+- Phase functions are independent of the scheduler and mill client — they
+  receive all dependencies as parameters.
 
 ### `ui/` — Dashboard
 
 | File | Role |
-|------|------|
+| ------ | ------ |
 | `router.py` | Serves `dashboard.html` at `/ui` and `login.html` at `/login`. |
 | `dashboard.html` | Single-page HTML dashboard with service status, logs, and action buttons. |
 | `login.html` | Login page for session-based auth. |
@@ -342,7 +353,7 @@ logged but does not fail the primary operation.
 Three backends exist, selected by `EXECUTION_BACKEND`:
 
 | Backend | When to use |
-|---------|-------------|
+| --------- | ------------- |
 | `docker_sdk` (default) | Production. Full-featured: pull, create, start, stop, logs, health, deploy, rollback. |
 | `docker` | Legacy/fallback. Uses `docker` CLI via subprocess. Deploy/rollback raise `NotImplementedError`. |
 | `noop` | Testing. All operations succeed silently. Always reports `sha256:noop` digest. |

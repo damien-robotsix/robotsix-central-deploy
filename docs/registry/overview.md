@@ -59,7 +59,7 @@ provides atomic writes (write to tmp file, then rename) guarded by an
 `asyncio.Lock`.
 
 | Store | Purpose | Key methods |
-|-------|---------|-------------|
+| ------- | --------- | ------------- |
 | `EnvStore` | Per-component env overrides and encrypted secrets | `get(name)`, `upsert(name, env, secrets)`, `delete_key(name, key)` |
 | `ConfigYamlStore` | Per-component `config.yaml` schema + current values + rollback snapshots | `get_current(name)`, `update_current(name, vals)`, `save_previous(name)`, `get_previous(name)` |
 | `DeployHistoryStore` | Per-component deploy history (most-recent-first, capped at 20) | `append(name, entry)`, `list(name)` |

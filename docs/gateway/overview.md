@@ -40,7 +40,7 @@ Incoming request (Host: <name>.deploy.robotsix.net)
 ## Routing Modes
 
 | Mode | Example | Behaviour |
-|------|---------|-----------|
+| ------ | --------- | ----------- |
 | Subdomain HTTP | `mail.deploy.robotsix.net/api/v1/users` | Proxy to `mail` container |
 | Subdomain WebSocket | `ws://mail.deploy.robotsix.net/ws` | Bidirectional relay to `mail` container |
 | Legacy path-prefix | `deploy.robotsix.net/mail/api/v1/users` | 307 redirect to `mail.deploy.robotsix.net/api/v1/users` |

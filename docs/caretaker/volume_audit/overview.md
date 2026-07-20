@@ -46,7 +46,7 @@ Both must be true. Neither alone is sufficient.
 All settings are loaded via environment variables (prefix `ROBOTSIX_LIFECYCLE_`).
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| ---------- | ------ | --------- | ------------- |
 | `VOLUME_AUDIT_ENABLED` | `bool` | `False` | Master switch for the background loop |
 | `VOLUME_AUDIT_INTERVAL_SECONDS` | `int` | `3600` | Seconds between scan passes |
 | `VOLUME_AUDIT_SNAPSHOT_PATH` | `str` | `data/volume_audit_snapshots.json` | Snapshot persistence path |

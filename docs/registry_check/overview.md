@@ -13,6 +13,7 @@ polls container registries for the latest manifest digest of managed images.
 ## Repo Derivation
 
 **Docker Hub:**
+
 - `docker.io/robotsix/mill:latest` → `robotsix/mill`
 - `robotsix/mill:latest` (implicit) → `robotsix/mill`
 - `nginx:latest` (single-segment implicit) → `library/nginx`

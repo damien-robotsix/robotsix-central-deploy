@@ -1,7 +1,7 @@
 # central-deploy Docker Compose Contract
 
 > Version 1 — 2026-06-27
-
+>
 > **Canonical home: this repository.** The contract is implemented by
 > central-deploy's parser and served by the running server
 > (`GET /help/deploy-contract`), so this copy versions with the code.
@@ -20,7 +20,7 @@ conform to this contract before the UI onboarding flow will accept them.
 central-deploy expects the following files in a conforming service repo:
 
 | Path | Role |
-|------|------|
+| ------ | ------ |
 | `deploy/docker-compose.yml` | **Deploy compose** (this contract). Required. |
 | `config/config.schema.json` | Runtime config schema (§ 8). Optional. |
 | `docker-compose.yml` (repo root) | Dev compose — **ignored by central-deploy**. |
@@ -41,7 +41,7 @@ header as a line (conventionally the first line):
 # central-deploy-contract-version: 1
 ```
 
-**Versioning semantics**
+### Versioning semantics
 
 - The integer increments only when the contract gains a **breaking change**
   (a field that was previously ignored becomes required, a previously valid
@@ -229,6 +229,7 @@ name from that mount and writes the merged config into it before starting the
 container. Preflight returns an error if this label is missing.
 
 Example:
+
 ```yaml
 services:
   mailbot:
@@ -289,20 +290,20 @@ volumes:
 
 ## § 7  Ignored and prohibited fields
 
-| Compose field                                  | Parser behaviour |
-|------------------------------------------------|------------------|
-| `services.<name>.restart`                      | Silently ignored.  Central-deploy always applies `RestartPolicy: unless-stopped`. |
-| `services.<name>.build`                        | **Parse error.** Only pre-built images are supported (`BUILD=0` on socket-proxy). |
-| `services.<name>.depends_on`                   | Silently ignored. |
-| `services.<name>.networks`                     | Silently ignored.  Central-deploy manages container networking. |
-| `services.<name>.command` / `entrypoint`       | **Honoured.** Parsed (string form is `shlex`-split, list form taken as-is) and applied at container-create time, overriding the image CMD/ENTRYPOINT. Any other type is a **parse error**. When omitted, the image CMD/entrypoint is used as-is. |
+| Compose field | Parser behaviour |
+| ------------------------------------------------ | ------------------ |
+| `services.<name>.restart` | Silently ignored.  Central-deploy always applies `RestartPolicy: unless-stopped`. |
+| `services.<name>.build` | **Parse error.** Only pre-built images are supported (`BUILD=0` on socket-proxy). |
+| `services.<name>.depends_on` | Silently ignored. |
+| `services.<name>.networks` | Silently ignored.  Central-deploy manages container networking. |
+| `services.<name>.command` / `entrypoint` | **Honoured.** Parsed (string form is `shlex`-split, list form taken as-is) and applied at container-create time, overriding the image CMD/ENTRYPOINT. Any other type is a **parse error**. When omitted, the image CMD/entrypoint is used as-is. |
 | N>1 services, no service has `robotsix.deploy.primary: "true"` | **Parse error.** |
 | N>1 services, multiple services have `robotsix.deploy.primary: "true"` | **Parse error.** |
 | Host bind-mount in `volumes` | **Parse error.** |
 | `robotsix.deploy.host-docker-sock: "true"` on the primary service | **Parse error.** (non-primary services only) |
 | Top-level keys other than `version`, `services`, `volumes` | Silently ignored. |
-| `version` (top-level compose version string)   | Silently ignored. |
-| Labels outside `robotsix.deploy.*` namespace   | Silently ignored. |
+| `version` (top-level compose version string) | Silently ignored. |
+| Labels outside `robotsix.deploy.*` namespace | Silently ignored. |
 
 > **"Silently ignored"** means: parsed but not stored; no warning to the user.
 >
@@ -314,12 +315,14 @@ volumes:
 ## § 8  config/config.json + config/config.schema.json — typed configuration
 
 ### Presence
+
 Optional. If `config/config.schema.json` exists at the repo root, central-deploy fetches it
 at `POST /onboard/preflight` (alongside `deploy/docker-compose.yml`) and returns the parsed
 schema in the preflight response. The matching runtime config file `config/config.json`
 provides default values for the schema's properties.
 
 ### Schema format
+
 `config/config.schema.json` must be a valid JSON Schema document (draft-07 or later) with a
 top-level `"type": "object"` and a `"properties"` block. Nested objects become UI sections.
 Each property declares a `"type"` (`"string"`, `"integer"`, `"number"`, `"boolean"`,
@@ -327,8 +330,10 @@ Each property declares a `"type"` (`"string"`, `"integer"`, `"number"`, `"boolea
 submits the config form via the dashboard.
 
 ### Secret-field convention
+
 A property with `"format": "password"` and `"writeOnly": true` is a **secret field**,
 mirroring pydantic's `SecretStr` convention:
+
 - Rendered as a masked password input in the configuration UI
 - Stored in central-deploy's data volume; never echoed back in GET responses
   (masked as `"***"` in the `current` dict)
@@ -386,6 +391,7 @@ mirroring pydantic's `SecretStr` convention:
 ```
 
 ### Deploy compose requirement
+
 The deploy compose MUST include the `robotsix.deploy.config-target` label (see §5) on the
 primary service when `config/config.schema.json` is present. The label value is the full
 in-container path of the config file (e.g. `/home/mailbot/config/config.json`). The
@@ -409,10 +415,10 @@ volumes:
 ```
 
 ### Round-trip guarantee
+
 At onboard: template defaults written to volume.
 On each config save: merged values (defaults + user edits) re-written to volume.
 Service reads only from the mounted volume; central-deploy never uses host bind-mounts.
-
 
 ---
 
@@ -421,7 +427,7 @@ Service reads only from the mounted volume; central-deploy never uses host bind-
 Reference: `src/robotsix_central_deploy/registry/models.py`
 
 | Compose field | `ComponentConfig` field | Conversion notes |
-|---|---|---|
+| --- | --- | --- |
 | service key | `id: str` | Must match `^[a-z0-9][a-z0-9-]*$`. |
 | `container_name` (or service key) | `container_name: str` | Defaults to service key if absent. |
 | `services.<name>.image` | `image: str` | Verbatim GHCR ref. |
@@ -542,6 +548,7 @@ volumes:
 ```
 
 In this example:
+
 - Component id: `auto-mail` (user-supplied `name` from the preflight request).
 - Primary container: `auto-mail` (or overridden by `container_name:` on `board`).
 - Sibling container: `auto-mail-ingester` (derived from `<name>-ingester`).
@@ -595,7 +602,7 @@ volumes:                                # required iff any service has named vol
 ### Error classification
 
 | Condition | Result |
-|-----------|--------|
+| ----------- | -------- |
 | Missing `# central-deploy-contract-version` header | Parse error |
 | Unknown contract version | Parse error |
 | N>1 services, no `robotsix.deploy.primary: "true"` | Parse error |

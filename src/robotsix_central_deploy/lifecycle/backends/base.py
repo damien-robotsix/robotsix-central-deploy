@@ -237,6 +237,6 @@ class ExecutionBackend(ABC):
         """Read and return the parsed ``.credentials.json`` from *volume_name*.
 
         Returns the parsed JSON dict.  Raises ``ValueError`` when the file
-        is missing or unparseable.
+        is missing or unparsable.
         """
         pass
