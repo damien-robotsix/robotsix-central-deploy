@@ -1,0 +1,1 @@
+Added `Field(description=...)` to all 24 fields in the `DerivedSpec` onboarding model (`onboard.models`), providing tooltip-level documentation in the generated OpenAPI schema for every onboarding request/response field.
