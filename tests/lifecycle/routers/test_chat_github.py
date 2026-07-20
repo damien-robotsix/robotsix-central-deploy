@@ -428,6 +428,38 @@ class TestGetWorkflowRunLogs:
         )
         assert resp.status_code == 502
 
+    async def test_log_singular_returns_same_result(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        """``/log`` (singular) is an alias for ``/logs`` and returns the same output."""
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, owner, repo: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_and_extract_run_logs",
+            lambda token, owner, repo, run_id, job_filter=None, tail_kb=100: (
+                "=== Deploy to OVH/1_Set up job.txt ===\n"
+                "Run deploy.sh\n"
+                "Uploading via lftp...\n"
+            ),
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/10/log",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert "Deploy to OVH" in resp.text
+        assert "lftp" in resp.text
+
 
 class _FakeRepo:
     """Stand-in for a PyGithub ``Repository``."""

@@ -288,7 +288,7 @@ def _fetch_and_extract_run_logs(
                 status_code=404,
                 detail=f"Run {run_id} not found in {owner}/{repo}",
             )
-        if redirect_resp.status_code != 302:
+        if redirect_resp.status_code not in (302, 303):
             raise HTTPException(
                 status_code=502,
                 detail=(
@@ -415,3 +415,43 @@ async def get_workflow_run_logs(
         )
 
     return log_text
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/log",
+    summary="Get workflow run logs (concatenated per-job text)",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Run (or repository) not found"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def get_workflow_run_log(
+    owner: str,
+    repo: str,
+    run_id: int,
+    job: str | None = Query(
+        None,
+        description="Filter logs to jobs whose name contains this string",
+    ),
+    tail_kb: int = Query(
+        100,
+        description="Only return the last N KB per job log (0 for unlimited)",
+        ge=0,
+    ),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> str:
+    """Alias for the ``/logs`` endpoint (the canonical GitHub API path).
+
+    See :func:`get_workflow_run_logs` for full documentation.
+    """
+    return await get_workflow_run_logs(
+        owner=owner,
+        repo=repo,
+        run_id=run_id,
+        job=job,
+        tail_kb=tail_kb,
+        config=config,
+        _auth=_auth,
+    )
