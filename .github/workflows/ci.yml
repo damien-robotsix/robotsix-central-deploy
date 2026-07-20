@@ -221,6 +221,11 @@ jobs:
         run: uv sync --frozen
       - name: Install pre-commit
         run: pip install pre-commit
+      - name: Install TruffleHog
+        run: |
+          TRUFFLEHOG_VERSION=3.95.9
+          curl -sSfL "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin trufflehog
       - name: Run pre-commit hooks
         run: pre-commit run --all-files --show-diff-on-failure
       - name: Flag raw health/state/backend strings outside enum definition
