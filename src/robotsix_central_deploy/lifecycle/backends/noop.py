@@ -125,6 +125,9 @@ class NoopBackend(ExecutionBackend):
     ) -> str:
         return "noop-self-update"
 
+    async def trigger_self_restart(self, target: SelfInspect) -> str:
+        return "noop-self-restart"
+
     # -- claude-auth stubs --------------------------------------------------
 
     async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:

@@ -973,3 +973,22 @@ class DockerSdkBackend(ExecutionBackend):
             raise RuntimeError(
                 f"failed to launch self-update container: {exc}"
             ) from exc
+
+    async def trigger_self_restart(self, target: SelfInspect) -> str:
+        """Restart the container identified by *target* via the Docker API.
+
+        The Docker daemon accepts the restart command and returns
+        immediately, then sends SIGTERM to the container asynchronously.
+        This allows the HTTP response to flush before the process is
+        killed.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(
+                None, lambda: self._client.api.restart(target.container_id, timeout=10)
+            )
+        except docker.errors.APIError as exc:
+            raise RuntimeError(f"failed to restart self container: {exc}") from exc
+        return target.container_id

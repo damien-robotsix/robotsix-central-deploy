@@ -232,6 +232,11 @@ class DockerBackend(ExecutionBackend):
             "trigger_self_update not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def trigger_self_restart(self, target: SelfInspect) -> str:
+        raise NotImplementedError(
+            "trigger_self_restart not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     # -- claude-auth stubs --------------------------------------------------
 
     async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:

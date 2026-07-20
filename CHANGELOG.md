@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add chat-allowlisted self-update and self-restart for central-deploy itself: `POST /chat/services/central-deploy/update` (pull latest image + recreate via watchtower) and `POST /chat/services/central-deploy/restart`. Both return 202 immediately so the API can respond before the process is replaced. Central-deploy is automatically registered in `GET /services` at startup.
 - Caretaker: stop filing `caretaker/update_applied` draft tickets on routine digest-only redeploys. The digest change remains recorded in deploy history and service status; only `UPDATE_FAILED` (and health/volume/disk findings) still generate board tickets.
 - Add missing mkdocstrings directives for chat-agent GitHub router modules (`chat_github_repos`, `chat_github_security`, `chat_github_pulls`, `chat_github_actions`) to `docs/lifecycle/api.md`
 - Add module-level docstrings to nine public production modules in caretaker/volume_audit, onboard, and registry.
