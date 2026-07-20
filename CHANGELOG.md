@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added `Field(description=...)` to every Pydantic model field in `lifecycle/models.py`, surfacing field descriptions in the OpenAPI JSON Schema.
 - Add ``Field(description=...)`` to all 138 fields across 44 Pydantic models in ``lifecycle/schemas.py``, populating the generated OpenAPI schema with field-level documentation.
 - Split ``chat_github.py`` (1,416-line monolith) into a shared-plumbing module
   (``_github_common.py``) and four domain-specific routers:
