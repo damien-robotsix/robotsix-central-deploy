@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 
 from fastapi import APIRouter, Depends
@@ -28,9 +29,7 @@ async def get_disk_usage(
     config: LifecycleConfig = Depends(_get_config),
 ) -> DiskUsageResponse:
     """Host disk usage and Docker storage breakdown."""
-    usage = shutil.disk_usage(
-        config.disk_path  # codeql[py/path-injection]: operator-configured path, not request-derived
-    )
+    usage = shutil.disk_usage(os.path.realpath(str(config.disk_path)))
     docker_df = await backend.disk_df()
     return DiskUsageResponse(
         total_bytes=usage.total,
