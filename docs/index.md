@@ -23,6 +23,14 @@ Langfuse.
 - **Registry update checks** — polls GHCR for newer image digests.
 - **Volume audit** — background growth tracking of managed named volumes.
 
+## Documentation
+
+- **[Architecture](ARCHITECTURE.md)** — system design, subpackage responsibilities,
+  data flow, state machine, and gateway routing rules.
+- **[Module overviews](#)** — each subsystem is documented in its own
+  `docs/<module>/overview.md`: Gateway, Onboarding, Registry, Registry Check,
+  Caretaker (including Volume Audit).
+
 ## Security / Credentials
 
 The lifecycle server supports two authentication mechanisms,

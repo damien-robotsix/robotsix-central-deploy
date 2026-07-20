@@ -63,7 +63,14 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Deployment: deployment.md
+  - Architecture: ARCHITECTURE.md
   - Configuration: lifecycle/configuration.md
   - API Reference: lifecycle/api.md
+  - Modules:
+      - Gateway: gateway/overview.md
+      - Onboarding: onboard/overview.md
+      - Registry: registry/overview.md
+      - Registry Check: registry_check/overview.md
+      - Caretaker: caretaker/overview.md
   - Deploy Contract: ui/DEPLOY_CONTRACT.md
   - Changelog: changelog.md
