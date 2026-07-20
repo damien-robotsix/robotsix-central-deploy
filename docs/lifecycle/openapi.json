@@ -5693,7 +5693,8 @@
         "properties": {
           "key": {
             "type": "string",
-            "title": "Key"
+            "title": "Key",
+            "description": "Dotted config path, e.g. 'accounts.0.auth.username'"
           },
           "label": {
             "anyOf": [
@@ -5704,7 +5705,8 @@
                 "type": "null"
               }
             ],
-            "title": "Label"
+            "title": "Label",
+            "description": "Optional human-readable label; None derives from the key"
           }
         },
         "type": "object",
@@ -6661,26 +6663,31 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Test"
+            "title": "Test",
+            "description": "Health check command array, e.g. ['CMD', 'curl', '-f', 'http://localhost:8080/']"
           },
           "interval_seconds": {
             "type": "integer",
             "title": "Interval Seconds",
+            "description": "Seconds between health check runs",
             "default": 30
           },
           "timeout_seconds": {
             "type": "integer",
             "title": "Timeout Seconds",
+            "description": "Seconds before a health check attempt times out",
             "default": 10
           },
           "retries": {
             "type": "integer",
             "title": "Retries",
+            "description": "Consecutive failures needed to mark the container unhealthy",
             "default": 3
           },
           "start_period_seconds": {
             "type": "integer",
             "title": "Start Period Seconds",
+            "description": "Grace period after container start before counting failures",
             "default": 10
           }
         },
@@ -6968,15 +6975,18 @@
         "properties": {
           "host": {
             "type": "integer",
-            "title": "Host"
+            "title": "Host",
+            "description": "Host-side port number"
           },
           "container": {
             "type": "integer",
-            "title": "Container"
+            "title": "Container",
+            "description": "Container-side port number"
           },
           "protocol": {
             "type": "string",
             "title": "Protocol",
+            "description": "Transport protocol: 'tcp' or 'udp'",
             "default": "tcp"
           }
         },
@@ -7282,15 +7292,18 @@
         "properties": {
           "service_key": {
             "type": "string",
-            "title": "Service Key"
+            "title": "Service Key",
+            "description": "Short key identifying this sibling service within the component"
           },
           "container_name": {
             "type": "string",
-            "title": "Container Name"
+            "title": "Container Name",
+            "description": "Docker container name for this sibling service"
           },
           "image": {
             "type": "string",
-            "title": "Image"
+            "title": "Image",
+            "description": "Container image reference (registry/repo:tag)"
           },
           "ports": {
             "items": {
@@ -7298,7 +7311,7 @@
             },
             "type": "array",
             "title": "Ports",
-            "default": []
+            "description": "Port mappings for this sibling service"
           },
           "mounts": {
             "items": {
@@ -7306,7 +7319,7 @@
             },
             "type": "array",
             "title": "Mounts",
-            "default": []
+            "description": "Volume mounts for this sibling service"
           },
           "env": {
             "additionalProperties": {
@@ -7314,21 +7327,24 @@
             },
             "type": "object",
             "title": "Env",
-            "default": {}
+            "description": "Static environment variables for this sibling service"
           },
           "claude_mount": {
             "type": "boolean",
             "title": "Claude Mount",
+            "description": "If true, mount ~/.claude into this sibling's container",
             "default": false
           },
           "claude_mount_path": {
             "type": "string",
             "title": "Claude Mount Path",
+            "description": "Container path where the claude-auth volume is mounted",
             "default": "/home/app/.claude"
           },
           "host_docker_sock": {
             "type": "boolean",
             "title": "Host Docker Sock",
+            "description": "If true, bind-mount the host Docker socket into this sibling",
             "default": false
           },
           "health_check": {
@@ -7339,7 +7355,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Docker health check configuration for this sibling"
           },
           "command": {
             "anyOf": [
@@ -7353,7 +7370,8 @@
                 "type": "null"
               }
             ],
-            "title": "Command"
+            "title": "Command",
+            "description": "Override the image's default CMD"
           },
           "entrypoint": {
             "anyOf": [
@@ -7367,7 +7385,8 @@
                 "type": "null"
               }
             ],
-            "title": "Entrypoint"
+            "title": "Entrypoint",
+            "description": "Override the image's default ENTRYPOINT"
           },
           "tmpfs": {
             "items": {
@@ -7375,11 +7394,12 @@
             },
             "type": "array",
             "title": "Tmpfs",
-            "default": []
+            "description": "Paths to mount as tmpfs in this sibling's container (e.g. ['/run'])"
           },
           "mem_limit": {
             "type": "string",
             "title": "Mem Limit",
+            "description": "Memory limit for this sibling's container (e.g. '2g')",
             "default": "2g"
           },
           "user": {
@@ -7391,7 +7411,8 @@
                 "type": "null"
               }
             ],
-            "title": "User"
+            "title": "User",
+            "description": "Container user override (e.g. '1000:1000' or 'root')"
           }
         },
         "type": "object",
@@ -8156,15 +8177,18 @@
         "properties": {
           "host": {
             "type": "string",
-            "title": "Host"
+            "title": "Host",
+            "description": "Host path or named-volume name"
           },
           "container": {
             "type": "string",
-            "title": "Container"
+            "title": "Container",
+            "description": "Mount path inside the container"
           },
           "read_only": {
             "type": "boolean",
             "title": "Read Only",
+            "description": "If true, mount the volume as read-only",
             "default": false
           }
         },

@@ -113,6 +113,7 @@ extend-select = ["S"]
 "tests/onboard/test_fetcher.py" = ["S603", "S607"]
 
 [tool.mypy]
+plugins = ["pydantic.mypy"]
 strict = true
 
 [[tool.mypy.overrides]]
