@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added module overview pages and ARCHITECTURE.md to the mkdocs navigation, making existing package documentation discoverable from the built docs site.
 - Split `chat.py` (1,035-line monolith) into `_chat_common.py` + `chat_components.py`, `chat_config.py`, `chat_self.py`, `chat_services.py`, `chat_audit.py` (structural extraction, no behavioural changes).
 - Enable `triage_boilerplate` periodic workflow to scan triage tickets for recurring patterns and propose boilerplate response templates.
 - Fix the GitHub Actions run-log endpoint to handle both HTTP 302 and 303 redirects from GitHub when fetching the signed ZIP archive, and add a `/log` (singular) route alias so requests to either `/log` or `/logs` return the concatenated plain-text log output.
