@@ -19,11 +19,13 @@ from .._config_utils import _sanitize_log
 from ...registry.config_store import ComponentConfigStore
 
 from ._chat_common import (
-    _SKILL_CACHE_TTL,
     _inject_auth,
-    _skill_cache,
     logger,
 )
+
+# Simple TTL cache for skill bodies: {component_id: (timestamp, body)}
+_skill_cache: dict[str, tuple[float, str]] = {}
+_SKILL_CACHE_TTL: float = 60.0
 
 router = APIRouter(tags=["chat"])
 

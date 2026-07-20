@@ -5,7 +5,6 @@ Provides:
 - ``_inject_auth`` — attach auth metadata to component roster entries
 - ``_check_rate_limit`` — per-action rate-limit cooldown guard
 - ``_require_allowed_service`` — enforce chat-agent mutatable flag
-- ``_skill_cache`` / ``_SKILL_CACHE_TTL`` — TTL cache for component skill bodies
 - ``_RATE_LIMIT_COOLDOWNS`` — cooldown durations per action type
 """
 
@@ -21,10 +20,6 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
-
-# Simple TTL cache for skill bodies: {component_id: (timestamp, body)}
-_skill_cache: dict[str, tuple[float, str]] = {}
-_SKILL_CACHE_TTL: float = 60.0
 
 # Rate-limit cooldowns (seconds) per action type.
 _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
