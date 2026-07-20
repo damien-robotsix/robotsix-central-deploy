@@ -90,18 +90,22 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     """
     cfg = request.app.state.config
     if not cfg.auth_required:
-        target = _safe_next(next)
-        _p = urllib.parse.urlparse(target)
-        if _p.scheme or _p.netloc:
+        parsed = urllib.parse.urlparse(next)
+        if parsed.scheme or parsed.netloc:
             target = "/ui"
+        else:
+            target = parsed.path or "/ui"
+            if parsed.query:
+                target = f"{target}?{parsed.query}"
         return RedirectResponse(url=target, status_code=303)
     token = request.cookies.get("session_token")
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
-        target = _safe_next(next)
-        _p = urllib.parse.urlparse(target)
-        if _p.scheme or _p.netloc:
+        parsed = urllib.parse.urlparse(next)
+        if parsed.scheme or parsed.netloc:
             target = "/ui"
+        else:
+            target = next or "/ui"
         return RedirectResponse(url=target, status_code=303)
 
     # --- CSRF token -------------------------------------------------------
