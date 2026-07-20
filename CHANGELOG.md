@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Enable `triage_boilerplate` periodic workflow to scan triage tickets for recurring patterns and propose boilerplate response templates.
+- Fix the GitHub Actions run-log endpoint to handle both HTTP 302 and 303 redirects from GitHub when fetching the signed ZIP archive, and add a `/log` (singular) route alias so requests to either `/log` or `/logs` return the concatenated plain-text log output.
 - Add chat-allowlisted self-update and self-restart for central-deploy itself: `POST /chat/services/central-deploy/update` (pull latest image + recreate via watchtower) and `POST /chat/services/central-deploy/restart`. Both return 202 immediately so the API can respond before the process is replaced. Central-deploy is automatically registered in `GET /services` at startup.
 - Caretaker: stop filing `caretaker/update_applied` draft tickets on routine digest-only redeploys. The digest change remains recorded in deploy history and service status; only `UPDATE_FAILED` (and health/volume/disk findings) still generate board tickets.
 - New read-only `GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs` endpoint for the `github` component. Follows GitHub's run-logs redirect, unzips server-side, and returns concatenated per-job log text. Supports `?job=` (filter by job name) and `?tail_kb=` (cap per-job output, default 100 KB). (mill: Add GitHub Actions run-LOG read endpoint to the chat-agent github component (20260720T144911Z-add-github-actions-run-log-read-endpoint-4982))
