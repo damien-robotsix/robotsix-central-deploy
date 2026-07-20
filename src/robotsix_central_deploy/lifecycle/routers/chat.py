@@ -39,6 +39,7 @@ from .._config_utils import (
     _mask_secrets,
     _merge_config,
     _restore_secrets_from_current,
+    _sanitize_log,
     _strip_secret_values,
 )
 from ..models import (
@@ -294,15 +295,15 @@ async def list_chat_components(
             else:
                 logger.warning(
                     "chat components: skill probe for %s (%s) returned %s",
-                    comp_cfg.id,
-                    base_url,
+                    _sanitize_log(comp_cfg.id),
+                    _sanitize_log(base_url),
                     resp.status_code,
                 )
         except Exception as exc:
             logger.warning(
                 "chat components: skill probe failed for %s (%s): %s",
-                comp_cfg.id,
-                base_url,
+                _sanitize_log(comp_cfg.id),
+                _sanitize_log(base_url),
                 exc,
             )
 
@@ -423,7 +424,7 @@ async def chat_update_config(
             )
         logging.getLogger().setLevel(raw_level)
         logger.info(
-            "Chat agent set log_level to %s via /chat/config/%s", raw_level, name
+            "Chat agent set log_level to %s via /chat/config/%s", raw_level, _sanitize_log(name)
         )  # codeql[py/log-injection]: raw_level validated against VALID_LOG_LEVELS above
         if not body.values:
             # Only log_level was submitted — nothing to write to the
@@ -663,7 +664,7 @@ async def chat_restart_service(
     try:
         final_state = await backend.restart(record)
     except Exception as exc:
-        logger.exception("chat restart %s failed", name.replace("\n", "\\n"))
+        logger.exception("chat restart %s failed", _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
@@ -764,7 +765,7 @@ async def chat_update_service(
     try:
         outcome = await backend.deploy(record, config, config.image)
     except Exception as exc:
-        logger.exception("chat update %s failed", name.replace("\n", "\\n"))
+        logger.exception("chat update %s failed", _sanitize_log(name))
         await audit_store.append(
             ChatAgentAuditEntry(
                 component=name,
@@ -824,7 +825,7 @@ async def chat_update_service(
             except Exception:
                 logger.warning(
                     "chat update: deploy sibling '%s' failed",
-                    sib_name.replace("\n", "\\n"),
+                    _sanitize_log(sib_name),
                 )
 
     await audit_store.append(
