@@ -98,7 +98,7 @@
 
 ## Deploy Lock
 
-::: robotsix_central_deploy.deploy_lock
+::: robotsix_central_deploy.lifecycle.deploy_lock
 
 ## Dashboard UI
 
