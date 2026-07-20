@@ -3968,6 +3968,79 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/relax-merge-gate": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Relax merge gate \u2014 remove required approving PR reviews",
+        "description": "Set required approving pull-request reviews to 0 on *owner*/*repo*'s\ndefault branch (or *branch* from the request body).\n\nAll other protection settings \u2014 including required status checks \u2014 are\npreserved exactly as-is.  Re-running on an already-relaxed repo is a\nno-op success.\n\nUses the same credential as the security-features endpoint (GitHub App\ninstallation token first, repo-creation PAT as fallback).  Returns the\nfull branch protection object so the caller can verify the change.",
+        "operationId": "relax_merge_gate_chat_github_repos__owner___repo__relax_merge_gate_post",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RelaxMergeGateRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Relax Merge Gate Chat Github Repos  Owner   Repo  Relax Merge Gate Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository or branch not found"
+          },
+          "422": {
+            "description": "GitHub rejected the request"
+          },
+          "503": {
+            "description": "Neither GitHub App nor repo-admin PAT is configured"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/vulnerability-alerts": {
       "put": {
         "tags": [
@@ -7031,6 +7104,25 @@
         ],
         "title": "ReclaimResponse",
         "description": "Result of a build-cache reclaim operation."
+      },
+      "RelaxMergeGateRequest": {
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch",
+            "description": "Branch name to relax. Defaults to the repo's default branch."
+          }
+        },
+        "type": "object",
+        "title": "RelaxMergeGateRequest",
+        "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/relax-merge-gate``.\n\n*branch* is optional; when omitted the repo's default branch is used."
       },
       "RollbackRequest": {
         "properties": {

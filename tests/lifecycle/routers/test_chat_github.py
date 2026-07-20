@@ -2481,3 +2481,299 @@ class TestDismissReview:
             headers=auth_headers,
         )
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/relax-merge-gate
+# ---------------------------------------------------------------------------
+
+
+class _FakeBranch:
+    """Stand-in for a PyGithub ``Branch`` with protection support."""
+
+    def __init__(
+        self,
+        *,
+        required_approving_review_count: int = 1,
+        required_status_checks: list[str] | None = None,
+    ) -> None:
+        self._required_approving_review_count = required_approving_review_count
+        self._required_status_checks = required_status_checks or []
+        self.edit_required_pull_request_reviews = MagicMock()
+        self.get_protection = MagicMock()
+
+    @property
+    def raw_data(self) -> dict:
+        """Simulate the protection data returned after a mutation."""
+        return self.get_protection.return_value.raw_data
+
+
+class TestRelaxMergeGate:
+    @pytest.fixture(autouse=True)
+    def _clear_audit(self):
+        """Ensure audit store is clean before each test."""
+        server_mod.app.state.chat_agent_audit_store._entries = []
+        yield
+
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.post("/chat/github/repos/acme/widget/relax-merge-gate")
+        assert resp.status_code == 401
+
+    async def test_503_when_neither_credential_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/relax-merge-gate",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_relaxes_default_branch(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        protection_data: dict[str, object] = {
+            "required_status_checks": {
+                "strict": True,
+                "contexts": ["CI"],
+            },
+            "required_pull_request_reviews": {
+                "required_approving_review_count": 0,
+            },
+            "enforce_admins": False,
+        }
+
+        fake_protection = MagicMock()
+        fake_protection.raw_data = protection_data
+
+        fake_branch = _FakeBranch()
+        fake_branch.get_protection.return_value = fake_protection
+
+        fake_repo = _FakeRepo(default_branch="main")
+        fake_repo.get_branch = MagicMock(return_value=fake_branch)
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.return_value = fake_repo
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/relax-merge-gate",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == protection_data
+        fake_repo.get_branch.assert_called_once_with("main")
+        fake_branch.edit_required_pull_request_reviews.assert_called_once_with(
+            required_approving_review_count=0
+        )
+
+    async def test_relaxes_custom_branch(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        protection_data: dict[str, object] = {
+            "required_status_checks": {"contexts": ["CI"]},
+            "required_pull_request_reviews": {
+                "required_approving_review_count": 0,
+            },
+        }
+
+        fake_protection = MagicMock()
+        fake_protection.raw_data = protection_data
+
+        fake_branch = _FakeBranch()
+        fake_branch.get_protection.return_value = fake_protection
+
+        fake_repo = _FakeRepo(default_branch="main")
+        fake_repo.get_branch = MagicMock(return_value=fake_branch)
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.return_value = fake_repo
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/relax-merge-gate",
+            json={"branch": "develop"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        fake_repo.get_branch.assert_called_once_with("develop")
+
+    async def test_records_audit_entry(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        protection_data: dict[str, object] = {
+            "required_pull_request_reviews": {
+                "required_approving_review_count": 0,
+            },
+        }
+
+        fake_protection = MagicMock()
+        fake_protection.raw_data = protection_data
+
+        fake_branch = _FakeBranch()
+        fake_branch.get_protection.return_value = fake_protection
+
+        fake_repo = _FakeRepo(default_branch="main")
+        fake_repo.get_branch = MagicMock(return_value=fake_branch)
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.return_value = fake_repo
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/relax-merge-gate",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "relax_merge_gate"
+        assert entries[0].key == "acme/widget"
+
+    async def test_records_audit_entry_with_branch(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        protection_data: dict[str, object] = {
+            "required_pull_request_reviews": {
+                "required_approving_review_count": 0,
+            },
+        }
+
+        fake_protection = MagicMock()
+        fake_protection.raw_data = protection_data
+
+        fake_branch = _FakeBranch()
+        fake_branch.get_protection.return_value = fake_protection
+
+        fake_repo = _FakeRepo(default_branch="main")
+        fake_repo.get_branch = MagicMock(return_value=fake_branch)
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.return_value = fake_repo
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/relax-merge-gate",
+            json={"branch": "staging"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].new_value == {"branch": "staging"}
+
+    async def test_unknown_repo_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/ghost/relax-merge-gate",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_pat_fallback_when_app_not_configured(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_repo_create_token,
+    ):
+        """When the App is not configured, the PAT should be used instead."""
+        protection_data: dict[str, object] = {
+            "required_pull_request_reviews": {
+                "required_approving_review_count": 0,
+            },
+        }
+
+        fake_protection = MagicMock()
+        fake_protection.raw_data = protection_data
+
+        fake_branch = _FakeBranch()
+        fake_branch.get_protection.return_value = fake_protection
+
+        fake_repo = _FakeRepo(default_branch="main")
+        fake_repo.get_branch = MagicMock(return_value=fake_branch)
+
+        fake_client = _fake_client(fake_repo)
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_repo_create_client",
+            lambda config: fake_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/relax-merge-gate",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        fake_branch.edit_required_pull_request_reviews.assert_called_once_with(
+            required_approving_review_count=0
+        )

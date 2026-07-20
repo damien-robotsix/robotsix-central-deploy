@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- New `POST /chat/github/repos/{owner}/{repo}/relax-merge-gate` endpoint sets required approving PR reviews to 0 on the repo's default branch while preserving all other protection settings (especially required status checks). Intended to unblock mill auto-merge when branch protection requires human approval. Uses the same credential fallback as the security-features endpoint (GitHub App installation token first, repo-creation PAT as fallback).
 - Move `deploy_lock.py` and `_yaml_utils.py` from the package root into the `lifecycle` sub-package, completing the per-module layout alignment for the lifecycle module.
 - Add ``Field(description=...)`` to all 138 fields across 44 Pydantic models in ``lifecycle/schemas.py``, populating the generated OpenAPI schema with field-level documentation.
 - Split ``chat_github.py`` (1,416-line monolith) into a shared-plumbing module
