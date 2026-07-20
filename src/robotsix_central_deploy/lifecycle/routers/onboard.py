@@ -57,6 +57,16 @@ router = APIRouter(tags=["onboard"])
 # ---------------------------------------------------------------------------
 
 
+def _parse_github_owner_repo(git_url: str) -> tuple[str, str] | None:
+    """Extract (owner, repo) from a GitHub HTTPS git URL, or ``None``."""
+    import re
+
+    m = re.match(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", git_url)
+    if m:
+        return m.group(1), m.group(2)
+    return None
+
+
 async def _deploy_onboard_siblings(
     spec: "DerivedSpec",
     store: ServiceStore,
@@ -218,11 +228,50 @@ async def onboard_preflight(
 
     # Fetch repo files (git clone is blocking → run in executor)
     loop = asyncio.get_running_loop()
+
+    # Try to get a GitHub App installation token so the clone works
+    # for private repos.  Public repos and non-GitHub URLs are fine
+    # without a token — fall back silently.
+    github_token: str | None = None
+    parsed = _parse_github_owner_repo(req.git_url)
+    if (
+        parsed is not None
+        and lifecycle_config.github_app_id
+        and lifecycle_config.github_app_private_key
+    ):
+        owner, repo = parsed
+        try:
+            from robotsix_central_deploy.lifecycle.github_app import (
+                get_installation_token_sync,
+            )
+
+            github_token = await loop.run_in_executor(
+                None,
+                get_installation_token_sync,
+                lifecycle_config.github_app_id,
+                lifecycle_config.github_app_private_key,
+                owner,
+                repo,
+            )
+        except Exception:
+            # owner/repo come from a regex match on a user-supplied URL;
+            # sanitise to prevent log-injection (newline forgery).
+            safe_owner = owner.replace("\n", "_").replace("\r", "_")
+            safe_repo = repo.replace("\n", "_").replace("\r", "_")
+            logger.warning(
+                "Cannot get GitHub App installation token for %s/%s; "
+                "cloning unauthenticated (public repos only)",
+                safe_owner,
+                safe_repo,
+            )
+
     try:
         repo_files = await loop.run_in_executor(
             None,
             fetch_repo_files,
             req.git_url,
+            30,
+            github_token,
         )
     except FetchError as e:
         raise HTTPException(status_code=422, detail={"error": str(e)})

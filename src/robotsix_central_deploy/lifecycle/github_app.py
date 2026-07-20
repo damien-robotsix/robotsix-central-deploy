@@ -47,6 +47,24 @@ def _build_client_sync(app_id: str, private_key: str, owner: str, repo: str) -> 
     return integration.get_github_for_installation(installation.id)
 
 
+def get_installation_token_sync(
+    app_id: str, private_key: str, owner: str, repo: str
+) -> str:
+    """Return a raw GitHub App installation access token for *owner*/*repo*.
+
+    The token is suitable for use as a Bearer token or in an
+    ``x-access-token`` git credential.  It is never cached — callers
+    should minimise calls (the preflight handler calls this once per
+    onboarding request).
+    """
+    from github import Auth, GithubIntegration
+
+    integration = GithubIntegration(auth=Auth.AppAuth(app_id, private_key))
+    installation = integration.get_repo_installation(owner, repo)
+    access_token = integration.get_access_token(installation.id)
+    return access_token.token
+
+
 async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> object:
     """Return a cached (or freshly-built) ``Github`` client for *owner*/*repo*.
 
