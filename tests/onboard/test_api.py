@@ -326,6 +326,165 @@ class TestOnboardPreflight:
         assert any("mail-auto-mail-data" in c for c in data["collisions"])
         assert any("mail-auto-mail-logs" in c for c in data["collisions"])
 
+    async def test_github_token_passed_to_fetch_repo_files(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """When the GitHub App is configured and the URL is GitHub,
+        the installation token is fetched and passed to fetch_repo_files."""
+        cfg: LifecycleConfig = server_mod.app.state.config
+        cfg.github_app_id = "123456"
+        cfg.github_app_private_key = "fake-pem"
+
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_json=None
+                ),
+            ) as mock_fetch,
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+            patch(
+                "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
+                return_value="ghs_test123",
+            ) as mock_token,
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        # Token should have been requested for the right owner/repo
+        mock_token.assert_called_once_with("123456", "fake-pem", "org", "cool-app")
+        # fetch_repo_files should have received the token
+        mock_fetch.assert_called_once()
+        call_args = mock_fetch.call_args
+        assert call_args.args[0] == "https://github.com/org/cool-app.git"
+        assert call_args.args[2] == "ghs_test123"
+
+    async def test_github_token_not_fetched_when_app_unconfigured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """When the GitHub App is not configured, no token is fetched."""
+        cfg: LifecycleConfig = server_mod.app.state.config
+        cfg.github_app_id = ""
+        cfg.github_app_private_key = ""
+
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_json=None
+                ),
+            ) as mock_fetch,
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        # No token was passed — 3rd positional arg should be None
+        call_args = mock_fetch.call_args
+        assert call_args.args[2] is None
+
+    async def test_github_token_not_fetched_for_non_github_url(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """When the URL is not a GitHub URL, no token is fetched even
+        if the App is configured."""
+        cfg: LifecycleConfig = server_mod.app.state.config
+        cfg.github_app_id = "123456"
+        cfg.github_app_private_key = "fake-pem"
+
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_json=None
+                ),
+            ) as mock_fetch,
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://gitlab.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        # No token was passed — 3rd positional arg should be None
+        call_args = mock_fetch.call_args
+        assert call_args.args[2] is None
+
+    async def test_github_token_failure_falls_back(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """When token retrieval raises, preflight still succeeds
+        (falls back to unauthenticated clone)."""
+        cfg: LifecycleConfig = server_mod.app.state.config
+        cfg.github_app_id = "123456"
+        cfg.github_app_private_key = "fake-pem"
+
+        spec = _make_derived_spec("cool-app")
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes", config_json=None
+                ),
+            ) as mock_fetch,
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+            patch(
+                "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
+                side_effect=RuntimeError("installation not found"),
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/private-repo.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 200
+        # No token on failure — 3rd positional arg should be None
+        call_args = mock_fetch.call_args
+        assert call_args.args[2] is None
+
 
 # ---------------------------------------------------------------------------
 # POST /onboard/confirm — helpers

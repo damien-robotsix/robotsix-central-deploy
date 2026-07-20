@@ -22,7 +22,9 @@ class RepoFiles:
     config_schema_json: bytes | None = None  # config/config.schema.json bytes, or None
 
 
-def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
+def fetch_repo_files(
+    git_url: str, timeout_sec: int = 30, github_token: str | None = None
+) -> RepoFiles:
     """Clone a repo shallowly and return the bytes of deploy/docker-compose.yml
     and (if present) config/config.json.
 
@@ -39,6 +41,10 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
       ``robotsix.deploy.config-template`` label on the first service
       in the compose file points to a relative path inside the repo.
 
+    If *github_token* is provided and *git_url* points to GitHub, the
+    URL is rewritten to use ``x-access-token`` authentication so the
+    clone works for private repos the GitHub App is installed on.
+
     Raises:
         FetchError: if the URL is not https://, git clone fails, or
             ``deploy/docker-compose.yml`` is absent from the cloned repo.
@@ -46,15 +52,29 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
     if not git_url.startswith("https://"):
         raise FetchError("only https:// git URLs are supported")
 
+    # If a GitHub token is provided, inject it into the URL so the
+    # clone works for private repos.  git sanitises credentials in
+    # error output (since 2.26), but we redact anyway as a defence-
+    # in-depth measure.
+    clone_url = git_url
+    if github_token and "github.com" in git_url:
+        clone_url = git_url.replace(
+            "https://github.com/",
+            f"https://x-access-token:{github_token}@github.com/",
+            1,
+        )
+
     with tempfile.TemporaryDirectory() as tmpdir:
         proc = subprocess.run(
-            ["git", "clone", "--depth", "1", git_url, tmpdir],
+            ["git", "clone", "--depth", "1", clone_url, tmpdir],
             check=False,
             capture_output=True,
             timeout=timeout_sec,
         )
         if proc.returncode != 0:
             stderr_tail = proc.stderr.decode(errors="replace")[:500]
+            if github_token:
+                stderr_tail = stderr_tail.replace(github_token, "***")
             raise FetchError(f"git clone failed: {stderr_tail}")
 
         compose_path = Path(tmpdir) / "deploy" / "docker-compose.yml"
@@ -106,7 +126,9 @@ def fetch_repo_files(git_url: str, timeout_sec: int = 30) -> RepoFiles:
         )
 
 
-def fetch_compose_bytes(git_url: str, timeout_sec: int = 30) -> bytes:
+def fetch_compose_bytes(
+    git_url: str, timeout_sec: int = 30, github_token: str | None = None
+) -> bytes:
     """Clone a repo shallowly and return the raw bytes of its
     ``deploy/docker-compose.yml``.
 
@@ -118,4 +140,4 @@ def fetch_compose_bytes(git_url: str, timeout_sec: int = 30) -> bytes:
         FetchError: if the URL is not https://, git clone fails, or
             ``deploy/docker-compose.yml`` is absent from the cloned repo.
     """
-    return fetch_repo_files(git_url, timeout_sec).compose_bytes
+    return fetch_repo_files(git_url, timeout_sec, github_token).compose_bytes

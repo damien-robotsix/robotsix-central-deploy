@@ -425,3 +425,121 @@ class TestFetchRepoFilesTemplateFallback:
 
         assert result.config_json is None
         assert result.config_json_template is None
+
+
+# ---------------------------------------------------------------------------
+# fetch_repo_files — github_token parameter
+# ---------------------------------------------------------------------------
+
+
+class TestFetchRepoFilesGitHubToken:
+    """Tests for the ``github_token`` parameter of ``fetch_repo_files``."""
+
+    def test_github_token_injects_x_access_token_in_url(self, tmp_path: Path):
+        """When *github_token* is provided and the URL is GitHub, the
+        clone URL is rewritten with ``x-access-token`` authentication."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+        )
+        _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
+
+        captured_urls: list[str] = []
+
+        def _capture_url(args, **kwargs):
+            if args[:4] == ["git", "clone", "--depth", "1"]:
+                captured_urls.append(args[4])
+            return _real_git_clone_side_effect(source_repo)(args, **kwargs)
+
+        with mock.patch("subprocess.run", side_effect=_capture_url):
+            fetch_repo_files(
+                "https://github.com/owner/repo.git", github_token="ghs_test123"
+            )
+
+        assert len(captured_urls) == 1
+        assert captured_urls[0] == (
+            "https://x-access-token:ghs_test123@github.com/owner/repo.git"
+        )
+
+    def test_github_token_not_injected_for_non_github_url(self, tmp_path: Path):
+        """When the URL is not a GitHub URL, the token is NOT injected."""
+        source_repo = tmp_path / "source"
+        _init_local_git_repo(
+            source_repo,
+            deploy_compose=b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n",
+        )
+
+        captured_urls: list[str] = []
+
+        def _capture_url(args, **kwargs):
+            if args[:4] == ["git", "clone", "--depth", "1"]:
+                captured_urls.append(args[4])
+            return _real_git_clone_side_effect(source_repo)(args, **kwargs)
+
+        with mock.patch("subprocess.run", side_effect=_capture_url):
+            fetch_repo_files(
+                "https://gitlab.com/owner/repo.git", github_token="glpat_test123"
+            )
+
+        assert len(captured_urls) == 1
+        assert captured_urls[0] == "https://gitlab.com/owner/repo.git"
+
+    def test_token_redacted_from_clone_failure_error(self):
+        """When git clone fails and a token was used, the error message
+        has the token redacted."""
+        with mock.patch("subprocess.run") as m_run:
+            m_run.return_value = mock.Mock(
+                returncode=128,
+                stderr=b"fatal: remote error: Repository not found.\n",
+            )
+            with pytest.raises(FetchError, match="git clone failed"):
+                fetch_repo_files(
+                    "https://github.com/owner/repo.git",
+                    github_token="ghs_test123",
+                )
+            # The error message must NOT contain the token
+            try:
+                fetch_repo_files(
+                    "https://github.com/owner/repo.git",
+                    github_token="ghs_test123",
+                )
+            except FetchError as e:
+                assert "ghs_test123" not in str(e)
+
+    def test_token_redacted_when_stderr_contains_token(self):
+        """If stderr accidentally includes the token string, it is
+        replaced with ``***`` in the FetchError message."""
+        with mock.patch("subprocess.run") as m_run:
+            m_run.return_value = mock.Mock(
+                returncode=128,
+                stderr=b"error: https://x-access-token:ghs_test123@github.com/ not accessible\n",
+            )
+            with pytest.raises(FetchError) as exc_info:
+                fetch_repo_files(
+                    "https://github.com/owner/repo.git",
+                    github_token="ghs_test123",
+                )
+            assert "ghs_test123" not in str(exc_info.value)
+            assert "***" in str(exc_info.value)
+
+    def test_no_token_clone_still_works(self, tmp_path: Path):
+        """When *github_token* is ``None``, behavior is unchanged."""
+        source_repo = tmp_path / "source"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n"
+            b"  svc:\n"
+            b"    image: img:latest\n"
+        )
+        _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
+
+        with mock.patch(
+            "subprocess.run",
+            side_effect=_real_git_clone_side_effect(source_repo),
+        ):
+            result = fetch_repo_files("https://github.com/owner/repo.git")
+
+        assert result.compose_bytes == compose_bytes
