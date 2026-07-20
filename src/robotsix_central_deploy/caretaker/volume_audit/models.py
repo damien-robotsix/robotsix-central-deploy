@@ -1,3 +1,5 @@
+"""Pydantic models for volume-audit findings, snapshots, and growth records."""
+
 from __future__ import annotations
 
 from datetime import datetime

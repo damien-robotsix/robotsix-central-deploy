@@ -1,3 +1,5 @@
+"""Git-clone and docker-compose.yml fetcher for the onboarding pipeline."""
+
 from __future__ import annotations
 
 import subprocess

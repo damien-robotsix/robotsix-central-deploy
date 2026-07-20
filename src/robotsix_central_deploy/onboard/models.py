@@ -1,3 +1,5 @@
+"""Pydantic models for the onboarding pipeline: preflight inputs, derived specs, and confirm payloads."""
+
 from __future__ import annotations
 
 from typing import Any, Optional

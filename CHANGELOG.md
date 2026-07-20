@@ -8,6 +8,7 @@ All notable changes to robotsix-central-deploy.
 
 - Caretaker: stop filing `caretaker/update_applied` draft tickets on routine digest-only redeploys. The digest change remains recorded in deploy history and service status; only `UPDATE_FAILED` (and health/volume/disk findings) still generate board tickets.
 - Add missing mkdocstrings directives for chat-agent GitHub router modules (`chat_github_repos`, `chat_github_security`, `chat_github_pulls`, `chat_github_actions`) to `docs/lifecycle/api.md`
+- Add module-level docstrings to nine public production modules in caretaker/volume_audit, onboard, and registry.
 - Replace gitleaks secret scanning with TruffleHog in CI (`.github/workflows/ci.yml`) and pre-commit (`.pre-commit-config.yaml`).  TruffleHog uses verified-only detection, requires no license key, and is platform-agnostic.  Removes the gitleaks-specific `.gitleaksignore` and the orphaned `.secrets.baseline` left over from a prior detect-secrets removal.
 - Onboard private repos: the preflight clone now authenticates via the
   GitHub App installation token when the App is configured and the git

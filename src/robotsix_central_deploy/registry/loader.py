@@ -1,3 +1,5 @@
+"""Registry loader: reads and validates component configs and env/secrets from disk."""
+
 from __future__ import annotations
 
 from pathlib import Path

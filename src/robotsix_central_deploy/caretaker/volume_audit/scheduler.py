@@ -1,3 +1,5 @@
+"""Periodic volume-audit scheduler: measures, records, and reports on managed volumes."""
+
 from __future__ import annotations
 
 import asyncio
