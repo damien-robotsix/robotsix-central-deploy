@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FindingKind(str, Enum):
@@ -49,12 +49,25 @@ class CaretakerFinding(BaseModel):
     (untracked, no matching onboarded repo).
     """
 
-    component_id: str = ""  # "" for host/orphan findings
-    repo_id: str = ""  # "" = untracked, local-only
-    kind: FindingKind
-    title: str
-    detail: str
-    severity: Literal["warning", "error"] = "warning"
+    component_id: str = Field(
+        default="",
+        description="Managed-component slug; empty for host-level or orphan-volume findings",
+    )
+    repo_id: str = Field(
+        default="",
+        description="Upstream repository identifier; empty when the finding is untracked",
+    )
+    kind: FindingKind = Field(
+        description="Category of the finding (update_applied, update_failed, health, volume_growth, volume_orphan, disk, port_collision)"
+    )
+    title: str = Field(description="Short human-readable summary of the finding")
+    detail: str = Field(
+        description="Extended explanation with context and remediation hints"
+    )
+    severity: Literal["warning", "error"] = Field(
+        default="warning",
+        description="Severity level: 'warning' for actionable issues, 'error' for failures requiring attention",
+    )
 
 
 class CaretakerReport(BaseModel):
@@ -68,12 +81,37 @@ class CaretakerReport(BaseModel):
     untracked repo, or explicitly opted out of remote reporting).
     """
 
-    started_at: datetime
-    finished_at: datetime
-    findings: list[CaretakerFinding] = []
-    phases_run: list[str] = []
-    mill_reported: int = 0
-    local_only: int = 0
-    errors: list[str] = []
-    mill_reachable: bool = True
-    mill_reachable_detail: str = ""
+    started_at: datetime = Field(
+        description="UTC timestamp when the caretaker pass began"
+    )
+    finished_at: datetime = Field(
+        description="UTC timestamp when the caretaker pass completed"
+    )
+    findings: list[CaretakerFinding] = Field(
+        default_factory=list,
+        description="Every finding emitted by all enabled phases during this pass",
+    )
+    phases_run: list[str] = Field(
+        default_factory=list,
+        description="Names of the caretaker phases that executed in this pass",
+    )
+    mill_reported: int = Field(
+        default=0,
+        description="Count of findings successfully forwarded to the central mill",
+    )
+    local_only: int = Field(
+        default=0,
+        description="Count of findings detected but not reported (mill unreachable, untracked, or opt-out)",
+    )
+    errors: list[str] = Field(
+        default_factory=list,
+        description="Non-fatal errors encountered during the pass",
+    )
+    mill_reachable: bool = Field(
+        default=True,
+        description="Whether the central mill could be reached during this pass",
+    )
+    mill_reachable_detail: str = Field(
+        default="",
+        description="Additional detail about mill reachability (e.g. error message when unreachable)",
+    )
