@@ -93,14 +93,16 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     cfg = request.app.state.config
     if not cfg.auth_required:
         return RedirectResponse(
-            url=_safe_next(next), status_code=303
-        )  # codeql[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
+            url=_safe_next(next),
+            status_code=303,  # codeql[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
+        )
     token = request.cookies.get("session_token")
     store: SessionStore = request.app.state.session_store
     if token and store.validate(token):
         return RedirectResponse(
-            url=_safe_next(next), status_code=303
-        )  # codeql[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
+            url=_safe_next(next),
+            status_code=303,  # codeql[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
+        )
 
     # --- CSRF token -------------------------------------------------------
     from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
@@ -197,8 +199,9 @@ async def login_submit(request: Request) -> Response:
     store: SessionStore = request.app.state.session_store
     token = store.create()
     response = RedirectResponse(
-        url=next_url, status_code=303
-    )  # codeql[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
+        url=next_url,
+        status_code=303,  # codeql[py/url-redirection]: target sanitized by _safe_next (rejects scheme/netloc)
+    )
     # Share the session cookie across component subdomains so a login on the
     # base domain also authorizes subdomain-routed component UIs
     # (e.g. mail.<gateway_base_domain>/...). Host-only when no base domain set.
