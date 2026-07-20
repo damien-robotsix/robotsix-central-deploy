@@ -5,6 +5,8 @@ Exposes:
 - ``PATCH /chat/github/repos/{owner}/{repo}`` — update repo settings
 - ``POST /chat/github/repos`` — create a new repository (Dependency graph is
   enabled automatically as part of creation)
+- ``POST /chat/github/repos/{owner}/{repo}/relax-merge-gate`` — set required
+  approving PR reviews to 0 on the default branch (preserves status checks)
 """
 
 from __future__ import annotations
@@ -262,6 +264,96 @@ async def create_repo(
             key=body.name,
             new_value=result["html_url"],
             detail=f"Created repository {result['full_name']}",
+        )
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/relax-merge-gate — set required
+# approving PR reviews to 0 on the default branch while preserving every
+# other protection setting (notably required_status_checks).
+# ---------------------------------------------------------------------------
+
+
+class RelaxMergeGateRequest(BaseModel):
+    """Body for ``POST /chat/github/repos/{owner}/{repo}/relax-merge-gate``.
+
+    *branch* is optional; when omitted the repo's default branch is used.
+    """
+
+    branch: str | None = Field(
+        default=None,
+        description="Branch name to relax. Defaults to the repo's default branch.",
+    )
+
+
+def _relax_merge_gate_sync(
+    client: Any, owner: str, repo: str, body: RelaxMergeGateRequest
+) -> dict[str, Any]:
+    """Set required approving review count to 0, preserving all other settings."""
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    branch_name = body.branch if body.branch else repo_obj.default_branch
+    branch_obj = repo_obj.get_branch(branch_name)
+    branch_obj.edit_required_pull_request_reviews(required_approving_review_count=0)
+    protection = branch_obj.get_protection()
+    return protection.raw_data  # type: ignore[no-any-return]
+
+
+@router.post(
+    "/chat/github/repos/{owner}/{repo}/relax-merge-gate",
+    summary="Relax merge gate — remove required approving PR reviews",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository or branch not found"},
+        422: {"description": "GitHub rejected the request"},
+        503: {"description": "Neither GitHub App nor repo-admin PAT is configured"},
+    },
+)
+async def relax_merge_gate(
+    owner: str,
+    repo: str,
+    body: RelaxMergeGateRequest | None = None,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Set required approving pull-request reviews to 0 on *owner*/*repo*'s
+    default branch (or *branch* from the request body).
+
+    All other protection settings — including required status checks — are
+    preserved exactly as-is.  Re-running on an already-relaxed repo is a
+    no-op success.
+
+    Uses the same credential as the security-features endpoint (GitHub App
+    installation token first, repo-creation PAT as fallback).  Returns the
+    full branch protection object so the caller can verify the change.
+    """
+    from ._github_common import (
+        _get_client_or_503_with_pat_fallback,
+        _reraise_github_errors,
+    )
+
+    if body is None:
+        body = RelaxMergeGateRequest()
+
+    client = await _get_client_or_503_with_pat_fallback(config, owner, repo)
+    try:
+        result: dict[str, Any] = await asyncio.to_thread(
+            _relax_merge_gate_sync, client, owner, repo, body
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="relax_merge_gate",
+            key=f"{owner}/{repo}",
+            new_value={"branch": body.branch} if body.branch else {},
+            detail=f"Relaxed merge gate on {owner}/{repo}"
+            + (f" (branch: {body.branch})" if body.branch else ""),
         )
     )
     return result
