@@ -642,7 +642,8 @@ async def chat_self_restart(
     try:
         self_info = await backend.inspect_self()
     except NotImplementedError:
-        pass  # non-docker_sdk backends cannot inspect themselves; None triggers 503 below
+        # non-docker_sdk backends cannot inspect themselves; None triggers 503 below
+        self_info = None
 
     if self_info is None:
         raise HTTPException(
@@ -706,7 +707,8 @@ async def chat_self_update(
     try:
         self_info = await backend.inspect_self()
     except NotImplementedError:
-        pass  # non-docker_sdk backends cannot inspect themselves; None triggers 503 below
+        # non-docker_sdk backends cannot inspect themselves; None triggers 503 below
+        self_info = None
 
     if self_info is None:
         raise HTTPException(
