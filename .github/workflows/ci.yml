@@ -133,21 +133,21 @@ jobs:
       - name: Audit dependencies
         run: uv audit --frozen
 
-  gitleaks:
+  trufflehog:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENT: false
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+      - name: TruffleHog secret scan
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            trufflesecurity/trufflehog:3.95.9 \
+            git file:///repo --only-verified --fail
 
   trivy:
     runs-on: ubuntu-latest
@@ -221,6 +221,11 @@ jobs:
         run: uv sync --frozen
       - name: Install pre-commit
         run: pip install pre-commit
+      - name: Install TruffleHog
+        run: |
+          TRUFFLEHOG_VERSION=3.95.9
+          curl -sSfL "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin trufflehog
       - name: Run pre-commit hooks
         run: pre-commit run --all-files --show-diff-on-failure
       - name: Flag raw health/state/backend strings outside enum definition
