@@ -265,6 +265,170 @@ class TestGetWorkflowRun:
         assert resp.status_code == 404
 
 
+class TestGetWorkflowRunLogs:
+    """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs``."""
+
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget/actions/runs/1/logs")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        # Do NOT use enable_github_app — the app must be unconfigured for 503.
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/1/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_gets_logs(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, owner, repo: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_and_extract_run_logs",
+            lambda token, owner, repo, run_id, job_filter=None, tail_kb=100: (
+                "=== Deploy to OVH/1_Set up job.txt ===\n"
+                "Run deploy.sh\n"
+                "Uploading via lftp...\n"
+            ),
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/10/logs",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert "Deploy to OVH" in resp.text
+        assert "lftp" in resp.text
+
+    async def test_job_filter_passed_through(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        captured_kwargs: dict = {}
+
+        def _fake_fetch(token, owner, repo, run_id, **kwargs):
+            captured_kwargs.update(kwargs)
+            return "filtered logs"
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, owner, repo: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_and_extract_run_logs",
+            _fake_fetch,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/10/logs?job=Deploy&tail_kb=50",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert captured_kwargs.get("job_filter") == "Deploy"
+        assert captured_kwargs.get("tail_kb") == 50
+
+    async def test_repo_not_found_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from github import UnknownObjectException
+
+        def _raise_not_found(app_id, private_key, owner, repo):
+            raise UnknownObjectException(404, data={"message": "Not Found"})
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            _raise_not_found,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/ghost/actions/runs/1/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_run_not_found_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from fastapi import HTTPException
+
+        def _raise_404(token, owner, repo, run_id, **kwargs):
+            raise HTTPException(status_code=404, detail="Run 9999 not found")
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, owner, repo: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_and_extract_run_logs",
+            _raise_404,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/9999/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_fetch_failure_returns_502(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        def _raise_runtime(token, owner, repo, run_id, **kwargs):
+            raise RuntimeError("connection reset")
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, owner, repo: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_and_extract_run_logs",
+            _raise_runtime,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/1/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 502
+
+
 class _FakeRepo:
     """Stand-in for a PyGithub ``Repository``."""
 
