@@ -5010,20 +5010,25 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "action": {
-            "$ref": "#/components/schemas/ActionType"
+            "$ref": "#/components/schemas/ActionType",
+            "description": "Action type: start, stop, restart, or rollback"
           },
           "previous_state": {
-            "$ref": "#/components/schemas/ServiceState"
+            "$ref": "#/components/schemas/ServiceState",
+            "description": "Lifecycle state before the action was applied"
           },
           "current_state": {
-            "$ref": "#/components/schemas/ServiceState"
+            "$ref": "#/components/schemas/ServiceState",
+            "description": "Lifecycle state after the action completed"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
+            "description": "Human-readable detail message; empty string when no extra context is available",
             "default": ""
           }
         },
@@ -5745,15 +5750,18 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Sibling service name (e.g. 'mail-ingester')"
           },
           "health": {
             "type": "string",
             "title": "Health",
+            "description": "HealthStatus value, or empty string if the container has no healthcheck configured",
             "default": ""
           },
           "state": {
             "$ref": "#/components/schemas/ServiceState",
+            "description": "Current lifecycle state of this sibling container",
             "default": "unknown"
           }
         },
@@ -5896,22 +5904,27 @@
         "properties": {
           "digest": {
             "type": "string",
-            "title": "Digest"
+            "title": "Digest",
+            "description": "Resolved SHA256 digest of the deployed image"
           },
           "image_ref": {
             "type": "string",
-            "title": "Image Ref"
+            "title": "Image Ref",
+            "description": "The Docker image reference actually deployed (tag or digest pin)"
           },
           "timestamp": {
             "type": "number",
-            "title": "Timestamp"
+            "title": "Timestamp",
+            "description": "Unix timestamp (seconds) when the deploy completed"
           },
           "source": {
-            "$ref": "#/components/schemas/DeploySource"
+            "$ref": "#/components/schemas/DeploySource",
+            "description": "What triggered the deploy: manual, caretaker auto-update, or rollback"
           },
           "previous_digest": {
             "type": "string",
             "title": "Previous Digest",
+            "description": "SHA256 digest that was running before this deploy; empty for initial deploy",
             "default": ""
           }
         },
@@ -5929,7 +5942,8 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "entries": {
             "items": {
@@ -5937,7 +5951,7 @@
             },
             "type": "array",
             "title": "Entries",
-            "default": []
+            "description": "Deploy history entries ordered most-recent-first"
           }
         },
         "type": "object",
@@ -6053,7 +6067,8 @@
                 "type": "null"
               }
             ],
-            "title": "Image"
+            "title": "Image",
+            "description": "Override Docker image reference; when None the stored ComponentConfig.image is used"
           }
         },
         "type": "object",
@@ -6287,22 +6302,27 @@
         "properties": {
           "total_bytes": {
             "type": "integer",
-            "title": "Total Bytes"
+            "title": "Total Bytes",
+            "description": "Total host disk capacity in bytes"
           },
           "used_bytes": {
             "type": "integer",
-            "title": "Used Bytes"
+            "title": "Used Bytes",
+            "description": "Used host disk space in bytes"
           },
           "free_bytes": {
             "type": "integer",
-            "title": "Free Bytes"
+            "title": "Free Bytes",
+            "description": "Free host disk space in bytes"
           },
           "warn_threshold_pct": {
             "type": "number",
-            "title": "Warn Threshold Pct"
+            "title": "Warn Threshold Pct",
+            "description": "Percentage threshold at which the UI shows a disk-space warning"
           },
           "docker": {
-            "$ref": "#/components/schemas/DockerDfStats"
+            "$ref": "#/components/schemas/DockerDfStats",
+            "description": "Docker storage breakdown"
           }
         },
         "type": "object",
@@ -6337,21 +6357,25 @@
           "images_size_bytes": {
             "type": "integer",
             "title": "Images Size Bytes",
+            "description": "Total storage consumed by all Docker images",
             "default": 0
           },
           "dangling_images_bytes": {
             "type": "integer",
             "title": "Dangling Images Bytes",
+            "description": "Storage consumed by dangling (untagged) images",
             "default": 0
           },
           "build_cache_size_bytes": {
             "type": "integer",
             "title": "Build Cache Size Bytes",
+            "description": "Total build cache storage",
             "default": 0
           },
           "build_cache_reclaimable_bytes": {
             "type": "integer",
             "title": "Build Cache Reclaimable Bytes",
+            "description": "Build cache storage eligible for reclamation",
             "default": 0
           },
           "volumes": {
@@ -6360,7 +6384,7 @@
             },
             "type": "array",
             "title": "Volumes",
-            "default": []
+            "description": "Per-volume size breakdown"
           }
         },
         "type": "object",
@@ -6547,10 +6571,12 @@
         "properties": {
           "error": {
             "type": "string",
-            "title": "Error"
+            "title": "Error",
+            "description": "Short error label"
           },
           "detail": {
             "title": "Detail",
+            "description": "Arbitrary structured detail (dict, list, string, or None)",
             "default": ""
           }
         },
@@ -7015,7 +7041,8 @@
         "properties": {
           "space_reclaimed_bytes": {
             "type": "integer",
-            "title": "Space Reclaimed Bytes"
+            "title": "Space Reclaimed Bytes",
+            "description": "Bytes freed by the build-cache reclaim operation"
           }
         },
         "type": "object",
@@ -7036,7 +7063,8 @@
                 "type": "null"
               }
             ],
-            "title": "Digest"
+            "title": "Digest",
+            "description": "Target digest to roll back to; when None the previous digest is used"
           }
         },
         "type": "object",
@@ -7047,18 +7075,22 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "action": {
             "$ref": "#/components/schemas/ActionType",
+            "description": "Always ActionType.ROLLBACK",
             "default": "rollback"
           },
           "rolled_back_to_digest": {
             "type": "string",
-            "title": "Rolled Back To Digest"
+            "title": "Rolled Back To Digest",
+            "description": "SHA256 digest of the image now running after rollback"
           },
           "current_state": {
-            "$ref": "#/components/schemas/ServiceState"
+            "$ref": "#/components/schemas/ServiceState",
+            "description": "Lifecycle state after rollback completed"
           },
           "warnings": {
             "items": {
@@ -7066,7 +7098,7 @@
             },
             "type": "array",
             "title": "Warnings",
-            "default": []
+            "description": "Non-fatal warnings collected during the rollback"
           }
         },
         "type": "object",
@@ -7125,31 +7157,37 @@
         "properties": {
           "supported": {
             "type": "boolean",
-            "title": "Supported"
+            "title": "Supported",
+            "description": "True when the server is running inside a Docker container"
           },
           "container_name": {
             "type": "string",
             "title": "Container Name",
+            "description": "Name of the server's own container; empty when not in a container",
             "default": ""
           },
           "image": {
             "type": "string",
             "title": "Image",
+            "description": "Docker image reference for the server",
             "default": ""
           },
           "running_digest": {
             "type": "string",
             "title": "Running Digest",
+            "description": "SHA256 digest of the currently running server image",
             "default": ""
           },
           "latest_digest": {
             "type": "string",
             "title": "Latest Digest",
+            "description": "SHA256 digest of the latest server image on the registry",
             "default": ""
           },
           "update_available": {
             "type": "boolean",
             "title": "Update Available",
+            "description": "True when a newer server image is available",
             "default": false
           }
         },
@@ -7165,11 +7203,13 @@
           "status": {
             "type": "string",
             "title": "Status",
+            "description": "Always 'update-started'",
             "default": "update-started"
           },
           "updater_container_id": {
             "type": "string",
-            "title": "Updater Container Id"
+            "title": "Updater Container Id",
+            "description": "Docker container ID of the one-shot watchtower updater"
           }
         },
         "type": "object",
@@ -7308,11 +7348,13 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "health": {
             "type": "string",
-            "title": "Health"
+            "title": "Health",
+            "description": "HealthStatus value for the primary container"
           }
         },
         "type": "object",
@@ -7327,24 +7369,29 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "state": {
-            "$ref": "#/components/schemas/ServiceState"
+            "$ref": "#/components/schemas/ServiceState",
+            "description": "Current lifecycle state"
           },
           "update_available": {
             "type": "boolean",
             "title": "Update Available",
+            "description": "True when a newer image digest is available on the registry",
             "default": false
           },
           "has_config_yaml": {
             "type": "boolean",
             "title": "Has Config Yaml",
+            "description": "True when this component has an operator-supplied config.yaml",
             "default": false
           },
           "component_id": {
             "type": "string",
             "title": "Component Id",
+            "description": "Non-empty for sibling records; set to the primary component name",
             "default": ""
           }
         },
@@ -7363,13 +7410,11 @@
               "$ref": "#/components/schemas/ServiceListItem"
             },
             "type": "array",
-            "title": "Services"
+            "title": "Services",
+            "description": "List of managed service summaries"
           }
         },
         "type": "object",
-        "required": [
-          "services"
-        ],
         "title": "ServiceListResponse",
         "description": "Wrapper for the service list endpoint."
       },
@@ -7391,24 +7436,29 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Component name"
           },
           "state": {
-            "$ref": "#/components/schemas/ServiceState"
+            "$ref": "#/components/schemas/ServiceState",
+            "description": "Current lifecycle state"
           },
           "image": {
             "type": "string",
             "title": "Image",
+            "description": "Docker image reference (e.g. 'ghcr.io/org/service:main')",
             "default": ""
           },
           "image_revision": {
             "type": "string",
             "title": "Image Revision",
+            "description": "VCS revision label from the running image (org.opencontainers.image.revision), empty if absent",
             "default": ""
           },
           "health": {
             "type": "string",
             "title": "Health",
+            "description": "Container health status value; empty string if no healthcheck is defined",
             "default": ""
           },
           "last_error": {
@@ -7420,34 +7470,41 @@
                 "type": "null"
               }
             ],
-            "title": "Last Error"
+            "title": "Last Error",
+            "description": "Most recent error message; None when the service is healthy"
           },
           "updated_at": {
             "type": "number",
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "Unix timestamp (seconds) of the last status update"
           },
           "update_available": {
             "type": "boolean",
             "title": "Update Available",
+            "description": "True when a newer image digest is available on the registry",
             "default": false
           },
           "running_digest": {
             "type": "string",
             "title": "Running Digest",
+            "description": "SHA256 digest of the currently deployed image (full sha256:...)",
             "default": ""
           },
           "latest_digest": {
             "type": "string",
             "title": "Latest Digest",
+            "description": "SHA256 digest of the latest manifest known to the registry checker",
             "default": ""
           },
           "update_state": {
             "$ref": "#/components/schemas/UpdateState",
+            "description": "Enum indicating whether an image update is available",
             "default": "unknown"
           },
           "has_config_yaml": {
             "type": "boolean",
             "title": "Has Config Yaml",
+            "description": "True when this component has an operator-supplied config.yaml",
             "default": false
           },
           "sibling_health": {
@@ -7456,7 +7513,7 @@
             },
             "type": "array",
             "title": "Sibling Health",
-            "default": []
+            "description": "Per-sibling container health snapshots for multi-service components"
           },
           "sibling_update_states": {
             "items": {
@@ -7464,11 +7521,12 @@
             },
             "type": "array",
             "title": "Sibling Update States",
-            "default": []
+            "description": "Per-sibling update-state snapshots for the UI aggregate badge"
           },
           "overall_health": {
             "type": "string",
             "title": "Overall Health",
+            "description": "Rollup health status across primary + siblings; HealthStatus value or empty string",
             "default": ""
           }
         },
@@ -7484,10 +7542,12 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Sibling service name"
           },
           "update_state": {
             "$ref": "#/components/schemas/UpdateState",
+            "description": "Image-update availability for this sibling",
             "default": "unknown"
           }
         },
@@ -8070,16 +8130,19 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Docker volume name"
           },
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes",
+            "description": "Storage consumed by this volume in bytes",
             "default": 0
           },
           "in_use": {
             "type": "boolean",
             "title": "In Use",
+            "description": "True when the volume is attached to at least one container",
             "default": false
           }
         },
