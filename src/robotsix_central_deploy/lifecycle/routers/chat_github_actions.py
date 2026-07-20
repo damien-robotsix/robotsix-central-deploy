@@ -3,6 +3,8 @@
 Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs`` — list recent runs
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}`` — a single run
+- ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs`` —
+  workflow run logs (concatenated per-job text)
 - ``GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
   read default workflow permissions
 - ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
@@ -11,17 +13,22 @@ Exposes:
 
 from __future__ import annotations
 
+import asyncio
+import io
+import zipfile
 from typing import Any
 
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ..auth import verify_auth
 from ..config import LifecycleConfig
 from ..deps import _get_chat_agent_audit_store, _get_config
+from ..github_app import get_installation_token_sync
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 
-from ._github_common import _call_github_endpoint
+from ._github_common import _call_github_endpoint, _reraise_github_errors
 
 router = APIRouter(tags=["chat-github"])
 
@@ -231,3 +238,180 @@ async def set_workflow_permissions(
             ),
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs
+# ---------------------------------------------------------------------------
+
+
+def _tail_bytes(text: str, max_bytes: int) -> str:
+    """Return the last *max_bytes* bytes of *text*, preserving valid UTF-8."""
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    return encoded[-max_bytes:].decode("utf-8", errors="replace")
+
+
+def _fetch_and_extract_run_logs(
+    token: str,
+    owner: str,
+    repo: str,
+    run_id: int,
+    *,
+    job_filter: str | None = None,
+    tail_kb: int = 100,
+) -> str:
+    """Fetch a workflow run's logs from the GitHub API and return
+    concatenated per-job text.
+
+    GitHub's run-logs endpoint returns a 302 redirect to a zip archive.
+    This function follows the redirect, downloads the zip, unzips it in
+    memory, and returns the per-file contents joined together.
+    """
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run_id}/logs"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "robotsix-central-deploy",
+    }
+
+    from fastapi import HTTPException
+
+    with httpx.Client(follow_redirects=False) as http_client:
+        # Step 1 — request the logs endpoint (returns a 302 redirect)
+        redirect_resp = http_client.get(api_url, headers=headers)
+        if redirect_resp.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Run {run_id} not found in {owner}/{repo}",
+            )
+        if redirect_resp.status_code != 302:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"GitHub returned HTTP {redirect_resp.status_code} for run logs"
+                ),
+            )
+
+        redirect_url = redirect_resp.headers.get("Location", "")
+        if not redirect_url:
+            raise HTTPException(
+                status_code=502,
+                detail="GitHub did not return a redirect URL for run logs",
+            )
+
+        # Step 2 — download the zip (pre-signed URL, no auth needed)
+        zip_resp = http_client.get(redirect_url, follow_redirects=True)
+        if zip_resp.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Failed to download run logs zip: HTTP {zip_resp.status_code}"
+                ),
+            )
+
+    # Step 3 — unzip and extract per-job log text
+    with zipfile.ZipFile(io.BytesIO(zip_resp.content)) as zf:
+        log_texts: list[str] = []
+        for name in sorted(zf.namelist()):
+            # Each entry is ``<job_name>/<step_number>_<step_name>.txt``
+            if job_filter is not None:
+                job_dir = name.split("/")[0] if "/" in name else name
+                if job_filter not in job_dir:
+                    continue
+
+            content = zf.read(name).decode("utf-8", errors="replace")
+            if tail_kb > 0:
+                max_bytes = tail_kb * 1024
+                if len(content.encode("utf-8")) > max_bytes:
+                    content = _tail_bytes(content, max_bytes)
+                    content = f"[... truncated to last {tail_kb} KB ...]\n\n{content}"
+
+            log_texts.append(f"=== {name} ===\n{content}")
+
+    if not log_texts:
+        return "(no matching job logs found)"
+
+    return "\n\n".join(log_texts)
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs",
+    summary="Get workflow run logs (concatenated per-job text)",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Run (or repository) not found"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def get_workflow_run_logs(
+    owner: str,
+    repo: str,
+    run_id: int,
+    job: str | None = Query(
+        None,
+        description="Filter logs to jobs whose name contains this string",
+    ),
+    tail_kb: int = Query(
+        100,
+        description="Only return the last N KB per job log (0 for unlimited)",
+        ge=0,
+    ),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> str:
+    """Get *owner*/*repo*'s workflow run *run_id* logs.
+
+    GitHub returns run logs as a zip archive.  This endpoint follows the
+    redirect, unzips server-side, and returns concatenated per-job log
+    text.
+
+    *job* filters to jobs whose directory name contains the given string
+    (e.g. ``"Deploy to OVH"``).
+    *tail_kb* caps each job log to the last N kilobytes (default 100 KB;
+    set to 0 for unlimited).
+    """
+    # Acquire a raw installation token (verifies App is configured and
+    # the repo is covered by an installation).
+    from fastapi import HTTPException
+
+    if not config.github_app_id or not config.github_app_private_key:
+        raise HTTPException(
+            status_code=503,
+            detail="GitHub App not configured",
+        )
+
+    try:
+        token = await asyncio.to_thread(
+            get_installation_token_sync,
+            config.github_app_id,
+            config.github_app_private_key,
+            owner,
+            repo,
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    try:
+        log_text = await asyncio.to_thread(
+            _fetch_and_extract_run_logs,
+            token,
+            owner,
+            repo,
+            run_id,
+            job_filter=job,
+            tail_kb=tail_kb,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to fetch run logs: {exc}",
+        )
+
+    return log_text
