@@ -124,19 +124,6 @@ async def phase_update(
                     exc_info=True,
                 )
 
-            findings.append(
-                CaretakerFinding(
-                    component_id=record.name,
-                    repo_id=config.repo_id,
-                    kind=FindingKind.UPDATE_APPLIED,
-                    title=f"Auto-updated component {record.name}",
-                    detail=(
-                        f"Deployed {outcome.deployed_digest} "
-                        f"(previous: {outcome.previous_digest or 'none'})"
-                    ),
-                    severity="warning",
-                )
-            )
             logger.info(
                 "phase_update: auto-deployed %s → %s",
                 record.name,

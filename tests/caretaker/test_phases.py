@@ -98,9 +98,9 @@ class TestPhaseUpdate:
         findings = await phase_update(
             registry, store, backend, ccs, dhs, _make_env_store()
         )
-        assert len(findings) == 1
-        assert findings[0].kind == FindingKind.UPDATE_APPLIED
-        assert findings[0].repo_id == "test-repo"
+        # Successful deploys are logged to deploy history and service
+        # state — they no longer emit a caretaker finding / board ticket.
+        assert len(findings) == 0
         backend.deploy.assert_called_once()
         # image_ref must be a pullable repo@digest reference — a bare
         # "sha256:…" digest resolves as repository "sha256" and 404s.
