@@ -8,6 +8,7 @@ import os
 import shlex
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlparse
 
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
 from ._util import (
@@ -35,6 +36,19 @@ if TYPE_CHECKING:
     from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _image_registry_host(image_ref: str) -> str | None:
+    """Return the registry host from an image reference, or *None*.
+
+    Handles standard Docker image refs (``registry/owner/repo:tag``) and
+    malformed refs that include a URL scheme.
+    """
+    # If the ref contains :// it's a URL — parse it properly.
+    if "://" in image_ref:
+        return urlparse(image_ref).hostname
+    # Standard Docker image ref: host/rest
+    return image_ref.split("/")[0] if "/" in image_ref else None
 
 
 class DockerSdkBackend(ExecutionBackend):
@@ -469,7 +483,7 @@ class DockerSdkBackend(ExecutionBackend):
         anonymous pull is used and a 401 on a private image will surface a
         diagnostic error.
         """
-        if not image_ref.startswith("ghcr.io/"):
+        if _image_registry_host(image_ref) != "ghcr.io":
             return None
         token = os.environ.get("GHCR_TOKEN", "").strip()
         if not token:
@@ -499,7 +513,7 @@ class DockerSdkBackend(ExecutionBackend):
             if (
                 response is not None
                 and response.status_code == 401
-                and image_ref.startswith("ghcr.io/")
+                and _image_registry_host(image_ref) == "ghcr.io"
                 and not auth_config
             ):
                 raise RuntimeError(

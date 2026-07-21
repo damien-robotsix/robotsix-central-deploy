@@ -513,9 +513,7 @@ class TestDockerSdkBackendDeploy:
     # -- 401 diagnostic error paths -----------------------------------------
 
     @staticmethod
-    def _make_401_error(
-        dm: MagicMock, message: str = "unauthorized"
-    ) -> Exception:
+    def _make_401_error(dm: MagicMock, message: str = "unauthorized") -> Exception:
         """Build a fake docker.errors.APIError with response.status_code == 401.
 
         Must use the *same* ``dm`` that is patched into ``sys.modules`` so
@@ -588,32 +586,22 @@ class TestDockerSdkBackendBuildAuthConfig:
             is None
         )
         assert (
-            DockerSdkBackend._build_auth_config("registry.example.com/app:v1")
-            is None
+            DockerSdkBackend._build_auth_config("registry.example.com/app:v1") is None
         )
 
     def test_ghcr_image_no_token_returns_none(self):
         """ghcr.io image without GHCR_TOKEN env var returns None."""
-        assert (
-            DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
-            is None
-        )
+        assert DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag") is None
 
     def test_ghcr_image_empty_token_returns_none(self, monkeypatch):
         """ghcr.io image with empty GHCR_TOKEN returns None."""
         monkeypatch.setenv("GHCR_TOKEN", "")
-        assert (
-            DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
-            is None
-        )
+        assert DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag") is None
 
     def test_ghcr_image_whitespace_token_returns_none(self, monkeypatch):
         """ghcr.io image with whitespace-only GHCR_TOKEN returns None."""
         monkeypatch.setenv("GHCR_TOKEN", "   ")
-        assert (
-            DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
-            is None
-        )
+        assert DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag") is None
 
     def test_ghcr_image_with_token_returns_auth_config(self, monkeypatch):
         """ghcr.io image with a non-empty GHCR_TOKEN returns an auth_config dict."""
