@@ -510,6 +510,121 @@ class TestDockerSdkBackendDeploy:
             await b.deploy(record, config, "ghcr.io/o/img:main")
         assert inflight_image_refs() == set()
 
+    # -- 401 diagnostic error paths -----------------------------------------
+
+    @staticmethod
+    def _make_401_error(
+        dm: MagicMock, message: str = "unauthorized"
+    ) -> Exception:
+        """Build a fake docker.errors.APIError with response.status_code == 401.
+
+        Must use the *same* ``dm`` that is patched into ``sys.modules`` so
+        that ``except docker.errors.APIError`` inside ``deploy()`` catches it.
+        """
+        exc = dm.errors.APIError(message, status_code=401)
+        resp = MagicMock()
+        resp.status_code = 401
+        exc.response = resp
+        return exc
+
+    async def test_deploy_401_on_ghcr_without_token_diagnostic(
+        self, backend, monkeypatch
+    ):
+        """401 on ghcr.io without GHCR_TOKEN raises RuntimeError mentioning GHCR_TOKEN."""
+        monkeypatch.delenv("GHCR_TOKEN", raising=False)
+        b, client, dm = backend
+        config = self._make_config()
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        client.images.pull.side_effect = self._make_401_error(dm)
+
+        with pytest.raises(RuntimeError, match="GHCR_TOKEN"):
+            await b.deploy(record, config, "ghcr.io/o/img:main")
+
+    async def test_deploy_401_on_non_ghcr_generic_error(self, backend):
+        """401 on a non-ghcr image raises generic 'Image pull failed' error."""
+        b, client, dm = backend
+        config = self._make_config(image="registry.example.com/app:v1")
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        client.images.pull.side_effect = self._make_401_error(dm)
+
+        with pytest.raises(RuntimeError, match="Image pull failed for"):
+            await b.deploy(record, config, "registry.example.com/app:v1")
+
+    async def test_deploy_401_on_ghcr_with_token_generic_error(
+        self, backend, monkeypatch
+    ):
+        """401 on ghcr.io with GHCR_TOKEN raises generic error (token may be
+        invalid/expired — don't mislead into thinking no token is set)."""
+        monkeypatch.setenv("GHCR_TOKEN", "ghp_some_token")
+        b, client, dm = backend
+        config = self._make_config()
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        client.images.pull.side_effect = self._make_401_error(dm)
+
+        with pytest.raises(RuntimeError, match="Image pull failed for"):
+            await b.deploy(record, config, "ghcr.io/o/img:main")
+
+
+# ---------------------------------------------------------------------------
+# _build_auth_config static method
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendBuildAuthConfig:
+    """Tests for _build_auth_config static method."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        """Ensure GHCR_TOKEN is not set for each test."""
+        monkeypatch.delenv("GHCR_TOKEN", raising=False)
+
+    def test_non_ghcr_image_returns_none(self):
+        """Images not starting with ghcr.io/ return None (anonymous pull)."""
+        assert (
+            DockerSdkBackend._build_auth_config("docker.io/library/nginx:latest")
+            is None
+        )
+        assert (
+            DockerSdkBackend._build_auth_config("registry.example.com/app:v1")
+            is None
+        )
+
+    def test_ghcr_image_no_token_returns_none(self):
+        """ghcr.io image without GHCR_TOKEN env var returns None."""
+        assert (
+            DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
+            is None
+        )
+
+    def test_ghcr_image_empty_token_returns_none(self, monkeypatch):
+        """ghcr.io image with empty GHCR_TOKEN returns None."""
+        monkeypatch.setenv("GHCR_TOKEN", "")
+        assert (
+            DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
+            is None
+        )
+
+    def test_ghcr_image_whitespace_token_returns_none(self, monkeypatch):
+        """ghcr.io image with whitespace-only GHCR_TOKEN returns None."""
+        monkeypatch.setenv("GHCR_TOKEN", "   ")
+        assert (
+            DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
+            is None
+        )
+
+    def test_ghcr_image_with_token_returns_auth_config(self, monkeypatch):
+        """ghcr.io image with a non-empty GHCR_TOKEN returns an auth_config dict."""
+        monkeypatch.setenv("GHCR_TOKEN", "ghp_test123")
+        result = DockerSdkBackend._build_auth_config("ghcr.io/owner/repo:tag")
+        assert result == {
+            "username": "USERNAME",
+            "password": "ghp_test123",
+            "serveraddress": "ghcr.io",
+        }
+
 
 # ---------------------------------------------------------------------------
 # Rollback flow

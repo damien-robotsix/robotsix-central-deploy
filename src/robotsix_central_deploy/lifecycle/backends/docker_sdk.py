@@ -474,6 +474,8 @@ class DockerSdkBackend(ExecutionBackend):
         token = os.environ.get("GHCR_TOKEN", "").strip()
         if not token:
             return None
+        # GHCR ignores the username field when a personal access token is
+        # supplied as the password — any non-empty string works here.
         return {"username": "USERNAME", "password": token, "serveraddress": "ghcr.io"}
 
     async def deploy(
