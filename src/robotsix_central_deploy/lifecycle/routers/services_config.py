@@ -703,4 +703,4 @@ async def run_config_assist(
         name, merged, _canonical_hash(merged)
     )
 
-    return ConfigAssistResponse(config=merged, output=output)
+    return ConfigAssistResponse(config=_mask_secrets(template, merged), output=output)

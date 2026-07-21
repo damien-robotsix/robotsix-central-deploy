@@ -10,6 +10,7 @@ from robotsix_central_deploy.lifecycle._config_utils import (
     _coerce_by_schema,
     _deep_merge,
     _is_json_schema,
+    _is_key_secret,
     _is_secret_prop,
     _mask_secrets,
     _mask_secrets_json_schema,
@@ -17,6 +18,7 @@ from robotsix_central_deploy.lifecycle._config_utils import (
     _merge_config_flat,
     _merge_config_json_schema,
     _resolve_ref,
+    _restore_secrets_from_current,
     _strip_secret_values,
 )
 
@@ -888,3 +890,265 @@ class TestNestedRefResolution:
         stripped = _strip_secret_values(_NESTED_REF_SCHEMA, values)
         assert "api_key" not in stripped["memory"]["llm"]
         assert stripped["memory"]["llm"]["endpoint"] == "https://api.example.com"
+
+
+# ---------------------------------------------------------------------------
+# _is_key_secret
+# ---------------------------------------------------------------------------
+
+
+class TestIsKeySecret:
+    def test_top_level_secret_key(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string", "format": "password", "writeOnly": True},
+                "host": {"type": "string"},
+            },
+        }
+        assert _is_key_secret(schema, "api_key") is True
+
+    def test_top_level_non_secret_key(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string", "format": "password", "writeOnly": True},
+                "host": {"type": "string"},
+            },
+        }
+        assert _is_key_secret(schema, "host") is False
+
+    def test_nested_secret_key(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "db": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string"},
+                        "password": {
+                            "type": "string",
+                            "format": "password",
+                            "writeOnly": True,
+                        },
+                    },
+                }
+            },
+        }
+        assert _is_key_secret(schema, "db.password") is True
+
+    def test_nested_non_secret_key(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "db": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string"},
+                        "password": {
+                            "type": "string",
+                            "format": "password",
+                            "writeOnly": True,
+                        },
+                    },
+                }
+            },
+        }
+        assert _is_key_secret(schema, "db.host") is False
+
+    def test_array_item_secret_key(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "password": {
+                                "type": "string",
+                                "format": "password",
+                                "writeOnly": True,
+                            },
+                        },
+                    },
+                }
+            },
+        }
+        assert _is_key_secret(schema, "accounts.0.password") is True
+
+    def test_array_item_non_secret_key(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "password": {
+                                "type": "string",
+                                "format": "password",
+                                "writeOnly": True,
+                            },
+                        },
+                    },
+                }
+            },
+        }
+        assert _is_key_secret(schema, "accounts.0.name") is False
+
+    def test_unknown_key_returns_false(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+            },
+        }
+        assert _is_key_secret(schema, "nonexistent") is False
+
+    def test_ref_resolved_secret_key(self):
+        schema = {
+            "type": "object",
+            "$defs": {
+                "secretDef": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                }
+            },
+            "properties": {
+                "token": {"$ref": "#/$defs/secretDef"},
+            },
+        }
+        assert _is_key_secret(schema, "token") is True
+
+    def test_flat_schema_always_returns_false(self):
+        assert _is_key_secret({"key": "value"}, "key") is False
+
+
+# ---------------------------------------------------------------------------
+# _restore_secrets_from_current
+# ---------------------------------------------------------------------------
+
+
+class TestRestoreSecretsFromCurrent:
+    def test_restores_secret_value_from_current(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string", "format": "password", "writeOnly": True},
+                "host": {"type": "string"},
+            },
+        }
+        restored = {"api_key": "", "host": "new.example.com"}
+        current = {"api_key": "real-secret", "host": "old.example.com"}
+        result = _restore_secrets_from_current(schema, restored, current)
+        assert result["api_key"] == "real-secret"
+        assert result["host"] == "new.example.com"
+
+    def test_nested_secret_restored(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "db": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string"},
+                        "password": {
+                            "type": "string",
+                            "format": "password",
+                            "writeOnly": True,
+                        },
+                    },
+                }
+            },
+        }
+        restored = {"db": {"host": "new-db.example.com", "password": ""}}
+        current = {"db": {"host": "old-db.example.com", "password": "real-db-pass"}}
+        result = _restore_secrets_from_current(schema, restored, current)
+        assert result["db"]["password"] == "real-db-pass"
+        assert result["db"]["host"] == "new-db.example.com"
+
+    def test_restored_missing_secret_added_from_current(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "api_key": {"type": "string", "format": "password", "writeOnly": True},
+                "host": {"type": "string"},
+            },
+        }
+        restored = {"host": "new.example.com"}  # api_key missing in snapshot
+        current = {"api_key": "real-secret", "host": "old.example.com"}
+        result = _restore_secrets_from_current(schema, restored, current)
+        # api_key was missing from snapshot but exists in current — it is added
+        assert result["api_key"] == "real-secret"
+        assert result["host"] == "new.example.com"
+
+    def test_array_of_objects_secret_restored(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "password": {
+                                "type": "string",
+                                "format": "password",
+                                "writeOnly": True,
+                            },
+                        },
+                    },
+                }
+            },
+        }
+        restored = {
+            "accounts": [
+                {"name": "alice", "password": ""},
+                {"name": "bob", "password": ""},
+            ]
+        }
+        current = {
+            "accounts": [
+                {"name": "alice", "password": "alice-pass"},
+                {"name": "bob", "password": "bob-pass"},
+            ]
+        }
+        result = _restore_secrets_from_current(schema, restored, current)
+        assert result["accounts"][0]["password"] == "alice-pass"
+        assert result["accounts"][0]["name"] == "alice"
+        assert result["accounts"][1]["password"] == "bob-pass"
+        assert result["accounts"][1]["name"] == "bob"
+
+    def test_flat_schema_passthrough(self):
+        schema = {"key": "value"}
+        restored = {"key": "restored-val"}
+        current = {"key": "current-val"}
+        result = _restore_secrets_from_current(schema, restored, current)
+        assert result["key"] == "restored-val"
+
+    def test_ref_resolved_secret_restored(self):
+        schema = {
+            "type": "object",
+            "$defs": {
+                "secretDef": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                }
+            },
+            "properties": {
+                "token": {"$ref": "#/$defs/secretDef"},
+                "host": {"type": "string"},
+            },
+        }
+        restored = {"token": "", "host": "new.example.com"}
+        current = {"token": "real-token", "host": "old.example.com"}
+        result = _restore_secrets_from_current(schema, restored, current)
+        assert result["token"] == "real-token"
+        assert result["host"] == "new.example.com"
