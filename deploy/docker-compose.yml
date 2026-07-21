@@ -1,0 +1,36 @@
+# central-deploy-contract-version: 1
+#
+# robotsix-central-deploy self-contract.
+# This file is read at startup by central-deploy itself to seed system
+# settings — the same contract-driven flow used for every managed repo.
+# System settings are carried as labels with the robotsix.deploy.settings.*
+# prefix.  Edits here take effect on the next restart.
+services:
+  central-deploy:
+    image: ghcr.io/damien-robotsix/robotsix-central-deploy:main
+    container_name: robotsix-central-deploy
+    ports:
+      - "8100:8100"
+    labels:
+      robotsix.deploy.primary: "true"
+      # ── System settings ──────────────────────────────────────────
+      robotsix.deploy.settings.auth-username: ""
+      robotsix.deploy.settings.auth-password: ""
+      robotsix.deploy.settings.disk-warn-pct: "10.0"
+      robotsix.deploy.settings.registry-check-interval: "300"
+      robotsix.deploy.settings.log-level: "INFO"
+      robotsix.deploy.settings.gateway-base-domain: ""
+      robotsix.deploy.settings.caretaker-enabled: "false"
+      robotsix.deploy.settings.caretaker-interval-hours: "24"
+      robotsix.deploy.settings.mill-component-id: ""
+      robotsix.deploy.settings.image-auto-prune: "false"
+      robotsix.deploy.settings.llmio-tier-config: "{}"
+      robotsix.deploy.settings.claude-auth-refresh-interval: "1800"
+      robotsix.deploy.settings.rate-limit-login-per-minute: "10"
+      robotsix.deploy.settings.rate-limit-api-per-hour: "20000"
+      robotsix.deploy.settings.rate-limit-login-max-attempts: "20"
+      robotsix.deploy.settings.rate-limit-login-lockout-seconds: "300"
+      robotsix.deploy.settings.volume-audit-enabled: "false"
+      robotsix.deploy.settings.volume-audit-interval-seconds: "3600"
+      robotsix.deploy.settings.volume-audit-growth-threshold-pct: "10.0"
+      robotsix.deploy.settings.volume-audit-min-delta-bytes: "10485760"

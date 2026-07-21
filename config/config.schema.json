@@ -226,6 +226,12 @@
       "title": "System Settings Path",
       "type": "string"
     },
+    "self_contract_path": {
+      "default": "deploy/docker-compose.yml",
+      "description": "Path to central-deploy's own deploy contract (deploy/docker-compose.yml). Read at startup to seed system settings from contract labels (robotsix.deploy.settings.*).",
+      "title": "Self Contract Path",
+      "type": "string"
+    },
     "log_level": {
       "default": "INFO",
       "description": "Root log level: DEBUG, INFO, WARNING, ERROR, or CRITICAL.",

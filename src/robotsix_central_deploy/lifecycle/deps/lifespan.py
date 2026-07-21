@@ -67,6 +67,156 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
 # ---------------------------------------------------------------------------
 
 
+def _parse_self_contract_settings(config: LifecycleConfig) -> "SystemSettings | None":  # type: ignore[name-defined]  # noqa: F821
+    """Parse central-deploy's own deploy contract and extract system settings.
+
+    Reads the YAML file at ``config.self_contract_path``, looks for the
+    primary service (or the first service), and extracts labels with the
+    ``robotsix.deploy.settings.`` prefix.  Each label key suffix maps to
+    a ``SystemSettings`` field.
+
+    Returns ``None`` when the contract file does not exist or cannot be
+    parsed — the caller should fall back to env-var defaults.
+    """
+    import json
+    from pathlib import Path
+
+    import yaml
+
+    from ...registry.settings_store import SystemSettings
+
+    contract_path = Path(config.self_contract_path)
+    if not contract_path.exists():
+        return None
+
+    try:
+        raw = yaml.safe_load(contract_path.read_bytes())
+    except (yaml.YAMLError, OSError) as exc:
+        logger.warning("Self-contract %s: YAML parse failed — %s", contract_path, exc)
+        return None
+
+    if not isinstance(raw, dict):
+        logger.warning(
+            "Self-contract %s: expected a mapping, got %s",
+            contract_path,
+            type(raw).__name__,
+        )
+        return None
+
+    services = raw.get("services")
+    if not isinstance(services, dict) or not services:
+        logger.warning("Self-contract %s: no services defined", contract_path)
+        return None
+
+    # Pick the primary service (robotsix.deploy.primary label) or fall
+    # back to the first service.
+    primary_name: str | None = None
+    for svc_name, svc_def in services.items():
+        if isinstance(svc_def, dict):
+            svc_labels = svc_def.get("labels") or {}
+            if (
+                isinstance(svc_labels, dict)
+                and svc_labels.get("robotsix.deploy.primary") == "true"
+            ):
+                primary_name = svc_name
+                break
+    if primary_name is None:
+        primary_name = next(iter(services))
+
+    svc_def = services[primary_name]
+    if not isinstance(svc_def, dict):
+        logger.warning(
+            "Self-contract %s: service %s is not a mapping", contract_path, primary_name
+        )
+        return None
+
+    labels = svc_def.get("labels") or {}
+    if not isinstance(labels, dict):
+        labels = {}
+
+    PREFIX = "robotsix.deploy.settings."
+    settings_kwargs: dict[str, object] = {}
+    for label_key, label_value in labels.items():
+        if not isinstance(label_key, str) or not label_key.startswith(PREFIX):
+            continue
+        field_name = label_key[len(PREFIX) :].replace("-", "_")
+        str_value = (
+            str(label_value) if not isinstance(label_value, str) else label_value
+        )
+
+        # Map the string value to the expected type for each known field.
+        if field_name in (
+            "auth_username",
+            "auth_password",
+            "log_level",
+            "gateway_base_domain",
+            "mill_component_id",
+        ):
+            settings_kwargs[field_name] = str_value
+        elif field_name in (
+            "registry_check_interval",
+            "caretaker_interval_hours",
+            "claude_auth_refresh_interval",
+            "rate_limit_login_per_minute",
+            "rate_limit_api_per_hour",
+            "rate_limit_login_max_attempts",
+            "rate_limit_login_lockout_seconds",
+            "volume_audit_interval_seconds",
+            "volume_audit_min_delta_bytes",
+        ):
+            try:
+                settings_kwargs[field_name] = int(str_value)
+            except ValueError:
+                logger.warning(
+                    "Self-contract %s: label %s value %r is not an integer — skipped",
+                    contract_path,
+                    label_key,
+                    str_value,
+                )
+        elif field_name in ("disk_warn_pct", "volume_audit_growth_threshold_pct"):
+            try:
+                settings_kwargs[field_name] = float(str_value)
+            except ValueError:
+                logger.warning(
+                    "Self-contract %s: label %s value %r is not a float — skipped",
+                    contract_path,
+                    label_key,
+                    str_value,
+                )
+        elif field_name in (
+            "caretaker_enabled",
+            "image_auto_prune",
+            "volume_audit_enabled",
+        ):
+            settings_kwargs[field_name] = str_value.lower() in ("true", "1", "yes")
+        elif field_name == "llmio_tier_config":
+            try:
+                settings_kwargs[field_name] = json.loads(str_value)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Self-contract %s: label %s value is not valid JSON — skipped",
+                    contract_path,
+                    label_key,
+                )
+        else:
+            logger.debug(
+                "Self-contract %s: unknown settings label %s — skipped",
+                contract_path,
+                label_key,
+            )
+
+    if not settings_kwargs:
+        return None
+
+    try:
+        return SystemSettings(**settings_kwargs)
+    except Exception as exc:
+        logger.warning(
+            "Self-contract %s: failed to build SystemSettings — %s", contract_path, exc
+        )
+        return None
+
+
 async def _init_config(app: FastAPI) -> None:
     """Load config from environment and construct core stores.
 
@@ -102,8 +252,8 @@ async def _init_config(app: FastAPI) -> None:
 
 
 async def _init_settings(app: FastAPI) -> None:
-    """Seed system settings on first boot, overlay persisted settings onto
-    config, and construct the execution backend.
+    """Read self-contract settings, persist to store, overlay onto config,
+    and construct the execution backend.
 
     Attaches ``settings_store``, ``backend``, ``session_store``, and
     ``job_registry`` to ``app.state``.  Applies the (possibly overlaid)
@@ -114,26 +264,55 @@ async def _init_settings(app: FastAPI) -> None:
     assert _config is not None
     from ...registry.settings_store import SystemSettings, SystemSettingsStore
 
+    from .._settings_defaults import SETTINGS_DEFAULTS
+
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
     app.state.settings_store = settings_store
 
-    # Seed on first boot: write a settings file so the dashboard always
-    # shows a non-blank username. Uses the env-var value if set, else "admin".
-    if not settings_store._path.exists():
-        await settings_store.put(
-            SystemSettings(
-                auth_username=_config.auth_username or "admin",
-                auth_password=_config.auth_password,
-                disk_warn_pct=_config.disk_warn_pct,
-                registry_check_interval=_config.registry_check_interval,
-                log_level=_config.log_level,
-                gateway_base_domain=_config.gateway_base_domain,
-                caretaker_enabled=_config.caretaker_enabled,
-                caretaker_interval_hours=_config.caretaker_interval_hours,
-                claude_auth_refresh_interval=_config.claude_auth_refresh_interval,
-            )
-        )
+    # 1. Parse self-contract (deploy/docker-compose.yml) to extract system
+    #    settings from labels (robotsix.deploy.settings.*).
+    contract_settings = _parse_self_contract_settings(_config)
 
+    # 2. Seed the store: on first boot, write settings from the self-contract
+    #    (or fall back to env-var defaults when no contract file exists).
+    if not settings_store._path.exists():
+        if contract_settings is not None:
+            # Merge contract settings with env-var overrides — contract
+            # provides the base, env-var LifecycleConfig values override.
+            contract_dict = contract_settings.model_dump()
+            for key, default_val in SETTINGS_DEFAULTS.items():
+                env_val = getattr(_config, key, default_val)
+                if env_val != default_val:
+                    contract_dict[key] = env_val
+            # Special case: when auth_username is empty everywhere, fall back to "admin".
+            if not contract_dict.get("auth_username"):
+                contract_dict["auth_username"] = "admin"
+            await settings_store.put(SystemSettings(**contract_dict))
+            logger.info(
+                "Seeded system settings from self-contract (%s)",
+                _config.self_contract_path,
+            )
+        else:
+            await settings_store.put(
+                SystemSettings(
+                    auth_username=_config.auth_username or "admin",
+                    auth_password=_config.auth_password,
+                    disk_warn_pct=_config.disk_warn_pct,
+                    registry_check_interval=_config.registry_check_interval,
+                    log_level=_config.log_level,
+                    gateway_base_domain=_config.gateway_base_domain,
+                    caretaker_enabled=_config.caretaker_enabled,
+                    caretaker_interval_hours=_config.caretaker_interval_hours,
+                    claude_auth_refresh_interval=_config.claude_auth_refresh_interval,
+                )
+            )
+            logger.info(
+                "Seeded system settings from env-var defaults "
+                "(self-contract %s not found)",
+                _config.self_contract_path,
+            )
+
+    # 3. Overlay persisted settings onto LifecycleConfig.
     _config = settings_store.overlay(
         _config
     )  # returns new LifecycleConfig (or same if no file)

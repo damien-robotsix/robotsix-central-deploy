@@ -24,6 +24,12 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | `ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH` | `data/component_config_yaml.json` | — | File path for the per-component `config.yaml` store. |
 | `ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH` | `data/system_settings.json` | — | File path for the system settings store. |
 
+### Self-Contract
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ROBOTSIX_LIFECYCLE_SELF_CONTRACT_PATH` | `deploy/docker-compose.yml` | Path to central-deploy's own deploy contract. Read at startup to seed system settings from contract labels (`robotsix.deploy.settings.*`). |
+
 ### Execution
 
 | Variable | Default | Allowed Values | Description |
@@ -93,7 +99,7 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_PER_MINUTE` | `10` | Max `POST /login` requests per IP per minute. Exceeding this returns HTTP 429. |
-| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_API_PER_HOUR` | `1000` | Max authenticated API requests (e.g. `/services`, `/settings`, `/volumes`, `/onboard`, `/chat`) per IP per hour. Exceeding this returns HTTP 429. |
+| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_API_PER_HOUR` | `20000` | Max authenticated API requests (e.g. `/services`, `/volumes`, `/onboard`, `/chat`) per IP per hour. Exceeding this returns HTTP 429. |
 | `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_MAX_ATTEMPTS` | `20` | Consecutive failed login attempts before the IP is temporarily locked out. Successful login resets the counter. |
 | `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_LOCKOUT_SECONDS` | `300` | Duration in seconds an IP remains locked out after exceeding the max login attempts. |
 

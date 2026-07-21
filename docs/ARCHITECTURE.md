@@ -7,8 +7,9 @@ Docker containers for the robotsix fleet. It acts as a single control plane
 to start, stop, restart, deploy, rollback, and inspect every managed
 component. It also provides a **reverse-proxy gateway** so each component
 is reachable at a well-known URL, an **onboarding pipeline** for adding
-new services from docker-compose repos, a **settings API** for operator
-runtime configuration, a **background registry checker** that polls GHCR
+new services from docker-compose repos, a **self-contract** mechanism
+that reads system settings from its own `deploy/docker-compose.yml` labels
+at startup, a **background registry checker** that polls GHCR
 for newer image versions, and a **volume audit subsystem** that tracks
 Docker volume growth over time.
 
@@ -35,11 +36,11 @@ Docker volume growth over time.
 │  │   deploy,rollback,logs,health,config,env}            │        │
 │  └──────────┬───────────────────────────────────────────┘        │
 │             │                                                     │
-│  ┌──────────┴──────────┐  ┌─────────────────┐                    │
-│  │  Onboard Router     │  │  Settings Router │                    │
-│  │  /onboard/preflight  │  │  /settings      │                    │
-│  │  /onboard/confirm   │  │                 │                    │
-│  └──────────┬──────────┘  └─────────────────┘                    │
+│  ┌──────────────────────────────┐                                │
+│  │  Onboard Router              │                                │
+│  │  /onboard/preflight          │                                │
+│  │  /onboard/confirm            │                                │
+│  └──────────┬───────────────────┘                                │
 └─────────────┼────────────────────────────────────────────────────┘
               │
      ┌────────┴────────┬──────────────────┬──────────────────┐
@@ -280,7 +281,7 @@ This mode handles both HTTP and WebSocket via the catch-all `"/{path:path}"` rou
 
 These names shadow central-deploy's own endpoints and are **never**
 resolved as component slugs: `ui`, `health`, `services`, `onboard`,
-`docs`, `openapi.json`, `redoc`, `disk`, `settings`, `help`, `volumes`,
+`docs`, `openapi.json`, `redoc`, `disk`, `help`, `volumes`,
 `login`, `logout`.
 
 ### Resolution

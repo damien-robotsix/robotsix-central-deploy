@@ -42,6 +42,7 @@ modules:
       - changelog.d/**/*
       - config/**/*
       - docker-compose.yml
+      - deploy/docker-compose.yml
       - mkdocs.yml
       - pyproject.toml
       - uv.lock

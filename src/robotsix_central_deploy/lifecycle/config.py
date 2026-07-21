@@ -189,6 +189,15 @@ class LifecycleConfig(BaseModel):
         description="Path of the operator-editable System Settings store.",
     )
 
+    self_contract_path: str = Field(
+        "deploy/docker-compose.yml",
+        description=(
+            "Path to central-deploy's own deploy contract (deploy/docker-compose.yml). "
+            "Read at startup to seed system settings from contract labels "
+            "(robotsix.deploy.settings.*)."
+        ),
+    )
+
     log_level: str = Field(
         SETTINGS_DEFAULTS["log_level"],
         description="Root log level: DEBUG, INFO, WARNING, ERROR, or CRITICAL.",

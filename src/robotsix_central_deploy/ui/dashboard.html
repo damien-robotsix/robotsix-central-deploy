@@ -11,7 +11,7 @@
 <header>
   <h1>Robotsix Deploy — Component Status</h1>
   <button id="add-component-btn" data-action="openOnboardModal" class="btn-header">+ Add Component</button>
-  <button id="settings-btn" data-action="showSettingsSection" class="btn-header">Settings</button>
+  <button id="claude-auth-btn" data-action="showClaudeAuthSection" class="btn-header">Claude Auth</button>
   <button id="self-update-btn" data-action="triggerSelfUpdate" title="A newer server image is available on the registry" class="btn-update-server hidden">⬆ Update server</button>
   <button id="logout-btn" data-action="doLogout" class="btn-header">Logout</button>
   <span id="refresh-time">Last refreshed: --:--:--</span>
@@ -310,98 +310,9 @@
   </div>
 </div>
 
-<!-- Settings section -->
-<div id="settings-section" class="hidden">
-  <h2 class="section-title">System Settings</h2>
-  <form id="settings-form" data-action="saveSettings">
-    <input type="hidden" name="csrftoken" value="{{csrf_token}}">
-    <table class="mb-20">
-      <tr>
-        <td class="td-label">Disk Warning (% free)</td>
-        <td class="td-value">
-          <input id="s-disk-warn" type="number" step="0.1" min="0" max="100"
-                 class="input-settings input-settings-w100" />
-          <span class="help-text">% free (warn when below)</span>
-        </td>
-      </tr>
-      <tr>
-        <td class="td-label">Registry Check Interval (s)</td>
-        <td class="td-value">
-          <input id="s-reg-interval" type="number" step="1" min="0" class="input-settings input-settings-w120" />
-          <span class="help-text">0 = disabled</span>
-        </td>
-      </tr>
-      <tr>
-        <td class="td-label">Gateway Base Domain</td>
-        <td class="td-value">
-          <input id="s-gateway-domain" type="text"
-                 placeholder="e.g. deploy.example.com"
-                 class="input-settings input-settings-w280" />
-          <span class="help-text">used for service shortcut links</span>
-        </td>
-      </tr>
-      <tr>
-        <td class="td-label">Auto-Prune Old Images</td>
-        <td class="td-value">
-          <input id="s-image-prune" type="checkbox" class="accent-blue" />
-          <span class="help-text">remove dangling images after updates (rollback images are kept)</span>
-        </td>
-      </tr>
-      <tr>
-        <td class="td-label">Daily Caretaker Pass</td>
-        <td class="td-value">
-          <input id="s-caretaker-enabled" type="checkbox" data-action="onCaretakerEnabledChange"
-                 class="accent-blue" />
-          <span class="help-text">enable periodic auto-update, health, and volume checks</span>
-        </td>
-      </tr>
-      <tr id="s-caretaker-interval-row" class="hidden">
-        <td class="td-label">Caretaker Interval (hours)</td>
-        <td class="td-value">
-          <input id="s-caretaker-interval" type="number" step="1" min="1"
-                 class="input-settings input-settings-w120" />
-        </td>
-      </tr>
-      <tr id="s-mill-component-row" class="hidden">
-        <td class="td-label">Mill Component</td>
-        <td class="td-value">
-          <input id="s-mill-component" type="text"
-                 placeholder="mill"
-                 class="input-settings input-settings-w280" />
-          <span class="help-text">component id the caretaker reports findings to</span>
-        </td>
-      </tr>
-    </table>
-    <h3 class="section-subtitle">LLMIO Tier Configuration</h3>
-    <p class="section-desc">Fleet-global mapping from capability level to provider and model. Changing these values affects every LLM component on its next deploy.</p>
-    <table class="mb-20" id="tier-config-table">
-      <tr>
-        <td class="td-label-w80">Level 1</td>
-        <td class="td-compact"><input id="tier-level1-provider" type="text" placeholder="openrouter-deepseek" class="input-settings input-settings-w140" /></td>
-        <td class="td-compact"><input id="tier-level1-model" type="text" placeholder="deepseek-v4-flash" class="input-settings input-settings-w240" /></td>
-      </tr>
-      <tr>
-        <td class="td-label-w80">Level 2</td>
-        <td class="td-compact"><input id="tier-level2-provider" type="text" placeholder="openrouter-deepseek" class="input-settings input-settings-w140" /></td>
-        <td class="td-compact"><input id="tier-level2-model" type="text" placeholder="deepseek-v4-pro" class="input-settings input-settings-w240" /></td>
-      </tr>
-      <tr>
-        <td class="td-label-w80">Level 3</td>
-        <td class="td-compact"><input id="tier-level3-provider" type="text" placeholder="claudeSDK" class="input-settings input-settings-w140" /></td>
-        <td class="td-compact"><input id="tier-level3-model" type="text" placeholder="opus" class="input-settings input-settings-w240" /></td>
-      </tr>
-      <tr>
-        <td class="td-label-w80">Level 4</td>
-        <td class="td-compact"><input id="tier-level4-provider" type="text" placeholder="claudeSDK" class="input-settings input-settings-w140" /></td>
-        <td class="td-compact"><input id="tier-level4-model" type="text" placeholder="claude-fable-5" class="input-settings input-settings-w240" /></td>
-      </tr>
-    </table>
-    <div class="flex-gap-8">
-      <button type="submit" class="btn-primary">Save Settings</button>
-      <button type="button" class="btn-secondary" data-action="hideSettingsSection">Back to Dashboard</button>
-    </div>
-  </form>
-  <div id="settings-toast" class="toast-section"></div>
+<!-- Claude Auth section -->
+<div id="claude-auth-section" class="hidden">
+  <h2 class="section-title">Claude Auth</h2>
 
   <!-- ═══ Claude auth panel ════════════════════════════════════════ -->
   <section class="disk-panel mt-24" id="claude-auth-panel">
@@ -445,6 +356,9 @@
     </div>
     <div id="claude-auth-toast" class="toast-line"></div>
   </section>
+  <div class="flex-gap-8 mt-16">
+    <button type="button" class="btn-secondary" data-action="hideClaudeAuthSection">Back to Dashboard</button>
+  </div>
 </div>
 
 <!-- Volume browser modal -->

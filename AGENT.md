@@ -120,14 +120,7 @@ Two-phase process:
 | PUT | `/services/{name}/env` | Upsert env and secrets |
 | DELETE | `/services/{name}/env/{key}` | Remove a single env key or secret |
 
-### Settings API
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/settings` | Current system settings |
-| PUT | `/settings` | Update settings (hot-applies where possible) |
-
-### Gateway Proxy
+### Git clone → parse → deploy → monitor → volume audit
 
 Registered **last** on the FastAPI app. Routes by Host subdomain: `{name}.{gateway_base_domain}` maps to the managed container (`gateway_base_domain` must be configured). HTTP requests proxied via `httpx.AsyncClient`, WebSocket via bidirectional relay. Legacy path-prefix URLs (`/{name}/{path}`) are **not proxied** — they 307-redirect to the component subdomain (path-prefix proxying broke apps serving absolute asset URLs).
 
@@ -188,5 +181,5 @@ src/robotsix_central_deploy/
 2. **Gateway router must be registered LAST** — it's a catch-all that would shadow specific API routes.
 3. **Registry check interval changes require restart** — captured at startup.
 4. **Fernet key loss is irrecoverable** — secrets must be re-entered if `secrets.key` is deleted.
-5. **Reserved names** (`ui`, `health`, `services`, `onboard`, `docs`, `openapi.json`, `redoc`, `disk`, `settings`, `help`, `volumes`, `login`, `logout`) cannot be used as component slugs — see `RESERVED_NAMES` in `gateway/router.py`.
+5. **Reserved names** (`ui`, `health`, `services`, `onboard`, `docs`, `openapi.json`, `redoc`, `disk`, `help`, `volumes`, `login`, `logout`) cannot be used as component slugs — see `RESERVED_NAMES` in `gateway/router.py`.
 6. **`NoopBackend` always reports `sha256:noop`** — never use in production.

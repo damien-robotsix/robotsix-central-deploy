@@ -57,8 +57,10 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 
 ## Configuration
 
-All settings are managed via the settings API (`PUT /settings`) or
-environment variables (prefix `ROBOTSIX_LIFECYCLE_`).
+All settings are managed via the self-contract labels in
+`deploy/docker-compose.yml` (prefix `robotsix.deploy.settings.*`) or
+environment variables (prefix `ROBOTSIX_LIFECYCLE_`). Changes to the
+self-contract take effect on the next server restart.
 
 | Variable | Type | Default | Description |
 | ---------- | ------ | --------- | ------------- |

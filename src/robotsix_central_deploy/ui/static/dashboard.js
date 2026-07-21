@@ -2540,116 +2540,21 @@ async function doLogout() {
   }
 }
 
-// ── Settings section ─────────────────────────────────────────────
+// ── Claude Auth section ───────────────────────────────────────────
 
-function showSettingsSection() {
+function showClaudeAuthSection() {
   document.querySelector('header').style.display = 'none';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = 'none');
   document.querySelector('table').style.display = 'none';
-  document.getElementById('settings-section').classList.remove('hidden');
-  loadSettings();
+  document.getElementById('claude-auth-section').classList.remove('hidden');
   fetchClaudeAuthStatus();
 }
 
-function hideSettingsSection() {
-  document.getElementById('settings-section').classList.add('hidden');
+function hideClaudeAuthSection() {
+  document.getElementById('claude-auth-section').classList.add('hidden');
   document.querySelector('header').style.display = '';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = '');
   document.querySelector('table').style.display = '';
-}
-
-function changeSecret(inputId) {
-  var inp = document.getElementById(inputId);
-  inp.disabled = false;
-  inp.value = '';
-  inp.placeholder = '';
-  inp.focus();
-}
-
-function showToast(msg, type) {
-  var el = document.getElementById('settings-toast');
-  el.textContent = msg;
-  el.style.color = type === 'error' ? 'var(--red)' : 'var(--green)';
-  setTimeout(function() { el.textContent = ''; }, 4000);
-}
-
-async function loadSettings() {
-  try {
-    var res = await fetch('/settings', { headers: authHeaders(), credentials: 'same-origin' });
-    if (!res.ok) { showToast('Error loading settings: HTTP ' + res.status, 'error'); return; }
-    var s = await res.json();
-    document.getElementById('s-disk-warn').value = s.disk_warn_pct;
-    document.getElementById('s-reg-interval').value = s.registry_check_interval;
-    document.getElementById('s-gateway-domain').value = s.gateway_base_domain || '';
-    document.getElementById('s-caretaker-enabled').checked = !!s.caretaker_enabled;
-    document.getElementById('s-caretaker-interval').value = s.caretaker_interval_hours || 24;
-    document.getElementById('s-mill-component').value = s.mill_component_id || 'mill';
-    document.getElementById('s-image-prune').checked = !!s.image_auto_prune;
-    document.getElementById('s-caretaker-interval-row').classList.toggle('hidden', !s.caretaker_enabled);
-    document.getElementById('s-mill-component-row').classList.toggle('hidden', !s.caretaker_enabled);
-    // LLMIO tier config
-    if (s.llmio_tier_config) {
-      for (var level = 1; level <= 4; level++) {
-        var key = 'level' + level;
-        var entry = s.llmio_tier_config[key] || {};
-        var provEl = document.getElementById('tier-' + key + '-provider');
-        var modelEl = document.getElementById('tier-' + key + '-model');
-        if (provEl) provEl.value = entry.provider || '';
-        if (modelEl) modelEl.value = entry.model || '';
-      }
-    }
-    // Also update module-level variable used for service shortcut links
-    gatewayBaseDomain = s.gateway_base_domain || '';
-  } catch (e) {
-    showToast('Error: ' + e.message, 'error');
-  }
-}
-
-async function saveSettings() {
-  var body = {
-    disk_warn_pct: parseFloat(document.getElementById('s-disk-warn').value),
-    registry_check_interval: parseInt(document.getElementById('s-reg-interval').value),
-    gateway_base_domain: document.getElementById('s-gateway-domain').value,
-    caretaker_enabled: document.getElementById('s-caretaker-enabled').checked,
-    caretaker_interval_hours: parseInt(document.getElementById('s-caretaker-interval').value),
-    mill_component_id: document.getElementById('s-mill-component').value.trim() || 'mill',
-    image_auto_prune: document.getElementById('s-image-prune').checked,
-  };
-  // Build llmio_tier_config from the form fields
-  var tierConfig = {};
-  for (var level = 1; level <= 4; level++) {
-    var key = 'level' + level;
-    var provider = document.getElementById('tier-' + key + '-provider').value.trim();
-    var model = document.getElementById('tier-' + key + '-model').value.trim();
-    if (provider || model) {
-      tierConfig[key] = { provider: provider, model: model };
-    }
-  }
-  body.llmio_tier_config = tierConfig;
-  try {
-    var res = await fetch('/settings', {
-      method: 'PUT',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-      credentials: 'same-origin',
-      body: JSON.stringify(body),
-    });
-    if (res.ok) {
-      showToast('Settings saved');
-      // Reload to refresh masked fields
-      loadSettings();
-    } else {
-      var data = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (data.error || 'HTTP ' + res.status), 'error');
-    }
-  } catch (e) {
-    showToast('Error: ' + e.message, 'error');
-  }
-}
-
-function onCaretakerEnabledChange() {
-  var enabled = document.getElementById('s-caretaker-enabled').checked;
-  document.getElementById('s-caretaker-interval-row').classList.toggle('hidden', !enabled);
-  document.getElementById('s-mill-component-row').classList.toggle('hidden', !enabled);
 }
 
 async function checkCaretakerStatus() {
@@ -3211,7 +3116,6 @@ async function pollSelfUpdateRecovery(startedAt) {
     }
   });
   wireClaudeAuthPanel();
-  await loadSettings();
   loadDashboard();
   startAutoRefresh();
   checkSelfUpdate();
