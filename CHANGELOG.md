@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Chat-agent config-write authorization is now explicitly coupled to restart access through the single ``chat_agent_mutatable`` flag. A service the chat agent can restart is also config-writable and rollback-able. ``update`` (self-deploy) remains a separate capability.
 - Support authenticated GHCR pulls via the ``GHCR_TOKEN`` environment variable. When set, images from ``ghcr.io`` are pulled with registry authentication; anonymous pulls remain the default when the variable is absent or empty. A diagnostic error is raised when a private ``ghcr.io`` image returns 401 without credentials.
 - Remove `lifecycle/server.py` backward-compatibility shim; all callers now import from `lifecycle.app` or the appropriate submodule directly
 - Retire the dedicated settings page (GET/PUT /settings) in favour of a self-contract: central-deploy now reads its own system settings from `deploy/docker-compose.yml` labels (`robotsix.deploy.settings.*`) at startup, the same contract-driven flow used for every managed repo. The dashboard settings form is removed; the Claude auth panel is preserved as its own standalone section.

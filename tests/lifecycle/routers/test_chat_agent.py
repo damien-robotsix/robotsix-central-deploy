@@ -366,6 +366,55 @@ async def test_chat_config_update_no_schema_returns_404(
     assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_chat_config_write_follows_restart_access(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    config_yaml_store: ConfigYamlStore,
+):
+    """Services the chat agent can restart are also config-writable.
+
+    Verifies acceptance criterion: restart and config-write authorizations
+    are coupled through the single ``chat_agent_mutatable`` flag.  An
+    allowlisted service returns 200 on both; a non-allowlisted service
+    returns 403 on both.
+    """
+    # -- Allowlisted service: both restart and config-write succeed -----
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp_restart = await client.post(
+        "/chat/services/chat/restart",
+        headers=auth_headers,
+    )
+    assert resp_restart.status_code == 200, f"restart failed: {resp_restart.text}"
+
+    resp_config = await client.put(
+        "/chat/config/chat",
+        json={"values": {"debug": True}},
+        headers=auth_headers,
+    )
+    assert resp_config.status_code == 200, (
+        f"config-write should succeed when restart succeeds; "
+        f"got {resp_config.status_code}: {resp_config.text}"
+    )
+
+    # -- Non-allowlisted service: both return 403 -----------------------
+    resp_restart2 = await client.post(
+        "/chat/services/other-svc/restart",
+        headers=auth_headers,
+    )
+    assert resp_restart2.status_code == 403
+
+    resp_config2 = await client.put(
+        "/chat/config/other-svc",
+        json={"values": {"debug": True}},
+        headers=auth_headers,
+    )
+    assert resp_config2.status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # Config rollback
 # ---------------------------------------------------------------------------
