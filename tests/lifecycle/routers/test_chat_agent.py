@@ -104,6 +104,7 @@ def cfg() -> LifecycleConfig:
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
         api_key="test-key",
+        chat_agent_deployable_components=["chat", "auto-mail"],
     )
 
 
