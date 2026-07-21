@@ -1068,6 +1068,11 @@ function openConfigModal(name) {
   document.getElementById('config-raw-body').value = '';
   document.getElementById('config-form-body').style.display = '';
   document.getElementById('config-raw-toggle-btn').textContent = '{ } Raw';
+  // Reset advanced toggle
+  const advBar = document.getElementById('config-advanced-bar');
+  if (advBar) advBar.classList.add('hidden');
+  const advCheckbox = document.getElementById('config-advanced-checkbox');
+  if (advCheckbox) advCheckbox.checked = false;
   // Remove any stale drift banner / conflict panel
   const driftBanner = document.getElementById('config-drift-banner');
   if (driftBanner) driftBanner.remove();
@@ -1234,6 +1239,33 @@ function generateConfigForm(schema, current, containerOrId) {
     : (containerOrId || document.getElementById('config-form-body'));
   container.innerHTML = '';
   _renderConfigNode(_ensureJsonSchema(schema), current, '', container);
+  _updateAdvancedToggle();
+}
+
+function _updateAdvancedToggle() {
+  const bar = document.getElementById('config-advanced-bar');
+  const checkbox = document.getElementById('config-advanced-checkbox');
+  const formBody = document.getElementById('config-form-body');
+  if (!bar || !checkbox || !formBody) return;
+  const hasAdvanced = formBody.querySelector('.advanced-setting') !== null;
+  if (hasAdvanced) {
+    bar.classList.remove('hidden');
+    const show = checkbox.checked;
+    formBody.querySelectorAll('.advanced-setting').forEach(function(el) {
+      if (show) { el.classList.remove('hidden'); }
+      else { el.classList.add('hidden'); }
+    });
+  } else {
+    bar.classList.add('hidden');
+    checkbox.checked = false;
+    formBody.querySelectorAll('.advanced-setting').forEach(function(el) {
+      el.classList.remove('hidden');
+    });
+  }
+}
+
+function toggleAdvancedSettings() {
+  _updateAdvancedToggle();
 }
 
 // ── Legacy template support ─────────────────────────────────────────
@@ -1377,6 +1409,9 @@ function _renderConfigNode(schema, current, prefix, container) {
     if (resolvedSchema.type === 'object') {
       const section = document.createElement('div');
       section.className = 'env-section';
+      if (resolvedSchema.advanced) {
+        section.classList.add('advanced-setting');
+      }
       const sectionDesc = resolvedSchema.description
         ? _renderSectionDesc(resolvedSchema.description)
         : '';
@@ -1481,6 +1516,9 @@ function _reindexArrayItems(container) {
 function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isRequired, defaultVal) {
   const div = document.createElement('div');
   div.className = 'env-row';
+  if (propSchema.advanced) {
+    div.classList.add('advanced-setting');
+  }
   const displayVal = (currentVal !== undefined && currentVal !== null)
     ? currentVal
     : (defaultVal !== undefined && defaultVal !== null ? defaultVal : '');
