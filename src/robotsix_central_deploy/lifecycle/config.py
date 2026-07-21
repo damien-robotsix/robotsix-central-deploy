@@ -368,6 +368,7 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+
     # Caretaker
     caretaker_enabled: bool = Field(
         SETTINGS_DEFAULTS["caretaker_enabled"],
@@ -443,8 +444,8 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    csrf_secret: str = Field(
-        "",
+    csrf_secret: SecretStr = Field(
+        SecretStr(""),
         description=(
             "Secret key for CSRF token signing. Auto-generated (random) "
             "when empty, which invalidates outstanding tokens on every "
