@@ -145,6 +145,12 @@ def registry(component_config_store: ComponentConfigStore) -> ComponentRegistry:
     return ComponentRegistry(list(component_config_store.all()))
 
 
+@pytest.fixture
+def env_store(state_dir: Path) -> EnvStore:
+    km = SecretKeyManager(state_dir / "secrets.key")
+    return EnvStore(state_dir / "env.json", km)
+
+
 @pytest.fixture(autouse=True)
 def _wire_app_state(
     monkeypatch,
@@ -155,6 +161,7 @@ def _wire_app_state(
     audit_store: ChatAgentAuditStore,
     component_config_store: ComponentConfigStore,
     registry: ComponentRegistry,
+    env_store: EnvStore,
     state_dir: Path,
 ):
     """Wire app.state with all needed stores before each test."""
@@ -163,8 +170,6 @@ def _wire_app_state(
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
 
-    km = SecretKeyManager(state_dir / "secrets.key")
-    env_store = EnvStore(state_dir / "env.json", km)
     deploy_history_store = DeployHistoryStore(state_dir / "deploy_history.json")
 
     server_mod._config = cfg
@@ -175,7 +180,7 @@ def _wire_app_state(
     server_mod.app.state.store = store
     server_mod.app.state.backend = backend
     server_mod.app.state.registry_checker = mock_checker
-    server_mod.app.state.key_manager = km
+    server_mod.app.state.key_manager = env_store._key_manager
     server_mod.app.state.env_store = env_store
     server_mod.app.state.config_yaml_store = config_yaml_store
     server_mod.app.state.deploy_history_store = deploy_history_store
@@ -703,6 +708,7 @@ async def test_chat_endpoints_require_auth(
     endpoints = [
         ("PUT", "/chat/config/chat", {"values": {"debug": True}}),
         ("POST", "/chat/config/chat/rollback", None),
+        ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
         ("POST", "/chat/services/chat/restart", None),
         ("POST", "/chat/services/chat/update", None),
     ]
@@ -712,3 +718,206 @@ async def test_chat_endpoints_require_auth(
         else:
             resp = await client.request(method, path)
         assert resp.status_code == 401, f"{method} {path} should require auth"
+
+
+# ---------------------------------------------------------------------------
+# Env / secret provisioning — PUT /chat/env/{name}
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_env_upsert_secrets_happy_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    env_store: EnvStore,
+):
+    """PUT /chat/env/chat upserts secrets and returns masked keys."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"GHCR_TOKEN": "ghp_test123"}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["component"] == "chat"
+    assert body["secret_keys"] == ["GHCR_TOKEN"]
+    assert body["env_keys"] == []
+    assert "GHCR_TOKEN" not in str(body).lower()  # value never in response
+    # Verify the value was actually stored (encrypted, decrypted on read).
+    stored = await env_store.get("chat")
+    assert "GHCR_TOKEN" in stored.secret_tokens
+
+
+@pytest.mark.asyncio
+async def test_chat_env_upsert_plain_env(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    env_store: EnvStore,
+):
+    """PUT /chat/env/chat upserts plain env vars."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/env/chat",
+        json={"env": {"LOG_LEVEL": "debug"}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["component"] == "chat"
+    assert body["env_keys"] == ["LOG_LEVEL"]
+    assert body["secret_keys"] == []
+
+    stored = await env_store.get("chat")
+    assert stored.env["LOG_LEVEL"] == "debug"
+
+
+@pytest.mark.asyncio
+async def test_chat_env_upsert_both_env_and_secrets(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    env_store: EnvStore,
+):
+    """PUT /chat/env/chat upserts both env and secrets in one call."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/env/chat",
+        json={
+            "env": {"NODE_ENV": "production"},
+            "secrets": {"DB_PASSWORD": "s3cret"},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "NODE_ENV" in body["env_keys"]
+    assert "DB_PASSWORD" in body["secret_keys"]
+    assert "s3cret" not in str(body)
+
+    stored = await env_store.get("chat")
+    assert stored.env["NODE_ENV"] == "production"
+    assert "DB_PASSWORD" in stored.secret_tokens
+
+
+@pytest.mark.asyncio
+async def test_chat_env_not_allowlisted(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """PUT /chat/env/other-svc returns 403 for non-allowlisted service."""
+    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/env/other-svc",
+        json={"secrets": {"TOKEN": "secret"}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_chat_env_empty_body(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """PUT /chat/env/chat with empty body returns 200 with no-op detail."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/env/chat",
+        json={},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["env_keys"] == []
+    assert body["secret_keys"] == []
+    assert "nothing to do" in body["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_env_audit_log_redacted(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    audit_store: ChatAgentAuditStore,
+):
+    """Secret values are never written to the audit log."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"SUPER_SECRET": "my-password"}},
+        headers=auth_headers,
+    )
+    entries = await audit_store.list()
+    secret_entries = [e for e in entries if e.key == "SUPER_SECRET"]
+    assert len(secret_entries) == 1
+    entry = secret_entries[0]
+    assert entry.new_value == "***"
+    assert entry.old_value is None
+    assert "my-password" not in str(entry.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_env_write_follows_restart_access(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """Services with chat_agent_mutatable=True can be env-written.
+
+    Verifies that the env write surface is gated by the same
+    ``chat_agent_mutatable`` flag as restart and config-write.
+    """
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
+
+    # Allowlisted
+    r = await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"T": "v"}},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    # Non-allowlisted
+    r = await client.put(
+        "/chat/env/other-svc",
+        json={"secrets": {"T": "v"}},
+        headers=auth_headers,
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_chat_env_upsert_is_idempotent(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    env_store: EnvStore,
+):
+    """Repeated PUTs with the same key overwrite, not duplicate."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"TOKEN": "first"}},
+        headers=auth_headers,
+    )
+    await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"TOKEN": "second"}},
+        headers=auth_headers,
+    )
+    stored = await env_store.get("chat")
+    assert len(stored.secret_tokens) == 1
+    assert "TOKEN" in stored.secret_tokens

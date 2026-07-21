@@ -27,6 +27,7 @@ _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
     "update": 300.0,
     "config_update": 5.0,
     "config_rollback": 10.0,
+    "env_update": 5.0,
 }
 
 

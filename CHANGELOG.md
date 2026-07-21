@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added `PUT /chat/env/{name}` endpoint for scoped, audited secret/env provisioning by the chat agent. Secrets are encrypted at rest (Fernet), never logged or echoed in responses, and gated behind the existing `chat_agent_mutatable` per-component flag.
 - Add missing `chat_audit`, `chat_components`, `chat_config`, `chat_self`, and `chat_services` router modules to the API documentation.
 - Classify config settings as advanced: 50 rarely-changed fields (paths, tuning knobs, integration credentials) now marked `"advanced": true` in the JSON schema, while 8 common settings (`log_level`, `gateway_base_domain`, `docker_socket_url`, auth fields, feature toggles) remain always-visible in the deploy UI.
 - Settings UI: add "Show advanced settings" toggle that hides settings flagged `advanced: true` in the JSON Schema by default.  Toggle is hidden when no component settings are marked advanced.

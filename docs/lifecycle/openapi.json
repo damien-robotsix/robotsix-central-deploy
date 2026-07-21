@@ -2635,6 +2635,75 @@
         }
       }
     },
+    "/chat/env/{name}": {
+      "put": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Upsert env vars and secrets for an allowlisted service",
+        "description": "Upsert environment variables and secrets for an allowlisted service.\n\nSecret values are encrypted at rest via Fernet and are **never**\nlogged, echoed in responses, or written to non-secret config.  Every\nwrite is audited (key name + actor; value redacted).  Secrets become\navailable to the target service's container on next restart or\nredeploy.\n\nRate-limited to one write per 5 seconds per service.",
+        "operationId": "chat_upsert_env_chat_env__name__put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentEnvUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentEnvResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/services/central-deploy/restart": {
       "post": {
         "tags": [
@@ -5495,6 +5564,88 @@
         ],
         "title": "ChatAgentConfigUpdate",
         "description": "Request body for PUT /chat/config/{name}.\n\nSecret keys are accepted with partial-update semantics: omitted or\nsentinel (``\"***\"``) values keep the stored secret; only an explicitly\nsupplied non-empty value overwrites it."
+      },
+      "ChatAgentEnvResponse": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "title": "Component",
+            "description": "Component name"
+          },
+          "env_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Env Keys",
+            "description": "Plain-text env keys that were upserted",
+            "default": []
+          },
+          "secret_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Keys",
+            "description": "Secret keys that were upserted (values never returned)",
+            "default": []
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "component"
+        ],
+        "title": "ChatAgentEnvResponse",
+        "description": "Response body for PUT /chat/env/{name}.\n\nSecret values are never included \u2014 only the key names are returned."
+      },
+      "ChatAgentEnvUpdate": {
+        "properties": {
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env",
+            "description": "Plain-text environment variables to set (key \u2192 value)",
+            "default": {}
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secrets",
+            "description": "Secret environment variables to set (key \u2192 value). Values are encrypted at rest and never returned in responses.",
+            "default": {}
+          },
+          "env_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env Scopes",
+            "description": "Visibility scope tags for env keys",
+            "default": {}
+          },
+          "secret_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secret Scopes",
+            "description": "Visibility scope tags for secret keys",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "ChatAgentEnvUpdate",
+        "description": "Request body for PUT /chat/env/{name}.\n\nSecret values are accepted in the ``secrets`` dict and are encrypted\nat rest \u2014 they are never logged or echoed in responses."
       },
       "ChatAgentPreviewDeployRequest": {
         "properties": {
