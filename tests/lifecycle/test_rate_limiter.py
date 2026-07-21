@@ -28,9 +28,6 @@ class TestIsApiPath:
     def test_services_path(self):
         assert _is_api_path("/services/svc-a/logs")
 
-    def test_settings_path(self):
-        assert _is_api_path("/settings")
-
     def test_system_path(self):
         assert _is_api_path("/system/update")
 

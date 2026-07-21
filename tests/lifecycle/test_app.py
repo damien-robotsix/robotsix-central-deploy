@@ -122,7 +122,6 @@ def test_specific_api_routes_before_gateway():
         "/health",
         "/services",
         "/system/update",
-        "/settings",
         "/onboard/preflight",
         "/ui",
     ]

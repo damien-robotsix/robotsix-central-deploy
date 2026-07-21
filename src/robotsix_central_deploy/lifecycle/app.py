@@ -55,7 +55,6 @@ from .routers.chat_github_repos import router as chat_github_repos_router
 from .routers.chat_github_security import router as chat_github_security_router
 from .routers.chat_preview import router as chat_preview_router
 from .routers.chat_langfuse import router as chat_langfuse_router
-from .settings_router import settings_router
 from ..ui.router import router as ui_router
 
 # URL patterns exempt from CSRF checks — these are API routes authenticated
@@ -66,7 +65,6 @@ _CSRF_EXEMPT_URLS: list[re.Pattern[str]] = [
     re.compile(r"^/login$"),
     re.compile(r"^/logout$"),
     re.compile(r"^/services"),
-    re.compile(r"^/settings$"),
     re.compile(r"^/system/"),
     re.compile(r"^/onboard"),
     re.compile(r"^/volumes"),
@@ -122,7 +120,6 @@ if _HAS_SECURE:
     app.add_middleware(GatewayAwareSecureMiddleware, secure=secure_headers)
 
 app.include_router(ui_router)
-app.include_router(settings_router)
 app.include_router(health_router)
 app.include_router(system_router)
 app.include_router(volumes_router)

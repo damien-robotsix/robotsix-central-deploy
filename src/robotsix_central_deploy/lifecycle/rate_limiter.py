@@ -21,7 +21,6 @@ from starlette.responses import JSONResponse, Response
 
 _API_PATH_PREFIXES: tuple[str, ...] = (
     "/services",
-    "/settings",
     "/system",
     "/volumes",
     "/onboard",
@@ -171,7 +170,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     - ``POST /login`` gets a strict per-minute limit *plus* lockout after
       too many failed attempts.
-    - Authenticated API paths (``/services``, ``/settings``, …) get a
+    - Authenticated API paths (``/services``, …) get a
       broader per-hour limit.
     - All other paths pass through untouched.
     """
@@ -183,7 +182,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         - **Login POST** (``/login``): strict per-minute limit + lockout after
           ``rate_limit_login_max_attempts`` consecutive failures.
-        - **API paths** (``/services``, ``/settings``, …): broader per-hour limit.
+        - **API paths** (``/services``, …): broader per-hour limit.
 
         Requests proxied through the gateway for a component subdomain are
         excluded from all limits (``_is_gateway_host`` check). Non-matching

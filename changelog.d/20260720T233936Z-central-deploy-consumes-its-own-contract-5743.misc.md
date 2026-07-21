@@ -1,0 +1,1 @@
+Central-deploy consumes its own contract and retires the bespoke settings page
