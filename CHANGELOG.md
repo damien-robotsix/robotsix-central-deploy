@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Settings UI: add "Show advanced settings" toggle that hides settings flagged `advanced: true` in the JSON Schema by default.  Toggle is hidden when no component settings are marked advanced.
 - Chat-agent config-write authorization is now explicitly coupled to restart access through the single ``chat_agent_mutatable`` flag. A service the chat agent can restart is also config-writable and rollback-able. ``update`` (self-deploy) remains a separate capability.
 - Support authenticated GHCR pulls via the ``GHCR_TOKEN`` environment variable. When set, images from ``ghcr.io`` are pulled with registry authentication; anonymous pulls remain the default when the variable is absent or empty. A diagnostic error is raised when a private ``ghcr.io`` image returns 401 without credentials.
 - Remove `lifecycle/server.py` backward-compatibility shim; all callers now import from `lifecycle.app` or the appropriate submodule directly

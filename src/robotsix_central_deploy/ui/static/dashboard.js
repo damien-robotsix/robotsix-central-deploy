@@ -1068,6 +1068,11 @@ function openConfigModal(name) {
   document.getElementById('config-raw-body').value = '';
   document.getElementById('config-form-body').style.display = '';
   document.getElementById('config-raw-toggle-btn').textContent = '{ } Raw';
+  // Reset advanced toggle
+  const advBar = document.getElementById('config-advanced-bar');
+  if (advBar) advBar.classList.add('hidden');
+  const advCheckbox = document.getElementById('config-advanced-checkbox');
+  if (advCheckbox) advCheckbox.checked = false;
   // Remove any stale drift banner / conflict panel
   const driftBanner = document.getElementById('config-drift-banner');
   if (driftBanner) driftBanner.remove();
@@ -1118,9 +1123,12 @@ function toggleConfigMode() {
     rawBody.classList.remove('hidden');
     toggleBtn.textContent = '📋 Form';
     saveBtn.disabled = false;
-    // Hide drift UI in raw mode
+    // Hide drift UI and advanced toggle in raw mode — neither makes sense
+    // when the user is editing raw JSON text.
     if (driftBanner) driftBanner.style.display = 'none';
     if (conflictPanel) conflictPanel.style.display = 'none';
+    var advBar = document.getElementById('config-advanced-bar');
+    if (advBar) advBar.classList.add('hidden');
   } else {
     // Switch back to form mode: parse raw JSON and regenerate form
     let parsed = {};
@@ -1138,9 +1146,10 @@ function toggleConfigMode() {
     formBody.style.display = '';
     toggleBtn.textContent = '{ } Raw';
     saveBtn.disabled = false;
-    // Restore drift UI if applicable
+    // Restore drift UI and advanced toggle if applicable
     if (driftBanner) driftBanner.style.display = '';
     if (conflictPanel) conflictPanel.style.display = '';
+    _updateAdvancedToggle();
   }
 }
 
@@ -1234,6 +1243,33 @@ function generateConfigForm(schema, current, containerOrId) {
     : (containerOrId || document.getElementById('config-form-body'));
   container.innerHTML = '';
   _renderConfigNode(_ensureJsonSchema(schema), current, '', container);
+  _updateAdvancedToggle();
+}
+
+function _updateAdvancedToggle() {
+  const bar = document.getElementById('config-advanced-bar');
+  const checkbox = document.getElementById('config-advanced-checkbox');
+  const formBody = document.getElementById('config-form-body');
+  if (!bar || !checkbox || !formBody) return;
+  const hasAdvanced = formBody.querySelector('.advanced-setting') !== null;
+  if (hasAdvanced) {
+    bar.classList.remove('hidden');
+    const show = checkbox.checked;
+    formBody.querySelectorAll('.advanced-setting').forEach(function(el) {
+      if (show) { el.classList.remove('hidden'); }
+      else { el.classList.add('hidden'); }
+    });
+  } else {
+    bar.classList.add('hidden');
+    checkbox.checked = false;
+    formBody.querySelectorAll('.advanced-setting').forEach(function(el) {
+      el.classList.remove('hidden');
+    });
+  }
+}
+
+function toggleAdvancedSettings() {
+  _updateAdvancedToggle();
 }
 
 // ── Legacy template support ─────────────────────────────────────────
@@ -1271,24 +1307,35 @@ function _legacyValueToProp(val) {
 
 function _resolveRef(propSchema, defs) {
   if (!propSchema) return propSchema;
+
+  // Wrapper extras that belong to the *field* (set via json_schema_extra on
+  // the pydantic Field) rather than the *type definition*.  When the field
+  // uses a $ref or a nullable union, these annotations sit on the wrapper
+  // schema — not on the $defs entry — so we must propagate them down.
+  var FIELD_EXTRAS = ['advanced', 'description', 'default', 'title'];
+
+  function _propagateExtras(source, target) {
+    var clone = Object.assign({}, target);
+    for (var i = 0; i < FIELD_EXTRAS.length; i++) {
+      var key = FIELD_EXTRAS[i];
+      if (source[key] !== undefined && clone[key] === undefined) {
+        clone[key] = source[key];
+      }
+    }
+    return clone;
+  }
+
   // Unwrap a nullable union: anyOf/oneOf with exactly one non-null branch
   // (e.g. Optional[RepoConfig] → {anyOf: [{$ref}, {type: 'null'}]}). Without
   // this the field falls through to a text leaf and emits an invalid "" that
   // fails the schema's anyOf[object, null] on deploy. Recurse so a $ref branch
-  // still resolves; preserve the wrapper's description/default if the inner
-  // branch lacks them. Non-nullable or multi-branch unions are left unchanged.
+  // still resolves; propagate the wrapper's extras. Non-nullable or
+  // multi-branch unions are left unchanged.
   const union = propSchema.anyOf || propSchema.oneOf;
   if (Array.isArray(union)) {
     const nonNull = union.filter((b) => b && b.type !== 'null');
     if (nonNull.length === 1) {
-      const inner = { ..._resolveRef(nonNull[0], defs) };
-      if (inner.description === undefined && propSchema.description !== undefined) {
-        inner.description = propSchema.description;
-      }
-      if (inner.default === undefined && propSchema.default !== undefined) {
-        inner.default = propSchema.default;
-      }
-      return inner;
+      return _propagateExtras(propSchema, _resolveRef(nonNull[0], defs));
     }
     return propSchema;
   }
@@ -1296,7 +1343,9 @@ function _resolveRef(propSchema, defs) {
   const refPath = propSchema.$ref;
   if (refPath.startsWith('#/$defs/')) {
     const defName = refPath.slice('#/$defs/'.length);
-    if (defs[defName]) return defs[defName];
+    if (defs[defName]) {
+      return _propagateExtras(propSchema, defs[defName]);
+    }
   }
   return propSchema;
 }
@@ -1377,6 +1426,9 @@ function _renderConfigNode(schema, current, prefix, container) {
     if (resolvedSchema.type === 'object') {
       const section = document.createElement('div');
       section.className = 'env-section';
+      if (resolvedSchema.advanced) {
+        section.classList.add('advanced-setting');
+      }
       const sectionDesc = resolvedSchema.description
         ? _renderSectionDesc(resolvedSchema.description)
         : '';
@@ -1481,6 +1533,9 @@ function _reindexArrayItems(container) {
 function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isRequired, defaultVal) {
   const div = document.createElement('div');
   div.className = 'env-row';
+  if (propSchema.advanced) {
+    div.classList.add('advanced-setting');
+  }
   const displayVal = (currentVal !== undefined && currentVal !== null)
     ? currentVal
     : (defaultVal !== undefined && defaultVal !== null ? defaultVal : '');
@@ -3116,6 +3171,11 @@ async function pollSelfUpdateRecovery(startedAt) {
     }
   });
   wireClaudeAuthPanel();
+  // Advanced-settings toggle — wired directly to avoid the double-fire that
+  // the delegated click + change handlers would cause (both dispatch on
+  // the same checkbox click).
+  var advCheckbox = document.getElementById('config-advanced-checkbox');
+  if (advCheckbox) advCheckbox.addEventListener('change', toggleAdvancedSettings);
   loadDashboard();
   startAutoRefresh();
   checkSelfUpdate();

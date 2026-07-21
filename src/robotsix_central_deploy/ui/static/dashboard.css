@@ -346,6 +346,9 @@
   .config-assist-spinner {
     margin-left: 0.5rem;
   }
+  #config-advanced-bar {
+    padding: 4px 0 8px; font-size: 0.85rem;
+  }
   .config-drift-banner {
     background: rgba(251,146,60,0.15); color: #fb923c;
     border: 1px solid #fb923c; padding: 10px 14px;
