@@ -488,6 +488,14 @@
       "title": "Csrf Secret",
       "type": "string"
     },
+    "chat_agent_deployable_components": {
+      "description": "Component names the chat agent is allowed to deploy via the generic POST /chat/deploy endpoint. Each entry must match ^[a-z0-9][a-z0-9-]*$. Distinct from chat_agent_mutatable (per-component flag) \u2014 this is a server-level allowlist for components that may not have a persisted ComponentConfig yet.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Chat Agent Deployable Components",
+      "type": "array"
+    },
     "virtual_components": {
       "advanced": true,
       "description": "Virtual (non-Docker) components to register in the chat-agent component roster alongside onboarded Docker services.",

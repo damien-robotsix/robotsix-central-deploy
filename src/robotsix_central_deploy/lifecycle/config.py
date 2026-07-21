@@ -458,6 +458,19 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Generic deploy allowlist — component names the chat agent may deploy
+    # via POST /chat/deploy even when no ComponentConfig exists yet.
+    chat_agent_deployable_components: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Component names the chat agent is allowed to deploy via the "
+            "generic POST /chat/deploy endpoint. Each entry must match "
+            "^[a-z0-9][a-z0-9-]*$. Distinct from chat_agent_mutatable "
+            "(per-component flag) — this is a server-level allowlist for "
+            "components that may not have a persisted ComponentConfig yet."
+        ),
+    )
+
     # Virtual chat components
     virtual_components: list[VirtualComponentEntry] = Field(
         default_factory=list,

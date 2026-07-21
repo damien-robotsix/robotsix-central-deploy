@@ -560,6 +560,46 @@ class ChatAgentSelfRestartResponse(BaseModel):
     )
 
 
+class ChatAgentDeployRequest(BaseModel):
+    """Request body for POST /chat/deploy.
+
+    Deploys (pull + recreate) a component identified by *name* using
+    *image*.  When *container_port* is supplied a matching host port is
+    assigned automatically; components that already have a persisted
+    ``ComponentConfig`` ignore this field and use their stored port
+    mappings.
+    """
+
+    name: str = Field(
+        description="Component name; must match ^[a-z0-9][a-z0-9-]*$",
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+    )
+    image: str = Field(description="Container image reference (registry/repo:tag)")
+    container_port: int | None = Field(
+        default=None,
+        description=(
+            "Container-side port to expose on the host at the same port "
+            "number. Ignored when the component already has a stored config."
+        ),
+    )
+
+
+class ChatAgentDeployResponse(BaseModel):
+    """Response body for POST /chat/deploy."""
+
+    name: str = Field(description="Component name")
+    action: str = Field(default="deploy", description="Always 'deploy'")
+    deployed_digest: str = Field(
+        default="",
+        description="Digest of the newly deployed image; empty when unchanged",
+    )
+    previous_digest: str = Field(
+        default="", description="Digest of the previously deployed image"
+    )
+    current_state: str = Field(description="Container state after deploy")
+    detail: str = Field(default="", description="Human-readable summary")
+
+
 class ChatAgentSelfUpdateResponse(BaseModel):
     """Response body for POST /chat/services/central-deploy/update."""
 

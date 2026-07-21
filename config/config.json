@@ -37,6 +37,7 @@
   "caretaker_interval_hours": 24,
   "mill_component_id": "",
   "image_auto_prune": false,
+  "chat_agent_deployable_components": [],
   "virtual_components": [
     {
       "id": "langfuse",

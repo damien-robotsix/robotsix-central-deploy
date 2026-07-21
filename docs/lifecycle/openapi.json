@@ -2919,6 +2919,70 @@
         }
       }
     },
+    "/chat/deploy": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Generic deploy: pull + recreate an allowlisted component",
+        "description": "Pull the latest image and recreate a container for an allowlisted component.\n\nThe component does NOT need a pre-existing ``ComponentConfig`` \u2014\nwhen absent a minimal config is derived from the request body.\nAccess is gated by the ``chat_agent_deployable_components`` server-\nlevel allowlist (``LifecycleConfig``).\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one deploy per 300 seconds per component.",
+        "operationId": "chat_deploy_chat_deploy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentDeployResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Component not in the deploy allowlist"
+          },
+          "409": {
+            "description": "Deploy already in progress"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Registry not loaded"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/audit-log": {
       "get": {
         "tags": [
@@ -5564,6 +5628,85 @@
         ],
         "title": "ChatAgentConfigUpdate",
         "description": "Request body for PUT /chat/config/{name}.\n\nSecret keys are accepted with partial-update semantics: omitted or\nsentinel (``\"***\"``) values keep the stored secret; only an explicitly\nsupplied non-empty value overwrites it."
+      },
+      "ChatAgentDeployRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Name",
+            "description": "Component name; must match ^[a-z0-9][a-z0-9-]*$"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "description": "Container image reference (registry/repo:tag)"
+          },
+          "container_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container Port",
+            "description": "Container-side port to expose on the host at the same port number. Ignored when the component already has a stored config."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "image"
+        ],
+        "title": "ChatAgentDeployRequest",
+        "description": "Request body for POST /chat/deploy.\n\nDeploys (pull + recreate) a component identified by *name* using\n*image*.  When *container_port* is supplied a matching host port is\nassigned automatically; components that already have a persisted\n``ComponentConfig`` ignore this field and use their stored port\nmappings."
+      },
+      "ChatAgentDeployResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'deploy'",
+            "default": "deploy"
+          },
+          "deployed_digest": {
+            "type": "string",
+            "title": "Deployed Digest",
+            "description": "Digest of the newly deployed image; empty when unchanged",
+            "default": ""
+          },
+          "previous_digest": {
+            "type": "string",
+            "title": "Previous Digest",
+            "description": "Digest of the previously deployed image",
+            "default": ""
+          },
+          "current_state": {
+            "type": "string",
+            "title": "Current State",
+            "description": "Container state after deploy"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "current_state"
+        ],
+        "title": "ChatAgentDeployResponse",
+        "description": "Response body for POST /chat/deploy."
       },
       "ChatAgentEnvResponse": {
         "properties": {

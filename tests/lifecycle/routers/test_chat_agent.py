@@ -104,6 +104,7 @@ def cfg() -> LifecycleConfig:
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
         api_key="test-key",
+        chat_agent_deployable_components=["chat", "auto-mail"],
     )
 
 
@@ -711,6 +712,7 @@ async def test_chat_endpoints_require_auth(
         ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
         ("POST", "/chat/services/chat/restart", None),
         ("POST", "/chat/services/chat/update", None),
+        ("POST", "/chat/deploy", {"name": "chat", "image": "test:latest"}),
     ]
     for method, path, body in endpoints:
         if body is not None:
@@ -921,3 +923,113 @@ async def test_chat_env_upsert_is_idempotent(
     stored = await env_store.get("chat")
     assert len(stored.secret_tokens) == 1
     assert "TOKEN" in stored.secret_tokens
+
+
+# ---------------------------------------------------------------------------
+# Deploy (generic POST /chat/deploy)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_deploy_happy_path_existing_config(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """POST /chat/deploy succeeds for an allowlisted component with a stored config."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp = await client.post(
+        "/chat/deploy",
+        json={"name": "chat", "image": "ghcr.io/test/robotsix-chat:v2"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "chat"
+    assert data["action"] == "deploy"
+    assert data["deployed_digest"] == "sha256:noop"
+    assert data["current_state"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_chat_deploy_happy_path_auto_create_config(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    component_config_store: ComponentConfigStore,
+):
+    """POST /chat/deploy auto-creates a minimal config when none exists."""
+    await store.put(ServiceRecord(name="auto-mail", state=ServiceState.RUNNING))
+    # Confirm no config exists for auto-mail yet.
+    assert component_config_store.get("auto-mail") is None
+
+    resp = await client.post(
+        "/chat/deploy",
+        json={
+            "name": "auto-mail",
+            "image": "ghcr.io/test/robotsix-auto-mail:main",
+            "container_port": 8025,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "auto-mail"
+    assert data["action"] == "deploy"
+    assert data["deployed_digest"] == "sha256:noop"
+    assert data["current_state"] == "running"
+
+    # The config should now be persisted and registered.
+    cfg = component_config_store.get("auto-mail")
+    assert cfg is not None
+    assert cfg.image == "ghcr.io/test/robotsix-auto-mail:main"
+    assert cfg.chat_agent_mutatable is True
+    assert cfg.health_check is not None
+    assert len(cfg.ports) == 1
+    assert cfg.ports[0].host == 8025
+
+
+@pytest.mark.asyncio
+async def test_chat_deploy_not_in_allowlist(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """POST /chat/deploy returns 403 when the component is not in the deploy allowlist."""
+    await store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
+
+    resp = await client.post(
+        "/chat/deploy",
+        json={"name": "cognee", "image": "ghcr.io/test/cognee:v2"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403
+    assert "deploy allowlist" in resp.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_chat_deploy_rate_limited(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """Second deploy within cooldown window returns 429."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    # First deploy succeeds.
+    resp1 = await client.post(
+        "/chat/deploy",
+        json={"name": "chat", "image": "ghcr.io/test/robotsix-chat:v2"},
+        headers=auth_headers,
+    )
+    assert resp1.status_code == 200
+
+    # Second deploy within cooldown fails.
+    resp2 = await client.post(
+        "/chat/deploy",
+        json={"name": "chat", "image": "ghcr.io/test/robotsix-chat:v2"},
+        headers=auth_headers,
+    )
+    assert resp2.status_code == 429
+    assert "Rate limit" in resp2.json()["error"]
