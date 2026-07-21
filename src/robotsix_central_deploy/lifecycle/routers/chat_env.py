@@ -100,7 +100,9 @@ async def chat_upsert_env(
         )
 
     for key in sorted(secrets):
-        logger.info(
+        # Only secret key *names* are logged (values are never exposed);
+        # names are already sanitised via _sanitize_log.  CodeQL FP.
+        logger.info(  # lgtm[py/clear-text-logging-sensitive-data]
             "Chat agent set secret key '%s' on component '%s'",
             _sanitize_log(key),
             _sanitize_log(name),
