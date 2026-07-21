@@ -13,7 +13,8 @@ from robotsix_central_deploy.registry.models import (
 )
 
 # Import the server module itself (not just symbols) so we can set its globals.
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle.deps.seed import _namespace_spec_volumes
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +61,7 @@ class TestNamespaceSpecVolumes:
             config_volume="auto-mail-config",
             siblings=[],
         )
-        result = server_mod._namespace_spec_volumes(spec, "mail")
+        result = _namespace_spec_volumes(spec, "mail")
 
         assert result.volume_mounts[0].host == "mail-auto-mail-config"
         assert result.volume_mounts[0].container == "/config"
@@ -80,7 +81,7 @@ class TestNamespaceSpecVolumes:
             config_volume=None,
             siblings=[],
         )
-        result = server_mod._namespace_spec_volumes(spec, "mail")
+        result = _namespace_spec_volumes(spec, "mail")
         assert result.config_volume is None
 
     def test_renames_sibling_volume_mounts(self):
@@ -111,7 +112,7 @@ class TestNamespaceSpecVolumes:
                 ),
             ],
         )
-        result = server_mod._namespace_spec_volumes(spec, "zzztest")
+        result = _namespace_spec_volumes(spec, "zzztest")
 
         assert result.volume_mounts[0].host == "zzztest-shared-vol"
         assert result.siblings[0].mounts[0].host == "zzztest-worker-data"
@@ -134,8 +135,8 @@ class TestNamespaceSpecVolumes:
             config_volume="auto-mail-config",
             siblings=[],
         )
-        mail_result = server_mod._namespace_spec_volumes(spec, "mail")
-        zzz_result = server_mod._namespace_spec_volumes(spec, "zzztest")
+        mail_result = _namespace_spec_volumes(spec, "mail")
+        zzz_result = _namespace_spec_volumes(spec, "zzztest")
 
         mail_hosts = {m.host for m in mail_result.volume_mounts}
         zzz_hosts = {m.host for m in zzz_result.volume_mounts}

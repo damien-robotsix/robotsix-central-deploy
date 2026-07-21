@@ -19,7 +19,6 @@ from .backends import (
 )
 from .store import ServiceStore, InMemoryStore, FileStore
 from .config import LifecycleConfig
-from .app import app
 
 __all__ = [
     "ServiceState",
@@ -39,5 +38,4 @@ __all__ = [
     "InMemoryStore",
     "FileStore",
     "LifecycleConfig",
-    "app",
 ]

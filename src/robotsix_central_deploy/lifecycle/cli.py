@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> None:
     from ._logging import LOGGING_CONFIG
 
     uvicorn.run(
-        "robotsix_central_deploy.lifecycle.server:app",
+        "robotsix_central_deploy.lifecycle.app:app",
         host=cfg.host,
         port=cfg.port,
         reload=False,

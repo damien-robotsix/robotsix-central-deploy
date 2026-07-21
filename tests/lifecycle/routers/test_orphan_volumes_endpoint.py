@@ -13,7 +13,7 @@ from robotsix_central_deploy.lifecycle.models import DockerDfStats, VolumeStat
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.models import ComponentConfig
 
-import robotsix_central_deploy.lifecycle.server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 import json
 
-from robotsix_central_deploy.lifecycle.server import app
+from robotsix_central_deploy.lifecycle.app import app
 
 schema = app.openapi()
 # The API uses its own auth (session token / API key) rather than OpenAPI

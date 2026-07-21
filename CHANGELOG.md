@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove `lifecycle/server.py` backward-compatibility shim; all callers now import from `lifecycle.app` or the appropriate submodule directly
 - Retire the dedicated settings page (GET/PUT /settings) in favour of a self-contract: central-deploy now reads its own system settings from `deploy/docker-compose.yml` labels (`robotsix.deploy.settings.*`) at startup, the same contract-driven flow used for every managed repo. The dashboard settings form is removed; the Claude auth panel is preserved as its own standalone section.
 - Remove `has_config_yaml` flag; make standard config a hard deployability gate.
   Onboard preflight now requires `config/config.json` + `config/config.schema.json`

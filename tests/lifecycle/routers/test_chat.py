@@ -18,7 +18,7 @@ from robotsix_central_deploy.registry.models import (
 )
 
 # Import the server module itself (not just symbols) so we can set its globals.
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 
 
 # ---------------------------------------------------------------------------
