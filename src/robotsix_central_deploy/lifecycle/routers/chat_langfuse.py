@@ -15,9 +15,7 @@ Exposes:
 
 Project aliases and credentials are configured via
 ``LifecycleConfig.langfuse_projects`` (dict of alias → {public_key,
-secret_key}).  A legacy fallback reads the six per-project config fields
-(``langfuse_chat_public_key``, …) for backward compatibility with
-existing deployments that haven't migrated to the dict form yet.
+secret_key}).
 """
 
 from __future__ import annotations
@@ -45,26 +43,9 @@ router = APIRouter(tags=["chat-langfuse"])
 def _build_project_creds(config: LifecycleConfig) -> dict[str, LangfuseProjectCreds]:
     """Build the full project-alias → credentials map from config.
 
-    Reads ``langfuse_projects`` first (the data-driven form).  Falls back
-    to the six legacy per-project config fields for backward compatibility
-    with existing deployments that haven't migrated yet.
+    Reads ``langfuse_projects`` (the data-driven dict form).
     """
-    result: dict[str, LangfuseProjectCreds] = dict(config.langfuse_projects)
-
-    # Legacy fallback: per-project fields for robotsix-chat, cognee, robotsix-mill.
-    _LEGACY_MAP: dict[str, tuple[str, str]] = {
-        "robotsix-chat": ("langfuse_chat_public_key", "langfuse_chat_secret_key"),
-        "cognee": ("langfuse_cognee_public_key", "langfuse_cognee_secret_key"),
-        "robotsix-mill": ("langfuse_mill_public_key", "langfuse_mill_secret_key"),
-    }
-    for alias, (pk_attr, sk_attr) in _LEGACY_MAP.items():
-        if alias in result:
-            continue  # new-style entry takes precedence
-        pk: str = getattr(config, pk_attr, "")
-        sk: str = getattr(config, sk_attr, "")
-        result[alias] = LangfuseProjectCreds(public_key=pk, secret_key=sk)
-
-    return result
+    return dict(config.langfuse_projects)
 
 
 def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, str]:
@@ -80,12 +61,12 @@ def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, s
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown Langfuse project alias '{project}'.",
         )
-    if not creds.public_key or not creds.secret_key:
+    if not creds.public_key or not creds.secret_key.get_secret_value():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Langfuse credentials for project '{project}' are not configured.",
         )
-    return creds.public_key, creds.secret_key
+    return creds.public_key, creds.secret_key.get_secret_value()
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -220,7 +201,7 @@ async def list_projects(
     return [
         alias
         for alias, creds in projects.items()
-        if creds.public_key and creds.secret_key
+        if creds.public_key and creds.secret_key.get_secret_value()
     ]
 
 

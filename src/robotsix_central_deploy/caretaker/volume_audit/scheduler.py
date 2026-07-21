@@ -155,14 +155,18 @@ class VolumeAuditScheduler:
     async def _maybe_create_board_client(self) -> BoardClient | None:
         """Return a BoardClient if board integration is configured, else None."""
         cfg = self._config
-        if cfg.board_api_url and cfg.board_api_token and cfg.board_repo_id:
+        if (
+            cfg.board_api_url
+            and cfg.board_api_token.get_secret_value()
+            and cfg.board_repo_id
+        ):
             try:
                 from robotsix_board_agent.client import BoardClient
                 from robotsix_board_agent.config import BoardAgentSettings
 
                 settings = BoardAgentSettings(
                     board_api_url=cfg.board_api_url,
-                    board_api_token=cfg.board_api_token,
+                    board_api_token=cfg.board_api_token.get_secret_value(),
                     board_repo_id=cfg.board_repo_id,
                 )
                 return BoardClient(settings)

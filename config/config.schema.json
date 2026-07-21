@@ -22,8 +22,10 @@
         "secret_key": {
           "default": "",
           "description": "Langfuse secret key for the project.",
+          "format": "password",
           "title": "Secret Key",
-          "type": "string"
+          "type": "string",
+          "writeOnly": true
         }
       },
       "title": "LangfuseProjectCreds",
@@ -146,8 +148,10 @@
     "api_key": {
       "default": "",
       "description": "Legacy API credential accepted via the X-API-Key header or as a Basic-auth password. Empty disables api-key auth.",
+      "format": "password",
       "title": "Api Key",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "auth_username": {
       "default": "",
@@ -158,8 +162,10 @@
     "auth_password": {
       "default": "",
       "description": "Basic-auth password paired with auth_username.",
+      "format": "password",
       "title": "Auth Password",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "store_backend": {
       "$ref": "#/$defs/StoreBackend",
@@ -356,8 +362,10 @@
       "advanced": true,
       "default": "",
       "description": "Bearer token for the board API.",
+      "format": "password",
       "title": "Board Api Token",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "board_repo_id": {
       "advanced": true,
@@ -377,22 +385,26 @@
       "advanced": true,
       "default": "",
       "description": "GitHub App private key (PEM) paired with github_app_id.",
+      "format": "password",
       "title": "Github App Private Key",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "github_repo_create_token": {
       "advanced": true,
       "default": "",
       "description": "A GitHub Personal Access Token (classic 'repo' scope, or fine-grained with Administration:read-and-write) used only for POST /chat/github/repos. GitHub App installation tokens cannot create repositories under a personal account ('Resource not accessible by integration'), so repo creation needs a separate PAT. Empty disables repo creation (the Actions-status endpoints are unaffected).",
+      "format": "password",
       "title": "Github Repo Create Token",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "langfuse_projects": {
       "additionalProperties": {
         "$ref": "#/$defs/LangfuseProjectCreds"
       },
       "advanced": true,
-      "description": "Langfuse project alias \u2192 credentials mapping.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}. Preferred over the legacy per-project config fields.",
+      "description": "Langfuse project alias \u2192 credentials mapping.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}.",
       "title": "Langfuse Projects",
       "type": "object"
     },
@@ -401,48 +413,6 @@
       "default": "",
       "description": "Langfuse instance base URL (no trailing slash).",
       "title": "Langfuse Base Url",
-      "type": "string"
-    },
-    "langfuse_chat_public_key": {
-      "advanced": true,
-      "default": "",
-      "description": "Langfuse public key for the robotsix-chat trace project.",
-      "title": "Langfuse Chat Public Key",
-      "type": "string"
-    },
-    "langfuse_chat_secret_key": {
-      "advanced": true,
-      "default": "",
-      "description": "Langfuse secret key for the robotsix-chat trace project.",
-      "title": "Langfuse Chat Secret Key",
-      "type": "string"
-    },
-    "langfuse_cognee_public_key": {
-      "advanced": true,
-      "default": "",
-      "description": "Langfuse public key for the cognee trace project.",
-      "title": "Langfuse Cognee Public Key",
-      "type": "string"
-    },
-    "langfuse_cognee_secret_key": {
-      "advanced": true,
-      "default": "",
-      "description": "Langfuse secret key for the cognee trace project.",
-      "title": "Langfuse Cognee Secret Key",
-      "type": "string"
-    },
-    "langfuse_mill_public_key": {
-      "advanced": true,
-      "default": "",
-      "description": "Langfuse public key for the robotsix-mill trace project.",
-      "title": "Langfuse Mill Public Key",
-      "type": "string"
-    },
-    "langfuse_mill_secret_key": {
-      "advanced": true,
-      "default": "",
-      "description": "Langfuse secret key for the robotsix-mill trace project.",
-      "title": "Langfuse Mill Secret Key",
       "type": "string"
     },
     "caretaker_enabled": {

@@ -183,12 +183,12 @@ async def login_submit(request: Request) -> Response:
     authed = False
     if not cfg.auth_required:
         authed = True
-    elif cfg.auth_username and cfg.auth_password:
+    elif cfg.auth_username and cfg.auth_password.get_secret_value():
         authed = hmac.compare_digest(
             username, cfg.auth_username
-        ) and hmac.compare_digest(password, cfg.auth_password)
-    elif cfg.api_key:
-        authed = hmac.compare_digest(password, cfg.api_key)
+        ) and hmac.compare_digest(password, cfg.auth_password.get_secret_value())
+    elif cfg.api_key.get_secret_value():
+        authed = hmac.compare_digest(password, cfg.api_key.get_secret_value())
 
     if not authed:
         # Generate a fresh CSRF token for the re-displayed login form

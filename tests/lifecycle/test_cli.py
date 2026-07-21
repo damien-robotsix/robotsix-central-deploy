@@ -51,7 +51,7 @@ class TestArgumentParser:
         # Config object mutated in-place.
         assert cfg.store_backend == StoreBackend.FILE
         assert cfg.execution_backend == ExecutionBackendType.NOOP
-        assert cfg.api_key == "secret"
+        assert cfg.api_key.get_secret_value() == "secret"
 
     def test_invalid_store_backend_raises_system_exit(self):
         """argparse rejects values outside StoreBackend choices."""
@@ -128,7 +128,7 @@ class TestMainOverride:
             {"uvicorn": fake_uvicorn, "robotsix_config": fake_robotsix_config},
         ):
             cli.main(["--api-key", "override-key"])
-        assert cfg.api_key == "override-key"
+        assert cfg.api_key.get_secret_value() == "override-key"
 
     def test_partial_override_preserves_defaults(self):
         """Unspecified flags leave config defaults intact."""

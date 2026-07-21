@@ -8,6 +8,7 @@ import httpx
 from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle.config import LangfuseProjectCreds
 
 
 class TestLangfuseProxyAuth:
@@ -25,10 +26,13 @@ class TestLangfuseProjectsEndpoint:
         auth_headers: dict,
     ):
         """GET /chat/langfuse/projects returns only projects with both keys set."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk-chat"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk-chat"
-        server_mod.app.state.config.langfuse_mill_public_key = "pk-mill"
-        server_mod.app.state.config.langfuse_mill_secret_key = "sk-mill"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk-chat", secret_key="sk-chat"
+        )
+        cfg.langfuse_projects["robotsix-mill"] = LangfuseProjectCreds(
+            public_key="pk-mill", secret_key="sk-mill"
+        )
         # cognee keys are NOT set — should not appear.
 
         resp = await client.get(
@@ -62,8 +66,10 @@ class TestLangfuseNotConfigured:
         self, client: AsyncClient, auth_headers: dict
     ):
         """When keys for a known project are empty, the proxy returns 503."""
-        server_mod.app.state.config.langfuse_chat_public_key = ""
-        server_mod.app.state.config.langfuse_chat_secret_key = ""
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="", secret_key=""
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/traces",
@@ -82,9 +88,11 @@ class TestLangfuseProxyTraces:
     ):
         """GET /chat/langfuse/{project}/traces forwards to Langfuse with
         Basic Auth injected from the project's keys."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk-chat"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk-chat"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk-chat", secret_key="sk-chat"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_headers: dict[str, str] = {}
         captured_url: str = ""
@@ -133,9 +141,11 @@ class TestLangfuseProxyTraces:
         monkeypatch,
     ):
         """The limit query param is capped at 100 server-side."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk", secret_key="sk"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_url: str = ""
 
@@ -170,9 +180,11 @@ class TestLangfuseProxyTraces:
         monkeypatch,
     ):
         """GET /chat/langfuse/{project}/traces/{traceId} works."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk-chat"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk-chat"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk-chat", secret_key="sk-chat"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_url: str = ""
 
@@ -206,9 +218,11 @@ class TestLangfuseProxyTraces:
         monkeypatch,
     ):
         """GET /chat/langfuse/{project}/observations works."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk-chat"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk-chat"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk-chat", secret_key="sk-chat"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_url: str = ""
 
@@ -242,9 +256,11 @@ class TestLangfuseProxyTraces:
         monkeypatch,
     ):
         """GET /chat/langfuse/{project}/observations/{observationId} works."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk-chat"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk-chat"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk-chat", secret_key="sk-chat"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_url: str = ""
 
@@ -280,9 +296,11 @@ class TestLangfuseProxyMillProject:
         monkeypatch,
     ):
         """When the project path param is robotsix-mill, the proxy uses mill keys."""
-        server_mod.app.state.config.langfuse_mill_public_key = "pk-mill"
-        server_mod.app.state.config.langfuse_mill_secret_key = "sk-mill"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-mill"] = LangfuseProjectCreds(
+            public_key="pk-mill", secret_key="sk-mill"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_headers: dict[str, str] = {}
 
@@ -321,8 +339,10 @@ class TestLangfuseProxyMillProject:
         auth_headers: dict,
     ):
         """When mill keys are empty, robotsix-mill returns 503."""
-        server_mod.app.state.config.langfuse_mill_public_key = ""
-        server_mod.app.state.config.langfuse_mill_secret_key = ""
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-mill"] = LangfuseProjectCreds(
+            public_key="", secret_key=""
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-mill/traces",
@@ -339,9 +359,11 @@ class TestLangfuseProxyCogneeProject:
         monkeypatch,
     ):
         """When the project path param is cognee, the proxy uses cognee keys."""
-        server_mod.app.state.config.langfuse_cognee_public_key = "pk-cog"
-        server_mod.app.state.config.langfuse_cognee_secret_key = "sk-cog"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["cognee"] = LangfuseProjectCreds(
+            public_key="pk-cog", secret_key="sk-cog"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         captured_headers: dict[str, str] = {}
 
@@ -380,8 +402,10 @@ class TestLangfuseProxyCogneeProject:
         auth_headers: dict,
     ):
         """When cognee keys are empty, cognee returns 503."""
-        server_mod.app.state.config.langfuse_cognee_public_key = ""
-        server_mod.app.state.config.langfuse_cognee_secret_key = ""
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["cognee"] = LangfuseProjectCreds(
+            public_key="", secret_key=""
+        )
 
         resp = await client.get(
             "/chat/langfuse/cognee/traces",
@@ -398,9 +422,11 @@ class TestLangfuseProxyErrorHandling:
         monkeypatch,
     ):
         """A ConnectError from httpx becomes 502 Bad Gateway."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk", secret_key="sk"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         async def _fake_get(url, headers=None, **kwargs):
             raise httpx.ConnectError("connection refused")
@@ -425,9 +451,11 @@ class TestLangfuseProxyErrorHandling:
         monkeypatch,
     ):
         """A TimeoutException from httpx becomes 504 Gateway Timeout."""
-        server_mod.app.state.config.langfuse_chat_public_key = "pk"
-        server_mod.app.state.config.langfuse_chat_secret_key = "sk"
-        server_mod.app.state.config.langfuse_base_url = "https://langfuse.example"
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk", secret_key="sk"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
 
         async def _fake_get(url, headers=None, **kwargs):
             raise httpx.TimeoutException("timed out")

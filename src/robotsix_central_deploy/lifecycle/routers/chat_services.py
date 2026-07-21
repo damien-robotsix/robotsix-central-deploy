@@ -386,7 +386,7 @@ async def chat_deploy(
         if (
             parsed is not None
             and lifecycle_config.github_app_id
-            and lifecycle_config.github_app_private_key
+            and lifecycle_config.github_app_private_key.get_secret_value()
         ):
             owner, repo_name = parsed
             try:
@@ -398,7 +398,7 @@ async def chat_deploy(
                     None,
                     get_installation_token_sync,
                     lifecycle_config.github_app_id,
-                    lifecycle_config.github_app_private_key,
+                    lifecycle_config.github_app_private_key.get_secret_value(),
                     owner,
                     repo_name,
                 )

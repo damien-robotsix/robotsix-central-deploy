@@ -50,11 +50,13 @@ def _fake_client(repo_obj: MagicMock) -> MagicMock:
 @pytest.fixture
 def enable_github_app():
     """Configure github_app_id/private_key so the endpoints don't 503."""
+    from pydantic import SecretStr
+
     server_mod.app.state.config.github_app_id = "12345"
-    server_mod.app.state.config.github_app_private_key = "pem-data"
+    server_mod.app.state.config.github_app_private_key = SecretStr("pem-data")
     yield
     server_mod.app.state.config.github_app_id = ""
-    server_mod.app.state.config.github_app_private_key = ""
+    server_mod.app.state.config.github_app_private_key = SecretStr("")
 
 
 class TestListWorkflowRuns:
