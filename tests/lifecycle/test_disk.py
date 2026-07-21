@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 from collections import namedtuple
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
@@ -68,7 +69,7 @@ class TestDiskEndpoint:
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         monkeypatch.setattr(
-            server_mod.shutil,
+            shutil,
             "disk_usage",
             lambda path: DiskUsage(total=100_000_000, used=60_000_000, free=40_000_000),
         )
@@ -88,7 +89,7 @@ class TestDiskEndpoint:
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         monkeypatch.setattr(
-            server_mod.shutil,
+            shutil,
             "disk_usage",
             lambda path: DiskUsage(total=1000, used=500, free=500),
         )
@@ -103,7 +104,7 @@ class TestDiskEndpoint:
     ):
         # free=10 GiB, warn=5 GiB → free > threshold
         monkeypatch.setattr(
-            server_mod.shutil,
+            shutil,
             "disk_usage",
             lambda path: DiskUsage(
                 total=100_000_000_000,
@@ -122,7 +123,7 @@ class TestDiskEndpoint:
     ):
         # free=2 GiB, warn=5 GiB → free < threshold
         monkeypatch.setattr(
-            server_mod.shutil,
+            shutil,
             "disk_usage",
             lambda path: DiskUsage(
                 total=100_000_000_000,
@@ -145,7 +146,7 @@ class TestDiskEndpoint:
             called_with.append(path)
             return DiskUsage(total=1000, used=500, free=500)
 
-        monkeypatch.setattr(server_mod.shutil, "disk_usage", fake_disk_usage)
+        monkeypatch.setattr(shutil, "disk_usage", fake_disk_usage)
         server_mod.app.state.config.disk_path = "/host_root"
 
         resp = await client.get("/disk", headers=auth_headers)
@@ -165,7 +166,7 @@ class TestDiskEndpoint:
         async def _fake_prune(self) -> int:
             return 2_684_354_560  # 2.5 GiB
 
-        monkeypatch.setattr(server_mod.NoopBackend, "prune_builds", _fake_prune)
+        monkeypatch.setattr(NoopBackend, "prune_builds", _fake_prune)
         resp = await client.post("/disk/reclaim", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["space_reclaimed_bytes"] == 2_684_354_560
@@ -179,8 +180,8 @@ class TestDiskEndpoint:
         async def _fake_prune_images(self, protected_refs: set[str]) -> int:
             return 2_000
 
-        monkeypatch.setattr(server_mod.NoopBackend, "prune_builds", _fake_prune_builds)
-        monkeypatch.setattr(server_mod.NoopBackend, "prune_images", _fake_prune_images)
+        monkeypatch.setattr(NoopBackend, "prune_builds", _fake_prune_builds)
+        monkeypatch.setattr(NoopBackend, "prune_images", _fake_prune_images)
         resp = await client.post("/disk/reclaim", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["space_reclaimed_bytes"] == 3_000
@@ -205,7 +206,7 @@ class TestDiskEndpoint:
             seen.append(protected_refs)
             return 0
 
-        monkeypatch.setattr(server_mod.NoopBackend, "prune_images", _fake_prune_images)
+        monkeypatch.setattr(NoopBackend, "prune_images", _fake_prune_images)
         resp = await client.post("/disk/reclaim", headers=auth_headers)
         assert resp.status_code == 200
         assert seen and {"sha256:current", "sha256:rollback"} <= seen[0]

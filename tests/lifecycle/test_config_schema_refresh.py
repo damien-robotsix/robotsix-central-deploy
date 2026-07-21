@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.models import ComponentConfig
 

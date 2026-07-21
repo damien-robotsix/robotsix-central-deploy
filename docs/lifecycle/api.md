@@ -88,8 +88,6 @@
 
 ::: robotsix_central_deploy.lifecycle.secure_headers
 
-::: robotsix_central_deploy.lifecycle.server
-
 ::: robotsix_central_deploy.lifecycle.session
 
 ## Caretaker

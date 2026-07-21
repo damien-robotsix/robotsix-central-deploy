@@ -25,7 +25,7 @@ from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 
 
 @pytest.fixture(autouse=True)

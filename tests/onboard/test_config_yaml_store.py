@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from robotsix_central_deploy.onboard.models import ConfigParseError
 from robotsix_central_deploy.onboard.parser import parse_config_json
-from robotsix_central_deploy.lifecycle.server import (
+from robotsix_central_deploy.lifecycle.deps.seed import (
     _prune_unset,
     _seed_for_detect,
     _validate_account_ids,

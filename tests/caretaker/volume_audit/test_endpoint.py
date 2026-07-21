@@ -2,7 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import robotsix_central_deploy.lifecycle.server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.caretaker.volume_audit import VolumeAuditResponse
 
 
 class TestVolumeAuditEndpoint:
@@ -19,7 +20,7 @@ class TestVolumeAuditEndpoint:
     async def test_enabled_returns_scheduler_response(self, client, monkeypatch):
         """When enabled, endpoint delegates to app.state.volume_audit_scheduler."""
         fake_scheduler = MagicMock()
-        fake_scheduler.get_audit_response.return_value = server_mod.VolumeAuditResponse(
+        fake_scheduler.get_audit_response.return_value = VolumeAuditResponse(
             enabled=True, volumes=[], recent_findings=[]
         )
         # Starlette State uses __setattr__ rather than __dict__ — set directly.

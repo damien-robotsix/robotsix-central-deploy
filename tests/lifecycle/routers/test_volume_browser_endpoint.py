@@ -9,7 +9,8 @@ from httpx import AsyncClient
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.models import ComponentConfig
 
-import robotsix_central_deploy.lifecycle.server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle.deps.volume import VOLUME_CAT_MAX_BYTES
 
 
 # ---------------------------------------------------------------------------
@@ -227,5 +228,5 @@ class TestVolumeBrowserHappyPath:
         assert data["binary"] is False
         assert data["truncated"] is False
         mock_backend.read_volume_file.assert_called_once_with(
-            "vol10", "readme.txt", server_mod.VOLUME_CAT_MAX_BYTES
+            "vol10", "readme.txt", VOLUME_CAT_MAX_BYTES
         )

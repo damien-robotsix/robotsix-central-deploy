@@ -200,7 +200,8 @@ class TestSettingsFirstBoot:
         monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
         monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_PASSWORD", raising=False)
 
-        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle.app import app
+        from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
         mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
@@ -225,7 +226,8 @@ class TestSettingsFirstBoot:
         monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", "operator")
         monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_PASSWORD", raising=False)
 
-        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle.app import app
+        from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
         mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
@@ -259,7 +261,8 @@ class TestSettingsFirstBoot:
             SystemSettings(auth_username="custom-op", auth_password="secret")
         )
 
-        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle.app import app
+        from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
         mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
@@ -286,7 +289,8 @@ class TestSettingsFirstBoot:
         monkeypatch.delenv("ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED", raising=False)
         monkeypatch.delenv("ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS", raising=False)
 
-        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle.app import app
+        from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
         mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
@@ -309,7 +313,8 @@ class TestSettingsFirstBoot:
         monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED", "true")
         monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS", "6")
 
-        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle.app import app
+        from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
         mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
@@ -355,7 +360,8 @@ class TestSettingsFirstBoot:
         store = SystemSettingsStore(settings_path)
         await store.put(SystemSettings(gateway_base_domain="overlaid.example.com"))
 
-        from robotsix_central_deploy.lifecycle.server import app, lifespan
+        from robotsix_central_deploy.lifecycle.app import app
+        from robotsix_central_deploy.lifecycle.deps import lifespan
         from robotsix_central_deploy.lifecycle import deps
 
         mock_rc = MagicMock()

@@ -1,0 +1,1 @@
+Migrate all callers from lifecycle.server to canonical modules and delete server.py

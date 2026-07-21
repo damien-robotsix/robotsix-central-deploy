@@ -22,7 +22,7 @@ from robotsix_central_deploy.lifecycle.models import (
 from robotsix_central_deploy.lifecycle.routers import claude_auth as claude_auth_mod
 from robotsix_central_deploy.lifecycle.session import SessionStore
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.settings_store import SystemSettingsStore

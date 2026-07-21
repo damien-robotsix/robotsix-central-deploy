@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from robotsix_central_deploy.lifecycle import server as server_mod
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     DeployHistoryEntry,
     DeployOutcome,
