@@ -103,6 +103,12 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_MAX_ATTEMPTS` | `20` | Consecutive failed login attempts before the IP is temporarily locked out. Successful login resets the counter. |
 | `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_LOCKOUT_SECONDS` | `300` | Duration in seconds an IP remains locked out after exceeding the max login attempts. |
 
+### Chat Agent
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ROBOTSIX_LIFECYCLE_CHAT_AGENT_DEPLOYABLE_COMPONENTS` | `[]` | Comma-separated list of component names the chat agent may deploy via `POST /chat/deploy`. Each entry must match `^[a-z0-9][a-z0-9-]*$`. This is a server-level allowlist for components that may not have a persisted `ComponentConfig` yet (distinct from the per-component `chat_agent_mutatable` flag). |
+
 ### Board Integration
 
 | Variable | Default | Description |

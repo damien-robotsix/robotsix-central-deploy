@@ -227,3 +227,28 @@ same derivation used by the caretaker's mill client.
 
 The flag is stored on the component's `ComponentConfig` and persists across
 redeploys.
+
+### Generic deploy (server-level allowlist)
+
+Not every deployable component needs an onboarding pipeline or persisted
+`ComponentConfig` from the start.  The server supports a **generic deploy**
+endpoint (`POST /chat/deploy`) that lets the chat agent pull + recreate any
+component whose name appears in the `chat_agent_deployable_components` list
+in `config/config.json` (or equivalently the
+`ROBOTSIX_LIFECYCLE_CHAT_AGENT_DEPLOYABLE_COMPONENTS` environment variable).
+
+On first deploy, a minimal `ComponentConfig` is derived from the request body
+(``name``, ``image``, optional ``container_port``), persisted automatically,
+and registered in the gateway's routing table.  Subsequent deploys (via the
+dashboard or the chat agent) then use the stored config — this makes the
+deploy target **portable**: adding a new component requires only appending its
+name to the allowlist, with **no engine code change**.
+
+Access is gated by:
+
+1. The server-level `chat_agent_deployable_components` allowlist (403 if absent).
+2. The standard `X-API-Key` auth (401 if missing/invalid).
+3. Per-component rate limiting (300 s cooldown per deploy).
+
+Health checks are configured automatically when `container_port` is supplied;
+operators can customise them through the dashboard after the first deploy.
