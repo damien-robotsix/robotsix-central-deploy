@@ -2635,75 +2635,6 @@
         }
       }
     },
-    "/chat/env/{name}": {
-      "put": {
-        "tags": [
-          "chat"
-        ],
-        "summary": "Upsert env vars and secrets for an allowlisted service",
-        "description": "Upsert environment variables and secrets for an allowlisted service.\n\nSecret values are encrypted at rest via Fernet and are **never**\nlogged, echoed in responses, or written to non-secret config.  Every\nwrite is audited (key name + actor; value redacted).  Secrets become\navailable to the target service's container on next restart or\nredeploy.\n\nRate-limited to one write per 5 seconds per service.",
-        "operationId": "chat_upsert_env_chat_env__name__put",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatAgentEnvUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatAgentEnvResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Service not allowlisted"
-          },
-          "429": {
-            "description": "Rate limited"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/chat/services/central-deploy/restart": {
       "post": {
         "tags": [
@@ -2896,6 +2827,70 @@
           },
           "404": {
             "description": "Service not found"
+          },
+          "409": {
+            "description": "Deploy already in progress"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Registry not loaded"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/deploy": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Generic deploy: pull + recreate an allowlisted component",
+        "description": "Pull the latest image and recreate a container for an allowlisted component.\n\nThe component does NOT need a pre-existing ``ComponentConfig`` \u2014\nwhen absent a minimal config is derived from the request body.\nAccess is gated by the ``chat_agent_deployable_components`` server-\nlevel allowlist (``LifecycleConfig``).\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one deploy per 300 seconds per component.",
+        "operationId": "chat_deploy_chat_deploy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentDeployResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Component not in the deploy allowlist"
           },
           "409": {
             "description": "Deploy already in progress"
@@ -5565,30 +5560,69 @@
         "title": "ChatAgentConfigUpdate",
         "description": "Request body for PUT /chat/config/{name}.\n\nSecret keys are accepted with partial-update semantics: omitted or\nsentinel (``\"***\"``) values keep the stored secret; only an explicitly\nsupplied non-empty value overwrites it."
       },
-      "ChatAgentEnvResponse": {
+      "ChatAgentDeployRequest": {
         "properties": {
-          "component": {
+          "name": {
             "type": "string",
-            "title": "Component",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Name",
+            "description": "Component name; must match ^[a-z0-9][a-z0-9-]*$"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "description": "Container image reference (registry/repo:tag)"
+          },
+          "container_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container Port",
+            "description": "Container-side port to expose on the host at the same port number. Ignored when the component already has a stored config."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "image"
+        ],
+        "title": "ChatAgentDeployRequest",
+        "description": "Request body for POST /chat/deploy.\n\nDeploys (pull + recreate) a component identified by *name* using\n*image*.  When *container_port* is supplied a matching host port is\nassigned automatically; components that already have a persisted\n``ComponentConfig`` ignore this field and use their stored port\nmappings."
+      },
+      "ChatAgentDeployResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
             "description": "Component name"
           },
-          "env_keys": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Env Keys",
-            "description": "Plain-text env keys that were upserted",
-            "default": []
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'deploy'",
+            "default": "deploy"
           },
-          "secret_keys": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Secret Keys",
-            "description": "Secret keys that were upserted (values never returned)",
-            "default": []
+          "deployed_digest": {
+            "type": "string",
+            "title": "Deployed Digest",
+            "description": "Digest of the newly deployed image; empty when unchanged",
+            "default": ""
+          },
+          "previous_digest": {
+            "type": "string",
+            "title": "Previous Digest",
+            "description": "Digest of the previously deployed image",
+            "default": ""
+          },
+          "current_state": {
+            "type": "string",
+            "title": "Current State",
+            "description": "Container state after deploy"
           },
           "detail": {
             "type": "string",
@@ -5599,53 +5633,11 @@
         },
         "type": "object",
         "required": [
-          "component"
+          "name",
+          "current_state"
         ],
-        "title": "ChatAgentEnvResponse",
-        "description": "Response body for PUT /chat/env/{name}.\n\nSecret values are never included \u2014 only the key names are returned."
-      },
-      "ChatAgentEnvUpdate": {
-        "properties": {
-          "env": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Env",
-            "description": "Plain-text environment variables to set (key \u2192 value)",
-            "default": {}
-          },
-          "secrets": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Secrets",
-            "description": "Secret environment variables to set (key \u2192 value). Values are encrypted at rest and never returned in responses.",
-            "default": {}
-          },
-          "env_scopes": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Env Scopes",
-            "description": "Visibility scope tags for env keys",
-            "default": {}
-          },
-          "secret_scopes": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Secret Scopes",
-            "description": "Visibility scope tags for secret keys",
-            "default": {}
-          }
-        },
-        "type": "object",
-        "title": "ChatAgentEnvUpdate",
-        "description": "Request body for PUT /chat/env/{name}.\n\nSecret values are accepted in the ``secrets`` dict and are encrypted\nat rest \u2014 they are never logged or echoed in responses."
+        "title": "ChatAgentDeployResponse",
+        "description": "Response body for POST /chat/deploy."
       },
       "ChatAgentPreviewDeployRequest": {
         "properties": {
@@ -8439,6 +8431,88 @@
         ],
         "title": "WorkflowPermissionsRequest",
         "description": "Body for ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow``.\n\nBoth fields are required by GitHub's API."
+      },
+      "ChatAgentEnvResponse": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "title": "Component",
+            "description": "Component name"
+          },
+          "env_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Env Keys",
+            "description": "Plain-text env keys that were upserted",
+            "default": []
+          },
+          "secret_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Keys",
+            "description": "Secret keys that were upserted (values never returned)",
+            "default": []
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "component"
+        ],
+        "title": "ChatAgentEnvResponse",
+        "description": "Response body for PUT /chat/env/{name}.\n\nSecret values are never included \u2014 only the key names are returned."
+      },
+      "ChatAgentEnvUpdate": {
+        "properties": {
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env",
+            "description": "Plain-text environment variables to set (key \u2192 value)",
+            "default": {}
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secrets",
+            "description": "Secret environment variables to set (key \u2192 value). Values are encrypted at rest and never returned in responses.",
+            "default": {}
+          },
+          "env_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Env Scopes",
+            "description": "Visibility scope tags for env keys",
+            "default": {}
+          },
+          "secret_scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secret Scopes",
+            "description": "Visibility scope tags for secret keys",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "ChatAgentEnvUpdate",
+        "description": "Request body for PUT /chat/env/{name}.\n\nSecret values are accepted in the ``secrets`` dict and are encrypted\nat rest \u2014 they are never logged or echoed in responses."
       }
     }
   },
