@@ -1,0 +1,1 @@
+Add a scoped path to provision secret env vars (e.g. GHCR_TOKEN) into central-deploy

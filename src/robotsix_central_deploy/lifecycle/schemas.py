@@ -637,3 +637,49 @@ class ChatAgentPreviewTeardownResponse(BaseModel):
     detail: str = Field(
         default="", description="Human-readable teardown status message"
     )
+
+
+# ---------------------------------------------------------------------------
+# Chat agent env (secret provisioning) models
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentEnvUpdate(BaseModel):
+    """Request body for PUT /chat/env/{name}.
+
+    Secret values are accepted in the ``secrets`` dict and are encrypted
+    at rest — they are never logged or echoed in responses.
+    """
+
+    env: dict[str, str] = Field(
+        default={},
+        description="Plain-text environment variables to set (key → value)",
+    )
+    secrets: dict[str, str] = Field(
+        default={},
+        description="Secret environment variables to set (key → value). Values are encrypted at rest and never returned in responses.",
+    )
+    env_scopes: dict[str, str] = Field(
+        default={},
+        description="Visibility scope tags for env keys",
+    )
+    secret_scopes: dict[str, str] = Field(
+        default={},
+        description="Visibility scope tags for secret keys",
+    )
+
+
+class ChatAgentEnvResponse(BaseModel):
+    """Response body for PUT /chat/env/{name}.
+
+    Secret values are never included — only the key names are returned.
+    """
+
+    component: str = Field(description="Component name")
+    env_keys: list[str] = Field(
+        default=[], description="Plain-text env keys that were upserted"
+    )
+    secret_keys: list[str] = Field(
+        default=[], description="Secret keys that were upserted (values never returned)"
+    )
+    detail: str = Field(default="", description="Human-readable summary")
