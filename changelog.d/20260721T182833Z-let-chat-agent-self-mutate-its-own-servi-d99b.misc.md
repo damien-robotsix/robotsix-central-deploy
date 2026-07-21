@@ -1,0 +1,1 @@
+Let chat agent self-mutate its own service when "Allow chat agent access" is checked
