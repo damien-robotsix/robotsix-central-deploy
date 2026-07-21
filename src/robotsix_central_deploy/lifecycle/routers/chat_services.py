@@ -22,6 +22,7 @@ from ..deps import (
     _get_sibling_pairs,
     _get_store,
 )
+from ...registry.models import HealthCheck
 from .._config_utils import _sanitize_log
 from ._chat_common import (
     _check_rate_limit,
@@ -313,15 +314,26 @@ def _build_minimal_config(body: ChatAgentDeployRequest) -> ComponentConfig:
     Used when no persisted config exists for the component yet.
     """
     ports: list[PortMapping] = []
+    health_check: HealthCheck | None = None
     if body.container_port is not None:
         ports.append(
             PortMapping(host=body.container_port, container=body.container_port)
+        )
+        # Provide a sensible default HTTP health check so the deploy
+        # flow can verify the container is ready before returning.
+        health_check = HealthCheck(
+            test=["CMD", "curl", "-f", f"http://localhost:{body.container_port}/"],
+            interval_seconds=30,
+            timeout_seconds=10,
+            retries=3,
+            start_period_seconds=10,
         )
     return ComponentConfig(
         id=body.name,
         image=body.image,
         container_name=f"robotsix-{body.name}",
         ports=ports,
+        health_check=health_check,
         chat_agent_mutatable=True,
     )
 
@@ -376,6 +388,13 @@ async def chat_deploy(
         # Register in the in-memory loader so the gateway can route to it.
         registry.register(comp_cfg)
 
+    # Merge env overrides and secrets from the EnvStore (same as
+    # chat_update_service and the main deploy flow) so operator-
+    # configured secrets are injected into the container.
+    env_store = await _get_env_store(request)
+    merged_env = await env_store.get_merged_env(body.name, comp_cfg.env)
+    comp_cfg = comp_cfg.model_copy(update={"env": merged_env})
+
     # Get or create the service record.
     record = await store.get(body.name)
     if record is None:
@@ -412,6 +431,12 @@ async def chat_deploy(
     record.deployed_image_digest = outcome.deployed_digest
     record.previous_image_digest = outcome.previous_digest
     await store.put(record)
+
+    # Update the persisted ComponentConfig.image so future dashboard-
+    # initiated deploys use the correct image reference.
+    if comp_cfg.image != body.image:
+        comp_cfg.image = body.image
+        await component_config_store.put(comp_cfg)
 
     await audit_store.append(
         ChatAgentAuditEntry(
