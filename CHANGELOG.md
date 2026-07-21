@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add missing `chat_audit`, `chat_components`, `chat_config`, `chat_self`, and `chat_services` router modules to the API documentation.
 - Classify config settings as advanced: 50 rarely-changed fields (paths, tuning knobs, integration credentials) now marked `"advanced": true` in the JSON schema, while 8 common settings (`log_level`, `gateway_base_domain`, `docker_socket_url`, auth fields, feature toggles) remain always-visible in the deploy UI.
 - Settings UI: add "Show advanced settings" toggle that hides settings flagged `advanced: true` in the JSON Schema by default.  Toggle is hidden when no component settings are marked advanced.
 - Chat-agent config-write authorization is now explicitly coupled to restart access through the single ``chat_agent_mutatable`` flag. A service the chat agent can restart is also config-writable and rollback-able. ``update`` (self-deploy) remains a separate capability.

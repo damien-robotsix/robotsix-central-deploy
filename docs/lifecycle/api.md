@@ -16,6 +16,12 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat
 
+::: robotsix_central_deploy.lifecycle.routers.chat_audit
+
+::: robotsix_central_deploy.lifecycle.routers.chat_components
+
+::: robotsix_central_deploy.lifecycle.routers.chat_config
+
 ::: robotsix_central_deploy.lifecycle.routers.chat_github
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_github_repos
@@ -29,6 +35,10 @@
 ::: robotsix_central_deploy.lifecycle.routers.chat_preview
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_langfuse
+
+::: robotsix_central_deploy.lifecycle.routers.chat_self
+
+::: robotsix_central_deploy.lifecycle.routers.chat_services
 
 ::: robotsix_central_deploy.lifecycle.routers.claude_auth
 
