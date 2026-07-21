@@ -237,7 +237,7 @@ async def onboard_preflight(
     if (
         parsed is not None
         and lifecycle_config.github_app_id
-        and lifecycle_config.github_app_private_key
+        and lifecycle_config.github_app_private_key.get_secret_value()
     ):
         owner, repo = parsed
         try:
@@ -249,7 +249,7 @@ async def onboard_preflight(
                 None,
                 get_installation_token_sync,
                 lifecycle_config.github_app_id,
-                lifecycle_config.github_app_private_key,
+                lifecycle_config.github_app_private_key.get_secret_value(),
                 owner,
                 repo,
             )

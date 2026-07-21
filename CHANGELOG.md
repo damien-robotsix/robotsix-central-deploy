@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- **Breaking:** All secret fields on `LifecycleConfig` are now `pydantic.SecretStr` — `api_key`, `auth_password`, `board_api_token`, `github_app_private_key`, `github_repo_create_token`, and `LangfuseProjectCreds.secret_key`. Read sites use `.get_secret_value()`. The six legacy per-project Langfuse fields (`langfuse_chat_public_key`, `langfuse_chat_secret_key`, …) have been removed; migrate to `langfuse_projects` dict.
 - **Breaking:** GHCR token and OVH SFTP credentials now read from `config/config.json` instead of environment variables. `ghcr_token` (SecretStr) and `ovh_sftp.{host,port,user,password}` are new typed fields on `LifecycleConfig`. The `GHCR_TOKEN` and `OVH_SFTP_*` environment variables are no longer read.
 - **POST /chat/deploy** is now contract-aware: accepts `name` + `repo` (git URL) instead of `name` + `image`, fetches the repo's `deploy/docker-compose.yml`, resolves the full service topology (image, command, ports, volumes, healthchecks, and siblings), and deploys every service — matching the dashboard onboarding flow.
 - Chat-agent mutation access now respects the operator-facing "Allow chat agent access" toggle in addition to the declarative `chat_agent_mutatable` flag.  Either flag alone is sufficient to grant restart, config-write, and config-rollback access — removing the barrier where the toggle was checked but didn't actually enable mutation.

@@ -22,23 +22,31 @@ async def verify_auth(request: Request) -> None:
 
     # Try X-API-Key (only when api_key is configured).
     api_key = request.headers.get("X-API-Key")
-    if api_key and config.api_key and _safe_compare(api_key, config.api_key):
+    if (
+        api_key
+        and config.api_key.get_secret_value()
+        and _safe_compare(api_key, config.api_key.get_secret_value())
+    ):
         return
 
     # Try HTTP Basic Auth.
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Basic "):
         username, password = _decode_basic_auth(auth_header)
-        if config.auth_username and config.auth_password:
+        if config.auth_username and config.auth_password.get_secret_value():
             # Username+password mode — both fields must match.
             if (
                 username
                 and password
                 and _safe_compare(username, config.auth_username)
-                and _safe_compare(password, config.auth_password)
+                and _safe_compare(password, config.auth_password.get_secret_value())
             ):
                 return
-        elif config.api_key and password and _safe_compare(password, config.api_key):
+        elif (
+            config.api_key.get_secret_value()
+            and password
+            and _safe_compare(password, config.api_key.get_secret_value())
+        ):
             # Legacy api_key mode — username is ignored, password == api_key.
             return
 

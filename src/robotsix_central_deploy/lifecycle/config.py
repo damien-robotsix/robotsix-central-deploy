@@ -43,8 +43,8 @@ class LangfuseProjectCreds(BaseModel):
         "",
         description="Langfuse public key for the project.",
     )
-    secret_key: str = Field(
-        "",
+    secret_key: SecretStr = Field(
+        SecretStr(""),
         description="Langfuse secret key for the project.",
     )
 
@@ -73,6 +73,8 @@ class OvhSftpConfig(BaseModel):
 class LifecycleConfig(BaseModel):
     """Configuration for the lifecycle server."""
 
+    model_config = {"validate_assignment": True}
+
     # Server
     host: str = Field(  # nosec B104 — intentional bind for the containerized service
         "0.0.0.0",
@@ -84,8 +86,8 @@ class LifecycleConfig(BaseModel):
         description="Port the HTTP server listens on.",
         json_schema_extra={"advanced": True},
     )
-    api_key: str = Field(
-        "",
+    api_key: SecretStr = Field(
+        SecretStr(""),
         description=(
             "Legacy API credential accepted via the X-API-Key header or as a "
             "Basic-auth password. Empty disables api-key auth."
@@ -98,8 +100,8 @@ class LifecycleConfig(BaseModel):
             "only when both username and password are set (or api_key is)."
         ),
     )
-    auth_password: str = Field(
-        SETTINGS_DEFAULTS["auth_password"],
+    auth_password: SecretStr = Field(
+        SecretStr(SETTINGS_DEFAULTS["auth_password"]),
         description="Basic-auth password paired with auth_username.",
     )
 
@@ -306,8 +308,8 @@ class LifecycleConfig(BaseModel):
         description="Board API base URL for filing audit-finding tickets; empty disables.",
         json_schema_extra={"advanced": True},
     )
-    board_api_token: str = Field(
-        "",
+    board_api_token: SecretStr = Field(
+        SecretStr(""),
         description="Bearer token for the board API.",
         json_schema_extra={"advanced": True},
     )
@@ -329,13 +331,13 @@ class LifecycleConfig(BaseModel):
         ),
         json_schema_extra={"advanced": True},
     )
-    github_app_private_key: str = Field(
-        "",
+    github_app_private_key: SecretStr = Field(
+        SecretStr(""),
         description="GitHub App private key (PEM) paired with github_app_id.",
         json_schema_extra={"advanced": True},
     )
-    github_repo_create_token: str = Field(
-        "",
+    github_repo_create_token: SecretStr = Field(
+        SecretStr(""),
         description=(
             "A GitHub Personal Access Token (classic 'repo' scope, or "
             "fine-grained with Administration:read-and-write) used only for "
@@ -352,54 +354,17 @@ class LifecycleConfig(BaseModel):
     # proxy).  The chat container never sees these credentials — the deploy
     # server injects Basic Auth server-side when proxying Langfuse public-API
     # requests.
-    #
-    # New deployments should use ``langfuse_projects`` (a dict of project
-    # alias → {public_key, secret_key}).  The six legacy per-project fields
-    # below (langfuse_chat_public_key, …) are still read as a fallback for
-    # backward compatibility with existing deployments that haven't migrated
-    # to the dict form yet.
     langfuse_projects: dict[str, LangfuseProjectCreds] = Field(
         default_factory=dict,
         description=(
             "Langfuse project alias → credentials mapping.  Example: "
-            '{"my-project": {"public_key": "pk-...", "secret_key": "sk-..."}}. '
-            "Preferred over the legacy per-project config fields."
+            '{"my-project": {"public_key": "pk-...", "secret_key": "sk-..."}}.'
         ),
         json_schema_extra={"advanced": True},
     )
     langfuse_base_url: str = Field(
         "",
         description="Langfuse instance base URL (no trailing slash).",
-        json_schema_extra={"advanced": True},
-    )
-    langfuse_chat_public_key: str = Field(
-        "",
-        description="Langfuse public key for the robotsix-chat trace project.",
-        json_schema_extra={"advanced": True},
-    )
-    langfuse_chat_secret_key: str = Field(
-        "",
-        description="Langfuse secret key for the robotsix-chat trace project.",
-        json_schema_extra={"advanced": True},
-    )
-    langfuse_cognee_public_key: str = Field(
-        "",
-        description="Langfuse public key for the cognee trace project.",
-        json_schema_extra={"advanced": True},
-    )
-    langfuse_cognee_secret_key: str = Field(
-        "",
-        description="Langfuse secret key for the cognee trace project.",
-        json_schema_extra={"advanced": True},
-    )
-    langfuse_mill_public_key: str = Field(
-        "",
-        description="Langfuse public key for the robotsix-mill trace project.",
-        json_schema_extra={"advanced": True},
-    )
-    langfuse_mill_secret_key: str = Field(
-        "",
-        description="Langfuse secret key for the robotsix-mill trace project.",
         json_schema_extra={"advanced": True},
     )
 
@@ -550,6 +515,6 @@ class LifecycleConfig(BaseModel):
         - a non-empty ``api_key``, OR
         - a non-empty ``auth_username`` AND ``auth_password`` pair.
         """
-        return bool(self.api_key) or (
-            bool(self.auth_username) and bool(self.auth_password)
+        return bool(self.api_key.get_secret_value()) or (
+            bool(self.auth_username) and bool(self.auth_password.get_secret_value())
         )

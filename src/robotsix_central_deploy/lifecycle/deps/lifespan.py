@@ -283,6 +283,10 @@ async def _init_settings(app: FastAPI) -> None:
             contract_dict = contract_settings.model_dump()
             for key, default_val in SETTINGS_DEFAULTS.items():
                 env_val = getattr(_config, key, default_val)
+                # SecretStr fields need their value extracted for comparison
+                # and for passing to SystemSettings (which uses plain str).
+                if hasattr(env_val, "get_secret_value"):
+                    env_val = env_val.get_secret_value()
                 if env_val != default_val:
                     contract_dict[key] = env_val
             # Special case: when auth_username is empty everywhere, fall back to "admin".
@@ -297,7 +301,7 @@ async def _init_settings(app: FastAPI) -> None:
             await settings_store.put(
                 SystemSettings(
                     auth_username=_config.auth_username or "admin",
-                    auth_password=_config.auth_password,
+                    auth_password=_config.auth_password.get_secret_value(),
                     disk_warn_pct=_config.disk_warn_pct,
                     registry_check_interval=_config.registry_check_interval,
                     log_level=_config.log_level,

@@ -72,7 +72,7 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
     are not configured. The returned client is typed ``object`` to keep
     ``github`` (PyGithub) import lazy — callers narrow it via ``.get_repo()``.
     """
-    if not config.github_app_id or not config.github_app_private_key:
+    if not config.github_app_id or not config.github_app_private_key.get_secret_value():
         raise GitHubAppNotConfiguredError(
             "github_app_id and github_app_private_key must both be set to "
             "use the github chat component."
@@ -83,7 +83,7 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
         client = await asyncio.to_thread(
             _build_client_sync,
             config.github_app_id,
-            config.github_app_private_key,
+            config.github_app_private_key.get_secret_value(),
             owner,
             repo,
         )
@@ -110,11 +110,13 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
 
     Raises :class:`GitHubRepoCreateNotConfiguredError` when the token is unset.
     """
-    if not config.github_repo_create_token:
+    if not config.github_repo_create_token.get_secret_value():
         raise GitHubRepoCreateNotConfiguredError(
             "github_repo_create_token must be set to create repositories."
         )
-    client = _repo_create_client_cache.get(config.github_repo_create_token)
+    client = _repo_create_client_cache.get(
+        config.github_repo_create_token.get_secret_value()
+    )
     if client is None:
         from github import Auth, Github
 
@@ -123,6 +125,10 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
             def token_type(self) -> str:
                 return "Bearer"
 
-        client = Github(auth=_BearerTokenAuth(config.github_repo_create_token))
-        _repo_create_client_cache[config.github_repo_create_token] = client
+        client = Github(
+            auth=_BearerTokenAuth(config.github_repo_create_token.get_secret_value())
+        )
+        _repo_create_client_cache[
+            config.github_repo_create_token.get_secret_value()
+        ] = client
     return client

@@ -56,8 +56,10 @@ async def _get_client_or_503_with_pat_fallback(
     from .chat_github import get_github_client as _get_gh_client
     from .chat_github import get_repo_create_client as _get_repo_create_client
 
-    app_configured = bool(config.github_app_id and config.github_app_private_key)
-    pat_configured = bool(config.github_repo_create_token)
+    app_configured = bool(
+        config.github_app_id and config.github_app_private_key.get_secret_value()
+    )
+    pat_configured = bool(config.github_repo_create_token.get_secret_value())
 
     if app_configured:
         return await _get_gh_client(config, owner, repo)
