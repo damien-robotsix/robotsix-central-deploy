@@ -563,24 +563,21 @@ class ChatAgentSelfRestartResponse(BaseModel):
 class ChatAgentDeployRequest(BaseModel):
     """Request body for POST /chat/deploy.
 
-    Deploys (pull + recreate) a component identified by *name* using
-    *image*.  When *container_port* is supplied a matching host port is
-    assigned automatically; components that already have a persisted
-    ``ComponentConfig`` ignore this field and use their stored port
-    mappings.
+    Deploys a component by fetching and parsing the repo's
+    ``deploy/docker-compose.yml`` (the deploy contract), resolving the
+    image, command, ports, volumes, healthchecks, and siblings from the
+    contract — matching the dashboard onboarding flow.
+
+    The component does NOT need a pre-existing ``ComponentConfig``;
+    one is derived from the deploy contract on first deploy.
     """
 
     name: str = Field(
         description="Component name; must match ^[a-z0-9][a-z0-9-]*$",
         pattern=r"^[a-z0-9][a-z0-9-]*$",
     )
-    image: str = Field(description="Container image reference (registry/repo:tag)")
-    container_port: int | None = Field(
-        default=None,
-        description=(
-            "Container-side port to expose on the host at the same port "
-            "number. Ignored when the component already has a stored config."
-        ),
+    repo: str = Field(
+        description="Git clone URL of the repository whose deploy/docker-compose.yml defines the component",
     )
 
 
@@ -598,6 +595,10 @@ class ChatAgentDeployResponse(BaseModel):
     )
     current_state: str = Field(description="Container state after deploy")
     detail: str = Field(default="", description="Human-readable summary")
+    deployed_siblings: list[str] = Field(
+        default_factory=list,
+        description="Sibling service names that were deployed alongside the primary",
+    )
 
 
 class ChatAgentSelfUpdateResponse(BaseModel):

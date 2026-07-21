@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -18,6 +18,8 @@ from robotsix_central_deploy.lifecycle.models import (
     ServiceState,
 )
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.onboard.fetcher import RepoFiles
+from robotsix_central_deploy.onboard.models import DerivedSpec, SiblingDerivedSpec
 from robotsix_central_deploy.registry.chat_agent_audit_store import ChatAgentAuditStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
@@ -783,7 +785,11 @@ async def test_chat_endpoints_require_auth(
         ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
         ("POST", "/chat/services/chat/restart", None),
         ("POST", "/chat/services/chat/update", None),
-        ("POST", "/chat/deploy", {"name": "chat", "image": "test:latest"}),
+        (
+            "POST",
+            "/chat/deploy",
+            {"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
+        ),
     ]
     for method, path, body in endpoints:
         if body is not None:
@@ -1012,7 +1018,7 @@ async def test_chat_deploy_happy_path_existing_config(
 
     resp = await client.post(
         "/chat/deploy",
-        json={"name": "chat", "image": "ghcr.io/test/robotsix-chat:v2"},
+        json={"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
@@ -1021,6 +1027,7 @@ async def test_chat_deploy_happy_path_existing_config(
     assert data["action"] == "deploy"
     assert data["deployed_digest"] == "sha256:noop"
     assert data["current_state"] == "running"
+    assert data["deployed_siblings"] == []
 
 
 @pytest.mark.asyncio
@@ -1029,27 +1036,93 @@ async def test_chat_deploy_happy_path_auto_create_config(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     component_config_store: ComponentConfigStore,
+    config_yaml_store: ConfigYamlStore,
 ):
-    """POST /chat/deploy auto-creates a minimal config when none exists."""
+    """POST /chat/deploy resolves the deploy contract to auto-create a config."""
     await store.put(ServiceRecord(name="auto-mail", state=ServiceState.RUNNING))
     # Confirm no config exists for auto-mail yet.
     assert component_config_store.get("auto-mail") is None
 
-    resp = await client.post(
-        "/chat/deploy",
-        json={
-            "name": "auto-mail",
-            "image": "ghcr.io/test/robotsix-auto-mail:main",
-            "container_port": 8025,
-        },
-        headers=auth_headers,
+    derived_spec = DerivedSpec(
+        name="auto-mail",
+        git_url="https://github.com/org/robotsix-auto-mail.git",
+        image="ghcr.io/test/robotsix-auto-mail:main",
+        ports=[PortMapping(host=8025, container=8025, protocol="tcp")],
+        volume_mounts=[VolumeMount(host="data", container="/data")],
+        env={"SECRET": ""},
+        claude_mount=False,
+        host_docker_sock=False,
+        health_check=HealthCheck(
+            test=["CMD", "curl", "-f", "http://localhost:8025/health"],
+            interval_seconds=30,
+            timeout_seconds=10,
+            retries=3,
+            start_period_seconds=10,
+        ),
+        command=["serve", "--host", "0.0.0.0", "--port", "8025"],
+        entrypoint=None,
+        container_name="",
+        siblings=[
+            SiblingDerivedSpec(
+                service_key="ingester",
+                image="ghcr.io/test/robotsix-auto-mail:main",
+                container_name="robotsix-auto-mail-ingester",
+                ports=[],
+                mounts=[VolumeMount(host="data", container="/data")],
+                env={},
+                command=["ingest", "--watch", "/data"],
+                health_check=HealthCheck(
+                    test=["CMD", "pgrep", "-f", "ingest"],
+                    interval_seconds=30,
+                    timeout_seconds=10,
+                    retries=3,
+                    start_period_seconds=10,
+                ),
+            ),
+        ],
+        config_schema=_CONFIG_TEMPLATE,
+        config_example_values=None,
+        config_volume="auto-mail-config",
+        config_assist_command=None,
+        config_assist_seeds=[],
+        llmio_tier_level=None,
+        allow_chat_access=False,
+        chat_agent_mutatable=True,
     )
+
+    repo_files = RepoFiles(
+        compose_bytes=b"# central-deploy-contract-version: 1\nservices: {}",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=b'{"type":"object","properties":{"debug":{"type":"boolean","default":false}}}',
+    )
+
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=derived_spec,
+        ),
+    ):
+        resp = await client.post(
+            "/chat/deploy",
+            json={
+                "name": "auto-mail",
+                "repo": "https://github.com/org/robotsix-auto-mail.git",
+            },
+            headers=auth_headers,
+        )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["name"] == "auto-mail"
     assert data["action"] == "deploy"
     assert data["deployed_digest"] == "sha256:noop"
     assert data["current_state"] == "running"
+    # Siblings should be deployed.
+    assert "auto-mail-ingester" in data["deployed_siblings"]
 
     # The config should now be persisted and registered.
     cfg = component_config_store.get("auto-mail")
@@ -1059,6 +1132,9 @@ async def test_chat_deploy_happy_path_auto_create_config(
     assert cfg.health_check is not None
     assert len(cfg.ports) == 1
     assert cfg.ports[0].host == 8025
+    assert cfg.command == ["serve", "--host", "0.0.0.0", "--port", "8025"]
+    assert len(cfg.siblings) == 1
+    assert cfg.siblings[0].service_key == "ingester"
 
 
 @pytest.mark.asyncio
@@ -1072,7 +1148,7 @@ async def test_chat_deploy_not_in_allowlist(
 
     resp = await client.post(
         "/chat/deploy",
-        json={"name": "cognee", "image": "ghcr.io/test/cognee:v2"},
+        json={"name": "cognee", "repo": "https://github.com/org/cognee.git"},
         headers=auth_headers,
     )
     assert resp.status_code == 403
@@ -1091,7 +1167,7 @@ async def test_chat_deploy_rate_limited(
     # First deploy succeeds.
     resp1 = await client.post(
         "/chat/deploy",
-        json={"name": "chat", "image": "ghcr.io/test/robotsix-chat:v2"},
+        json={"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
         headers=auth_headers,
     )
     assert resp1.status_code == 200
@@ -1099,7 +1175,7 @@ async def test_chat_deploy_rate_limited(
     # Second deploy within cooldown fails.
     resp2 = await client.post(
         "/chat/deploy",
-        json={"name": "chat", "image": "ghcr.io/test/robotsix-chat:v2"},
+        json={"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
         headers=auth_headers,
     )
     assert resp2.status_code == 429

@@ -2924,8 +2924,8 @@
         "tags": [
           "chat"
         ],
-        "summary": "Generic deploy: pull + recreate an allowlisted component",
-        "description": "Pull the latest image and recreate a container for an allowlisted component.\n\nThe component does NOT need a pre-existing ``ComponentConfig`` \u2014\nwhen absent a minimal config is derived from the request body.\nAccess is gated by the ``chat_agent_deployable_components`` server-\nlevel allowlist (``LifecycleConfig``).\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one deploy per 300 seconds per component.",
+        "summary": "Contract-aware deploy: fetch docker-compose.yml and deploy an allowlisted component",
+        "description": "Deploy an allowlisted component by fetching and parsing its deploy contract.\n\nFetches the repo's ``deploy/docker-compose.yml``, resolves the\nimage and full service topology (including siblings), and deploys\nevery service \u2014 matching the dashboard onboarding flow.\n\nThe component does NOT need a pre-existing ``ComponentConfig``;\none is derived from the deploy contract on first deploy.\nAccess is gated by the ``chat_agent_deployable_components`` server-\nlevel allowlist (``LifecycleConfig``).\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one deploy per 300 seconds per component.",
         "operationId": "chat_deploy_chat_deploy_post",
         "requestBody": {
           "content": {
@@ -5637,31 +5637,19 @@
             "title": "Name",
             "description": "Component name; must match ^[a-z0-9][a-z0-9-]*$"
           },
-          "image": {
+          "repo": {
             "type": "string",
-            "title": "Image",
-            "description": "Container image reference (registry/repo:tag)"
-          },
-          "container_port": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Container Port",
-            "description": "Container-side port to expose on the host at the same port number. Ignored when the component already has a stored config."
+            "title": "Repo",
+            "description": "Git clone URL of the repository whose deploy/docker-compose.yml defines the component"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "image"
+          "repo"
         ],
         "title": "ChatAgentDeployRequest",
-        "description": "Request body for POST /chat/deploy.\n\nDeploys (pull + recreate) a component identified by *name* using\n*image*.  When *container_port* is supplied a matching host port is\nassigned automatically; components that already have a persisted\n``ComponentConfig`` ignore this field and use their stored port\nmappings."
+        "description": "Request body for POST /chat/deploy.\n\nDeploys a component by fetching and parsing the repo's\n``deploy/docker-compose.yml`` (the deploy contract), resolving the\nimage, command, ports, volumes, healthchecks, and siblings from the\ncontract \u2014 matching the dashboard onboarding flow.\n\nThe component does NOT need a pre-existing ``ComponentConfig``;\none is derived from the deploy contract on first deploy."
       },
       "ChatAgentDeployResponse": {
         "properties": {
@@ -5698,6 +5686,14 @@
             "title": "Detail",
             "description": "Human-readable summary",
             "default": ""
+          },
+          "deployed_siblings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deployed Siblings",
+            "description": "Sibling service names that were deployed alongside the primary"
           }
         },
         "type": "object",
