@@ -40,8 +40,6 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.system
 
-::: robotsix_central_deploy.lifecycle.settings_router
-
 ::: robotsix_central_deploy.lifecycle.auth
 
 ::: robotsix_central_deploy.lifecycle.models
