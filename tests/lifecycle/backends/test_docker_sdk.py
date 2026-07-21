@@ -1425,7 +1425,9 @@ class TestDockerSdkBackendTriggerSelfUpdate:
         )
 
         assert cid == "watchtower-abc123"
-        client.images.pull.assert_called_once_with("containrrr/watchtower:latest")
+        client.images.pull.assert_called_once_with(
+            "containrrr/watchtower:latest", auth_config=None
+        )
         client.api.create_container.assert_called_once()
         client.api.start.assert_called_once_with("watchtower-abc123")
 

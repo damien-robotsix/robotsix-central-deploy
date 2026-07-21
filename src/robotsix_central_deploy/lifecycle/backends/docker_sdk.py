@@ -460,6 +460,22 @@ class DockerSdkBackend(ExecutionBackend):
         except Exception as restore_exc:
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
+    @staticmethod
+    def _build_auth_config(image_ref: str) -> dict[str, str] | None:
+        """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
+
+        Only ``ghcr.io`` images are authenticated.  The token is read from
+        the ``GHCR_TOKEN`` environment variable; when it is absent or empty,
+        anonymous pull is used and a 401 on a private image will surface a
+        diagnostic error.
+        """
+        if not image_ref.startswith("ghcr.io/"):
+            return None
+        token = os.environ.get("GHCR_TOKEN", "").strip()
+        if not token:
+            return None
+        return {"username": "USERNAME", "password": token, "serveraddress": "ghcr.io"}
+
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
     ) -> DeployOutcome:
@@ -470,11 +486,25 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         # Step 1 — pull target image; obtain its digest
+        auth_config = self._build_auth_config(image_ref)
         try:
             image = await loop.run_in_executor(
-                None, lambda: self._client.images.pull(image_ref)
+                None,
+                lambda: self._client.images.pull(image_ref, auth_config=auth_config),
             )
         except docker.errors.APIError as exc:
+            response = getattr(exc, "response", None)
+            if (
+                response is not None
+                and response.status_code == 401
+                and image_ref.startswith("ghcr.io/")
+                and not auth_config
+            ):
+                raise RuntimeError(
+                    f"Image pull failed for {image_ref!r}: received 401 Unauthorized "
+                    "from ghcr.io. Set the GHCR_TOKEN environment variable to a GitHub "
+                    "personal access token with read:packages scope."
+                ) from exc
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
         # Derive manifest digest from RepoDigests (comparable to registry
         # Docker-Content-Digest header), falling back to config digest.
@@ -945,7 +975,10 @@ class DockerSdkBackend(ExecutionBackend):
 
         def _run() -> str:
             api = self._client.api
-            self._client.images.pull(watchtower_image)
+            self._client.images.pull(
+                watchtower_image,
+                auth_config=self._build_auth_config(watchtower_image),
+            )
             networking = None
             if target.networks:
                 # Multi-endpoint create keeps the watchtower container itself
