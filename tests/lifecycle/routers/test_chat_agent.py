@@ -785,7 +785,7 @@ async def test_chat_endpoints_require_auth(
         ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
         ("POST", "/chat/services/chat/restart", None),
         ("POST", "/chat/services/chat/update", None),
-        ("POST", "/chat/deploy", {"name": "chat", "image": "test:latest"}),
+        ("POST", "/chat/deploy", {"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"}),
     ]
     for method, path, body in endpoints:
         if body is not None:
