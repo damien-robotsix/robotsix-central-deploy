@@ -11,6 +11,11 @@ from fastapi import HTTPException
 
 from robotsix_central_deploy.onboard.models import ConfigParseError
 from robotsix_central_deploy.onboard.parser import parse_config_json
+from robotsix_central_deploy.lifecycle.server import (
+    _prune_unset,
+    _seed_for_detect,
+    _validate_account_ids,
+)
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 
 # ---------------------------------------------------------------------------
@@ -109,12 +114,6 @@ async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path)
 # ---------------------------------------------------------------------------
 # _mask_secrets and _merge_config (imported from server)
 # ---------------------------------------------------------------------------
-
-from robotsix_central_deploy.lifecycle.server import (
-    _prune_unset,
-    _validate_account_ids,
-    _seed_for_detect,
-)
 
 # TestMaskSecrets removed — old sentinel-based templates no longer supported
 
