@@ -58,11 +58,13 @@ class DockerSdkBackend(ExecutionBackend):
         self,
         socket_url: str = "unix:///var/run/docker.sock",
         timeout: int = 120,
+        ghcr_token: str = "",
     ) -> None:
         import docker
 
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
         self._auth = AuthOps(self._client)
+        self._ghcr_token = ghcr_token.strip()
         self._volume = VolumeOps(self._client)
 
     # -- helpers ------------------------------------------------------------
@@ -474,23 +476,25 @@ class DockerSdkBackend(ExecutionBackend):
         except Exception as restore_exc:
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
-    @staticmethod
-    def _build_auth_config(image_ref: str) -> dict[str, str] | None:
+    def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
         """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
 
         Only ``ghcr.io`` images are authenticated.  The token is read from
-        the ``GHCR_TOKEN`` environment variable; when it is absent or empty,
-        anonymous pull is used and a 401 on a private image will surface a
-        diagnostic error.
+        ``LifecycleConfig.ghcr_token`` (set in ``config/config.json``); when
+        it is absent or empty, anonymous pull is used and a 401 on a private
+        image will surface a diagnostic error.
         """
         if _image_registry_host(image_ref) != "ghcr.io":
             return None
-        token = os.environ.get("GHCR_TOKEN", "").strip()
-        if not token:
+        if not self._ghcr_token:
             return None
         # GHCR ignores the username field when a personal access token is
         # supplied as the password — any non-empty string works here.
-        return {"username": "USERNAME", "password": token, "serveraddress": "ghcr.io"}
+        return {
+            "username": "USERNAME",
+            "password": self._ghcr_token,
+            "serveraddress": "ghcr.io",
+        }
 
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
@@ -518,7 +522,7 @@ class DockerSdkBackend(ExecutionBackend):
             ):
                 raise RuntimeError(
                     f"Image pull failed for {image_ref!r}: received 401 Unauthorized "
-                    "from ghcr.io. Set the GHCR_TOKEN environment variable to a GitHub "
+                    "from ghcr.io. Set ghcr_token in config/config.json to a GitHub "
                     "personal access token with read:packages scope."
                 ) from exc
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc

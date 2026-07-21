@@ -10,6 +10,7 @@
   "component_config_store_path": "data/component_configs.json",
   "docker_socket_url": "unix:///var/run/docker.sock",
   "docker_sdk_timeout": 120,
+  "ghcr_token": "",
   "disk_path": "/",
   "disk_warn_pct": 10.0,
   "env_store_path": "component_env.json",
@@ -67,5 +68,11 @@
       "auth_token_env": "DEPLOY_API_KEY"
     }
   ],
-  "github_repo_create_token": ""
+  "github_repo_create_token": "",
+  "ovh_sftp": {
+    "host": "",
+    "port": 22,
+    "user": "",
+    "password": ""
+  }
 }

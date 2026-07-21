@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from ._settings_defaults import SETTINGS_DEFAULTS
 from .models import ExecutionBackendType, StoreBackend
@@ -46,6 +46,27 @@ class LangfuseProjectCreds(BaseModel):
     secret_key: str = Field(
         "",
         description="Langfuse secret key for the project.",
+    )
+
+
+class OvhSftpConfig(BaseModel):
+    """OVH website SFTP credentials, seeded into the encrypted env store on first boot."""
+
+    host: str = Field(
+        "",
+        description="OVH SFTP hostname.",
+    )
+    port: int = Field(
+        22,
+        description="OVH SFTP port.",
+    )
+    user: str = Field(
+        "",
+        description="OVH SFTP username.",
+    )
+    password: SecretStr = Field(
+        SecretStr(""),
+        description="OVH SFTP password.",
     )
 
 
@@ -129,6 +150,15 @@ class LifecycleConfig(BaseModel):
             "typical image pulls."
         ),
         json_schema_extra={"advanced": True},
+    )
+
+    ghcr_token: SecretStr = Field(
+        SecretStr(""),
+        description=(
+            "GitHub personal access token with read:packages scope for "
+            "authenticated GHCR image pulls. Empty skips authentication "
+            "(public images only)."
+        ),
     )
 
     # Disk usage monitoring
@@ -479,6 +509,17 @@ class LifecycleConfig(BaseModel):
             "component roster alongside onboarded Docker services."
         ),
         json_schema_extra={"advanced": True},
+    )
+
+    # OVH SFTP credentials (seeded into encrypted env store on first boot)
+    ovh_sftp: OvhSftpConfig = Field(
+        default_factory=OvhSftpConfig,
+        description=(
+            "OVH website SFTP credentials. If all four fields are set AND "
+            "the ovh-website-credentials entry does not already exist in "
+            "the encrypted store, the values are seeded at startup with "
+            "scope tag 'website:ovh'."
+        ),
     )
 
     @property
