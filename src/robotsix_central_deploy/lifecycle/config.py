@@ -56,8 +56,13 @@ class LifecycleConfig(BaseModel):
     host: str = Field(  # nosec B104 — intentional bind for the containerized service
         "0.0.0.0",
         description="Interface the HTTP server binds to.",
+        json_schema_extra={"advanced": True},
     )
-    port: int = Field(8100, description="Port the HTTP server listens on.")
+    port: int = Field(
+        8100,
+        description="Port the HTTP server listens on.",
+        json_schema_extra={"advanced": True},
+    )
     api_key: str = Field(
         "",
         description=(
@@ -84,10 +89,12 @@ class LifecycleConfig(BaseModel):
             "Persistence backend for service records: 'memory' is ephemeral "
             "(dev), 'file' persists to store_path."
         ),
+        json_schema_extra={"advanced": True},
     )
     store_path: str = Field(
         "lifecycle_state.yaml",
         description="Path of the service-record store (file backend only).",
+        json_schema_extra={"advanced": True},
     )
 
     # Execution backend
@@ -97,11 +104,13 @@ class LifecycleConfig(BaseModel):
             "How containers are managed: 'docker_sdk' (full support), "
             "'docker' CLI (status/logs only), or 'noop' (dry runs)."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     component_config_store_path: str = Field(
         "data/component_configs.json",
         description="Path of the persisted per-component deployment configs.",
+        json_schema_extra={"advanced": True},
     )
 
     docker_socket_url: str = Field(
@@ -119,6 +128,7 @@ class LifecycleConfig(BaseModel):
             "(pull, create, start, stop, …). The default accommodates "
             "typical image pulls."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     # Disk usage monitoring
@@ -128,30 +138,36 @@ class LifecycleConfig(BaseModel):
             "Filesystem path whose free space is reported on the dashboard; "
             "/host_root when containerised (host filesystem mount)."
         ),
+        json_schema_extra={"advanced": True},
     )
     disk_warn_pct: float = Field(
         SETTINGS_DEFAULTS["disk_warn_pct"],
         description="Warn on the dashboard when free disk space drops below this percentage.",
+        json_schema_extra={"advanced": True},
     )
 
     # Env / secrets persistence
     env_store_path: str = Field(
         "component_env.json",
         description="Path of the per-component env/secret store.",
+        json_schema_extra={"advanced": True},
     )
     secret_key_path: str = Field(
         "secrets.key",
         description="Path of the Fernet key encrypting stored secrets.",
+        json_schema_extra={"advanced": True},
     )
 
     config_yaml_store_path: str = Field(
         "data/component_config_yaml.json",
         description="Path of the per-component config template/values store.",
+        json_schema_extra={"advanced": True},
     )
 
     deploy_history_store_path: str = Field(
         "data/deploy_history.json",
         description="Path of the per-component deploy-history JSON store.",
+        json_schema_extra={"advanced": True},
     )
 
     self_update_watchtower_image: str = Field(
@@ -160,6 +176,7 @@ class LifecycleConfig(BaseModel):
             "One-shot updater image launched by the dashboard's "
             "'Update server' button; keep the tag pinned."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     self_update_docker_api_version: str = Field(
@@ -169,12 +186,14 @@ class LifecycleConfig(BaseModel):
             "1.7.1's client defaults to API 1.25, below modern daemons' "
             "minimum, and panics without this."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     # Registry check
     registry_check_ttl: int = Field(
         300,
         description="Cache TTL (seconds) for registry manifest-digest lookups.",
+        json_schema_extra={"advanced": True},
     )
     registry_check_interval: int = Field(
         SETTINGS_DEFAULTS["registry_check_interval"],
@@ -182,11 +201,13 @@ class LifecycleConfig(BaseModel):
             "Interval (seconds) of the background update-available check; "
             "0 disables it."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     system_settings_path: str = Field(
         "data/system_settings.json",
         description="Path of the operator-editable System Settings store.",
+        json_schema_extra={"advanced": True},
     )
 
     self_contract_path: str = Field(
@@ -196,6 +217,7 @@ class LifecycleConfig(BaseModel):
             "Read at startup to seed system settings from contract labels "
             "(robotsix.deploy.settings.*)."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     log_level: str = Field(
@@ -220,20 +242,24 @@ class LifecycleConfig(BaseModel):
     volume_audit_interval_seconds: int = Field(
         SETTINGS_DEFAULTS["volume_audit_interval_seconds"],
         description="Interval (seconds) between volume-audit scans.",
+        json_schema_extra={"advanced": True},
     )
     volume_audit_snapshot_path: str = Field(
         "data/volume_audit_snapshots.json",
         description="Path of persisted volume-size snapshots.",
+        json_schema_extra={"advanced": True},
     )
     volume_audit_findings_path: str = Field(
         "data/volume_audit_findings.json",
         description="Path of persisted volume-audit findings.",
+        json_schema_extra={"advanced": True},
     )
     volume_audit_growth_threshold_pct: float = Field(
         SETTINGS_DEFAULTS["volume_audit_growth_threshold_pct"],
         description=(
             "Volume growth (percent between scans) above which a finding is raised."
         ),
+        json_schema_extra={"advanced": True},
     )
     volume_audit_min_delta_bytes: int = Field(
         SETTINGS_DEFAULTS["volume_audit_min_delta_bytes"],
@@ -241,20 +267,24 @@ class LifecycleConfig(BaseModel):
             "Minimum absolute growth (bytes) before a finding is raised — "
             "filters noise on small volumes. Default 10 MiB."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     # Board integration (for filing audit-finding tickets and other automations)
     board_api_url: str = Field(
         "",
         description="Board API base URL for filing audit-finding tickets; empty disables.",
+        json_schema_extra={"advanced": True},
     )
     board_api_token: str = Field(
         "",
         description="Bearer token for the board API.",
+        json_schema_extra={"advanced": True},
     )
     board_repo_id: str = Field(
         "",
         description="Board repo id under which audit tickets are filed.",
+        json_schema_extra={"advanced": True},
     )
 
     # GitHub App auth (chat-agent "github" virtual component — GitHub Actions
@@ -267,10 +297,12 @@ class LifecycleConfig(BaseModel):
             "GitHub App ID used to mint installation tokens for the chat "
             "agent's 'github' component. Empty disables the component."
         ),
+        json_schema_extra={"advanced": True},
     )
     github_app_private_key: str = Field(
         "",
         description="GitHub App private key (PEM) paired with github_app_id.",
+        json_schema_extra={"advanced": True},
     )
     github_repo_create_token: str = Field(
         "",
@@ -283,6 +315,7 @@ class LifecycleConfig(BaseModel):
             "PAT. Empty disables repo creation (the "
             "Actions-status endpoints are unaffected)."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     # Langfuse auth (chat-agent "langfuse" virtual component — trace read
@@ -302,34 +335,42 @@ class LifecycleConfig(BaseModel):
             '{"my-project": {"public_key": "pk-...", "secret_key": "sk-..."}}. '
             "Preferred over the legacy per-project config fields."
         ),
+        json_schema_extra={"advanced": True},
     )
     langfuse_base_url: str = Field(
         "",
         description="Langfuse instance base URL (no trailing slash).",
+        json_schema_extra={"advanced": True},
     )
     langfuse_chat_public_key: str = Field(
         "",
         description="Langfuse public key for the robotsix-chat trace project.",
+        json_schema_extra={"advanced": True},
     )
     langfuse_chat_secret_key: str = Field(
         "",
         description="Langfuse secret key for the robotsix-chat trace project.",
+        json_schema_extra={"advanced": True},
     )
     langfuse_cognee_public_key: str = Field(
         "",
         description="Langfuse public key for the cognee trace project.",
+        json_schema_extra={"advanced": True},
     )
     langfuse_cognee_secret_key: str = Field(
         "",
         description="Langfuse secret key for the cognee trace project.",
+        json_schema_extra={"advanced": True},
     )
     langfuse_mill_public_key: str = Field(
         "",
         description="Langfuse public key for the robotsix-mill trace project.",
+        json_schema_extra={"advanced": True},
     )
     langfuse_mill_secret_key: str = Field(
         "",
         description="Langfuse secret key for the robotsix-mill trace project.",
+        json_schema_extra={"advanced": True},
     )
 
     # Caretaker
@@ -343,16 +384,19 @@ class LifecycleConfig(BaseModel):
     caretaker_interval_hours: int = Field(
         SETTINGS_DEFAULTS["caretaker_interval_hours"],
         description="Hours between caretaker passes.",
+        json_schema_extra={"advanced": True},
     )
     mill_component_id: str = Field(
         SETTINGS_DEFAULTS["mill_component_id"],
         description=(
             "Component id of the mill instance the caretaker reports findings to."
         ),
+        json_schema_extra={"advanced": True},
     )
     image_auto_prune: bool = Field(
         SETTINGS_DEFAULTS["image_auto_prune"],
         description=("After updates, remove dangling images not needed for rollback."),
+        json_schema_extra={"advanced": True},
     )
     llmio_tier_config: dict[str, Any] = Field(
         default=SETTINGS_DEFAULTS["llmio_tier_config"],
@@ -360,11 +404,13 @@ class LifecycleConfig(BaseModel):
             "Fleet-global mapping from llmio capability level (level1-4) to "
             "provider and model. Overridden by the System Settings store."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     chat_agent_audit_store_path: str = Field(
         "data/chat_agent_audit.json",
         description="Path of the chat-agent mutation audit log.",
+        json_schema_extra={"advanced": True},
     )
 
     claude_auth_refresh_interval: int = Field(
@@ -373,12 +419,14 @@ class LifecycleConfig(BaseModel):
             "Interval (seconds) between Claude auth credential refresh "
             "attempts; 0 disables background refresh."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     # Rate limiting
     rate_limit_login_per_minute: int = Field(
         SETTINGS_DEFAULTS["rate_limit_login_per_minute"],
         description="Max POST /login requests per IP per minute.",
+        json_schema_extra={"advanced": True},
     )
     rate_limit_api_per_hour: int = Field(
         SETTINGS_DEFAULTS["rate_limit_api_per_hour"],
@@ -387,14 +435,17 @@ class LifecycleConfig(BaseModel):
             "dashboard UI, which polls several endpoints every few "
             "seconds from one IP (~5000/h per open tab)."
         ),
+        json_schema_extra={"advanced": True},
     )
     rate_limit_login_max_attempts: int = Field(
         SETTINGS_DEFAULTS["rate_limit_login_max_attempts"],
         description="Failed login attempts before IP lockout.",
+        json_schema_extra={"advanced": True},
     )
     rate_limit_login_lockout_seconds: int = Field(
         SETTINGS_DEFAULTS["rate_limit_login_lockout_seconds"],
         description="Lockout duration (seconds) after too many failed logins.",
+        json_schema_extra={"advanced": True},
     )
 
     csrf_secret: str = Field(
@@ -404,6 +455,7 @@ class LifecycleConfig(BaseModel):
             "when empty, which invalidates outstanding tokens on every "
             "restart — acceptable for single-server deployments."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     # Virtual chat components
@@ -413,6 +465,7 @@ class LifecycleConfig(BaseModel):
             "Virtual (non-Docker) components to register in the chat-agent "
             "component roster alongside onboarded Docker services."
         ),
+        json_schema_extra={"advanced": True},
     )
 
     @property

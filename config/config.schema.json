@@ -97,12 +97,14 @@
   "description": "Configuration for the lifecycle server.",
   "properties": {
     "host": {
+      "advanced": true,
       "default": "0.0.0.0",
       "description": "Interface the HTTP server binds to.",
       "title": "Host",
       "type": "string"
     },
     "port": {
+      "advanced": true,
       "default": 8100,
       "description": "Port the HTTP server listens on.",
       "title": "Port",
@@ -128,10 +130,12 @@
     },
     "store_backend": {
       "$ref": "#/$defs/StoreBackend",
+      "advanced": true,
       "default": "memory",
       "description": "Persistence backend for service records: 'memory' is ephemeral (dev), 'file' persists to store_path."
     },
     "store_path": {
+      "advanced": true,
       "default": "lifecycle_state.yaml",
       "description": "Path of the service-record store (file backend only).",
       "title": "Store Path",
@@ -139,10 +143,12 @@
     },
     "execution_backend": {
       "$ref": "#/$defs/ExecutionBackendType",
+      "advanced": true,
       "default": "docker_sdk",
       "description": "How containers are managed: 'docker_sdk' (full support), 'docker' CLI (status/logs only), or 'noop' (dry runs)."
     },
     "component_config_store_path": {
+      "advanced": true,
       "default": "data/component_configs.json",
       "description": "Path of the persisted per-component deployment configs.",
       "title": "Component Config Store Path",
@@ -155,78 +161,91 @@
       "type": "string"
     },
     "docker_sdk_timeout": {
+      "advanced": true,
       "default": 120,
       "description": "Client-level timeout (seconds) for every Docker SDK operation (pull, create, start, stop, \u2026). The default accommodates typical image pulls.",
       "title": "Docker Sdk Timeout",
       "type": "integer"
     },
     "disk_path": {
+      "advanced": true,
       "default": "/",
       "description": "Filesystem path whose free space is reported on the dashboard; /host_root when containerised (host filesystem mount).",
       "title": "Disk Path",
       "type": "string"
     },
     "disk_warn_pct": {
+      "advanced": true,
       "default": 10.0,
       "description": "Warn on the dashboard when free disk space drops below this percentage.",
       "title": "Disk Warn Pct",
       "type": "number"
     },
     "env_store_path": {
+      "advanced": true,
       "default": "component_env.json",
       "description": "Path of the per-component env/secret store.",
       "title": "Env Store Path",
       "type": "string"
     },
     "secret_key_path": {
+      "advanced": true,
       "default": "secrets.key",
       "description": "Path of the Fernet key encrypting stored secrets.",
       "title": "Secret Key Path",
       "type": "string"
     },
     "config_yaml_store_path": {
+      "advanced": true,
       "default": "data/component_config_yaml.json",
       "description": "Path of the per-component config template/values store.",
       "title": "Config Yaml Store Path",
       "type": "string"
     },
     "deploy_history_store_path": {
+      "advanced": true,
       "default": "data/deploy_history.json",
       "description": "Path of the per-component deploy-history JSON store.",
       "title": "Deploy History Store Path",
       "type": "string"
     },
     "self_update_watchtower_image": {
+      "advanced": true,
       "default": "containrrr/watchtower:1.7.1",
       "description": "One-shot updater image launched by the dashboard's 'Update server' button; keep the tag pinned.",
       "title": "Self Update Watchtower Image",
       "type": "string"
     },
     "self_update_docker_api_version": {
+      "advanced": true,
       "default": "1.44",
       "description": "DOCKER_API_VERSION exported to the one-shot updater. Watchtower 1.7.1's client defaults to API 1.25, below modern daemons' minimum, and panics without this.",
       "title": "Self Update Docker Api Version",
       "type": "string"
     },
     "registry_check_ttl": {
+      "advanced": true,
       "default": 300,
       "description": "Cache TTL (seconds) for registry manifest-digest lookups.",
       "title": "Registry Check Ttl",
       "type": "integer"
     },
     "registry_check_interval": {
+      "advanced": true,
       "default": 300,
       "description": "Interval (seconds) of the background update-available check; 0 disables it.",
       "title": "Registry Check Interval",
       "type": "integer"
     },
     "system_settings_path": {
+      "advanced": true,
       "default": "data/system_settings.json",
       "description": "Path of the operator-editable System Settings store.",
       "title": "System Settings Path",
       "type": "string"
     },
     "self_contract_path": {
+      "advanced": true,
       "default": "deploy/docker-compose.yml",
       "description": "Path to central-deploy's own deploy contract (deploy/docker-compose.yml). Read at startup to seed system settings from contract labels (robotsix.deploy.settings.*).",
       "title": "Self Contract Path",
@@ -251,66 +270,77 @@
       "type": "boolean"
     },
     "volume_audit_interval_seconds": {
+      "advanced": true,
       "default": 3600,
       "description": "Interval (seconds) between volume-audit scans.",
       "title": "Volume Audit Interval Seconds",
       "type": "integer"
     },
     "volume_audit_snapshot_path": {
+      "advanced": true,
       "default": "data/volume_audit_snapshots.json",
       "description": "Path of persisted volume-size snapshots.",
       "title": "Volume Audit Snapshot Path",
       "type": "string"
     },
     "volume_audit_findings_path": {
+      "advanced": true,
       "default": "data/volume_audit_findings.json",
       "description": "Path of persisted volume-audit findings.",
       "title": "Volume Audit Findings Path",
       "type": "string"
     },
     "volume_audit_growth_threshold_pct": {
+      "advanced": true,
       "default": 10.0,
       "description": "Volume growth (percent between scans) above which a finding is raised.",
       "title": "Volume Audit Growth Threshold Pct",
       "type": "number"
     },
     "volume_audit_min_delta_bytes": {
+      "advanced": true,
       "default": 10485760,
       "description": "Minimum absolute growth (bytes) before a finding is raised \u2014 filters noise on small volumes. Default 10 MiB.",
       "title": "Volume Audit Min Delta Bytes",
       "type": "integer"
     },
     "board_api_url": {
+      "advanced": true,
       "default": "",
       "description": "Board API base URL for filing audit-finding tickets; empty disables.",
       "title": "Board Api Url",
       "type": "string"
     },
     "board_api_token": {
+      "advanced": true,
       "default": "",
       "description": "Bearer token for the board API.",
       "title": "Board Api Token",
       "type": "string"
     },
     "board_repo_id": {
+      "advanced": true,
       "default": "",
       "description": "Board repo id under which audit tickets are filed.",
       "title": "Board Repo Id",
       "type": "string"
     },
     "github_app_id": {
+      "advanced": true,
       "default": "",
       "description": "GitHub App ID used to mint installation tokens for the chat agent's 'github' component. Empty disables the component.",
       "title": "Github App Id",
       "type": "string"
     },
     "github_app_private_key": {
+      "advanced": true,
       "default": "",
       "description": "GitHub App private key (PEM) paired with github_app_id.",
       "title": "Github App Private Key",
       "type": "string"
     },
     "github_repo_create_token": {
+      "advanced": true,
       "default": "",
       "description": "A GitHub Personal Access Token (classic 'repo' scope, or fine-grained with Administration:read-and-write) used only for POST /chat/github/repos. GitHub App installation tokens cannot create repositories under a personal account ('Resource not accessible by integration'), so repo creation needs a separate PAT. Empty disables repo creation (the Actions-status endpoints are unaffected).",
       "title": "Github Repo Create Token",
@@ -320,47 +350,55 @@
       "additionalProperties": {
         "$ref": "#/$defs/LangfuseProjectCreds"
       },
+      "advanced": true,
       "description": "Langfuse project alias \u2192 credentials mapping.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}. Preferred over the legacy per-project config fields.",
       "title": "Langfuse Projects",
       "type": "object"
     },
     "langfuse_base_url": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse instance base URL (no trailing slash).",
       "title": "Langfuse Base Url",
       "type": "string"
     },
     "langfuse_chat_public_key": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse public key for the robotsix-chat trace project.",
       "title": "Langfuse Chat Public Key",
       "type": "string"
     },
     "langfuse_chat_secret_key": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse secret key for the robotsix-chat trace project.",
       "title": "Langfuse Chat Secret Key",
       "type": "string"
     },
     "langfuse_cognee_public_key": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse public key for the cognee trace project.",
       "title": "Langfuse Cognee Public Key",
       "type": "string"
     },
     "langfuse_cognee_secret_key": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse secret key for the cognee trace project.",
       "title": "Langfuse Cognee Secret Key",
       "type": "string"
     },
     "langfuse_mill_public_key": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse public key for the robotsix-mill trace project.",
       "title": "Langfuse Mill Public Key",
       "type": "string"
     },
     "langfuse_mill_secret_key": {
+      "advanced": true,
       "default": "",
       "description": "Langfuse secret key for the robotsix-mill trace project.",
       "title": "Langfuse Mill Secret Key",
@@ -373,18 +411,21 @@
       "type": "boolean"
     },
     "caretaker_interval_hours": {
+      "advanced": true,
       "default": 24,
       "description": "Hours between caretaker passes.",
       "title": "Caretaker Interval Hours",
       "type": "integer"
     },
     "mill_component_id": {
+      "advanced": true,
       "default": "",
       "description": "Component id of the mill instance the caretaker reports findings to.",
       "title": "Mill Component Id",
       "type": "string"
     },
     "image_auto_prune": {
+      "advanced": true,
       "default": false,
       "description": "After updates, remove dangling images not needed for rollback.",
       "title": "Image Auto Prune",
@@ -392,54 +433,63 @@
     },
     "llmio_tier_config": {
       "additionalProperties": true,
+      "advanced": true,
       "default": {},
       "description": "Fleet-global mapping from llmio capability level (level1-4) to provider and model. Overridden by the System Settings store.",
       "title": "Llmio Tier Config",
       "type": "object"
     },
     "chat_agent_audit_store_path": {
+      "advanced": true,
       "default": "data/chat_agent_audit.json",
       "description": "Path of the chat-agent mutation audit log.",
       "title": "Chat Agent Audit Store Path",
       "type": "string"
     },
     "claude_auth_refresh_interval": {
+      "advanced": true,
       "default": 1800,
       "description": "Interval (seconds) between Claude auth credential refresh attempts; 0 disables background refresh.",
       "title": "Claude Auth Refresh Interval",
       "type": "integer"
     },
     "rate_limit_login_per_minute": {
+      "advanced": true,
       "default": 10,
       "description": "Max POST /login requests per IP per minute.",
       "title": "Rate Limit Login Per Minute",
       "type": "integer"
     },
     "rate_limit_api_per_hour": {
+      "advanced": true,
       "default": 20000,
       "description": "Max API requests per IP per hour. Must accommodate the dashboard UI, which polls several endpoints every few seconds from one IP (~5000/h per open tab).",
       "title": "Rate Limit Api Per Hour",
       "type": "integer"
     },
     "rate_limit_login_max_attempts": {
+      "advanced": true,
       "default": 20,
       "description": "Failed login attempts before IP lockout.",
       "title": "Rate Limit Login Max Attempts",
       "type": "integer"
     },
     "rate_limit_login_lockout_seconds": {
+      "advanced": true,
       "default": 300,
       "description": "Lockout duration (seconds) after too many failed logins.",
       "title": "Rate Limit Login Lockout Seconds",
       "type": "integer"
     },
     "csrf_secret": {
+      "advanced": true,
       "default": "",
       "description": "Secret key for CSRF token signing. Auto-generated (random) when empty, which invalidates outstanding tokens on every restart \u2014 acceptable for single-server deployments.",
       "title": "Csrf Secret",
       "type": "string"
     },
     "virtual_components": {
+      "advanced": true,
       "description": "Virtual (non-Docker) components to register in the chat-agent component roster alongside onboarded Docker services.",
       "items": {
         "$ref": "#/$defs/VirtualComponentEntry"
