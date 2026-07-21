@@ -136,6 +136,18 @@ class CaretakerScheduler:
                 mill_reachable_detail = "health probe failed"
 
         # 2. Phase: UPDATE
+        # Identify our own container so phase_update never tries to auto-deploy
+        # (and thereby kill) the process running this pass — see phase_update.
+        self_container_name = ""
+        try:
+            self_info = await self._backend.inspect_self()
+            if self_info is not None:
+                self_container_name = self_info.container_name
+        except NotImplementedError:
+            pass
+        except Exception:
+            logger.warning("caretaker: inspect_self failed", exc_info=True)
+
         try:
             update_findings = await phase_update(
                 self._registry,
@@ -144,6 +156,7 @@ class CaretakerScheduler:
                 self._component_config_store,
                 self._deploy_history_store,
                 self._env_store,
+                self_container_name,
             )
             findings.extend(update_findings)
             phases_run.append("update")

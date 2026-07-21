@@ -36,6 +36,7 @@ async def phase_update(
     component_config_store: ComponentConfigStore,
     deploy_history_store: DeployHistoryStore,
     env_store: EnvStore,
+    self_container_name: str = "",
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -43,6 +44,13 @@ async def phase_update(
     (primary), ``update_available == True``, and the component config does
     NOT have ``caretaker_auto_update == False``.  Sibling records are
     excluded — they are managed by the main deploy path.
+
+    The record matching ``self_container_name`` (the container this caretaker
+    runs inside) is also skipped: an in-process ``backend.deploy`` of our own
+    container stops+recreates us mid-pass, so ``update_available=False`` is
+    never persisted and the replacement self-updates forever. Self-update is
+    handled exclusively by ``POST /system/update`` (a detached watchtower
+    container that survives the swap).
     """
     findings: list[CaretakerFinding] = []
     records = await store.list_all()
@@ -50,6 +58,20 @@ async def phase_update(
     for record in records:
         # Skip sibling records
         if record.component_id:
+            continue
+
+        # Never auto-deploy the container this caretaker runs inside. The
+        # deploy would replace our own container before this pass can persist
+        # ``update_available=False``, so every replacement boots, still sees
+        # the update as pending, and self-updates again — an unbreakable loop
+        # that took down deploy.robotsix.net on 2026-07-21. Self-update is
+        # operator/watchtower-driven via POST /system/update instead.
+        if self_container_name and record.container_name == self_container_name:
+            logger.debug(
+                "phase_update: skipping self-component %s "
+                "(self-update handled by /system/update)",
+                record.name,
+            )
             continue
 
         if not record.update_available:

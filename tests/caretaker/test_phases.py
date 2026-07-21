@@ -280,6 +280,77 @@ class TestPhaseUpdate:
         assert len(findings) == 0
         backend.deploy.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_skips_self_component(self):
+        """The caretaker never auto-deploys the container it runs inside.
+
+        Regression (2026-07-21 outage): deploying the self-component
+        stops+recreates this very process before ``update_available=False``
+        is persisted, so every replacement self-updates again in an
+        unbreakable loop. Self-update belongs to POST /system/update.
+        """
+        store = MagicMock()
+        record = _make_record(name="central-deploy")
+        record.container_name = "robotsix-central-deploy-central-deploy-1"
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock()
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config(id="central-deploy"))
+        dhs = MagicMock(spec=DeployHistoryStore)
+
+        findings = await phase_update(
+            registry,
+            store,
+            backend,
+            ccs,
+            dhs,
+            _make_env_store(),
+            self_container_name="robotsix-central-deploy-central-deploy-1",
+        )
+        assert len(findings) == 0
+        backend.deploy.assert_not_called()
+        # The stale update_available flag is left untouched — clearing it is
+        # the self-update path's job, not the caretaker's.
+        assert record.update_available is True
+
+    @pytest.mark.asyncio
+    async def test_still_deploys_others_when_self_name_set(self):
+        """A non-self primary component is still auto-deployed normally."""
+        store = MagicMock()
+        record = _make_record(name="svc")
+        record.container_name = "svc"
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(
+            registry,
+            store,
+            backend,
+            ccs,
+            dhs,
+            _make_env_store(),
+            self_container_name="robotsix-central-deploy-central-deploy-1",
+        )
+        # A non-self component is still deployed even when a self name is set.
+        backend.deploy.assert_called_once()
+        assert record.update_available is False
+
 
 class TestPhaseHealth:
     @pytest.mark.asyncio
