@@ -421,6 +421,77 @@ async def test_chat_config_write_follows_restart_access(
     assert resp_config2.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_chat_mutation_allowed_via_allow_chat_access_flag(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    config_yaml_store: ConfigYamlStore,
+    component_config_store: ComponentConfigStore,
+):
+    """``allow_chat_access`` alone (operator toggle) grants mutation access.
+
+    A component with ``allow_chat_access=True`` and
+    ``chat_agent_mutatable=False`` must still be reachable through the
+    mutation endpoints — the operator-facing "Allow chat agent access"
+    checkbox is the single control surface.
+    """
+    # -- Register a component with allow_chat_access=True only ----------
+    cfg = _make_config("chat-access-only", "ghcr.io/test/access-only:main")
+    cfg.allow_chat_access = True
+    component_config_store.register(cfg)
+
+    await config_yaml_store.save_template("chat-access-only", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="chat-access-only", state=ServiceState.RUNNING))
+
+    # Config-write must succeed.
+    resp_config = await client.put(
+        "/chat/config/chat-access-only",
+        json={"values": {"debug": True}},
+        headers=auth_headers,
+    )
+    assert resp_config.status_code == 200, (
+        f"config-write should succeed when allow_chat_access=True; "
+        f"got {resp_config.status_code}: {resp_config.text}"
+    )
+
+    # Restart must also succeed.
+    resp_restart = await client.post(
+        "/chat/services/chat-access-only/restart",
+        headers=auth_headers,
+    )
+    assert resp_restart.status_code == 200, (
+        f"restart should succeed when allow_chat_access=True; "
+        f"got {resp_restart.status_code}: {resp_restart.text}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_mutation_denied_when_both_flags_are_false(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    config_yaml_store: ConfigYamlStore,
+    component_config_store: ComponentConfigStore,
+):
+    """Both flags false → 403, even when the service record exists."""
+    cfg = _make_config("no-access", "ghcr.io/test/no-access:main")
+    # Explicitly confirm both flags are false.
+    cfg.allow_chat_access = False
+    cfg.chat_agent_mutatable = False
+    component_config_store.register(cfg)
+
+    await config_yaml_store.save_template("no-access", _CONFIG_TEMPLATE)
+    await store.put(ServiceRecord(name="no-access", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/config/no-access",
+        json={"values": {"debug": True}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # Config rollback
 # ---------------------------------------------------------------------------

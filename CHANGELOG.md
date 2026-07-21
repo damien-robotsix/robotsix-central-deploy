@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Chat-agent mutation access now respects the operator-facing "Allow chat agent access" toggle in addition to the declarative `chat_agent_mutatable` flag.  Either flag alone is sufficient to grant restart, config-write, and config-rollback access — removing the barrier where the toggle was checked but didn't actually enable mutation.
 - Added `PUT /chat/env/{name}` endpoint for scoped, audited secret/env provisioning by the chat agent. Secrets are encrypted at rest (Fernet), never logged or echoed in responses, and gated behind the existing `chat_agent_mutatable` per-component flag.
 - Add missing `chat_audit`, `chat_components`, `chat_config`, `chat_self`, and `chat_services` router modules to the API documentation.
 - Added `POST /chat/deploy` generic deploy endpoint — the chat agent can now pull + recreate any component in the `chat_agent_deployable_components` server-level allowlist, even when no persisted `ComponentConfig` exists yet. A minimal config is derived from the request body (`name`, `image`, optional `container_port`) and persisted on first deploy. Gated by the usual `X-API-Key` auth and rate-limited to one deploy per 300 s per component.

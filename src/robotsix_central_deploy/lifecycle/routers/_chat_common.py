@@ -95,18 +95,24 @@ async def _require_allowed_service(
 ) -> None:
     """Raise HTTP 403 when *name* is not chat-agent mutatable.
 
-    A component is mutatable when its ``chat_agent_mutatable`` flag is set
-    in the component config — this is a declarative, per-service setting,
-    not a hard-coded allowlist.  Virtual components are never mutatable
-    (they have no Docker containers to restart/deploy).
+    A component is mutatable when either its ``chat_agent_mutatable`` flag
+    (set declaratively via docker-compose label or programmatically at
+    seed time) or its ``allow_chat_access`` flag (the operator-facing
+    "Allow chat agent access" toggle) is enabled.  Either flag alone is
+    sufficient to grant mutation access.
 
-    This single flag gates **restart**, **config-write**, and
-    **config-rollback** together — restart access implies config-write
-    access.  ``update`` (self-deploy) is a separate, more sensitive
-    capability that is NOT implicitly granted by this flag.
+    Virtual components are never mutatable (they have no Docker containers
+    to restart/deploy).
+
+    These flags together gate **restart**, **config-write**, and
+    **config-rollback** — restart access implies config-write access.
+    ``update`` (self-deploy) is a separate, more sensitive capability
+    that is NOT implicitly granted by these flags.
     """
     comp_cfg = component_config_store.get(name)
-    if comp_cfg is None or not comp_cfg.chat_agent_mutatable:
+    if comp_cfg is None or not (
+        comp_cfg.chat_agent_mutatable or comp_cfg.allow_chat_access
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Chat agent is not permitted to mutate service '{name}'.",
