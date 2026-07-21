@@ -563,7 +563,7 @@ class TestDockerSdkBackendDeploy:
         outcome = await b.deploy(record, config, "repo:v2")
 
         # image pull was called
-        client.images.pull.assert_called_once_with("repo:v2")
+        client.images.pull.assert_called_once_with("repo:v2", auth_config=None)
 
         # container was created with the right params
         client.containers.create.assert_called_once()

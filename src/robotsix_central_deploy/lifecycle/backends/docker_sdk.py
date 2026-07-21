@@ -8,6 +8,7 @@ import os
 import shlex
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlparse
 
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
 from ._util import (
@@ -35,6 +36,19 @@ if TYPE_CHECKING:
     from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _image_registry_host(image_ref: str) -> str | None:
+    """Return the registry host from an image reference, or *None*.
+
+    Handles standard Docker image refs (``registry/owner/repo:tag``) and
+    malformed refs that include a URL scheme.
+    """
+    # If the ref contains :// it's a URL — parse it properly.
+    if "://" in image_ref:
+        return urlparse(image_ref).hostname
+    # Standard Docker image ref: host/rest
+    return image_ref.split("/")[0] if "/" in image_ref else None
 
 
 class DockerSdkBackend(ExecutionBackend):
@@ -460,6 +474,24 @@ class DockerSdkBackend(ExecutionBackend):
         except Exception as restore_exc:
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
+    @staticmethod
+    def _build_auth_config(image_ref: str) -> dict[str, str] | None:
+        """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
+
+        Only ``ghcr.io`` images are authenticated.  The token is read from
+        the ``GHCR_TOKEN`` environment variable; when it is absent or empty,
+        anonymous pull is used and a 401 on a private image will surface a
+        diagnostic error.
+        """
+        if _image_registry_host(image_ref) != "ghcr.io":
+            return None
+        token = os.environ.get("GHCR_TOKEN", "").strip()
+        if not token:
+            return None
+        # GHCR ignores the username field when a personal access token is
+        # supplied as the password — any non-empty string works here.
+        return {"username": "USERNAME", "password": token, "serveraddress": "ghcr.io"}
+
     async def deploy(
         self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
     ) -> DeployOutcome:
@@ -470,11 +502,25 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         # Step 1 — pull target image; obtain its digest
+        auth_config = self._build_auth_config(image_ref)
         try:
             image = await loop.run_in_executor(
-                None, lambda: self._client.images.pull(image_ref)
+                None,
+                lambda: self._client.images.pull(image_ref, auth_config=auth_config),
             )
         except docker.errors.APIError as exc:
+            response = getattr(exc, "response", None)
+            if (
+                response is not None
+                and response.status_code == 401
+                and _image_registry_host(image_ref) == "ghcr.io"
+                and not auth_config
+            ):
+                raise RuntimeError(
+                    f"Image pull failed for {image_ref!r}: received 401 Unauthorized "
+                    "from ghcr.io. Set the GHCR_TOKEN environment variable to a GitHub "
+                    "personal access token with read:packages scope."
+                ) from exc
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
         # Derive manifest digest from RepoDigests (comparable to registry
         # Docker-Content-Digest header), falling back to config digest.
@@ -945,7 +991,10 @@ class DockerSdkBackend(ExecutionBackend):
 
         def _run() -> str:
             api = self._client.api
-            self._client.images.pull(watchtower_image)
+            self._client.images.pull(
+                watchtower_image,
+                auth_config=self._build_auth_config(watchtower_image),
+            )
             networking = None
             if target.networks:
                 # Multi-endpoint create keeps the watchtower container itself
