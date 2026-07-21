@@ -7809,11 +7809,6 @@
             "title": "Update Available",
             "default": false
           },
-          "has_config_yaml": {
-            "type": "boolean",
-            "title": "Has Config Yaml",
-            "default": false
-          },
           "component_id": {
             "type": "string",
             "title": "Component Id",
@@ -7916,11 +7911,6 @@
           "update_state": {
             "$ref": "#/components/schemas/UpdateState",
             "default": "unknown"
-          },
-          "has_config_yaml": {
-            "type": "boolean",
-            "title": "Has Config Yaml",
-            "default": false
           },
           "sibling_health": {
             "items": {

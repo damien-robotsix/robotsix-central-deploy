@@ -90,7 +90,6 @@ def _build_component_config_from_spec(
         + [m.host for sib in spec.siblings for m in sib.mounts],
         siblings=[sib.model_copy() for sib in spec.siblings],
         git_url=git_url,
-        has_config_yaml=(spec.config_schema is not None),
         config_volume=spec.config_volume,
         config_assist_command=spec.config_assist_command,
         config_assist_seeds=spec.config_assist_seeds,

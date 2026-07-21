@@ -191,11 +191,8 @@ function renderRow(svc) {
       <button data-action="doAction" data-arg-0="${escAttr(svc.name)}" data-arg-1="restart" id="btn-restart-${escAttr(svc.name)}">Restart</button>
       <button data-action="updateService" data-arg-0="${escAttr(svc.name)}" id="btn-update-${escAttr(svc.name)}" class="btn-primary text-xs" title="Force-pull the latest image and recreate the container"${_deployPhaseLabels[svc.name] ? ' disabled' : ''}>${_deployPhaseLabels[svc.name] ? escHtml(_deployPhaseLabels[svc.name]) : 'Update'}</button>
       <button data-action="openHistoryModal" data-arg-0="${escAttr(svc.name)}" id="btn-history-${escAttr(svc.name)}" class="text-xs" title="View deploy history and rollback">History</button>
-      ${svc.has_config_yaml
-        ? `<button data-action="openConfigModal" data-arg-0="${escAttr(svc.name)}" class="btn-primary text-xs">Configure</button>
-           <button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Env &amp; Secrets</button>`
-        : `<button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Config</button>`
-      }
+      <button data-action="openConfigModal" data-arg-0="${escAttr(svc.name)}" class="btn-primary text-xs">Configure</button>
+      <button data-action="openEnvModal" data-arg-0="${escAttr(svc.name)}" class="btn-secondary">Env &amp; Secrets</button>
       <button class="btn-danger" data-action="doRemove" data-arg-0="${escAttr(svc.name)}">Remove</button>
       <span class="inline-error hidden" id="err-${escAttr(svc.name)}"></span>
     </td>

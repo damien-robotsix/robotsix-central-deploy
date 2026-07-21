@@ -6,6 +6,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove `has_config_yaml` flag; make standard config a hard deployability gate.
+  Onboard preflight now requires `config/config.json` + `config/config.schema.json`
+  + `robotsix.deploy.config-target` label. All onboarded services get both
+  "Configure" and "Env & Secrets" UI buttons unconditionally.
 - Add markdownlint-cli2 and codespell hooks to pre-commit config, plus
   `.markdownlint-cli2.yaml` and `[tool.codespell]` in `pyproject.toml`, for
   automated Markdown documentation quality checks.
