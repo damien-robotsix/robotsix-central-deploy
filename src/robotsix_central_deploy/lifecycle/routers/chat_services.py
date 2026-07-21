@@ -16,13 +16,13 @@ from ..deps import (
     _get_chat_agent_audit_store,
     _get_component_config_store,
     _get_config,
+    _get_config_yaml_store,
     _get_env_store,
     _get_or_create_record,
     _get_registry,
     _get_sibling_pairs,
     _get_store,
 )
-from ...registry.models import HealthCheck
 from .._config_utils import _sanitize_log
 from ._chat_common import (
     _check_rate_limit,
@@ -42,7 +42,7 @@ from ..store import ServiceStore
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig, PortMapping
+from ...registry.models import ComponentConfig
 
 router = APIRouter(tags=["chat"])
 
@@ -308,40 +308,10 @@ async def chat_update_service(
 # ---------------------------------------------------------------------------
 
 
-def _build_minimal_config(body: ChatAgentDeployRequest) -> ComponentConfig:
-    """Build a minimal ``ComponentConfig`` from a generic deploy request.
-
-    Used when no persisted config exists for the component yet.
-    """
-    ports: list[PortMapping] = []
-    health_check: HealthCheck | None = None
-    if body.container_port is not None:
-        ports.append(
-            PortMapping(host=body.container_port, container=body.container_port)
-        )
-        # Provide a sensible default HTTP health check so the deploy
-        # flow can verify the container is ready before returning.
-        health_check = HealthCheck(
-            test=["CMD", "curl", "-f", f"http://localhost:{body.container_port}/"],
-            interval_seconds=30,
-            timeout_seconds=10,
-            retries=3,
-            start_period_seconds=10,
-        )
-    return ComponentConfig(
-        id=body.name,
-        image=body.image,
-        container_name=f"robotsix-{body.name}",
-        ports=ports,
-        health_check=health_check,
-        chat_agent_mutatable=True,
-    )
-
-
 @router.post(
     "/chat/deploy",
     response_model=ChatAgentDeployResponse,
-    summary="Generic deploy: pull + recreate an allowlisted component",
+    summary="Contract-aware deploy: fetch docker-compose.yml and deploy an allowlisted component",
     responses={
         403: {"description": "Component not in the deploy allowlist"},
         409: {"description": "Deploy already in progress"},
@@ -359,18 +329,37 @@ async def chat_deploy(
     audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentDeployResponse:
-    """Pull the latest image and recreate a container for an allowlisted component.
+    """Deploy an allowlisted component by fetching and parsing its deploy contract.
 
-    The component does NOT need a pre-existing ``ComponentConfig`` —
-    when absent a minimal config is derived from the request body.
+    Fetches the repo's ``deploy/docker-compose.yml``, resolves the
+    image and full service topology (including siblings), and deploys
+    every service — matching the dashboard onboarding flow.
+
+    The component does NOT need a pre-existing ``ComponentConfig``;
+    one is derived from the deploy contract on first deploy.
     Access is gated by the ``chat_agent_deployable_components`` server-
     level allowlist (``LifecycleConfig``).
 
     Synchronous — waits for the deploy to complete before returning.
     Rate-limited to one deploy per 300 seconds per component.
     """
-    config = await _get_config(request)
-    if body.name not in config.chat_agent_deployable_components:
+    import asyncio
+    import json
+
+    from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
+    from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
+    from robotsix_central_deploy.lifecycle.deps.seed import (
+        _namespace_spec_volumes,
+        _build_component_config_from_spec,
+        _validate_config_or_422,
+    )
+    from robotsix_central_deploy.lifecycle._config_utils import (
+        _canonical_hash,
+        _merge_config,
+    )
+
+    lifecycle_config = await _get_config(request)
+    if body.name not in lifecycle_config.chat_agent_deployable_components:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Component '{body.name}' is not in the deploy allowlist.",
@@ -378,38 +367,178 @@ async def chat_deploy(
 
     _check_rate_limit(request.app.state, body.name, "deploy")
 
-    # Resolve or build the ComponentConfig.
+    # Resolve the deploy contract when no persisted config exists.
     comp_cfg = component_config_store.get(body.name)
     if comp_cfg is None:
-        comp_cfg = _build_minimal_config(body)
-        # Persist the minimal config so future deploys (and sibling
-        # fan-out, dashboard, etc.) can reference it.
+        # --- Fetch repo files (clone is blocking → run in executor) ---
+        loop = asyncio.get_running_loop()
+
+        github_token: str | None = None
+        try:
+            from .onboard import (
+                _parse_github_owner_repo as _parse_gh,
+            )
+
+            parsed = _parse_gh(body.repo)
+        except ImportError:
+            parsed = None
+
+        if (
+            parsed is not None
+            and lifecycle_config.github_app_id
+            and lifecycle_config.github_app_private_key
+        ):
+            owner, repo_name = parsed
+            try:
+                from robotsix_central_deploy.lifecycle.github_app import (
+                    get_installation_token_sync,
+                )
+
+                github_token = await loop.run_in_executor(
+                    None,
+                    get_installation_token_sync,
+                    lifecycle_config.github_app_id,
+                    lifecycle_config.github_app_private_key,
+                    owner,
+                    repo_name,
+                )
+            except Exception:
+                safe_owner = owner.replace("\n", "_").replace("\r", "_")
+                safe_repo = repo_name.replace("\n", "_").replace("\r", "_")
+                logger.warning(
+                    "Cannot get GitHub App installation token for %s/%s; "
+                    "cloning unauthenticated (public repos only)",
+                    safe_owner,
+                    safe_repo,
+                )
+
+        try:
+            repo_files = await loop.run_in_executor(
+                None, fetch_repo_files, body.repo, 30, github_token
+            )
+        except FetchError as e:
+            raise HTTPException(status_code=422, detail={"error": str(e)})
+
+        # --- Parse deploy/docker-compose.yml ---
+        try:
+            derived_spec = parse_compose(repo_files.compose_bytes, body.name, body.repo)
+        except ParseError as e:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "compose validation failed",
+                    "violations": e.violations,
+                },
+            )
+
+        # --- Parse config/config.schema.json if present ---
+        if repo_files.config_schema_json is not None:
+            try:
+                derived_spec.config_schema = json.loads(repo_files.config_schema_json)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": (
+                            f"config/config.schema.json is not valid JSON: {exc}"
+                        ),
+                    },
+                )
+        else:
+            derived_spec.config_schema = None
+
+        # --- Hard precondition: config contract must be satisfied ---
+        if derived_spec.config_schema is None or derived_spec.config_volume is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": (
+                        "Repo does not satisfy the robotsix config standard "
+                        "(robotsix-standards/docs/config-standard.md).  Every "
+                        "deployed service must ship config/config.json + "
+                        "config/config.schema.json and declare "
+                        "robotsix.deploy.config-target in "
+                        "deploy/docker-compose.yml."
+                    ),
+                },
+            )
+
+        # --- Namespace volume names ---
+        derived_spec = _namespace_spec_volumes(derived_spec, body.name)
+
+        # --- Build ComponentConfig from DerivedSpec ---
+        comp_cfg = _build_component_config_from_spec(derived_spec, git_url=body.repo)
+
+        # Persist the config so future deploys (and sibling fan-out,
+        # dashboard, etc.) can reference it.
         await component_config_store.put(comp_cfg)
         # Register in the in-memory loader so the gateway can route to it.
         registry.register(comp_cfg)
 
-    # Merge env overrides and secrets from the EnvStore (same as
-    # chat_update_service and the main deploy flow) so operator-
-    # configured secrets are injected into the container.
+        # --- Write merged config.json to the config volume ---
+        if derived_spec.config_schema is not None:
+            config_yaml_store = await _get_config_yaml_store(request)
+            await config_yaml_store.save_template(body.name, derived_spec.config_schema)
+            # Use example values as base when present; otherwise empty.
+            base_values: dict[str, object] = {}
+            if derived_spec.config_example_values is not None:
+                base_values = dict(derived_spec.config_example_values)
+            try:
+                merged_config = _merge_config(
+                    derived_spec.config_schema, base_values, {}
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"error": str(exc)},
+                )
+            _validate_config_or_422(derived_spec.config_schema, merged_config)
+            if derived_spec.config_volume is not None:
+                try:
+                    await backend.write_config_to_volume(
+                        derived_spec.config_volume, merged_config
+                    )
+                    await config_yaml_store.update_current_and_hash(
+                        body.name,
+                        merged_config,
+                        _canonical_hash(merged_config),
+                    )
+                except Exception:
+                    await config_yaml_store.delete(body.name)
+                    raise
+            else:
+                await config_yaml_store.update_current(body.name, merged_config)
+
+        # --- Seed EnvStore from the repo's env contract ---
+        env_store = await _get_env_store(request)
+        existing_env = await env_store.get(body.name)
+        if not existing_env.env and not existing_env.secret_tokens:
+            seeded_env = {k: v for k, v in derived_spec.env.items() if v}
+            seeded_secrets = {k: "" for k, v in derived_spec.env.items() if not v}
+            if seeded_env or seeded_secrets:
+                await env_store.upsert(body.name, seeded_env, seeded_secrets)
+
+    # --- Merge env overrides and secrets ---
     env_store = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(body.name, comp_cfg.env)
     comp_cfg = comp_cfg.model_copy(update={"env": merged_env})
 
-    # Get or create the service record.
+    # --- Get or create the service record ---
     record = await store.get(body.name)
     if record is None:
         record = ServiceRecord(name=body.name)
         await store.put(record)
 
-    # Serialise concurrent deploys.
+    # --- Serialise concurrent deploys ---
     if not await try_acquire_deploy_lock(body.name):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Deploy already in progress for '{body.name}'.",
         )
 
+    deploy_image = comp_cfg.image
     try:
-        outcome = await backend.deploy(record, comp_cfg, body.image)
+        outcome = await backend.deploy(record, comp_cfg, deploy_image)
     except Exception as exc:
         logger.exception("chat deploy %s failed", _sanitize_log(body.name))
         await audit_store.append(
@@ -427,16 +556,61 @@ async def chat_deploy(
         release_deploy_lock(body.name)
 
     record.state = outcome.state
-    record.image = body.image
+    record.image = deploy_image
     record.deployed_image_digest = outcome.deployed_digest
     record.previous_image_digest = outcome.previous_digest
     await store.put(record)
 
     # Update the persisted ComponentConfig.image so future dashboard-
     # initiated deploys use the correct image reference.
-    if comp_cfg.image != body.image:
-        comp_cfg.image = body.image
+    if comp_cfg.image != deploy_image:
+        comp_cfg.image = deploy_image
         await component_config_store.put(comp_cfg)
+
+    # --- Deploy siblings (best-effort) ---
+    deployed_siblings: list[str] = []
+    if comp_cfg.siblings:
+        for sib in comp_cfg.siblings:
+            sib_name = f"{body.name}-{sib.service_key}"
+            sib_record = ServiceRecord(
+                name=sib_name,
+                container_name=sib.container_name,
+                image=sib.image,
+                component_id=body.name,
+            )
+            await store.put(sib_record)
+            try:
+                sib_cfg = ComponentConfig(
+                    id=sib_name,
+                    image=sib.image,
+                    container_name=sib.container_name,
+                    ports=sib.ports,
+                    mounts=sib.mounts,
+                    env=sib.env,
+                    health_check=sib.health_check,
+                    claude_mount=sib.claude_mount,
+                    claude_mount_path=sib.claude_mount_path,
+                    host_docker_sock=sib.host_docker_sock,
+                    named_volumes=[m.host for m in sib.mounts],
+                    command=sib.command,
+                    entrypoint=sib.entrypoint,
+                    tmpfs=sib.tmpfs,
+                    mem_limit=sib.mem_limit,
+                    user=sib.user,
+                )
+                sib_outcome = await backend.deploy(sib_record, sib_cfg, sib.image)
+                sib_record.state = sib_outcome.state
+                sib_record.image = sib.image
+                sib_record.deployed_image_digest = sib_outcome.deployed_digest
+                sib_record.previous_image_digest = sib_outcome.previous_digest
+                await store.put(sib_record)
+                deployed_siblings.append(sib_name)
+            except Exception as exc:
+                logger.warning(
+                    "chat deploy sibling '%s' failed: %s",
+                    _sanitize_log(sib_name),
+                    exc,
+                )
 
     await audit_store.append(
         ChatAgentAuditEntry(
@@ -450,10 +624,15 @@ async def chat_deploy(
         )
     )
 
+    detail = "Deploy completed."
+    if deployed_siblings:
+        detail += f" Siblings deployed: {', '.join(deployed_siblings)}"
+
     return ChatAgentDeployResponse(
         name=body.name,
         deployed_digest=outcome.deployed_digest,
         previous_digest=outcome.previous_digest,
         current_state=outcome.state.value,
-        detail="Deploy completed.",
+        detail=detail,
+        deployed_siblings=deployed_siblings,
     )
