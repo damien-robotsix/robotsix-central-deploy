@@ -71,6 +71,7 @@ def _make_derived_spec(
         env={"KEY": "val"},
         claude_mount=False,
         host_docker_sock=False,
+        config_volume="test-config",
     )
 
 
@@ -159,7 +160,9 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ),
             patch(
@@ -295,13 +298,16 @@ class TestOnboardPreflight:
             env={},
             claude_mount=False,
             host_docker_sock=False,
+            config_volume="mail-config",
         )
 
         with (
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ),
             patch(
@@ -341,7 +347,9 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ) as mock_fetch,
             patch(
@@ -385,7 +393,9 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ) as mock_fetch,
             patch(
@@ -422,7 +432,9 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ) as mock_fetch,
             patch(
@@ -459,7 +471,9 @@ class TestOnboardPreflight:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ) as mock_fetch,
             patch(
@@ -1008,6 +1022,7 @@ def _make_multi_service_derived_spec(name: str = "multi-svc") -> DerivedSpec:
         env={"PRIMARY_KEY": "val"},
         claude_mount=False,
         host_docker_sock=False,
+        config_volume="multi-svc-config",
         siblings=[
             SiblingDerivedSpec(
                 service_key="worker",
@@ -1168,7 +1183,9 @@ class TestMultiServiceOnboardConfirm:
             patch(
                 "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
                 return_value=RepoFiles(
-                    compose_bytes=b"fake compose bytes", config_json=None
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_schema_json=b"{}",
                 ),
             ),
             patch(
@@ -1239,6 +1256,7 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_config_schema_null_when_absent(
         self, client: AsyncClient, auth_headers: dict
     ):
+        """Preflight returns 422 when no config schema is present (hard precondition)."""
         spec = _make_derived_spec("cool-app")
 
         with (
@@ -1263,9 +1281,9 @@ class TestOnboardPreflightWithConfig:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 422
         data = resp.json()
-        assert data["spec"]["config_schema"] is None
+        assert "robotsix config standard" in data["error"]
 
     async def test_preflight_invalid_config_schema_json_returns_422(
         self, client: AsyncClient, auth_headers: dict
@@ -1304,7 +1322,7 @@ class TestOnboardPreflightWithConfig:
     ):
         """Preflight returns 422 when config schema is present but no robotsix.deploy.config-target label."""
         spec = _make_derived_spec("cool-app")
-        # config_volume NOT set — simulates missing config-target label
+        spec.config_volume = None  # simulates missing config-target label
         schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
 
         with (
@@ -1368,12 +1386,12 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "no config file or template was found" in data["error"]
+        assert "robotsix config standard" in data["error"]
 
     async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """When only config.json exists (no schema JSON), config_schema is None."""
+        """When only config.json exists (no schema JSON), preflight returns 422 (hard precondition)."""
         spec = _make_derived_spec("cool-app")
         config_json_bytes = b'{"host": "localhost"}'
 
@@ -1401,9 +1419,9 @@ class TestOnboardPreflightWithConfig:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 422
         data = resp.json()
-        assert data["spec"]["config_schema"] is None
+        assert "robotsix config standard" in data["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -1875,7 +1893,7 @@ class TestOnboardConfigSchemaValidation:
     async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """config_json present but config_schema_json=None → spec.config_schema is None."""
+        """config_json present but config_schema_json=None → 422 (hard precondition)."""
         spec = _make_derived_spec("cool-app")
         config_json_bytes = b'{"host": "localhost"}'
 
@@ -1902,9 +1920,9 @@ class TestOnboardConfigSchemaValidation:
                 headers=auth_headers,
             )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 422
         data = resp.json()
-        assert data["spec"]["config_schema"] is None
+        assert "robotsix config standard" in data["error"]
 
     async def test_confirm_missing_required_field_returns_422(
         self, client: AsyncClient, auth_headers: dict

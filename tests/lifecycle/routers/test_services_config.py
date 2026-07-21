@@ -344,7 +344,6 @@ class TestPutServiceConfig:
             id="chat",
             image="chat:latest",
             container_name="chat",
-            has_config_yaml=True,
             config_volume="chat-config",
         )
         await config_store.put(cfg)
@@ -392,7 +391,6 @@ class TestPutServiceConfig:
             id="chat",
             image="chat:latest",
             container_name="chat",
-            has_config_yaml=True,
             config_volume="chat-config",
         )
         await config_store.put(cfg)
@@ -444,7 +442,6 @@ class TestPutServiceConfig:
             id="chat",
             image="chat:latest",
             container_name="chat",
-            has_config_yaml=True,
             config_volume="chat-config",
         )
         await config_store.put(cfg)
@@ -491,7 +488,6 @@ class TestPutServiceConfig:
             id="chat",
             image="chat:latest",
             container_name="chat",
-            has_config_yaml=True,
             config_volume="chat-config",
         )
         await config_store.put(cfg)
@@ -556,7 +552,6 @@ class TestGetServiceConfigAssistFields:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_assist_command="detect",
             config_assist_seeds=[
                 ConfigAssistSeed(key="account.email"),
@@ -586,7 +581,6 @@ class TestGetServiceConfigAssistFields:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_assist_command="detect",
             config_assist_seeds=[
                 ConfigAssistSeed(key="accounts.0.auth.username", label="Email"),
@@ -662,7 +656,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect",
             config_assist_seeds=[
@@ -750,7 +743,6 @@ class TestConfigAssist:
             id="chat",
             image="chat:latest",
             container_name="chat",
-            has_config_yaml=True,
             config_volume="chat-config",
             config_assist_command=None,
         )
@@ -782,7 +774,6 @@ class TestConfigAssist:
             id="chat",
             image="chat:latest",
             container_name="chat",
-            has_config_yaml=True,
             config_volume=None,
             config_assist_command="detect",
         )
@@ -814,7 +805,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect",
         )
@@ -852,7 +842,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect",
         )
@@ -899,7 +888,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect {account.email} --no-verify --output /config/config.yaml",
             config_assist_seeds=[
@@ -963,7 +951,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect {account.email} --no-verify --output /config/config.yaml",
             config_assist_seeds=[ConfigAssistSeed(key="account.email")],
@@ -1032,7 +1019,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="old-detect --old",
             config_assist_seeds=["old_host"],
@@ -1128,7 +1114,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="stored-detect",
             config_assist_seeds=[],
@@ -1216,7 +1201,6 @@ class TestConfigAssist:
             id="test-gmail",
             image="auto-mail:latest",
             container_name="test-gmail",
-            has_config_yaml=True,
             config_volume="test-gmail-config",
             config_assist_command="detect --output /config/config.yaml",
             config_assist_seeds=[
@@ -1316,7 +1300,6 @@ class TestConfigAssist:
             id="mail",
             image="mail:latest",
             container_name="mail",
-            has_config_yaml=True,
             config_volume="mail-config",
             config_assist_command="detect",
             config_assist_seeds=[
@@ -1407,7 +1390,6 @@ class TestConfigAssist:
             id="mail3",
             image="mail:latest",
             container_name="mail3",
-            has_config_yaml=True,
             config_volume="mail3-config",
             config_assist_command="detect",
             config_assist_seeds=[
@@ -1506,7 +1488,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -1624,7 +1605,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -1769,7 +1749,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -1900,7 +1879,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -2086,7 +2064,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -2205,7 +2182,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -2303,7 +2279,6 @@ class TestConfigAssist:
             id="fresh-mail",
             image="fresh-mail:latest",
             container_name="fresh-mail",
-            has_config_yaml=True,
             config_volume="fresh-mail-config",
             config_assist_command=(
                 "detect {accounts.0.auth.username} --id {accounts.0.id} --overwrite"
@@ -2413,7 +2388,6 @@ class TestConfigAssist:
             id="mail-multi",
             image="mail-multi:latest",
             container_name="mail-multi",
-            has_config_yaml=True,
             config_volume="mail-multi-config",
             config_assist_command="detect --overwrite",
             config_assist_seeds=[
@@ -2507,7 +2481,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect",
             config_assist_seeds=[
@@ -2585,7 +2558,6 @@ class TestConfigAssist:
             id="auto-mail",
             image="auto-mail:latest",
             container_name="auto-mail",
-            has_config_yaml=True,
             config_volume="auto-mail-config",
             config_assist_command="detect",
             config_assist_seeds=[

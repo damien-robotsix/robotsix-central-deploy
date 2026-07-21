@@ -36,7 +36,6 @@ async def client_with_legacy_component() -> AsyncClient:
         id="legacy-comp",
         image="ghcr.io/org/legacy:latest",
         container_name="legacy-comp",
-        has_config_yaml=True,
         config_volume="legacy-comp-config",
         git_url="https://github.com/org/legacy.git",
     )

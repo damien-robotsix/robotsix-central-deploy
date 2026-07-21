@@ -281,7 +281,7 @@ async def _run_deploy_job(
     """
     try:
         # Write merged config.json into the config volume before starting.
-        if config.has_config_yaml and config.config_volume:
+        if config.config_volume:
             # --- drift guard ---
             # If the live volume has been edited out-of-band (drift),
             # auto-import it as current before proceeding so the deploy

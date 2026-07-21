@@ -229,7 +229,6 @@ class ServiceStatus(BaseModel):
     running_digest: str = ""  # deployed_image_digest short-form (full sha256)
     latest_digest: str = ""  # last known registry manifest digest
     update_state: UpdateState = UpdateState.UNKNOWN
-    has_config_yaml: bool = False
     sibling_health: list[ContainerHealthSummary] = []
     sibling_update_states: list[SiblingUpdateSummary] = []
     overall_health: str = ""  # rollup: HealthStatus value or ""
@@ -241,7 +240,6 @@ class ServiceListItem(BaseModel):
     name: str
     state: ServiceState
     update_available: bool = False
-    has_config_yaml: bool = False
     component_id: str = (
         ""  # non-empty for sibling records; equals the primary service name
     )

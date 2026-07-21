@@ -160,10 +160,6 @@ class ComponentConfig(BaseModel):
     git_url: str = Field(
         "", description="Source repository URL recorded at onboard time"
     )
-    has_config_yaml: bool = Field(
-        False,
-        description="True when the onboarded repo declared config/config.json",
-    )
     config_volume: Optional[str] = Field(
         default=None,
         description="Named volume holding config.json, resolved from the robotsix.deploy.config-target label",

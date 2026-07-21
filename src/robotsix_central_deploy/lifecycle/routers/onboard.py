@@ -314,29 +314,20 @@ async def onboard_preflight(
     else:
         derived_spec.config_example_values = None
 
-    # Preflight gate: config (or template) present but no config-target label
-    if derived_spec.config_schema is not None and derived_spec.config_volume is None:
+    # Hard precondition: config/config.json + config/config.schema.json AND
+    # robotsix.deploy.config-target must all be present.  A repo lacking any
+    # of these does not satisfy the robotsix config standard and is not
+    # deployable.
+    if derived_spec.config_schema is None or derived_spec.config_volume is None:
         raise HTTPException(
             status_code=422,
             detail={
                 "error": (
-                    "repo has a config file or template but no service declares "
-                    "`robotsix.deploy.config-target` — add the label to "
-                    "deploy/docker-compose.yml pointing to the full in-container "
-                    "path of the config file (e.g. /home/mailbot/config/config.json)"
-                ),
-            },
-        )
-
-    # Preflight gate: config-target label declared but no config file/template found
-    if derived_spec.config_volume is not None and derived_spec.config_schema is None:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": (
-                    "config-target label is set but no config file or template was found — "
-                    "commit config/config.example.json to the repo or set "
-                    "robotsix.deploy.config-template to a valid in-repo template path"
+                    "Repo does not satisfy the robotsix config standard "
+                    "(robotsix-standards/docs/config-standard.md).  Every "
+                    "deployed service must ship config/config.json + "
+                    "config/config.schema.json and declare "
+                    "robotsix.deploy.config-target in deploy/docker-compose.yml."
                 ),
             },
         )

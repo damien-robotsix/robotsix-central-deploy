@@ -55,7 +55,6 @@ async def client_with_component(
         id="test-comp",
         image="ghcr.io/org/test:latest",
         container_name="test-comp",
-        has_config_yaml=True,
         config_volume="test-comp-config",
     )
     await component_config_store.put(comp)

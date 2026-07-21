@@ -173,9 +173,6 @@ async def list_services(
     items: list[ServiceListItem] = []
     for r in records:
         item = r.to_list_item()
-        config = component_config_store.get(r.name)
-        if config is not None:
-            item.has_config_yaml = config.has_config_yaml
         items.append(item)
     return ServiceListResponse(services=items)
 
@@ -277,9 +274,6 @@ async def get_service_status(
             pass  # degrade gracefully; return last known update_available
 
     result = record.to_status()
-    cfg = component_config_store.get(name)
-    if cfg is not None:
-        result.has_config_yaml = cfg.has_config_yaml
 
     # -- Sibling health fan-out ------------------------------------------
     comp_config = registry.get(name)  # ComponentConfig or None

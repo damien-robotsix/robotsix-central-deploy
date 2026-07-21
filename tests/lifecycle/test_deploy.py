@@ -416,7 +416,6 @@ class TestDeployDriftGuard:
             container_name="chat",
             ports=[PortMapping(host=8080, container=8080)],
             mounts=[VolumeMount(host="chat-config", container="/config")],
-            has_config_yaml=True,
             config_volume="chat-config",
         )
         config_store = server_mod.app.state.component_config_store
