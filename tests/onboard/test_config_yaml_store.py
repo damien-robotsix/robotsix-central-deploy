@@ -110,9 +110,9 @@ async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path)
 # _mask_secrets and _merge_config (imported from server)
 # ---------------------------------------------------------------------------
 
-from robotsix_central_deploy.lifecycle.server import (  # noqa: E402
-    _prune_unset,  # new
-    _validate_account_ids,  # new
+from robotsix_central_deploy.lifecycle.server import (
+    _prune_unset,
+    _validate_account_ids,
     _seed_for_detect,
 )
 
