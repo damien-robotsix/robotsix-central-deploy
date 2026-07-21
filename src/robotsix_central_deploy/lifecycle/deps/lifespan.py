@@ -56,6 +56,7 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
         return DockerSdkBackend(
             socket_url=cfg.docker_socket_url,
             timeout=cfg.docker_sdk_timeout,
+            ghcr_token=cfg.ghcr_token.get_secret_value(),
         )
     if cfg.execution_backend == ExecutionBackendType.DOCKER:
         return DockerBackend()
@@ -247,8 +248,8 @@ async def _init_config(app: FastAPI) -> None:
     app.state.chat_agent_audit_store = _chat_agent_audit_store
     app.state.chat_agent_rate_limits = {}
 
-    # Seed OVH website credentials from env vars (one-time, idempotent).
-    await _seed_ovh_website_credentials(_env_store)
+    # Seed OVH website credentials from config (one-time, idempotent).
+    await _seed_ovh_website_credentials(_env_store, _config)
 
 
 async def _init_settings(app: FastAPI) -> None:
@@ -390,21 +391,23 @@ async def _init_background_tasks(app: FastAPI) -> None:
     )
 
 
-async def _seed_ovh_website_credentials(env_store: EnvStore) -> None:
+async def _seed_ovh_website_credentials(
+    env_store: EnvStore, config: LifecycleConfig
+) -> None:
     """Seed OVH website SFTP credentials into the encrypted store on first boot.
 
-    Reads ``OVH_SFTP_HOST``, ``OVH_SFTP_PORT``, ``OVH_SFTP_USER``, and
-    ``OVH_SFTP_PASSWORD`` from the process environment.  If any of the four
-    are set AND the ``ovh-website-credentials`` entry does not already exist
-    in the store, the values are encrypted and stored with scope tag
-    ``website:ovh``.  Already-stored credentials are never overwritten.
+    Reads ``ovh_sftp.host``, ``ovh_sftp.port``, ``ovh_sftp.user``, and
+    ``ovh_sftp.password`` from the loaded ``LifecycleConfig``.  If any of
+    the four are set AND the ``ovh-website-credentials`` entry does not
+    already exist in the store, the values are encrypted and stored with
+    scope tag ``website:ovh``.  Already-stored credentials are never
+    overwritten.
     """
-    import os
-
-    host = os.getenv("OVH_SFTP_HOST", "").strip()
-    port = os.getenv("OVH_SFTP_PORT", "").strip()
-    user = os.getenv("OVH_SFTP_USER", "").strip()
-    password = os.getenv("OVH_SFTP_PASSWORD", "")
+    ovh = config.ovh_sftp
+    host = ovh.host.strip()
+    port = str(ovh.port)
+    user = ovh.user.strip()
+    password = ovh.password.get_secret_value()
 
     if not (host and port and user and password):
         return  # not fully configured — nothing to seed

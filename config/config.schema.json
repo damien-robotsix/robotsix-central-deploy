@@ -29,6 +29,39 @@
       "title": "LangfuseProjectCreds",
       "type": "object"
     },
+    "OvhSftpConfig": {
+      "description": "OVH website SFTP credentials, seeded into the encrypted env store on first boot.",
+      "properties": {
+        "host": {
+          "default": "",
+          "description": "OVH SFTP hostname.",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 22,
+          "description": "OVH SFTP port.",
+          "title": "Port",
+          "type": "integer"
+        },
+        "user": {
+          "default": "",
+          "description": "OVH SFTP username.",
+          "title": "User",
+          "type": "string"
+        },
+        "password": {
+          "default": "",
+          "description": "OVH SFTP password.",
+          "format": "password",
+          "title": "Password",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "title": "OvhSftpConfig",
+      "type": "object"
+    },
     "StoreBackend": {
       "description": "Persistence backend for the lifecycle service store.",
       "enum": [
@@ -166,6 +199,14 @@
       "description": "Client-level timeout (seconds) for every Docker SDK operation (pull, create, start, stop, \u2026). The default accommodates typical image pulls.",
       "title": "Docker Sdk Timeout",
       "type": "integer"
+    },
+    "ghcr_token": {
+      "default": "",
+      "description": "GitHub personal access token with read:packages scope for authenticated GHCR image pulls. Empty skips authentication (public images only).",
+      "format": "password",
+      "title": "Ghcr Token",
+      "type": "string",
+      "writeOnly": true
     },
     "disk_path": {
       "advanced": true,
@@ -504,8 +545,13 @@
       },
       "title": "Virtual Components",
       "type": "array"
+    },
+    "ovh_sftp": {
+      "$ref": "#/$defs/OvhSftpConfig",
+      "description": "OVH website SFTP credentials. If all four fields are set AND the ovh-website-credentials entry does not already exist in the encrypted store, the values are seeded at startup with scope tag 'website:ovh'."
     }
   },
   "title": "LifecycleConfig",
   "type": "object"
 }
+
