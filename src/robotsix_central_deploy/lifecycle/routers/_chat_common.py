@@ -97,6 +97,11 @@ async def _require_allowed_service(
     in the component config — this is a declarative, per-service setting,
     not a hard-coded allowlist.  Virtual components are never mutatable
     (they have no Docker containers to restart/deploy).
+
+    This single flag gates **restart**, **config-write**, and
+    **config-rollback** together — restart access implies config-write
+    access.  ``update`` (self-deploy) is a separate, more sensitive
+    capability that is NOT implicitly granted by this flag.
     """
     comp_cfg = component_config_store.get(name)
     if comp_cfg is None or not comp_cfg.chat_agent_mutatable:
