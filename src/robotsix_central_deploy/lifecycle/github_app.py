@@ -24,13 +24,16 @@ except ImportError:
     # (see ticket 20260721T221137Z-build-robotsix-github-auth-shared-fleet-b220).
     # Fall back to a local stub that raises a clear error.
     def mint_installation_token(
-        app_id: str, private_key: str, installation_id: str,
+        app_id: str,
+        private_key: str,
+        installation_id: str,
     ) -> str:
         """Stub — the shared ``robotsix-github-auth`` library is not installed."""
         raise NotImplementedError(
             "robotsix-github-auth library not yet available — "
             "install the real package when it is released."
         )
+
 
 from .config import LifecycleConfig
 
