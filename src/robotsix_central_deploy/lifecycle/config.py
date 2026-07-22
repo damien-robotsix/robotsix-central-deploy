@@ -32,7 +32,9 @@ class VirtualComponentEntry(BaseModel):
     auth_type: str = ""  # "basic" | "header" | ""
     auth_header_name: str = ""  # header name when auth_type="header"
     auth_username_env: str = ""  # env var holding Basic-Auth username
-    auth_password_env: str = ""  # env var holding Basic-Auth password
+    auth_password_env: SecretStr = Field(
+        SecretStr(""), description="env var holding Basic-Auth password"
+    )
     auth_token_env: str = ""  # env var holding a bearer/header token
 
 
