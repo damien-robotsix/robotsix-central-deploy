@@ -357,6 +357,7 @@ class DockerSdkBackend(ExecutionBackend):
                         if output:
                             detail_parts.append(f"output: {output[:500]}")
                 except Exception:
+                    # Best-effort operation — failure is non-critical here.
                     pass
                 detail = (
                     "; ".join(detail_parts)
@@ -748,6 +749,7 @@ class DockerSdkBackend(ExecutionBackend):
                 try:
                     container.remove(force=True)
                 except Exception:
+                    # Best-effort operation — failure is non-critical here.
                     pass
 
         return await loop.run_in_executor(None, _run)
