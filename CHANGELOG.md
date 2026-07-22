@@ -10,6 +10,7 @@ All notable changes to robotsix-central-deploy.
   dangling Docker images and/or reclaimable build cache.  Returns bytes
   reclaimed plus a post-prune disk snapshot; audit-logged.  Never touches
   tagged images, in-use images, or named volumes.
+- Onboard and deploy job status responses now include a ``logs`` field with captured container logs when a deploy fails, so operators can diagnose startup and healthcheck failures without the container still existing. The healthcheck failure error message now includes actionable detail (failing streak, last check exit code and output) instead of a generic "unhealthy" string.
 - Fix HTTP 500 when GitHub chat component endpoints receive a repo outside the App's installation scope: ``_get_client_or_503`` and ``_get_client_or_503_with_pat_fallback`` now catch ``UnknownObjectException`` from client acquisition and return HTTP 404 instead of letting it propagate as an unhandled 500.
 - Extract seven label-parsing helpers from `_parse_one_service` in `onboard/parser.py`: `_parse_claude_mount`, `_parse_host_docker_sock`, `_parse_config_target`, `_parse_config_assist`, `_parse_llmio_tier_level`, `_parse_chat_access`, `_parse_chat_agent_mutatable`. Each helper is independently unit-testable.
 - Migrate GitHub App token minting from hand-rolled PyGithub integration to the shared ``robotsix-github-auth`` library. ``github_app_id`` is now ``SecretStr`` and a new ``installation_id`` ``SecretStr`` field replaces dynamic installation resolution. All GitHub secrets are now ``SecretStr`` in ``config.json``.

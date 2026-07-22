@@ -64,6 +64,13 @@ class NoopBackend(ExecutionBackend):
     ) -> AsyncIterator[bytes]:
         yield b"[noop backend]\n"
 
+    async def get_container_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 200,
+    ) -> str:
+        return ""
+
     async def disk_df(self) -> DockerDfStats:
         return DockerDfStats()
 

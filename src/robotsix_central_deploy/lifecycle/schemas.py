@@ -99,6 +99,10 @@ class OnboardJobStatusResponse(BaseModel):
         default=None,
         description="Error message when phase is 'failed'; None otherwise",
     )
+    logs: str | None = Field(
+        default=None,
+        description="Container logs captured when a deploy fails; None otherwise",
+    )
     name: str | None = Field(default=None, description="Component name")
     image: str | None = Field(
         default=None,
@@ -135,6 +139,10 @@ class DeployJobStatusResponse(BaseModel):
     error: str | None = Field(
         default=None,
         description="Error message when phase is 'failed'; None otherwise",
+    )
+    logs: str | None = Field(
+        default=None,
+        description="Container logs captured when a deploy fails; None otherwise",
     )
     name: str | None = Field(default=None, description="Component name")
     image: str | None = Field(

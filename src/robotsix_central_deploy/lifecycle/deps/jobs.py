@@ -16,6 +16,7 @@ class Job:
         "component",
         "phase",
         "error",
+        "logs",
         "name",
         "image",
         "state",
@@ -27,6 +28,7 @@ class Job:
     component: str
     phase: Enum
     error: str | None
+    logs: str | None
     name: str | None
     image: str | None
     state: str | None
@@ -39,6 +41,7 @@ class Job:
         self.component = component
         # phase is set by the subclass __init__ to the correct default.
         self.error = None
+        self.logs = None
         self.name = None
         self.image = None
         self.state = None
@@ -104,12 +107,14 @@ class JobRegistry:
         if job is not None:
             job.phase = phase
 
-    def mark_failed(self, job_id: str, error: str) -> None:
-        """Mark a job as failed with an error string."""
+    def mark_failed(self, job_id: str, error: str, logs: str | None = None) -> None:
+        """Mark a job as failed with an error string and optional logs."""
         job = self._jobs.get(job_id)
         if job is not None:
             job.phase = getattr(type(job).variant, "FAILED")
             job.error = error
+            if logs is not None:
+                job.logs = logs
 
     def mark_done(
         self,

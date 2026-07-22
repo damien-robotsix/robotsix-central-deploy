@@ -75,6 +75,20 @@ class ExecutionBackend(ABC):
         pass
 
     @abstractmethod
+    async def get_container_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 200,
+    ) -> str:
+        """Return the last *tail* lines of a container's logs as a string.
+
+        Returns an empty string if the container is not found or an error
+        occurs.  This is used to capture startup/healthcheck logs when a
+        deploy fails so the operator can diagnose the failure.
+        """
+        pass
+
+    @abstractmethod
     async def disk_df(self) -> DockerDfStats:
         """Return Docker storage breakdown (images, build cache, reclaimable)."""
         pass
