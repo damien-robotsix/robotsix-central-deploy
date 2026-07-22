@@ -22,6 +22,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_config
 
+::: robotsix_central_deploy.lifecycle.routers.chat_disk
+
 ::: robotsix_central_deploy.lifecycle.routers.chat_env
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_github
