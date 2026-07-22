@@ -168,7 +168,7 @@ class TestSystemSettingsStore:
         # A copy, not the original.
         assert result is not cfg
         assert result.auth_username == "stored-user"
-        assert result.auth_password == "stored-pw"
+        assert result.auth_password.get_secret_value() == "stored-pw"
         assert result.disk_warn_pct == 15.0
         assert result.registry_check_interval == 60
         assert result.log_level == "DEBUG"

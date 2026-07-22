@@ -114,9 +114,8 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
         raise GitHubRepoCreateNotConfiguredError(
             "github_repo_create_token must be set to create repositories."
         )
-    client = _repo_create_client_cache.get(
-        config.github_repo_create_token.get_secret_value()
-    )
+    token_str = config.github_repo_create_token.get_secret_value()
+    client = _repo_create_client_cache.get(token_str)
     if client is None:
         from github import Auth, Github
 
@@ -125,10 +124,6 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
             def token_type(self) -> str:
                 return "Bearer"
 
-        client = Github(
-            auth=_BearerTokenAuth(config.github_repo_create_token.get_secret_value())
-        )
-        _repo_create_client_cache[
-            config.github_repo_create_token.get_secret_value()
-        ] = client
+        client = Github(auth=_BearerTokenAuth(token_str))
+        _repo_create_client_cache[token_str] = client
     return client

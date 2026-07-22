@@ -166,6 +166,8 @@ class SystemSettingsStore:
             return config
 
         stored = self._load()
-        return config.model_copy(
-            update={key: getattr(stored, key) for key in SETTINGS_DEFAULTS}
-        )
+        # Use model_validate so SecretStr fields are coerced from plain
+        # strings (model_copy(update=...) bypasses type coercion).
+        merged = config.model_dump()
+        merged.update({key: getattr(stored, key) for key in SETTINGS_DEFAULTS})
+        return type(config).model_validate(merged)

@@ -81,7 +81,7 @@ async def dashboard(
     csrf_token = request.cookies.get("csrftoken", "")
     set_cookie = False
     if not csrf_token:
-        csrf_secret = get_csrf_secret(cfg.csrf_secret)
+        csrf_secret = get_csrf_secret(cfg.csrf_secret.get_secret_value())
         from ..lifecycle.csrf import CSRFHelper
 
         csrf_helper = CSRFHelper(csrf_secret)
@@ -120,7 +120,7 @@ async def login_page(request: Request, next: str = "/ui") -> Response:
     # --- CSRF token -------------------------------------------------------
     from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
 
-    csrf_secret = get_csrf_secret(cfg.csrf_secret)
+    csrf_secret = get_csrf_secret(cfg.csrf_secret.get_secret_value())
     csrf_helper = CSRFHelper(csrf_secret)
     csrf_token = csrf_helper.generate()
 
@@ -163,7 +163,7 @@ async def login_submit(request: Request) -> Response:
     # --- CSRF validation --------------------------------------------------
     from ..lifecycle.csrf import CSRFHelper, get_csrf_secret
 
-    csrf_secret = get_csrf_secret(cfg.csrf_secret)
+    csrf_secret = get_csrf_secret(cfg.csrf_secret.get_secret_value())
     csrf_helper = CSRFHelper(csrf_secret)
     cookie_token = request.cookies.get("csrftoken", "")
     form_token = params.get("csrftoken", [""])[0]
