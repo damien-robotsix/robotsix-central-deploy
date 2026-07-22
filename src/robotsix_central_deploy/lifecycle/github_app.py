@@ -16,23 +16,9 @@ token on every cache miss (the library returns short-lived tokens).
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
-try:
-    from robotsix_github_auth import mint_installation_token
-except ImportError:
-    # The shared ``robotsix-github-auth`` library is not yet published
-    # (see ticket 20260721T221137Z-build-robotsix-github-auth-shared-fleet-b220).
-    # Fall back to a local stub that raises a clear error.
-    def mint_installation_token(
-        app_id: str,
-        private_key: str,
-        installation_id: str,
-    ) -> str:
-        """Stub — the shared ``robotsix-github-auth`` library is not installed."""
-        raise NotImplementedError(
-            "robotsix-github-auth library not yet available — "
-            "install the real package when it is released."
-        )
+from robotsix_github_auth import mint_installation_token
 
 
 from .config import LifecycleConfig
@@ -84,7 +70,9 @@ def get_installation_token_sync(
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
-    return mint_installation_token(app_id, private_key, installation_id)  # type: ignore[no-any-return]
+    return cast(
+        str, mint_installation_token(app_id, private_key, installation_id).token
+    )
 
 
 async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> object:
@@ -112,10 +100,10 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
 
     client = _client_cache.get(installation_id)
     if client is None:
-        token = await asyncio.to_thread(
+        result = await asyncio.to_thread(
             mint_installation_token, app_id, private_key, installation_id
         )
-        client = _bearer_client(token)
+        client = _bearer_client(result.token)
         _client_cache[installation_id] = client
     return client
 

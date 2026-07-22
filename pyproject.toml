@@ -21,6 +21,7 @@ dependencies = [
     "secure>=2.0",
     "robotsix-board-agent @ git+https://github.com/damien-robotsix/robotsix-board-agent.git@3b999fc697fd1112024160f6f5ba45bd89e7f5d0",
     "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@424f8ec5140e14e9699b92d5c3755d929625b570",
+    "robotsix-github-auth @ git+https://github.com/damien-robotsix/robotsix-github-auth.git@e6214c41fd743120aa987bacb4e9b2bc88e73943",
 ]
 
 # Dev tooling as a PEP 735 dependency-group (the fleet convention), pulled
@@ -141,7 +142,7 @@ fail_under = 80
 
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
-per_rule_ignores = { "DEP001" = ["hatchling", "robotsix_github_auth"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config", "structlog"], "DEP003" = ["starlette", "requests", "tomli", "itsdangerous"] }
+per_rule_ignores = { "DEP001" = ["hatchling"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config", "structlog"], "DEP003" = ["starlette", "requests", "tomli", "itsdangerous"] }
 
 [tool.codespell]
 skip = "*.lock,*.css,*.map,*.min.*,.git/,node_modules/,uv.lock,LICENSE,site/,vendor/"

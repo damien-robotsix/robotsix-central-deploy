@@ -1236,6 +1236,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "robotsix-board-agent" },
     { name = "robotsix-config" },
+    { name = "robotsix-github-auth" },
     { name = "secure" },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1274,6 +1275,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "robotsix-board-agent", git = "https://github.com/damien-robotsix/robotsix-board-agent.git?rev=3b999fc697fd1112024160f6f5ba45bd89e7f5d0" },
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config.git?rev=424f8ec5140e14e9699b92d5c3755d929625b570" },
+    { name = "robotsix-github-auth", git = "https://github.com/damien-robotsix/robotsix-github-auth.git?rev=e6214c41fd743120aa987bacb4e9b2bc88e73943" },
     { name = "secure", specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
@@ -1305,6 +1307,15 @@ version = "0.1.0"
 source = { git = "https://github.com/damien-robotsix/robotsix-config.git?rev=424f8ec5140e14e9699b92d5c3755d929625b570#424f8ec5140e14e9699b92d5c3755d929625b570" }
 dependencies = [
     { name = "pydantic" },
+]
+
+[[package]]
+name = "robotsix-github-auth"
+version = "0.1.0"
+source = { git = "https://github.com/damien-robotsix/robotsix-github-auth.git?rev=e6214c41fd743120aa987bacb4e9b2bc88e73943#e6214c41fd743120aa987bacb4e9b2bc88e73943" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pyjwt", extra = ["crypto"] },
 ]
 
 [[package]]

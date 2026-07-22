@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -68,7 +69,7 @@ async def test_builds_client_via_mint_installation_token():
 
     with patch(
         "robotsix_central_deploy.lifecycle.github_app.mint_installation_token",
-        return_value="ghs_test-token",
+        return_value=SimpleNamespace(token="ghs_test-token"),
     ) as mock_mint:
         with patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
@@ -93,7 +94,7 @@ async def test_client_is_cached_across_calls():
 
     with patch(
         "robotsix_central_deploy.lifecycle.github_app.mint_installation_token",
-        return_value="ghs_test-token",
+        return_value=SimpleNamespace(token="ghs_test-token"),
     ) as mock_mint:
         with patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
@@ -122,7 +123,10 @@ async def test_different_installation_ids_get_different_cache_entries():
 
     with patch(
         "robotsix_central_deploy.lifecycle.github_app.mint_installation_token",
-        side_effect=["token-a", "token-b"],
+        side_effect=[
+            SimpleNamespace(token="token-a"),
+            SimpleNamespace(token="token-b"),
+        ],
     ) as mock_mint:
         with patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
