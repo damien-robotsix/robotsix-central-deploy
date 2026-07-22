@@ -340,6 +340,7 @@ class TestOnboardPreflight:
         cfg: LifecycleConfig = server_mod.app.state.config
         cfg.github_app_id = "123456"
         cfg.github_app_private_key = "fake-pem"
+        cfg.installation_id = "999"
 
         spec = _make_derived_spec("cool-app")
 
@@ -372,7 +373,7 @@ class TestOnboardPreflight:
 
         assert resp.status_code == 200
         # Token should have been requested for the right owner/repo
-        mock_token.assert_called_once_with("123456", "fake-pem", "org", "cool-app")
+        mock_token.assert_called_once_with("123456", "fake-pem", "999")
         # fetch_repo_files should have received the token
         mock_fetch.assert_called_once()
         call_args = mock_fetch.call_args
@@ -425,6 +426,7 @@ class TestOnboardPreflight:
         cfg: LifecycleConfig = server_mod.app.state.config
         cfg.github_app_id = "123456"
         cfg.github_app_private_key = "fake-pem"
+        cfg.installation_id = "999"
 
         spec = _make_derived_spec("cool-app")
 
@@ -464,6 +466,7 @@ class TestOnboardPreflight:
         cfg: LifecycleConfig = server_mod.app.state.config
         cfg.github_app_id = "123456"
         cfg.github_app_private_key = "fake-pem"
+        cfg.installation_id = "999"
 
         spec = _make_derived_spec("cool-app")
 

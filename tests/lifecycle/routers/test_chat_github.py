@@ -49,14 +49,16 @@ def _fake_client(repo_obj: MagicMock) -> MagicMock:
 
 @pytest.fixture
 def enable_github_app():
-    """Configure github_app_id/private_key so the endpoints don't 503."""
+    """Configure github_app_id/private_key/installation_id so the endpoints don't 503."""
     from pydantic import SecretStr
 
     server_mod.app.state.config.github_app_id = "12345"
     server_mod.app.state.config.github_app_private_key = SecretStr("pem-data")
+    server_mod.app.state.config.installation_id = SecretStr("999")
     yield
     server_mod.app.state.config.github_app_id = ""
     server_mod.app.state.config.github_app_private_key = SecretStr("")
+    server_mod.app.state.config.installation_id = SecretStr("")
 
 
 class TestListWorkflowRuns:
@@ -316,7 +318,7 @@ class TestGetWorkflowRunLogs:
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
             "get_installation_token_sync",
-            lambda app_id, private_key, owner, repo: "fake-token",
+            lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
@@ -353,7 +355,7 @@ class TestGetWorkflowRunLogs:
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
             "get_installation_token_sync",
-            lambda app_id, private_key, owner, repo: "fake-token",
+            lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
@@ -379,7 +381,7 @@ class TestGetWorkflowRunLogs:
     ):
         from github import UnknownObjectException
 
-        def _raise_not_found(app_id, private_key, owner, repo):
+        def _raise_not_found(app_id, private_key, installation_id):
             raise UnknownObjectException(404, data={"message": "Not Found"})
 
         monkeypatch.setattr(
@@ -409,7 +411,7 @@ class TestGetWorkflowRunLogs:
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
             "get_installation_token_sync",
-            lambda app_id, private_key, owner, repo: "fake-token",
+            lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
@@ -436,7 +438,7 @@ class TestGetWorkflowRunLogs:
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
             "get_installation_token_sync",
-            lambda app_id, private_key, owner, repo: "fake-token",
+            lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
@@ -461,7 +463,7 @@ class TestGetWorkflowRunLogs:
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
             "get_installation_token_sync",
-            lambda app_id, private_key, owner, repo: "fake-token",
+            lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
@@ -1748,17 +1750,18 @@ class TestMergePull:
 
 
 class TestGitHubAppNotConfiguredError:
-    def test_message_mentions_both_fields(self):
+    def test_message_mentions_all_fields(self):
         # Sanity check on the error message content raised by github_app.py,
         # surfaced verbatim as the 503 detail above.
         try:
             raise GitHubAppNotConfiguredError(
-                "github_app_id and github_app_private_key must both be set "
-                "to use the github chat component."
+                "github_app_id, github_app_private_key, and installation_id "
+                "must all be set to use the github chat component."
             )
         except GitHubAppNotConfiguredError as exc:
             assert "github_app_id" in str(exc)
             assert "github_app_private_key" in str(exc)
+            assert "installation_id" in str(exc)
 
 
 # ---------------------------------------------------------------------------

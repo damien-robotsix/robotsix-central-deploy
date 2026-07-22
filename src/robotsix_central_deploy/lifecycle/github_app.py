@@ -1,31 +1,34 @@
 """GitHub App client for the chat-agent ``github`` component.
 
-Wraps PyGithub's ``GithubIntegration``/``Auth.AppAuth`` rather than
-hand-rolling JWT signing and installation-token minting.
+Uses the shared ``robotsix-github-auth`` library for installation-token
+minting rather than hand-rolling PyGithub ``GithubIntegration`` /
+``Auth.AppAuth``. The deploy server mints the installation token
+server-side and never exposes the App private key to the chat container —
+the chat agent only ever sees this server's own ``X-API-Key`` (same as the
+``deploy`` component).
 
-Shares the same GitHub App installation as the fleet's CI/CD pipeline.
-The deploy server mints the installation token server-side and never
-exposes the App private key to the chat container — the chat agent only
-ever sees this server's own ``X-API-Key`` (same as the ``deploy`` component).
-
-The authenticated ``Github`` client is cached per ``(app_id, owner, repo)``:
-PyGithub's own ``AppInstallationAuth.token`` property lazily re-mints the
-installation token only once it is close to expiry, so reusing one cached
-client indefinitely avoids re-resolving the installation and re-minting a
-token on every request.
+The authenticated ``Github`` client is cached per ``installation_id``:
+a single installation token covers all repos under that installation, so
+one cached client suffices.  Token refresh is handled by minting a fresh
+token on every cache miss (the library returns short-lived tokens).
 """
 
 from __future__ import annotations
 
 import asyncio
+from typing import cast
+
+from robotsix_github_auth import mint_installation_token
+
 
 from .config import LifecycleConfig
 
-_client_cache: dict[tuple[str, str, str], object] = {}
+_client_cache: dict[str, object] = {}
 
 
 class GitHubAppNotConfiguredError(RuntimeError):
-    """Raised when ``github_app_id``/``github_app_private_key`` are unset."""
+    """Raised when ``github_app_id`` / ``github_app_private_key`` /
+    ``installation_id`` are unset."""
 
 
 class GitHubRepoCreateNotConfiguredError(RuntimeError):
@@ -38,56 +41,70 @@ class GitHubRepoCreateNotConfiguredError(RuntimeError):
     """
 
 
-def _build_client_sync(app_id: str, private_key: str, owner: str, repo: str) -> object:
-    """Resolve *owner*/*repo*'s installation and return an authenticated client."""
-    from github import Auth, GithubIntegration
+def _bearer_client(token: str) -> object:
+    """Build a PyGithub ``Github`` client authenticated with a Bearer token.
 
-    integration = GithubIntegration(auth=Auth.AppAuth(app_id, private_key))
-    installation = integration.get_repo_installation(owner, repo)
-    return integration.get_github_for_installation(installation.id)
+    PyGithub's ``Auth.Token`` defaults to ``Authorization: token <...>``,
+    but GitHub App installation tokens require ``Authorization: Bearer
+    <...>`` (the same scheme fine-grained PATs expect).
+    """
+    from github import Auth, Github
+
+    class _BearerTokenAuth(Auth.Token):
+        @property
+        def token_type(self) -> str:
+            return "Bearer"
+
+    return Github(auth=_BearerTokenAuth(token))
 
 
 def get_installation_token_sync(
-    app_id: str, private_key: str, owner: str, repo: str
+    app_id: str, private_key: str, installation_id: str
 ) -> str:
-    """Return a raw GitHub App installation access token for *owner*/*repo*.
+    """Return a raw GitHub App installation access token.
 
     The token is suitable for use as a Bearer token or in an
     ``x-access-token`` git credential.  It is never cached — callers
     should minimise calls (the preflight handler calls this once per
     onboarding request).
-    """
-    from github import Auth, GithubIntegration
 
-    integration = GithubIntegration(auth=Auth.AppAuth(app_id, private_key))
-    installation = integration.get_repo_installation(owner, repo)
-    access_token = integration.get_access_token(installation.id)
-    return access_token.token
+    Delegates to the shared ``robotsix-github-auth`` library.
+    """
+    return cast(
+        str, mint_installation_token(app_id, private_key, installation_id).token
+    )
 
 
 async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> object:
-    """Return a cached (or freshly-built) ``Github`` client for *owner*/*repo*.
+    """Return a cached (or freshly-built) ``Github`` client.
 
-    Raises :class:`GitHubAppNotConfiguredError` when the App id/private key
-    are not configured. The returned client is typed ``object`` to keep
-    ``github`` (PyGithub) import lazy — callers narrow it via ``.get_repo()``.
+    *owner* and *repo* are accepted for caller compatibility but are not
+    used for token minting — the installation token is scoped to the
+    configured ``installation_id`` and covers all repos under that
+    installation.
+
+    Raises :class:`GitHubAppNotConfiguredError` when the App id, private
+    key, or installation id are not configured. The returned client is
+    typed ``object`` to keep ``github`` (PyGithub) import lazy — callers
+    narrow it via ``.get_repo()``.
     """
-    if not config.github_app_id or not config.github_app_private_key.get_secret_value():
+    app_id = config.github_app_id.get_secret_value()
+    private_key = config.github_app_private_key.get_secret_value()
+    installation_id = config.installation_id.get_secret_value()
+
+    if not app_id or not private_key or not installation_id:
         raise GitHubAppNotConfiguredError(
-            "github_app_id and github_app_private_key must both be set to "
-            "use the github chat component."
+            "github_app_id, github_app_private_key, and installation_id "
+            "must all be set to use the github chat component."
         )
-    key = (config.github_app_id, owner, repo)
-    client = _client_cache.get(key)
+
+    client = _client_cache.get(installation_id)
     if client is None:
-        client = await asyncio.to_thread(
-            _build_client_sync,
-            config.github_app_id,
-            config.github_app_private_key.get_secret_value(),
-            owner,
-            repo,
+        result = await asyncio.to_thread(
+            mint_installation_token, app_id, private_key, installation_id
         )
-        _client_cache[key] = client
+        client = _bearer_client(result.token)
+        _client_cache[installation_id] = client
     return client
 
 
@@ -114,16 +131,9 @@ def get_repo_create_client(config: LifecycleConfig) -> object:
         raise GitHubRepoCreateNotConfiguredError(
             "github_repo_create_token must be set to create repositories."
         )
-    token_str = config.github_repo_create_token.get_secret_value()
-    client = _repo_create_client_cache.get(token_str)
+    token = config.github_repo_create_token.get_secret_value()
+    client = _repo_create_client_cache.get(token)
     if client is None:
-        from github import Auth, Github
-
-        class _BearerTokenAuth(Auth.Token):
-            @property
-            def token_type(self) -> str:
-                return "Bearer"
-
-        client = Github(auth=_BearerTokenAuth(token_str))
-        _repo_create_client_cache[token_str] = client
+        client = _bearer_client(token)
+        _repo_create_client_cache[token] = client
     return client

@@ -236,8 +236,9 @@ async def onboard_preflight(
     parsed = _parse_github_owner_repo(req.git_url)
     if (
         parsed is not None
-        and lifecycle_config.github_app_id
+        and lifecycle_config.github_app_id.get_secret_value()
         and lifecycle_config.github_app_private_key.get_secret_value()
+        and lifecycle_config.installation_id.get_secret_value()
     ):
         owner, repo = parsed
         try:
@@ -248,10 +249,9 @@ async def onboard_preflight(
             github_token = await loop.run_in_executor(
                 None,
                 get_installation_token_sync,
-                lifecycle_config.github_app_id,
+                lifecycle_config.github_app_id.get_secret_value(),
                 lifecycle_config.github_app_private_key.get_secret_value(),
-                owner,
-                repo,
+                lifecycle_config.installation_id.get_secret_value(),
             )
         except Exception:
             # owner/repo come from a regex match on a user-supplied URL;

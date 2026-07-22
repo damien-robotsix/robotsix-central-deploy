@@ -1,0 +1,1 @@
+Migrate central-deploy GitHub auth to robotsix-github-auth + config-standard secrets
