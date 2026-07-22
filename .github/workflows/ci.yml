@@ -62,6 +62,12 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
 
+      - name: Check changelog fragment
+        if: github.event_name == 'pull_request'
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run towncrier check --compare-with origin/${{ github.base_ref }}
+
       - name: deptry (dependency hygiene)
         env:
           UV_PROJECT_ENVIRONMENT: system
