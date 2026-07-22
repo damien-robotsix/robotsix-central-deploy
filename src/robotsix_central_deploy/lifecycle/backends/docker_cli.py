@@ -150,6 +150,19 @@ class DockerBackend(ExecutionBackend):
     ) -> AsyncIterator[bytes]:
         yield b"[docker-cli backend: use docker_sdk for log streaming]\n"
 
+    async def get_container_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 200,
+    ) -> str:
+        """Return container logs via ``docker logs`` CLI."""
+        name = service.container_name or service.name
+        rc, stdout, stderr = await _run("docker", "logs", "--tail", str(tail), name)
+        if rc != 0:
+            return ""
+        combined = stdout + ("\n" + stderr if stderr else "")
+        return combined
+
     async def disk_df(self) -> DockerDfStats:
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()

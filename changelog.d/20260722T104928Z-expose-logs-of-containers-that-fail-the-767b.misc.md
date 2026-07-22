@@ -1,0 +1,1 @@
+Expose logs of containers that fail the healthcheck gate during a fresh deploy

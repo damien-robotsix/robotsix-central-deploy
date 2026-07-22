@@ -342,7 +342,30 @@ class DockerSdkBackend(ExecutionBackend):
             if status == HealthStatus.HEALTHY:
                 return
             if status == HealthStatus.UNHEALTHY:
-                raise RuntimeError(f"Container {name} is unhealthy after deploy")
+                # Capture healthcheck failure detail for actionable error message.
+                detail_parts: list[str] = []
+                try:
+                    h = container.attrs["State"].get("Health") or {}
+                    failing_streak = h.get("FailingStreak", 0)
+                    detail_parts.append(f"failing streak: {failing_streak}")
+                    log_entries = h.get("Log", []) or []
+                    if log_entries:
+                        last = log_entries[-1]
+                        exit_code = last.get("ExitCode", "?")
+                        output = (last.get("Output") or "").strip()
+                        detail_parts.append(f"last check: exit code {exit_code}")
+                        if output:
+                            detail_parts.append(f"output: {output[:500]}")
+                except Exception:
+                    pass
+                detail = (
+                    "; ".join(detail_parts)
+                    if detail_parts
+                    else "no healthcheck detail available"
+                )
+                raise RuntimeError(
+                    f"Container {name} is unhealthy after deploy ({detail})"
+                )
             await asyncio.sleep(2)
         logger.warning(
             "Health wait timed out for %s after %.0fs — proceeding", name, timeout
@@ -789,6 +812,41 @@ class DockerSdkBackend(ExecutionBackend):
                     Exception
                 ):  # Best-effort close; iterator may already be exhausted
                     pass
+
+    async def get_container_logs(
+        self,
+        service: ServiceRecord,
+        tail: int = 200,
+    ) -> str:
+        """Return the last *tail* lines of a container's logs as a string.
+
+        Returns an empty string if the container is not found or an error
+        occurs.
+        """
+        import docker  # noqa: PLC0415
+
+        loop = asyncio.get_running_loop()
+        name = self._container_name(service)
+
+        try:
+            container = await self._get_container(name)
+        except docker.errors.APIError:
+            return ""
+
+        if container is None:
+            return ""
+
+        try:
+            raw = await loop.run_in_executor(
+                None,
+                lambda: container.logs(stdout=True, stderr=True, tail=tail),
+            )
+            return raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
+        except Exception:
+            logger.warning(
+                "get_container_logs: failed to read logs for %s", name, exc_info=True
+            )
+            return ""
 
     async def disk_df(self) -> DockerDfStats:
         """Return Docker disk usage statistics."""

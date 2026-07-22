@@ -504,6 +504,19 @@ async def _run_onboard_deploy_job(
             )
         except Exception as exc:
             logger.exception("onboard sibling deploy failed for '%s'", spec_name)
+            # Capture sibling container logs before rollback.
+            sibling_logs: str | None = None
+            if sibling_records_created:
+                try:
+                    sibling_logs = await backend.get_container_logs(
+                        sibling_records_created[-1], tail=200
+                    )
+                except Exception:
+                    logger.warning(
+                        "onboard %s: failed to capture sibling container logs",
+                        spec_name,
+                        exc_info=True,
+                    )
             await _rollback_onboard(
                 spec_name,
                 config.id,
@@ -518,7 +531,7 @@ async def _run_onboard_deploy_job(
                 sibling_records=sibling_records_created,
                 named_volumes=config.named_volumes,
             )
-            job_registry.mark_failed(job_id, str(exc))
+            job_registry.mark_failed(job_id, str(exc), logs=sibling_logs)
             return
 
         # Success
@@ -531,6 +544,17 @@ async def _run_onboard_deploy_job(
         )
     except Exception as exc:
         logger.exception("onboard deploy failed for '%s'", spec_name)
+        # Capture container logs before rollback removes the container,
+        # so the operator can diagnose startup/healthcheck failures.
+        captured_logs: str | None = None
+        try:
+            captured_logs = await backend.get_container_logs(record, tail=200)
+        except Exception:
+            logger.warning(
+                "onboard %s: failed to capture container logs",
+                spec_name,
+                exc_info=True,
+            )
         await _rollback_onboard(
             spec_name,
             config.id,
@@ -544,7 +568,7 @@ async def _run_onboard_deploy_job(
             env_was_seeded=env_was_seeded,
             named_volumes=config.named_volumes,
         )
-        job_registry.mark_failed(job_id, str(exc))
+        job_registry.mark_failed(job_id, str(exc), logs=captured_logs)
 
 
 # ---------------------------------------------------------------------------
@@ -758,6 +782,7 @@ async def onboard_job_status(
         component=job.component,
         phase=cast(OnboardJobPhase, job.phase),
         error=job.error,
+        logs=job.logs,
         name=job.name,
         image=job.image,
         state=job.state,

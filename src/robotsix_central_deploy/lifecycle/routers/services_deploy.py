@@ -446,7 +446,17 @@ async def _run_deploy_job(
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
         await store.put(record)
-        job_registry.mark_failed(job_id, str(exc))
+        # Capture container logs so the operator can diagnose the failure.
+        captured_logs: str | None = None
+        try:
+            captured_logs = await backend.get_container_logs(record, tail=200)
+        except Exception:
+            logger.warning(
+                "deploy %s: failed to capture container logs",
+                _sanitize_log(name),
+                exc_info=True,
+            )
+        job_registry.mark_failed(job_id, str(exc), logs=captured_logs)
     finally:
         release_deploy_lock(name)
 
@@ -481,6 +491,7 @@ async def deploy_job_status(
         component=job.component,
         phase=cast(DeployJobPhase, job.phase),
         error=job.error,
+        logs=job.logs,
         name=job.name,
         image=job.image,
         state=job.state,
