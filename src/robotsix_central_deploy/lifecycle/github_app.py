@@ -17,8 +17,6 @@ from __future__ import annotations
 
 import asyncio
 
-from robotsix_github_auth import mint_installation_token  # type: ignore[import-not-found]
-
 from .config import LifecycleConfig
 
 _client_cache: dict[str, object] = {}
@@ -68,6 +66,8 @@ def get_installation_token_sync(
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
+    from robotsix_github_auth import mint_installation_token  # type: ignore[import-not-found]
+
     return mint_installation_token(app_id, private_key, installation_id)  # type: ignore[no-any-return]
 
 
@@ -93,6 +93,8 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
             "github_app_id, github_app_private_key, and installation_id "
             "must all be set to use the github chat component."
         )
+
+    from robotsix_github_auth import mint_installation_token  # type: ignore[import-not-found]
 
     client = _client_cache.get(installation_id)
     if client is None:
