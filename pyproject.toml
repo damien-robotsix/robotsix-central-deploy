@@ -137,7 +137,7 @@ fail_under = 80
 
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
-per_rule_ignores = { "DEP001" = ["hatchling"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config", "structlog"], "DEP003" = ["starlette", "requests", "tomli", "itsdangerous"] }
+per_rule_ignores = { "DEP001" = ["hatchling", "robotsix_github_auth"], "DEP002" = ["pytest", "pytest-asyncio", "mypy", "coverage", "pytest-cov", "ruff", "robotsix-config", "structlog"], "DEP003" = ["starlette", "requests", "tomli", "itsdangerous"] }
 
 [tool.codespell]
 skip = "*.lock,*.css,*.map,*.min.*,.git/,node_modules/,uv.lock,LICENSE,site/,vendor/"
