@@ -415,7 +415,6 @@
       "title": "Langfuse Base Url",
       "type": "string"
     },
-
     "caretaker_enabled": {
       "default": false,
       "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",
