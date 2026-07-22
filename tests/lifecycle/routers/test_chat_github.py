@@ -184,6 +184,26 @@ class TestListWorkflowRuns:
         )
         assert resp.status_code == 404
 
+    async def test_not_installed_repo_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """A repo outside the App's installation scope returns 404, not 500."""
+        from github import UnknownObjectException
+
+        async def _raise_not_found(config, owner, repo):
+            raise UnknownObjectException(404, data={"message": "Not Found"})
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _raise_not_found,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/robotsix/nonexistent/actions/runs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
     async def test_generic_github_error_returns_502(
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
     ):

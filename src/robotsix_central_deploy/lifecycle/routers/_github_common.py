@@ -32,10 +32,17 @@ _T = TypeVar("_T")
 
 
 async def _get_client_or_503(config: LifecycleConfig, owner: str, repo: str) -> Any:
+    from github import UnknownObjectException
+
     from .chat_github import get_github_client as _get_gh_client
 
     try:
         return await _get_gh_client(config, owner, repo)
+    except UnknownObjectException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Not found: {owner}/{repo} (or the GitHub App is not installed on it)",
+        )
     except GitHubAppNotConfiguredError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
@@ -53,6 +60,8 @@ async def _get_client_or_503_with_pat_fallback(
     if the App is not configured we fall back to the repo-creation PAT.
     If neither credential is available the endpoint returns 503.
     """
+    from github import UnknownObjectException
+
     from .chat_github import get_github_client as _get_gh_client
     from .chat_github import get_repo_create_client as _get_repo_create_client
 
@@ -62,7 +71,14 @@ async def _get_client_or_503_with_pat_fallback(
     pat_configured = bool(config.github_repo_create_token.get_secret_value())
 
     if app_configured:
-        return await _get_gh_client(config, owner, repo)
+        try:
+            return await _get_gh_client(config, owner, repo)
+        except UnknownObjectException:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Not found: {owner}/{repo} "
+                "(or the GitHub App is not installed on it)",
+            )
 
     if pat_configured:
         return _get_repo_create_client(config)
