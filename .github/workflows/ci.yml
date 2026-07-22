@@ -36,18 +36,18 @@ jobs:
           set -euo pipefail
           diff docs/ui/DEPLOY_CONTRACT.md src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md
 
-  tests:
-    # Inlined from the reusable python-ci.yml to avoid astral-sh/setup-uv
-    # manifest-fetch timeouts (the action fetches raw.githubusercontent.com
-    # and sometimes hits a 5-second Node.js fetch timeout in CI).  Using
-    # `pip install uv` instead — no manifest fetch, no timeout risk.
+  # ── lint / typecheck / test: split from the old monolithic "tests" job
+  # so that a failure in one (e.g. ruff) does not hide results from the
+  # others (e.g. mypy, pytest).  Each runs in parallel with its own
+  # status check (CI / lint, CI / typecheck, CI / test).
+
+  lint:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
@@ -84,6 +84,27 @@ jobs:
           uv run ruff check --output-format=github .
           uv run ruff format --check --diff .
 
+  typecheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dev deps
+        run: uv sync --frozen
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+
       - name: Mypy (static type check)
         env:
           UV_PROJECT_ENVIRONMENT: system
@@ -93,6 +114,28 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
+
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dev deps
+        run: uv sync --frozen
+        env:
+          UV_PROJECT_ENVIRONMENT: system
 
       - name: Run tests
         env:
