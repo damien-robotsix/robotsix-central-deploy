@@ -17,6 +17,21 @@ from __future__ import annotations
 
 import asyncio
 
+try:
+    from robotsix_github_auth import mint_installation_token
+except ImportError:
+    # The shared ``robotsix-github-auth`` library is not yet published
+    # (see ticket 20260721T221137Z-build-robotsix-github-auth-shared-fleet-b220).
+    # Fall back to a local stub that raises a clear error.
+    def mint_installation_token(
+        app_id: str, private_key: str, installation_id: str,
+    ) -> str:
+        """Stub — the shared ``robotsix-github-auth`` library is not installed."""
+        raise NotImplementedError(
+            "robotsix-github-auth library not yet available — "
+            "install the real package when it is released."
+        )
+
 from .config import LifecycleConfig
 
 _client_cache: dict[str, object] = {}
@@ -66,8 +81,6 @@ def get_installation_token_sync(
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
-    from robotsix_github_auth import mint_installation_token
-
     return mint_installation_token(app_id, private_key, installation_id)  # type: ignore[no-any-return]
 
 
@@ -93,8 +106,6 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
             "github_app_id, github_app_private_key, and installation_id "
             "must all be set to use the github chat component."
         )
-
-    from robotsix_github_auth import mint_installation_token
 
     client = _client_cache.get(installation_id)
     if client is None:
