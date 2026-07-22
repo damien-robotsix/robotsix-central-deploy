@@ -26,6 +26,7 @@ _RATE_LIMIT_COOLDOWNS: dict[str, float] = {
     "restart": 60.0,
     "update": 300.0,
     "deploy": 300.0,
+    "disk_reclaim": 300.0,
     "config_update": 5.0,
     "config_rollback": 10.0,
     "env_update": 5.0,

@@ -6,6 +6,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added `POST /chat/disk/reclaim` — chat-agent-allowlisted endpoint to prune
+  dangling Docker images and/or reclaimable build cache.  Returns bytes
+  reclaimed plus a post-prune disk snapshot; audit-logged.  Never touches
+  tagged images, in-use images, or named volumes.
 - Fix HTTP 500 when GitHub chat component endpoints receive a repo outside the App's installation scope: ``_get_client_or_503`` and ``_get_client_or_503_with_pat_fallback`` now catch ``UnknownObjectException`` from client acquisition and return HTTP 404 instead of letting it propagate as an unhandled 500.
 - Extract seven label-parsing helpers from `_parse_one_service` in `onboard/parser.py`: `_parse_claude_mount`, `_parse_host_docker_sock`, `_parse_config_target`, `_parse_config_assist`, `_parse_llmio_tier_level`, `_parse_chat_access`, `_parse_chat_agent_mutatable`. Each helper is independently unit-testable.
 - **Breaking:** All secret fields on `LifecycleConfig` are now `pydantic.SecretStr` — `api_key`, `auth_password`, `board_api_token`, `github_app_private_key`, `github_repo_create_token`, and `LangfuseProjectCreds.secret_key`. Read sites use `.get_secret_value()`. The six legacy per-project Langfuse fields (`langfuse_chat_public_key`, `langfuse_chat_secret_key`, …) have been removed; migrate to `langfuse_projects` dict.

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from robotsix_central_deploy.lifecycle.models import (
     ActionType,
     DeployJobPhase,
+    DiskUsageResponse,
     OnboardJobPhase,
     VolumeEntryType,
 )
@@ -724,3 +725,41 @@ class ChatAgentEnvResponse(BaseModel):
         default=[], description="Secret keys that were upserted (values never returned)"
     )
     detail: str = Field(default="", description="Human-readable summary")
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/disk/reclaim
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentDiskReclaimRequest(BaseModel):
+    """Request body for POST /chat/disk/reclaim.
+
+    Selects which safe reclaim targets to prune.  Only ``dangling_images``
+    and ``build_cache`` are accepted — tagged images, in-use images, and
+    named volumes are never pruned.
+    """
+
+    dangling_images: bool = Field(
+        default=False,
+        description="Prune dangling (untagged) Docker images.",
+    )
+    build_cache: bool = Field(
+        default=False,
+        description="Prune reclaimable Docker build cache.",
+    )
+
+
+class ChatAgentDiskReclaimResponse(BaseModel):
+    """Response body for POST /chat/disk/reclaim."""
+
+    name: str = Field(default="central-deploy")
+    action: str = Field(default="disk-reclaim")
+    space_reclaimed_bytes: int = Field(
+        description="Total bytes freed by the reclaim operation."
+    )
+    detail: str = Field(default="", description="Human-readable summary")
+    disk_snapshot: "DiskUsageResponse | None" = Field(
+        default=None,
+        description="Full disk-usage snapshot taken after the reclaim operation.",
+    )
