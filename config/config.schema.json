@@ -378,8 +378,10 @@
       "advanced": true,
       "default": "",
       "description": "GitHub App ID used to mint installation tokens for the chat agent's 'github' component. Empty disables the component.",
+      "format": "password",
       "title": "Github App Id",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "github_app_private_key": {
       "advanced": true,
@@ -387,6 +389,15 @@
       "description": "GitHub App private key (PEM) paired with github_app_id.",
       "format": "password",
       "title": "Github App Private Key",
+      "type": "string",
+      "writeOnly": true
+    },
+    "installation_id": {
+      "advanced": true,
+      "default": "",
+      "description": "GitHub App installation ID for the fleet's shared installation. Used together with github_app_id and github_app_private_key to mint short-lived installation access tokens.",
+      "format": "password",
+      "title": "Installation Id",
       "type": "string",
       "writeOnly": true
     },

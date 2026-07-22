@@ -323,8 +323,8 @@ class LifecycleConfig(BaseModel):
     # workflow-run status). Shares the same GitHub App installation as the
     # fleet's CI/CD pipeline; the chat container never sees these credentials —
     # the deploy server mints short-lived installation tokens server-side.
-    github_app_id: str = Field(
-        "",
+    github_app_id: SecretStr = Field(
+        SecretStr(""),
         description=(
             "GitHub App ID used to mint installation tokens for the chat "
             "agent's 'github' component. Empty disables the component."
@@ -334,6 +334,15 @@ class LifecycleConfig(BaseModel):
     github_app_private_key: SecretStr = Field(
         SecretStr(""),
         description="GitHub App private key (PEM) paired with github_app_id.",
+        json_schema_extra={"advanced": True},
+    )
+    installation_id: SecretStr = Field(
+        SecretStr(""),
+        description=(
+            "GitHub App installation ID for the fleet's shared installation. "
+            "Used together with github_app_id and github_app_private_key to "
+            "mint short-lived installation access tokens."
+        ),
         json_schema_extra={"advanced": True},
     )
     github_repo_create_token: SecretStr = Field(

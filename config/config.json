@@ -34,6 +34,7 @@
   "board_repo_id": "",
   "github_app_id": "",
   "github_app_private_key": "",
+  "installation_id": "",
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
   "mill_component_id": "",

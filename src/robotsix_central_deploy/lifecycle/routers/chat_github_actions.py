@@ -378,7 +378,11 @@ async def get_workflow_run_logs(
     # the repo is covered by an installation).
     from fastapi import HTTPException
 
-    if not config.github_app_id or not config.github_app_private_key.get_secret_value():
+    if (
+        not config.github_app_id.get_secret_value()
+        or not config.github_app_private_key.get_secret_value()
+        or not config.installation_id.get_secret_value()
+    ):
         raise HTTPException(
             status_code=503,
             detail="GitHub App not configured",
@@ -387,10 +391,9 @@ async def get_workflow_run_logs(
     try:
         token = await asyncio.to_thread(
             get_installation_token_sync,
-            config.github_app_id,
+            config.github_app_id.get_secret_value(),
             config.github_app_private_key.get_secret_value(),
-            owner,
-            repo,
+            config.installation_id.get_secret_value(),
         )
     except Exception as exc:
         _reraise_github_errors(exc, owner, repo)

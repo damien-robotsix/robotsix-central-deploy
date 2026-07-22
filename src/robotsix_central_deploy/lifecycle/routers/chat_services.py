@@ -385,8 +385,9 @@ async def chat_deploy(
 
         if (
             parsed is not None
-            and lifecycle_config.github_app_id
+            and lifecycle_config.github_app_id.get_secret_value()
             and lifecycle_config.github_app_private_key.get_secret_value()
+            and lifecycle_config.installation_id.get_secret_value()
         ):
             owner, repo_name = parsed
             try:
@@ -397,10 +398,9 @@ async def chat_deploy(
                 github_token = await loop.run_in_executor(
                     None,
                     get_installation_token_sync,
-                    lifecycle_config.github_app_id,
+                    lifecycle_config.github_app_id.get_secret_value(),
                     lifecycle_config.github_app_private_key.get_secret_value(),
-                    owner,
-                    repo_name,
+                    lifecycle_config.installation_id.get_secret_value(),
                 )
             except Exception:
                 safe_owner = owner.replace("\n", "_").replace("\r", "_")
