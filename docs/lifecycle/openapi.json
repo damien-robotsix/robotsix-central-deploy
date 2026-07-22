@@ -2635,6 +2635,64 @@
         }
       }
     },
+    "/chat/disk/reclaim": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Prune dangling images and/or build cache (chat-agent allowlisted)",
+        "description": "Prune safe Docker disk targets: dangling images and/or build cache.\n\nOnly ``dangling_images`` and ``build_cache`` are accepted \u2014 this\nendpoint never touches tagged images, running-container images, or\nnamed volumes.",
+        "operationId": "chat_disk_reclaim_chat_disk_reclaim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentDiskReclaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentDiskReclaimResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/env/{name}": {
       "put": {
         "tags": [
@@ -5703,6 +5761,67 @@
         ],
         "title": "ChatAgentDeployResponse",
         "description": "Response body for POST /chat/deploy."
+      },
+      "ChatAgentDiskReclaimRequest": {
+        "properties": {
+          "dangling_images": {
+            "type": "boolean",
+            "title": "Dangling Images",
+            "description": "Prune dangling (untagged) Docker images.",
+            "default": false
+          },
+          "build_cache": {
+            "type": "boolean",
+            "title": "Build Cache",
+            "description": "Prune reclaimable Docker build cache.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ChatAgentDiskReclaimRequest",
+        "description": "Request body for POST /chat/disk/reclaim.\n\nSelects which safe reclaim targets to prune.  Only ``dangling_images``\nand ``build_cache`` are accepted \u2014 tagged images, in-use images, and\nnamed volumes are never pruned."
+      },
+      "ChatAgentDiskReclaimResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": "central-deploy"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "disk-reclaim"
+          },
+          "space_reclaimed_bytes": {
+            "type": "integer",
+            "title": "Space Reclaimed Bytes",
+            "description": "Total bytes freed by the reclaim operation."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          },
+          "disk_snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiskUsageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Full disk-usage snapshot taken after the reclaim operation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "space_reclaimed_bytes"
+        ],
+        "title": "ChatAgentDiskReclaimResponse",
+        "description": "Response body for POST /chat/disk/reclaim."
       },
       "ChatAgentEnvResponse": {
         "properties": {
