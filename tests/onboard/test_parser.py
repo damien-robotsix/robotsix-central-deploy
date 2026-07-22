@@ -8,7 +8,17 @@ from robotsix_central_deploy.onboard.models import (
     DerivedSpec,
     ParseError,
 )
-from robotsix_central_deploy.onboard.parser import _parse_go_duration, parse_compose
+from robotsix_central_deploy.onboard.parser import (
+    _parse_chat_access,
+    _parse_chat_agent_mutatable,
+    _parse_claude_mount,
+    _parse_config_assist,
+    _parse_config_target,
+    _parse_go_duration,
+    _parse_host_docker_sock,
+    _parse_llmio_tier_level,
+    parse_compose,
+)
 from robotsix_central_deploy.registry.models import (
     ConfigAssistSeed,
     PortMapping,
@@ -70,6 +80,223 @@ class TestGoDuration:
     def test_invalid_raises(self):
         with pytest.raises(ValueError):
             _parse_go_duration("abc")
+
+
+# ---------------------------------------------------------------------------
+# Label-parsing helpers
+# ---------------------------------------------------------------------------
+
+
+class TestParseClaudeMount:
+    def test_true_value(self):
+        claude_mount, claude_mount_path, violations = _parse_claude_mount(
+            {"robotsix.deploy.claude-mount": "true"}
+        )
+        assert claude_mount is True
+        assert claude_mount_path == "/home/app/.claude"
+        assert violations == []
+
+    def test_false_value(self):
+        claude_mount, claude_mount_path, violations = _parse_claude_mount(
+            {"robotsix.deploy.claude-mount": "false"}
+        )
+        assert claude_mount is False
+        assert claude_mount_path == "/home/app/.claude"
+        assert violations == []
+
+    def test_path_value(self):
+        claude_mount, claude_mount_path, violations = _parse_claude_mount(
+            {"robotsix.deploy.claude-mount": "/home/mill/.claude"}
+        )
+        assert claude_mount is True
+        assert claude_mount_path == "/home/mill/.claude"
+        assert violations == []
+
+    def test_no_label(self):
+        claude_mount, claude_mount_path, violations = _parse_claude_mount({})
+        assert claude_mount is False
+        assert claude_mount_path == "/home/app/.claude"
+        assert violations == []
+
+    def test_invalid_value_adds_violation(self):
+        claude_mount, claude_mount_path, violations = _parse_claude_mount(
+            {"robotsix.deploy.claude-mount": "yes please"}
+        )
+        assert claude_mount is False
+        assert claude_mount_path == "/home/app/.claude"
+        assert len(violations) == 1
+        assert "claude-mount" in violations[0]
+
+    def test_prefix_in_violation(self):
+        _claude_mount, _path, violations = _parse_claude_mount(
+            {"robotsix.deploy.claude-mount": "invalid"}, prefix="[service 'foo'] "
+        )
+        assert violations[0].startswith("[service 'foo'] ")
+
+
+class TestParseHostDockerSock:
+    def test_true_value(self):
+        host_docker_sock, violations = _parse_host_docker_sock(
+            {"robotsix.deploy.host-docker-sock": "true"}
+        )
+        assert host_docker_sock is True
+        assert violations == []
+
+    def test_false_value(self):
+        host_docker_sock, violations = _parse_host_docker_sock(
+            {"robotsix.deploy.host-docker-sock": "false"}
+        )
+        assert host_docker_sock is False
+        assert violations == []
+
+    def test_no_label(self):
+        host_docker_sock, violations = _parse_host_docker_sock({})
+        assert host_docker_sock is False
+        assert violations == []
+
+    def test_true_on_primary_adds_violation(self):
+        host_docker_sock, violations = _parse_host_docker_sock(
+            {"robotsix.deploy.host-docker-sock": "true"}, is_primary=True
+        )
+        assert host_docker_sock is True
+        assert len(violations) == 1
+        assert "primary" in violations[0].lower()
+
+    def test_prefix_in_violation(self):
+        _hds, violations = _parse_host_docker_sock(
+            {"robotsix.deploy.host-docker-sock": "true"},
+            is_primary=True,
+            prefix="[service 'foo'] ",
+        )
+        assert violations[0].startswith("[service 'foo'] ")
+
+
+class TestParseConfigTarget:
+    def test_resolves_volume_name(self):
+        volume_mounts = [VolumeMount(host="app-config", container="/home/app/config")]
+        config_volume, violations = _parse_config_target(
+            {"robotsix.deploy.config-target": "/home/app/config/config.yaml"},
+            volume_mounts,
+        )
+        assert config_volume == "app-config"
+        assert violations == []
+
+    def test_no_matching_mount_adds_violation(self):
+        volume_mounts = [VolumeMount(host="other-vol", container="/data")]
+        config_volume, violations = _parse_config_target(
+            {"robotsix.deploy.config-target": "/home/app/config/config.yaml"},
+            volume_mounts,
+        )
+        assert config_volume is None
+        assert len(violations) == 1
+        assert "config-target" in violations[0]
+        assert "no matching volume mount" in violations[0]
+
+    def test_no_label_returns_none(self):
+        config_volume, violations = _parse_config_target({}, [])
+        assert config_volume is None
+        assert violations == []
+
+    def test_prefix_in_violation(self):
+        _cv, violations = _parse_config_target(
+            {"robotsix.deploy.config-target": "/nonexistent/config.yaml"},
+            [],
+            prefix="[service 'foo'] ",
+        )
+        assert violations[0].startswith("[service 'foo'] ")
+
+
+class TestParseConfigAssist:
+    def test_command_only(self):
+        cmd, seeds = _parse_config_assist(
+            {"robotsix.deploy.config-assist": "python -m seed"}
+        )
+        assert cmd == "python -m seed"
+        assert seeds == []
+
+    def test_seeds_only(self):
+        cmd, seeds = _parse_config_assist(
+            {"robotsix.deploy.config-assist-seeds": "key1,key2"}
+        )
+        assert cmd is None
+        assert seeds == [
+            ConfigAssistSeed(key="key1"),
+            ConfigAssistSeed(key="key2"),
+        ]
+
+    def test_both_command_and_seeds(self):
+        cmd, seeds = _parse_config_assist(
+            {
+                "robotsix.deploy.config-assist": "python -m seed",
+                "robotsix.deploy.config-assist-seeds": "key1,key2",
+            }
+        )
+        assert cmd == "python -m seed"
+        assert seeds == [
+            ConfigAssistSeed(key="key1"),
+            ConfigAssistSeed(key="key2"),
+        ]
+
+    def test_no_labels(self):
+        cmd, seeds = _parse_config_assist({})
+        assert cmd is None
+        assert seeds == []
+
+    def test_seed_with_label(self):
+        _cmd, seeds = _parse_config_assist(
+            {"robotsix.deploy.config-assist-seeds": "key1:Label One,key2"}
+        )
+        assert seeds == [
+            ConfigAssistSeed(key="key1", label="Label One"),
+            ConfigAssistSeed(key="key2", label=None),
+        ]
+
+
+class TestParseLlmioTierLevel:
+    def test_level_value(self):
+        assert (
+            _parse_llmio_tier_level({"robotsix.deploy.llmio-tier-level": "level1"})
+            == "level1"
+        )
+
+    def test_no_label(self):
+        assert _parse_llmio_tier_level({}) is None
+
+    def test_whitespace_stripped(self):
+        assert (
+            _parse_llmio_tier_level({"robotsix.deploy.llmio-tier-level": "  level2  "})
+            == "level2"
+        )
+
+
+class TestParseChatAccess:
+    def test_true_value(self):
+        assert _parse_chat_access({"robotsix.deploy.chat-access": "true"}) is True
+
+    def test_1_value(self):
+        assert _parse_chat_access({"robotsix.deploy.chat-access": "1"}) is True
+
+    def test_yes_value(self):
+        assert _parse_chat_access({"robotsix.deploy.chat-access": "yes"}) is True
+
+    def test_false_value(self):
+        assert _parse_chat_access({"robotsix.deploy.chat-access": "false"}) is False
+
+    def test_no_label(self):
+        assert _parse_chat_access({}) is False
+
+
+class TestParseChatAgentMutatable:
+    def test_true_value(self):
+        assert (
+            _parse_chat_agent_mutatable(
+                {"robotsix.deploy.chat-agent-mutatable": "true"}
+            )
+            is True
+        )
+
+    def test_no_label(self):
+        assert _parse_chat_agent_mutatable({}) is False
 
 
 # ---------------------------------------------------------------------------
