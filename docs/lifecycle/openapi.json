@@ -6748,6 +6748,18 @@
             "title": "Error",
             "description": "Error message when phase is 'failed'; None otherwise"
           },
+          "logs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logs",
+            "description": "Container logs captured when a deploy fails; None otherwise"
+          },
           "name": {
             "anyOf": [
               {
@@ -7510,6 +7522,18 @@
             ],
             "title": "Error",
             "description": "Error message when phase is 'failed'; None otherwise"
+          },
+          "logs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logs",
+            "description": "Container logs captured when a deploy fails; None otherwise"
           },
           "name": {
             "anyOf": [
