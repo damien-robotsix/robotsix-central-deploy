@@ -368,7 +368,6 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-
     # Caretaker
     caretaker_enabled: bool = Field(
         SETTINGS_DEFAULTS["caretaker_enabled"],
