@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract seven label-parsing helpers from `_parse_one_service` in `onboard/parser.py`: `_parse_claude_mount`, `_parse_host_docker_sock`, `_parse_config_target`, `_parse_config_assist`, `_parse_llmio_tier_level`, `_parse_chat_access`, `_parse_chat_agent_mutatable`. Each helper is independently unit-testable.
 - **Breaking:** All secret fields on `LifecycleConfig` are now `pydantic.SecretStr` — `api_key`, `auth_password`, `board_api_token`, `github_app_private_key`, `github_repo_create_token`, and `LangfuseProjectCreds.secret_key`. Read sites use `.get_secret_value()`. The six legacy per-project Langfuse fields (`langfuse_chat_public_key`, `langfuse_chat_secret_key`, …) have been removed; migrate to `langfuse_projects` dict.
 - **Breaking:** GHCR token and OVH SFTP credentials now read from `config/config.json` instead of environment variables. `ghcr_token` (SecretStr) and `ovh_sftp.{host,port,user,password}` are new typed fields on `LifecycleConfig`. The `GHCR_TOKEN` and `OVH_SFTP_*` environment variables are no longer read.
 - **POST /chat/deploy** is now contract-aware: accepts `name` + `repo` (git URL) instead of `name` + `image`, fetches the repo's `deploy/docker-compose.yml`, resolves the full service topology (image, command, ports, volumes, healthchecks, and siblings), and deploys every service — matching the dashboard onboarding flow.

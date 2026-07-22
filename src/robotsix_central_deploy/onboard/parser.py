@@ -248,6 +248,142 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
     )
 
 
+# ---------------------------------------------------------------------------
+# Label-parsing helpers — one per deploy label
+# ---------------------------------------------------------------------------
+
+
+def _parse_claude_mount(
+    labels: dict[str, Any], *, prefix: str = ""
+) -> tuple[bool, str, list[str]]:
+    """Parse ``robotsix.deploy.claude-mount`` label.
+
+    Returns ``(claude_mount, claude_mount_path, violations)``.
+    """
+    violations: list[str] = []
+    claude_mount = False
+    claude_mount_path = "/home/app/.claude"
+
+    val = labels.get(CLAUDE_MOUNT_LABEL)
+    if isinstance(val, str):
+        stripped = val.strip()
+        if stripped.lower() == "true":
+            claude_mount = True
+        elif stripped.startswith("/"):
+            claude_mount = True
+            claude_mount_path = stripped
+        elif stripped and stripped.lower() != "false":
+            violations.append(
+                f'{prefix}{CLAUDE_MOUNT_LABEL} must be "true", "false", '
+                f"or an absolute container path — got {stripped!r}"
+            )
+
+    return claude_mount, claude_mount_path, violations
+
+
+def _parse_host_docker_sock(
+    labels: dict[str, Any], *, prefix: str = "", is_primary: bool = False
+) -> tuple[bool, list[str]]:
+    """Parse ``robotsix.deploy.host-docker-sock`` label.
+
+    Returns ``(host_docker_sock, violations)``.
+    """
+    violations: list[str] = []
+    host_docker_sock = False
+
+    val = labels.get(HOST_DOCKER_SOCK_LABEL)
+    if isinstance(val, str) and val.strip().lower() == "true":
+        host_docker_sock = True
+
+    if host_docker_sock and is_primary:
+        violations.append(
+            f"{prefix}{HOST_DOCKER_SOCK_LABEL} is not permitted on the primary "
+            f"service — apply it only to a hardened non-primary (socket-proxy) sibling"
+        )
+
+    return host_docker_sock, violations
+
+
+def _parse_config_target(
+    labels: dict[str, Any], volume_mounts: list[VolumeMount], *, prefix: str = ""
+) -> tuple[str | None, list[str]]:
+    """Parse ``robotsix.deploy.config-target`` label, resolving to a named-volume name.
+
+    Returns ``(config_volume, violations)``.
+    """
+    violations: list[str] = []
+    config_volume: str | None = None
+
+    config_target = labels.get(LABEL_CONFIG_TARGET)
+    if isinstance(config_target, str) and config_target.strip():
+        config_dir = str(Path(config_target.strip()).parent)
+        match = next((m for m in volume_mounts if m.container == config_dir), None)
+        if match is None:
+            violations.append(
+                f"{prefix}{LABEL_CONFIG_TARGET} '{config_target}' has no matching "
+                f"volume mount at '{config_dir}' in this service"
+            )
+        else:
+            config_volume = match.host
+
+    return config_volume, violations
+
+
+def _parse_config_assist(
+    labels: dict[str, Any],
+) -> tuple[str | None, list[ConfigAssistSeed]]:
+    """Parse ``robotsix.deploy.config-assist`` and ``config-assist-seeds`` labels.
+
+    Returns ``(config_assist_command, config_assist_seeds)``.
+    """
+    config_assist_command: str | None = None
+    config_assist_seeds: list[ConfigAssistSeed] = []
+
+    raw_cmd = labels.get(LABEL_CONFIG_ASSIST)
+    if isinstance(raw_cmd, str) and raw_cmd.strip():
+        config_assist_command = raw_cmd.strip()
+
+    _seeds_raw = labels.get(LABEL_CONFIG_ASSIST_SEEDS, "")
+    if isinstance(_seeds_raw, str) and _seeds_raw.strip():
+        for _entry in _seeds_raw.split(","):
+            _entry = _entry.strip()
+            if not _entry:
+                continue
+            if ":" in _entry:
+                _key, _, _lbl = _entry.partition(":")
+                config_assist_seeds.append(
+                    ConfigAssistSeed(key=_key.strip(), label=_lbl.strip() or None)
+                )
+            else:
+                config_assist_seeds.append(ConfigAssistSeed(key=_entry))
+
+    return config_assist_command, config_assist_seeds
+
+
+def _parse_llmio_tier_level(labels: dict[str, Any]) -> str | None:
+    """Parse ``robotsix.deploy.llmio-tier-level`` label."""
+    val = labels.get(LABEL_LLMIO_TIER_LEVEL)
+    if isinstance(val, str) and val.strip():
+        return val.strip()
+    return None
+
+
+def _parse_chat_access(labels: dict[str, Any]) -> bool:
+    """Parse ``robotsix.deploy.chat-access`` label."""
+    val = labels.get(LABEL_CHAT_ACCESS)
+    if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
+        return True
+    return False
+
+
+def _parse_chat_agent_mutatable(labels: dict[str, Any]) -> bool:
+    """Parse ``robotsix.deploy.chat-agent-mutatable`` label."""
+    val = labels.get(LABEL_CHAT_AGENT_MUTATABLE)
+    if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
+        return True
+    return False
+
+
 def _parse_one_service(
     svc: dict[str, Any],
     key: str,
@@ -293,101 +429,39 @@ def _parse_one_service(
     health_check, hc_violations = _parse_healthcheck(svc.get("healthcheck"))
     violations.extend(f"{prefix}{v}" for v in hc_violations)
 
-    # Labels — claude-mount. The value is either "true" (mount the
-    # claude-auth volume at the default /home/app/.claude) or an absolute
-    # container path ("/home/mill/.claude") for images whose user's HOME
-    # is not /home/app — the CLI only reads $HOME/.claude, so a wrong
-    # path silently yields "Not logged in" at runtime.
+    # Labels
+    labels = svc.get("labels")
     claude_mount = False
     claude_mount_path = "/home/app/.claude"
-    labels = svc.get("labels")
-    if isinstance(labels, dict):
-        val = labels.get(CLAUDE_MOUNT_LABEL)
-        if isinstance(val, str):
-            stripped = val.strip()
-            if stripped.lower() == "true":
-                claude_mount = True
-            elif stripped.startswith("/"):
-                claude_mount = True
-                claude_mount_path = stripped
-            elif stripped and stripped.lower() != "false":
-                violations.append(
-                    f'{prefix}{CLAUDE_MOUNT_LABEL} must be "true", "false", '
-                    f"or an absolute container path — got {stripped!r}"
-                )
-
-    # Labels — host-docker-sock
     host_docker_sock = False
-    if isinstance(labels, dict):
-        val = labels.get(HOST_DOCKER_SOCK_LABEL)
-        if isinstance(val, str) and val.strip().lower() == "true":
-            host_docker_sock = True
-    # Primary-guard: host-docker-sock is only valid on non-primary services.
-    if host_docker_sock and is_primary:
-        violations.append(
-            f"{prefix}{HOST_DOCKER_SOCK_LABEL} is not permitted on the primary "
-            f"service — apply it only to a hardened non-primary (socket-proxy) sibling"
-        )
-
-    # Labels — config-target (resolve to named-volume name)
     config_volume: str | None = None
-    if isinstance(labels, dict):
-        config_target = labels.get(LABEL_CONFIG_TARGET)
-        if isinstance(config_target, str) and config_target.strip():
-            config_dir = str(
-                Path(config_target.strip()).parent
-            )  # e.g. "/home/mailbot/config"
-            match = next((m for m in volume_mounts if m.container == config_dir), None)
-            if match is None:
-                violations.append(
-                    f"{prefix}{LABEL_CONFIG_TARGET} '{config_target}' has no matching "
-                    f"volume mount at '{config_dir}' in this service"
-                )
-            else:
-                config_volume = match.host  # e.g. "mailbot-config"
-
-    # Labels — config-assist (command + seed fields)
     config_assist_command: str | None = None
     config_assist_seeds: list[ConfigAssistSeed] = []
-    if isinstance(labels, dict):
-        raw_cmd = labels.get(LABEL_CONFIG_ASSIST)
-        if isinstance(raw_cmd, str) and raw_cmd.strip():
-            config_assist_command = raw_cmd.strip()
-        _seeds_raw = labels.get(LABEL_CONFIG_ASSIST_SEEDS, "")
-        if isinstance(_seeds_raw, str) and _seeds_raw.strip():
-            config_assist_seeds = []
-            for _entry in _seeds_raw.split(","):
-                _entry = _entry.strip()
-                if not _entry:
-                    continue
-                if ":" in _entry:
-                    _key, _, _lbl = _entry.partition(":")
-                    config_assist_seeds.append(
-                        ConfigAssistSeed(key=_key.strip(), label=_lbl.strip() or None)
-                    )
-                else:
-                    config_assist_seeds.append(ConfigAssistSeed(key=_entry))
-
-    # Labels — llmio-tier-level
     llmio_tier_level: str | None = None
-    if isinstance(labels, dict):
-        val = labels.get(LABEL_LLMIO_TIER_LEVEL)
-        if isinstance(val, str) and val.strip():
-            llmio_tier_level = val.strip()
-
-    # Labels — chat-access
     allow_chat_access = False
-    if isinstance(labels, dict):
-        val = labels.get(LABEL_CHAT_ACCESS)
-        if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
-            allow_chat_access = True
-
-    # Labels — chat-agent-mutatable
     chat_agent_mutatable = False
+
     if isinstance(labels, dict):
-        val = labels.get(LABEL_CHAT_AGENT_MUTATABLE)
-        if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
-            chat_agent_mutatable = True
+        claude_mount, claude_mount_path, claude_violations = _parse_claude_mount(
+            labels, prefix=prefix
+        )
+        violations.extend(claude_violations)
+
+        host_docker_sock, hds_violations = _parse_host_docker_sock(
+            labels, prefix=prefix, is_primary=is_primary
+        )
+        violations.extend(hds_violations)
+
+        config_volume, ct_violations = _parse_config_target(
+            labels, volume_mounts, prefix=prefix
+        )
+        violations.extend(ct_violations)
+
+        config_assist_command, config_assist_seeds = _parse_config_assist(labels)
+
+        llmio_tier_level = _parse_llmio_tier_level(labels)
+        allow_chat_access = _parse_chat_access(labels)
+        chat_agent_mutatable = _parse_chat_agent_mutatable(labels)
 
     # container_name override
     container_name = svc.get("container_name", "")

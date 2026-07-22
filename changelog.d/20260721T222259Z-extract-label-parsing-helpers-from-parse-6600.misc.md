@@ -1,0 +1,1 @@
+Extract label-parsing helpers from `_parse_one_service` in `onboard/parser.py`
