@@ -20,9 +20,10 @@ from typing import cast
 
 try:
     from robotsix_github_auth import mint_installation_token as _mint_installation_token
+
     _HAS_GITHUB_AUTH = True
 except ImportError:  # pragma: no cover
-    _mint_installation_token = None  # type: ignore[assignment]
+    _mint_installation_token = None
     _HAS_GITHUB_AUTH = False
 
 
