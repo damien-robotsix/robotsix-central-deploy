@@ -8,7 +8,6 @@ so a green CI can never hide a missing/incompatible dependency, and pins
 the return contract (``InstallationToken.token`` is a str).
 """
 
-
 import pytest
 
 

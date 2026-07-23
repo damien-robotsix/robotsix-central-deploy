@@ -18,8 +18,10 @@ from __future__ import annotations
 import asyncio
 from typing import cast
 
-from robotsix_github_auth import mint_installation_token
-
+try:
+    from robotsix_github_auth import mint_installation_token
+except ImportError:
+    mint_installation_token = None
 
 from .config import LifecycleConfig
 
@@ -70,6 +72,11 @@ def get_installation_token_sync(
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
+    if mint_installation_token is None:
+        raise ImportError(
+            "robotsix-github-auth is not installed; "
+            "run `uv sync` or install the robotsix-github-auth package."
+        )
     return cast(
         str, mint_installation_token(app_id, private_key, installation_id).token
     )
@@ -98,6 +105,11 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
             "must all be set to use the github chat component."
         )
 
+    if mint_installation_token is None:
+        raise ImportError(
+            "robotsix-github-auth is not installed; "
+            "run `uv sync` or install the robotsix-github-auth package."
+        )
     client = _client_cache.get(installation_id)
     if client is None:
         result = await asyncio.to_thread(
