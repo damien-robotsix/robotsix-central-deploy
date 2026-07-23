@@ -68,7 +68,7 @@ async def test_builds_client_via_mint_installation_token():
     fake_client = MagicMock(name="fake-github-client")
 
     with patch(
-        "robotsix_central_deploy.lifecycle.github_app.mint_installation_token",
+        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
         return_value=SimpleNamespace(token="ghs_test-token"),
     ) as mock_mint:
         with patch(
@@ -93,7 +93,7 @@ async def test_client_is_cached_across_calls():
     fake_client = MagicMock(name="fake-github-client")
 
     with patch(
-        "robotsix_central_deploy.lifecycle.github_app.mint_installation_token",
+        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
         return_value=SimpleNamespace(token="ghs_test-token"),
     ) as mock_mint:
         with patch(
@@ -122,7 +122,7 @@ async def test_different_installation_ids_get_different_cache_entries():
     fake_client_b = MagicMock(name="client-b")
 
     with patch(
-        "robotsix_central_deploy.lifecycle.github_app.mint_installation_token",
+        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
         side_effect=[
             SimpleNamespace(token="token-a"),
             SimpleNamespace(token="token-b"),

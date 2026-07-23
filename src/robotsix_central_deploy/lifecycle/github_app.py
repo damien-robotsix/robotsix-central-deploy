@@ -18,7 +18,13 @@ from __future__ import annotations
 import asyncio
 from typing import cast
 
-from robotsix_github_auth import mint_installation_token
+try:
+    from robotsix_github_auth import mint_installation_token as _mint_installation_token
+
+    _HAS_GITHUB_AUTH = True
+except ImportError:  # pragma: no cover
+    _mint_installation_token = None
+    _HAS_GITHUB_AUTH = False
 
 
 from .config import LifecycleConfig
@@ -70,8 +76,13 @@ def get_installation_token_sync(
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
+    if not _HAS_GITHUB_AUTH:
+        raise ImportError(
+            "robotsix-github-auth is required for GitHub App token minting. "
+            "Install it with 'pip install robotsix-github-auth'."
+        )
     return cast(
-        str, mint_installation_token(app_id, private_key, installation_id).token
+        str, _mint_installation_token(app_id, private_key, installation_id).token
     )
 
 
@@ -100,8 +111,13 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
 
     client = _client_cache.get(installation_id)
     if client is None:
+        if not _HAS_GITHUB_AUTH:
+            raise ImportError(
+                "robotsix-github-auth is required for GitHub App token minting. "
+                "Install it with 'pip install robotsix-github-auth'."
+            )
         result = await asyncio.to_thread(
-            mint_installation_token, app_id, private_key, installation_id
+            _mint_installation_token, app_id, private_key, installation_id
         )
         client = _bearer_client(result.token)
         _client_cache[installation_id] = client
