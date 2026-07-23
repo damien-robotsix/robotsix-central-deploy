@@ -683,11 +683,18 @@
   /* Drift / warning boxes */
   .warning-box {
     background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px;
-    border-radius: 4px; margin-top: 8px;
+    border-radius: 4px; margin-top: 8px; color: #92400e;
   }
   .warning-box-mb {
     background: #fff3cd; border: 1px solid #ffc107; padding: 8px 12px;
-    border-radius: 4px; margin-bottom: 8px;
+    border-radius: 4px; margin-bottom: 8px; color: #92400e;
+  }
+  .warning-box button, .warning-box-mb button {
+    background: #1e293b; color: #cbd5e1; border: 1px solid #475569;
+    border-radius: 3px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
+  }
+  .warning-box button:hover, .warning-box-mb button:hover {
+    background: #334155; border-color: var(--blue);
   }
   .ml-list { margin: 4px 0 0 16px; }
 

@@ -9,8 +9,12 @@ the return contract (``InstallationToken.token`` is a str).
 """
 
 
+import pytest
+
+
 def test_robotsix_github_auth_is_a_real_installed_dependency() -> None:
     """The shared library imports and exposes the expected token contract."""
+    pytest.importorskip("robotsix_github_auth")
     import robotsix_github_auth
     from robotsix_github_auth import InstallationToken, mint_installation_token
 

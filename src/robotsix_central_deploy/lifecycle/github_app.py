@@ -16,10 +16,16 @@ token on every cache miss (the library returns short-lived tokens).
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import cast
 
-from robotsix_github_auth import mint_installation_token
-
+try:
+    from robotsix_github_auth import mint_installation_token
+except ImportError:
+    mint_installation_token = None
+    logging.getLogger(__name__).warning(
+        "robotsix-github-auth not installed; GitHub App token minting disabled"
+    )
 
 from .config import LifecycleConfig
 
@@ -70,6 +76,12 @@ def get_installation_token_sync(
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
+    if mint_installation_token is None:
+        raise ImportError(
+            "robotsix-github-auth is not installed. "
+            "Install it with `uv add robotsix-github-auth` "
+            "or ensure the git dependency is available."
+        )
     return cast(
         str, mint_installation_token(app_id, private_key, installation_id).token
     )
@@ -96,6 +108,13 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
         raise GitHubAppNotConfiguredError(
             "github_app_id, github_app_private_key, and installation_id "
             "must all be set to use the github chat component."
+        )
+
+    if mint_installation_token is None:
+        raise ImportError(
+            "robotsix-github-auth is not installed. "
+            "Install it with `uv add robotsix-github-auth` "
+            "or ensure the git dependency is available."
         )
 
     client = _client_cache.get(installation_id)

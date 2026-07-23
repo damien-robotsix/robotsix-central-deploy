@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix unreadable warning banner text in the Add Component dialog: port-collision and deploy-warning boxes now use dark amber text (`#92400e`) on the light yellow background, meeting WCAG AA contrast (~5.3:1) in dark theme.
 - Added `POST /chat/disk/reclaim` — chat-agent-allowlisted endpoint to prune
   dangling Docker images and/or reclaimable build cache.  Returns bytes
   reclaimed plus a post-prune disk snapshot; audit-logged.  Never touches
