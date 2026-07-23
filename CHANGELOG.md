@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added dedicated tests for `chat_services.py` chat-agent endpoints covering restart, update, deploy, audit logging, and auth (30 tests)
 - Added `POST /chat/disk/reclaim` — chat-agent-allowlisted endpoint to prune
   dangling Docker images and/or reclaimable build cache.  Returns bytes
   reclaimed plus a post-prune disk snapshot; audit-logged.  Never touches
