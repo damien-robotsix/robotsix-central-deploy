@@ -67,7 +67,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: system
           BASE_REF: ${{ github.base_ref }}
-        run: uv run towncrier check --compare-with origin/$BASE_REF
+        run: uv run towncrier check --compare-with "origin/$BASE_REF"
 
       - name: deptry (dependency hygiene)
         env:
