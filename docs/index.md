@@ -52,6 +52,18 @@ liveness probe.
 set, every endpoint is accessible without credentials — useful for
 local development.
 
+### GHCR image-pull authentication
+
+Private `ghcr.io` container images are pulled using **short-lived GitHub
+App installation tokens** minted by the
+[`robotsix-github-auth`](https://github.com/damien-robotsix/robotsix-github-auth)
+library.  A fresh token is generated per pull operation — no static PAT
+or durable credential is stored on disk.  The three GitHub App fields
+(`github_app_id`, `github_app_private_key`, `installation_id`) in
+`config/config.json` control which App installation is used; when these
+fields are unset, `ghcr.io` pulls fall back to anonymous access (public
+images only).
+
 ### Example `.env.lifecycle` snippet
 
 ```ini

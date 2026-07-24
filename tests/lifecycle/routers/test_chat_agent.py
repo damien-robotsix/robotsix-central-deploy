@@ -816,18 +816,18 @@ async def test_chat_env_upsert_secrets_happy_path(
 
     resp = await client.put(
         "/chat/env/chat",
-        json={"secrets": {"GHCR_TOKEN": "ghp_test123"}},
+        json={"secrets": {"SOME_SECRET": "test_value_123"}},
         headers=auth_headers,
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["component"] == "chat"
-    assert body["secret_keys"] == ["GHCR_TOKEN"]
+    assert body["secret_keys"] == ["SOME_SECRET"]
     assert body["env_keys"] == []
-    assert "GHCR_TOKEN" not in str(body).lower()  # value never in response
+    assert "SOME_SECRET" not in str(body).lower()  # value never in response
     # Verify the value was actually stored (encrypted, decrypted on read).
     stored = await env_store.get("chat")
-    assert "GHCR_TOKEN" in stored.secret_tokens
+    assert "SOME_SECRET" in stored.secret_tokens
 
 
 @pytest.mark.asyncio

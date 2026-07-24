@@ -10,6 +10,14 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
+try:
+    from robotsix_github_auth import mint_installation_token
+
+    _HAS_GITHUB_AUTH = True
+except ImportError:  # pragma: no cover
+    mint_installation_token = None
+    _HAS_GITHUB_AUTH = False
+
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
 from ._util import (
     docker_status_to_service_state,
@@ -58,13 +66,22 @@ class DockerSdkBackend(ExecutionBackend):
         self,
         socket_url: str = "unix:///var/run/docker.sock",
         timeout: int = 120,
-        ghcr_token: str = "",
+        github_app_id: str = "",
+        github_app_private_key: str = "",
+        installation_id: str = "",
     ) -> None:
         import docker
 
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
         self._auth = AuthOps(self._client)
-        self._ghcr_token = ghcr_token.strip()
+        self._github_app_id = github_app_id.strip()
+        self._github_app_private_key = github_app_private_key.strip()
+        self._installation_id = installation_id.strip()
+        self._github_app_configured = bool(
+            self._github_app_id
+            and self._github_app_private_key
+            and self._installation_id
+        )
         self._volume = VolumeOps(self._client)
 
     # -- helpers ------------------------------------------------------------
@@ -500,23 +517,44 @@ class DockerSdkBackend(ExecutionBackend):
         except Exception as restore_exc:
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
-    def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
+    async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
         """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
 
-        Only ``ghcr.io`` images are authenticated.  The token is read from
-        ``LifecycleConfig.ghcr_token`` (set in ``config/config.json``); when
-        it is absent or empty, anonymous pull is used and a 401 on a private
-        image will surface a diagnostic error.
+        Only ``ghcr.io`` images are authenticated.  When GitHub App
+        credentials are configured, a fresh installation token is minted
+        via ``robotsix-github-auth`` for each pull; anonymous pull is used
+        when the App is not configured (public images only — a 401 on a
+        private image surfaces a diagnostic error).
         """
         if _image_registry_host(image_ref) != "ghcr.io":
             return None
-        if not self._ghcr_token:
+        if not self._github_app_configured:
             return None
-        # GHCR ignores the username field when a personal access token is
-        # supplied as the password — any non-empty string works here.
+        if not _HAS_GITHUB_AUTH:
+            logger.warning(
+                "robotsix-github-auth is not installed — ghcr.io pull will be anonymous"
+            )
+            return None
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                mint_installation_token,
+                self._github_app_id,
+                self._github_app_private_key,
+                self._installation_id,
+            )
+            token: str = result.token
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to mint GitHub App installation token for ghcr.io "
+                f"pull of {image_ref!r}: {exc}"
+            ) from exc
+        # GHCR accepts GitHub App installation tokens with username
+        # "x-access-token" (the standard convention for App tokens).
         return {
-            "username": "USERNAME",
-            "password": self._ghcr_token,
+            "username": "x-access-token",
+            "password": token,
             "serveraddress": "ghcr.io",
         }
 
@@ -530,7 +568,7 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         # Step 1 — pull target image; obtain its digest
-        auth_config = self._build_auth_config(image_ref)
+        auth_config = await self._build_auth_config(image_ref)
         try:
             image = await loop.run_in_executor(
                 None,
@@ -546,8 +584,9 @@ class DockerSdkBackend(ExecutionBackend):
             ):
                 raise RuntimeError(
                     f"Image pull failed for {image_ref!r}: received 401 Unauthorized "
-                    "from ghcr.io. Set ghcr_token in config/config.json to a GitHub "
-                    "personal access token with read:packages scope."
+                    "from ghcr.io. Configure github_app_id, github_app_private_key, "
+                    "and installation_id in config/config.json to authenticate with "
+                    "a GitHub App installation token."
                 ) from exc
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
         # Derive manifest digest from RepoDigests (comparable to registry
@@ -1053,11 +1092,16 @@ class DockerSdkBackend(ExecutionBackend):
 
         loop = asyncio.get_running_loop()
 
+        # Mint the auth config before entering the executor — token minting
+        # does network I/O and cannot run inside a thread that's already
+        # inside run_in_executor.
+        auth_config = await self._build_auth_config(watchtower_image)
+
         def _run() -> str:
             api = self._client.api
             self._client.images.pull(
                 watchtower_image,
-                auth_config=self._build_auth_config(watchtower_image),
+                auth_config=auth_config,
             )
             networking = None
             if target.networks:
