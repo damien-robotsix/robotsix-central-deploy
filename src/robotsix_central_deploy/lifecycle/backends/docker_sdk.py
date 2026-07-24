@@ -936,14 +936,20 @@ class DockerSdkBackend(ExecutionBackend):
             for v in (result.get("Volumes") or [])
             if (v.get("UsageData") or {}).get("Size", 0) >= 0
         ]
-        # Untagged (dangling) images — candidates for /disk/reclaim. Sums
-        # per-image ``Size`` so shared layers may be double-counted; this is
-        # an indicator, not an exact reclaim prediction.
-        dangling_size = sum(
-            img.get("Size", 0)
-            for img in images
-            if not [t for t in (img.get("RepoTags") or []) if t != "<none>:<none>"]
-        )
+        # Dangling images — use the same ``images.list(dangling=True)``
+        # source as ``prune_images()`` so the metric matches what the
+        # reclaim endpoint can actually remove.  The ``df()`` Images array
+        # includes intermediate/parent layers that have no tag but are
+        # still referenced by tagged images; those are not prunable.
+        try:
+            dangling_images = await loop.run_in_executor(
+                None,
+                lambda: self._client.images.list(filters={"dangling": True}),
+            )
+        except docker.errors.APIError as exc:
+            logger.warning("docker image list (dangling) failed: %s", exc)
+            dangling_images = []
+        dangling_size = sum(int(img.attrs.get("Size", 0)) for img in dangling_images)
         return DockerDfStats(
             images_size_bytes=images_size,
             dangling_images_bytes=dangling_size,
