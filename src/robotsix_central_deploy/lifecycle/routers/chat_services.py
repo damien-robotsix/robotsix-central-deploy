@@ -44,6 +44,23 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 
+import asyncio
+import json
+
+from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
+from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
+from robotsix_central_deploy.lifecycle.deps.seed import (
+    _build_component_config_from_spec,
+    _namespace_spec_volumes,
+    _validate_config_or_422,
+)
+from robotsix_central_deploy.lifecycle._config_utils import (
+    _canonical_hash,
+    _merge_config,
+)
+from ..config import LifecycleConfig
+from .onboard import _parse_github_owner_repo as _parse_gh
+
 router = APIRouter(tags=["chat"])
 
 
@@ -308,6 +325,161 @@ async def chat_update_service(
 # ---------------------------------------------------------------------------
 
 
+async def _resolve_deploy_contract(
+    body: ChatAgentDeployRequest,
+    request: Request,
+    lifecycle_config: LifecycleConfig,
+    component_config_store: ComponentConfigStore,
+    registry: ComponentRegistry,
+    backend: ExecutionBackend,
+) -> ComponentConfig:
+    """Fetch repo, parse compose + config schema, build & persist ComponentConfig.
+
+    Returns the resolved ``ComponentConfig``.  Side-effects:
+    persists to ``component_config_store``, registers in the in-memory
+    ``registry``, writes merged config.json to the config volume, and
+    seeds the ``EnvStore`` from the repo's env contract.
+    """
+    # --- Fetch repo files (clone is blocking → run in executor) ---
+    loop = asyncio.get_running_loop()
+
+    github_token: str | None = None
+    parsed = _parse_gh(body.repo)
+
+    if (
+        parsed is not None
+        and lifecycle_config.github_app_id.get_secret_value()
+        and lifecycle_config.github_app_private_key.get_secret_value()
+        and lifecycle_config.installation_id.get_secret_value()
+    ):
+        owner, repo_name = parsed
+        try:
+            from robotsix_central_deploy.lifecycle.github_app import (
+                get_installation_token_sync,
+            )
+
+            github_token = await loop.run_in_executor(
+                None,
+                get_installation_token_sync,
+                lifecycle_config.github_app_id.get_secret_value(),
+                lifecycle_config.github_app_private_key.get_secret_value(),
+                lifecycle_config.installation_id.get_secret_value(),
+            )
+        except Exception:
+            safe_owner = owner.replace("\n", "_").replace("\r", "_")
+            safe_repo = repo_name.replace("\n", "_").replace("\r", "_")
+            logger.warning(
+                "Cannot get GitHub App installation token for %s/%s; "
+                "cloning unauthenticated (public repos only)",
+                safe_owner,
+                safe_repo,
+            )
+
+    try:
+        repo_files = await loop.run_in_executor(
+            None, fetch_repo_files, body.repo, 30, github_token
+        )
+    except FetchError as e:
+        raise HTTPException(status_code=422, detail={"error": str(e)})
+
+    # --- Parse deploy/docker-compose.yml ---
+    try:
+        derived_spec = parse_compose(repo_files.compose_bytes, body.name, body.repo)
+    except ParseError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "compose validation failed",
+                "violations": e.violations,
+            },
+        )
+
+    # --- Parse config/config.schema.json if present ---
+    if repo_files.config_schema_json is not None:
+        try:
+            derived_spec.config_schema = json.loads(repo_files.config_schema_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": (f"config/config.schema.json is not valid JSON: {exc}"),
+                },
+            )
+    else:
+        derived_spec.config_schema = None
+
+    # --- Hard precondition: config contract must be satisfied ---
+    if derived_spec.config_schema is None or derived_spec.config_volume is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": (
+                    "Repo does not satisfy the robotsix config standard "
+                    "(robotsix-standards/docs/config-standard.md).  Every "
+                    "deployed service must ship config/config.json + "
+                    "config/config.schema.json and declare "
+                    "robotsix.deploy.config-target in "
+                    "deploy/docker-compose.yml."
+                ),
+            },
+        )
+
+    # --- Namespace volume names ---
+    derived_spec = _namespace_spec_volumes(derived_spec, body.name)
+
+    # --- Build ComponentConfig from DerivedSpec ---
+    comp_cfg = _build_component_config_from_spec(derived_spec, git_url=body.repo)
+
+    # Persist the config so future deploys (and sibling fan-out,
+    # dashboard, etc.) can reference it.
+    await component_config_store.put(comp_cfg)
+    # Register in the in-memory loader so the gateway can route to it.
+    registry.register(comp_cfg)
+
+    # --- Write merged config.json to the config volume ---
+    if derived_spec.config_schema is not None:
+        config_yaml_store = await _get_config_yaml_store(request)
+        await config_yaml_store.save_template(body.name, derived_spec.config_schema)
+        # Use example values as base when present; otherwise empty.
+        base_values: dict[str, object] = {}
+        if derived_spec.config_example_values is not None:
+            base_values = dict(derived_spec.config_example_values)
+        try:
+            merged_config = _merge_config(derived_spec.config_schema, base_values, {})
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": str(exc)},
+            )
+        _validate_config_or_422(derived_spec.config_schema, merged_config)
+        if derived_spec.config_volume is not None:
+            try:
+                await backend.write_config_to_volume(
+                    derived_spec.config_volume, merged_config
+                )
+                await config_yaml_store.update_current_and_hash(
+                    body.name,
+                    merged_config,
+                    _canonical_hash(merged_config),
+                )
+            except Exception:
+                await config_yaml_store.delete(body.name)
+                raise
+        else:
+            await config_yaml_store.update_current(body.name, merged_config)
+
+    # --- Seed EnvStore from the repo's env contract ---
+    env_store = await _get_env_store(request)
+    existing_env = await env_store.get(body.name)
+    if not existing_env.env and not existing_env.secret_tokens:
+        seeded_env = {k: v for k, v in derived_spec.env.items() if v}
+        seeded_secrets = {k: "" for k, v in derived_spec.env.items() if not v}
+        if seeded_env or seeded_secrets:
+            await env_store.upsert(body.name, seeded_env, seeded_secrets)
+
+    return comp_cfg
+
+
 @router.post(
     "/chat/deploy",
     response_model=ChatAgentDeployResponse,
@@ -343,21 +515,6 @@ async def chat_deploy(
     Synchronous — waits for the deploy to complete before returning.
     Rate-limited to one deploy per 300 seconds per component.
     """
-    import asyncio
-    import json
-
-    from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
-    from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
-    from robotsix_central_deploy.lifecycle.deps.seed import (
-        _namespace_spec_volumes,
-        _build_component_config_from_spec,
-        _validate_config_or_422,
-    )
-    from robotsix_central_deploy.lifecycle._config_utils import (
-        _canonical_hash,
-        _merge_config,
-    )
-
     lifecycle_config = await _get_config(request)
     if body.name not in lifecycle_config.chat_agent_deployable_components:
         raise HTTPException(
@@ -370,153 +527,14 @@ async def chat_deploy(
     # Resolve the deploy contract when no persisted config exists.
     comp_cfg = component_config_store.get(body.name)
     if comp_cfg is None:
-        # --- Fetch repo files (clone is blocking → run in executor) ---
-        loop = asyncio.get_running_loop()
-
-        github_token: str | None = None
-        try:
-            from .onboard import (
-                _parse_github_owner_repo as _parse_gh,
-            )
-
-            parsed = _parse_gh(body.repo)
-        except ImportError:
-            parsed = None
-
-        if (
-            parsed is not None
-            and lifecycle_config.github_app_id.get_secret_value()
-            and lifecycle_config.github_app_private_key.get_secret_value()
-            and lifecycle_config.installation_id.get_secret_value()
-        ):
-            owner, repo_name = parsed
-            try:
-                from robotsix_central_deploy.lifecycle.github_app import (
-                    get_installation_token_sync,
-                )
-
-                github_token = await loop.run_in_executor(
-                    None,
-                    get_installation_token_sync,
-                    lifecycle_config.github_app_id.get_secret_value(),
-                    lifecycle_config.github_app_private_key.get_secret_value(),
-                    lifecycle_config.installation_id.get_secret_value(),
-                )
-            except Exception:
-                safe_owner = owner.replace("\n", "_").replace("\r", "_")
-                safe_repo = repo_name.replace("\n", "_").replace("\r", "_")
-                logger.warning(
-                    "Cannot get GitHub App installation token for %s/%s; "
-                    "cloning unauthenticated (public repos only)",
-                    safe_owner,
-                    safe_repo,
-                )
-
-        try:
-            repo_files = await loop.run_in_executor(
-                None, fetch_repo_files, body.repo, 30, github_token
-            )
-        except FetchError as e:
-            raise HTTPException(status_code=422, detail={"error": str(e)})
-
-        # --- Parse deploy/docker-compose.yml ---
-        try:
-            derived_spec = parse_compose(repo_files.compose_bytes, body.name, body.repo)
-        except ParseError as e:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": "compose validation failed",
-                    "violations": e.violations,
-                },
-            )
-
-        # --- Parse config/config.schema.json if present ---
-        if repo_files.config_schema_json is not None:
-            try:
-                derived_spec.config_schema = json.loads(repo_files.config_schema_json)
-            except json.JSONDecodeError as exc:
-                raise HTTPException(
-                    status_code=422,
-                    detail={
-                        "error": (
-                            f"config/config.schema.json is not valid JSON: {exc}"
-                        ),
-                    },
-                )
-        else:
-            derived_spec.config_schema = None
-
-        # --- Hard precondition: config contract must be satisfied ---
-        if derived_spec.config_schema is None or derived_spec.config_volume is None:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": (
-                        "Repo does not satisfy the robotsix config standard "
-                        "(robotsix-standards/docs/config-standard.md).  Every "
-                        "deployed service must ship config/config.json + "
-                        "config/config.schema.json and declare "
-                        "robotsix.deploy.config-target in "
-                        "deploy/docker-compose.yml."
-                    ),
-                },
-            )
-
-        # --- Namespace volume names ---
-        derived_spec = _namespace_spec_volumes(derived_spec, body.name)
-
-        # --- Build ComponentConfig from DerivedSpec ---
-        comp_cfg = _build_component_config_from_spec(derived_spec, git_url=body.repo)
-
-        # Persist the config so future deploys (and sibling fan-out,
-        # dashboard, etc.) can reference it.
-        await component_config_store.put(comp_cfg)
-        # Register in the in-memory loader so the gateway can route to it.
-        registry.register(comp_cfg)
-
-        # --- Write merged config.json to the config volume ---
-        if derived_spec.config_schema is not None:
-            config_yaml_store = await _get_config_yaml_store(request)
-            await config_yaml_store.save_template(body.name, derived_spec.config_schema)
-            # Use example values as base when present; otherwise empty.
-            base_values: dict[str, object] = {}
-            if derived_spec.config_example_values is not None:
-                base_values = dict(derived_spec.config_example_values)
-            try:
-                merged_config = _merge_config(
-                    derived_spec.config_schema, base_values, {}
-                )
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=422,
-                    detail={"error": str(exc)},
-                )
-            _validate_config_or_422(derived_spec.config_schema, merged_config)
-            if derived_spec.config_volume is not None:
-                try:
-                    await backend.write_config_to_volume(
-                        derived_spec.config_volume, merged_config
-                    )
-                    await config_yaml_store.update_current_and_hash(
-                        body.name,
-                        merged_config,
-                        _canonical_hash(merged_config),
-                    )
-                except Exception:
-                    await config_yaml_store.delete(body.name)
-                    raise
-            else:
-                await config_yaml_store.update_current(body.name, merged_config)
-
-        # --- Seed EnvStore from the repo's env contract ---
-        env_store = await _get_env_store(request)
-        existing_env = await env_store.get(body.name)
-        if not existing_env.env and not existing_env.secret_tokens:
-            seeded_env = {k: v for k, v in derived_spec.env.items() if v}
-            seeded_secrets = {k: "" for k, v in derived_spec.env.items() if not v}
-            if seeded_env or seeded_secrets:
-                await env_store.upsert(body.name, seeded_env, seeded_secrets)
+        comp_cfg = await _resolve_deploy_contract(
+            body,
+            request,
+            lifecycle_config,
+            component_config_store,
+            registry,
+            backend,
+        )
 
     # --- Merge env overrides and secrets ---
     env_store = await _get_env_store(request)

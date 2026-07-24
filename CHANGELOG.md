@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Extract `_resolve_deploy_contract` helper from `chat_deploy` in `chat_services.py`, moving contract-resolution logic (~130 lines) into a standalone async function for improved testability and readability.
 - Fix unreadable warning banner text in the Add Component dialog: port-collision and deploy-warning boxes now use dark amber text (`#92400e`) on the light yellow background, meeting WCAG AA contrast (~5.3:1) in dark theme.
 - Added `POST /chat/disk/reclaim` — chat-agent-allowlisted endpoint to prune
   dangling Docker images and/or reclaimable build cache.  Returns bytes
