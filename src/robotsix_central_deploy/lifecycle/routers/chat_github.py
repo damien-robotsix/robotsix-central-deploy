@@ -14,13 +14,14 @@ App installation tokens cannot create repositories under a personal
 account.
 
 Reads need no audit/confirmation gate. Repo update, security-features
-toggle, repo creation, review submission, and review dismissal are genuine
-mutations, so all are audit-logged (mirroring :mod:`.chat`'s
-config/restart/update endpoints) and — per the ``github`` skill's
-documented safety rule — expected to only be called after the chat agent
-has obtained explicit user confirmation in-conversation (a server-side
-confirmation gate isn't possible here; the skill text is the enforcement
-point, same as the config/restart/update endpoints in :mod:`.chat`).
+toggle, repo creation, review submission, review dismissal, and workflow
+dispatch are genuine mutations, so all are audit-logged (mirroring
+:mod:`.chat`'s config/restart/update endpoints) and — per the ``github``
+skill's documented safety rule — expected to only be called after the chat
+agent has obtained explicit user confirmation in-conversation (a
+server-side confirmation gate isn't possible here; the skill text is the
+enforcement point, same as the config/restart/update endpoints in
+:mod:`.chat`).
 
 Router aggregation is done in ``app.py``, which imports each domain
 router directly — that avoids a top-level import cycle between this

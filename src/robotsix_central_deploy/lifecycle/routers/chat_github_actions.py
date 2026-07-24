@@ -9,6 +9,8 @@ Exposes:
   read default workflow permissions
 - ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
   set default workflow permissions
+- ``POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches`` —
+  trigger a workflow via ``workflow_dispatch`` (write; App installation token)
 """
 
 from __future__ import annotations
@@ -29,7 +31,11 @@ from ..deps import _get_chat_agent_audit_store, _get_config
 from ..github_app import get_installation_token_sync
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 
-from ._github_common import _call_github_endpoint, _reraise_github_errors
+from ._github_common import (
+    _call_github_endpoint,
+    _get_client_or_503,
+    _reraise_github_errors,
+)
 
 router = APIRouter(tags=["chat-github"])
 
@@ -243,6 +249,124 @@ async def set_workflow_permissions(
             ),
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches
+# — trigger a workflow via workflow_dispatch (write; App installation token)
+# ---------------------------------------------------------------------------
+
+
+class WorkflowDispatchRequest(BaseModel):
+    """Body for ``POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches``.
+
+    *ref* is required (the branch or tag to run the workflow against).
+    *inputs* are optional and passed through to GitHub's workflow_dispatch
+    API unchanged.
+    """
+
+    ref: str = Field(
+        ...,
+        description="The git reference (branch or tag) to run the workflow against.",
+    )
+    inputs: dict[str, str] | None = Field(
+        None,
+        description="Optional workflow input key/value pairs "
+        "(passed through to GitHub's workflow_dispatch API).",
+    )
+
+
+def _dispatch_workflow_sync(
+    client: Any,
+    owner: str,
+    repo: str,
+    workflow_file: str,
+    body: WorkflowDispatchRequest,
+) -> dict[str, Any]:
+    input_payload = body.inputs if body.inputs else {}
+    client.requester.requestJsonAndCheck(
+        "POST",
+        f"/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches",
+        input={"ref": body.ref, "inputs": input_payload},
+    )
+    return {"dispatched": True, "workflow": workflow_file, "ref": body.ref}
+
+
+@router.post(
+    "/chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches",
+    summary="Trigger a GitHub Actions workflow via workflow_dispatch",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {
+            "description": "Repository or workflow not found, "
+            "or workflow has no workflow_dispatch trigger"
+        },
+        422: {"description": "GitHub rejected the request (bad ref or inputs)"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def dispatch_workflow(
+    owner: str,
+    repo: str,
+    workflow_file: str,
+    body: WorkflowDispatchRequest,
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Trigger *owner*/*repo*'s workflow *workflow_file* via
+    ``workflow_dispatch`` on the given *ref*, with optional *inputs*.
+
+    This is a **real mutation**: the chat agent must confirm the repo,
+    workflow file, ref, and inputs with the user in-conversation before
+    calling this endpoint (same confirmation pattern as repo creation).
+
+    Returns 404 when the repo or workflow isn't found, or when the
+    workflow file doesn't have a ``workflow_dispatch`` trigger.
+    Returns 422 when GitHub rejects the request (e.g. invalid ref,
+    missing required inputs, or inputs with the wrong type).
+    """
+    from github import GithubException, UnknownObjectException
+    from fastapi import HTTPException, status
+
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(
+            _dispatch_workflow_sync, client, owner, repo, workflow_file, body
+        )
+    except UnknownObjectException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Not found: {owner}/{repo} workflow '{workflow_file}' "
+                "(or the workflow has no workflow_dispatch trigger)"
+            ),
+        )
+    except GithubException as exc:
+        http_status = exc.status if exc.status else 502
+        if http_status == 422:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"GitHub rejected the dispatch request: {exc.data}",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"GitHub API error: {exc}",
+        )
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="dispatch_workflow",
+            key=f"{owner}/{repo}/{workflow_file}",
+            new_value={"ref": body.ref, "inputs": body.inputs},
+            detail=(
+                f"Dispatched workflow '{workflow_file}' on {owner}/{repo} "
+                f"at ref={body.ref}"
+            ),
+        )
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------

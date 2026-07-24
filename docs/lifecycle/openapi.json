@@ -3411,6 +3411,81 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Trigger a GitHub Actions workflow via workflow_dispatch",
+        "description": "Trigger *owner*/*repo*'s workflow *workflow_file* via\n``workflow_dispatch`` on the given *ref*, with optional *inputs*.\n\nThis is a **real mutation**: the chat agent must confirm the repo,\nworkflow file, ref, and inputs with the user in-conversation before\ncalling this endpoint (same confirmation pattern as repo creation).\n\nReturns 404 when the repo or workflow isn't found, or when the\nworkflow file doesn't have a ``workflow_dispatch`` trigger.\nReturns 422 when GitHub rejects the request (e.g. invalid ref,\nmissing required inputs, or inputs with the wrong type).",
+        "operationId": "dispatch_workflow_chat_github_repos__owner___repo__actions_workflows__workflow_file__dispatches_post",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "workflow_file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workflow File"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDispatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Dispatch Workflow Chat Github Repos  Owner   Repo  Actions Workflows  Workflow File  Dispatches Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository or workflow not found, or workflow has no workflow_dispatch trigger"
+          },
+          "422": {
+            "description": "GitHub rejected the request (bad ref or inputs)"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs": {
       "get": {
         "tags": [
@@ -8699,6 +8774,36 @@
         ],
         "title": "VolumeStat",
         "description": "Size of a single Docker volume (from ``docker system df``)."
+      },
+      "WorkflowDispatchRequest": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref",
+            "description": "The git reference (branch or tag) to run the workflow against."
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs",
+            "description": "Optional workflow input key/value pairs (passed through to GitHub's workflow_dispatch API)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref"
+        ],
+        "title": "WorkflowDispatchRequest",
+        "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches``.\n\n*ref* is required (the branch or tag to run the workflow against).\n*inputs* are optional and passed through to GitHub's workflow_dispatch\nAPI unchanged."
       },
       "WorkflowPermissionsRequest": {
         "properties": {
