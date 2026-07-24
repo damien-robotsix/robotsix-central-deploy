@@ -61,6 +61,7 @@ jobs:
         run: uv sync --frozen
         env:
           UV_PROJECT_ENVIRONMENT: system
+          UV_MALWARE_CHECK: '1'
 
       - name: Check changelog fragment
         if: github.event_name == 'pull_request'
