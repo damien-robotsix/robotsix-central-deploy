@@ -16,6 +16,12 @@ __all__ = ["FetchError", "RepoFiles", "fetch_compose_bytes", "fetch_repo_files"]
 
 _LABEL_CONFIG_TEMPLATE = "robotsix.deploy.config-template"
 
+# Per robotsix-standards/docs/config-standard.md:
+#   https://damien-robotsix.github.io/robotsix-standards/config-standard/
+_STANDARD_CONFIG_FILE = "config/config.json"
+_STANDARD_CONFIG_SCHEMA_FILE = "config/config.schema.json"
+_STANDARD_CONFIG_EXAMPLE_FILE = "config/config.example.json"
+
 
 @dataclass
 class RepoFiles:
@@ -29,7 +35,10 @@ def fetch_repo_files(
     git_url: str, timeout_sec: int = 30, github_token: str | None = None
 ) -> RepoFiles:
     """Clone a repo shallowly and return the bytes of deploy/docker-compose.yml
-    and (if present) config/config.json.
+    and (if present) the config files at the standardized paths defined by
+    the robotsix-standards config-standard convention
+    (``config/config.json``, ``config/config.schema.json``,
+    ``config/config.example.json``).
 
     The repo root ``docker-compose.yml`` (dev compose) is **ignored**.
     Only ``deploy/docker-compose.yml`` is read — this is the deploy-
@@ -90,16 +99,16 @@ def fetch_repo_files(
             )
         compose_bytes = compose_path.read_bytes()
 
-        config_path = Path(tmpdir) / "config" / "config.json"
+        config_path = Path(tmpdir) / _STANDARD_CONFIG_FILE
         config_json = config_path.read_bytes() if config_path.is_file() else None
 
-        schema_path = Path(tmpdir) / "config" / "config.schema.json"
+        schema_path = Path(tmpdir) / _STANDARD_CONFIG_SCHEMA_FILE
         config_schema_json = schema_path.read_bytes() if schema_path.is_file() else None
 
         config_json_template: bytes | None = None
         if config_json is None:
             # Strategy A — adjacent convention
-            example_path = Path(tmpdir) / "config" / "config.example.json"
+            example_path = Path(tmpdir) / _STANDARD_CONFIG_EXAMPLE_FILE
             if example_path.is_file():
                 config_json_template = example_path.read_bytes()
             else:

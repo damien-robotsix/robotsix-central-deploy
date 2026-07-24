@@ -297,19 +297,33 @@ async def onboard_preflight(
     else:
         derived_spec.config_schema = None
 
-    # Parse config/config.example.json (or a committed config/config.json) into
-    # the base "deploy default" values. These are layered UNDER the user's form
-    # input and OVER the schema defaults during /onboard/confirm, so a field
-    # whose example value differs from its schema default deploys with the
-    # example value. Absent/invalid JSON → None (non-fatal).
-    example_bytes = repo_files.config_json or repo_files.config_json_template
-    if example_bytes is not None:
+    # Resolve the repo default config per the robotsix-standards config-standard
+    # convention (robotsix-standards/docs/config-standard.md). The primary
+    # default is config/config.json; fall back to config/config.example.json
+    # or the robotsix.deploy.config-template label when absent.
+    if repo_files.config_json is not None:
         try:
-            parsed_example = json.loads(example_bytes)
+            parsed_example = json.loads(repo_files.config_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": (f"config/config.json is not valid JSON: {exc}"),
+                },
+            )
+        if not isinstance(parsed_example, dict):
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "config/config.json must be a top-level JSON object"},
+            )
+        derived_spec.config_example_values = parsed_example
+    elif repo_files.config_json_template is not None:
+        try:
+            parsed_template = json.loads(repo_files.config_json_template)
         except json.JSONDecodeError:
-            parsed_example = None
+            parsed_template = None
         derived_spec.config_example_values = (
-            parsed_example if isinstance(parsed_example, dict) else None
+            parsed_template if isinstance(parsed_template, dict) else None
         )
     else:
         derived_spec.config_example_values = None
@@ -682,9 +696,11 @@ async def onboard_confirm(
     # config.json to the real config volume so the container starts healthy.
     if spec.config_schema is not None:
         await config_yaml_store.save_template(spec.name, spec.config_schema)
-        # Base layer: the repo's config.example.json values ("deploy defaults"),
-        # with secret fields stripped so example placeholders never inject a
-        # secret. Precedence: user form values > example values > schema default.
+        # Base layer: the repo's config/config.json values ("deploy defaults"),
+        # per the robotsix-standards config-standard convention
+        # (robotsix-standards/docs/config-standard.md). Secret fields are
+        # stripped so example placeholders never inject a secret.
+        # Precedence: user form values > deploy defaults > schema default.
         base_values = _strip_secret_values(
             spec.config_schema, spec.config_example_values or {}
         )

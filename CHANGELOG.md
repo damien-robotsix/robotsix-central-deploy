@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Config default resolution now cites the **robotsix-standards config-standard** convention. The standardized repo paths (`config/config.json`, `config/config.schema.json`, `config/config.example.json`) are defined as module-level constants in `onboard/fetcher.py` referencing `robotsix-standards/docs/config-standard.md`, replacing ad-hoc hardcoded strings. Invalid JSON in a committed `config/config.json` now surfaces as HTTP 422 during preflight instead of being silently swallowed.
 - Adopted `robotsix-http.RetryClient` to consolidate scattered `httpx.AsyncClient` instantiations, adding automatic retry with exponential backoff across lifecycle, caretaker, and registry-check modules. Created shared `retry_client_context` / `wrap_retry_client` factory in `_http.py`. Gateway proxy (`proxy.py`) and synchronous GH Actions log fetcher (`chat_github_actions.py`) remain unchanged — streaming and sync contexts are out of scope for retry wrapping.
 - Fix `/disk` `dangling_images_bytes` metric to use the same Docker API source (`images.list(dangling=True)`) as the reclaim endpoint's `prune_images()`, so the post-reclaim snapshot accurately reflects what remains instead of showing unreclaimable intermediate layers.
 - Add `ghcr_pull_token` config field (config.json / config schema) for authenticating private GHCR image pulls with a static PAT. The token is preferred over the GitHub App installation token for ``ghcr.io`` pulls when set.
