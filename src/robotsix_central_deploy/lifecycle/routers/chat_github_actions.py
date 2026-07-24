@@ -3,6 +3,8 @@
 Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs`` — list recent runs
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}`` — a single run
+- ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/jobs`` —
+  list jobs for a run with step names, conclusions, and timestamps
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs`` —
   workflow run logs (concatenated per-job text)
 - ``GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
@@ -83,6 +85,45 @@ def _get_run_sync(client: Any, owner: str, repo: str, run_id: int) -> dict[str, 
     repo_obj = client.get_repo(f"{owner}/{repo}")
     run = repo_obj.get_workflow_run(run_id)
     return _run_to_dict(run)
+
+
+def _step_to_dict(step: Any) -> dict[str, Any]:
+    """Flatten a PyGithub ``WorkflowStep`` to the fields the chat agent needs."""
+    return {
+        "name": step.name,
+        "status": step.status,
+        "conclusion": step.conclusion,
+        "number": step.number,
+        "started_at": step.started_at.isoformat() if step.started_at else None,
+        "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+    }
+
+
+def _job_to_dict(job: Any) -> dict[str, Any]:
+    """Flatten a PyGithub ``WorkflowJob`` to the fields the chat agent needs."""
+    return {
+        "id": job.id,
+        "name": job.name,
+        "status": job.status,
+        "conclusion": job.conclusion,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "html_url": job.html_url,
+        "steps": [_step_to_dict(s) for s in job.steps],
+    }
+
+
+def _list_jobs_sync(
+    client: Any,
+    owner: str,
+    repo: str,
+    run_id: int,
+    per_page: int,
+) -> list[dict[str, Any]]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    run = repo_obj.get_workflow_run(run_id)
+    limit = min(per_page, 100)
+    return [_job_to_dict(job) for job in itertools.islice(run.jobs(), limit)]
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +224,38 @@ async def get_workflow_run(
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s workflow run *run_id* (status, conclusion, URL)."""
     return await _call_github_endpoint(config, owner, repo, _get_run_sync, run_id)
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+    summary="List jobs for a GitHub Actions workflow run",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Run (or repository) not found"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def list_workflow_run_jobs(
+    owner: str,
+    repo: str,
+    run_id: int,
+    per_page: int = Query(
+        30,
+        description="Maximum number of jobs to return (capped at 100).",
+        ge=1,
+        le=100,
+    ),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> list[dict[str, Any]]:
+    """List jobs for *owner*/*repo*'s workflow run *run_id*, with step
+    names, conclusions, and timestamps.
+
+    *per_page* is capped at 100 (GitHub's own page-size ceiling).
+    """
+    return await _call_github_endpoint(
+        config, owner, repo, _list_jobs_sync, run_id, per_page
+    )
 
 
 @router.get(

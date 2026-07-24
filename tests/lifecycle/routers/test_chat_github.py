@@ -364,6 +364,156 @@ class TestGetWorkflowRun:
         assert resp.status_code == 404
 
 
+class TestListWorkflowRunJobs:
+    """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/jobs``."""
+
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get("/chat/github/repos/acme/widget/actions/runs/1/jobs")
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/1/jobs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_lists_jobs(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        class _FakeStep:
+            def __init__(self, name, status, conclusion, number):
+                self.name = name
+                self.status = status
+                self.conclusion = conclusion
+                self.number = number
+                self.started_at = datetime(2026, 7, 7, 12, 0, 10, tzinfo=timezone.utc)
+                self.completed_at = datetime(2026, 7, 7, 12, 0, 30, tzinfo=timezone.utc)
+
+        class _FakeJob:
+            def __init__(self, job_id, name, status, conclusion, steps):
+                self.id = job_id
+                self.name = name
+                self.status = status
+                self.conclusion = conclusion
+                self.started_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=timezone.utc)
+                self.completed_at = datetime(2026, 7, 7, 12, 1, 0, tzinfo=timezone.utc)
+                self.html_url = f"https://github.com/acme/widget/runs/1/jobs/{job_id}"
+                self.steps = steps
+
+        jobs = [
+            _FakeJob(
+                101,
+                "build",
+                "completed",
+                "success",
+                [
+                    _FakeStep("Checkout", "completed", "success", 1),
+                    _FakeStep("Build", "completed", "success", 2),
+                ],
+            ),
+            _FakeJob(
+                102,
+                "test",
+                "completed",
+                "failure",
+                [
+                    _FakeStep("Checkout", "completed", "success", 1),
+                    _FakeStep("Test", "completed", "failure", 2),
+                ],
+            ),
+        ]
+
+        class _FakeJobsPaginated:
+            def __init__(self, items):
+                self._items = list(items)
+
+            def __iter__(self):
+                return iter(self._items)
+
+            def __getitem__(self, key):
+                if (
+                    isinstance(key, slice)
+                    and key.stop is not None
+                    and key.stop > len(self._items)
+                ):
+                    raise IndexError("list index out of range")
+                return self._items[key]
+
+        fake_run = MagicMock()
+        fake_run.jobs.return_value = _FakeJobsPaginated(jobs)
+
+        repo_obj = MagicMock()
+        repo_obj.get_workflow_run.return_value = fake_run
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/1/jobs",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["id"] == 101
+        assert data[0]["name"] == "build"
+        assert data[0]["status"] == "completed"
+        assert data[0]["conclusion"] == "success"
+        assert data[0]["html_url"] == ("https://github.com/acme/widget/runs/1/jobs/101")
+        assert len(data[0]["steps"]) == 2
+        assert data[0]["steps"][0]["name"] == "Checkout"
+        assert data[0]["steps"][0]["status"] == "completed"
+        assert data[0]["steps"][0]["conclusion"] == "success"
+        assert data[0]["steps"][0]["number"] == 1
+        assert data[1]["id"] == 102
+        assert data[1]["conclusion"] == "failure"
+
+        repo_obj.get_workflow_run.assert_called_once_with(1)
+
+    async def test_run_not_found_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from github import UnknownObjectException
+
+        repo_obj = MagicMock()
+        repo_obj.get_workflow_run.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs/9999/jobs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+
 class TestGetWorkflowRunLogs:
     """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs``."""
 
