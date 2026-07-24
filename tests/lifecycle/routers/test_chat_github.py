@@ -58,8 +58,10 @@ class _FakePaginatedList:
         return iter(self._items)
 
     def __getitem__(self, key):
-        if isinstance(key, slice) and key.stop is not None and key.stop > len(
-            self._items
+        if (
+            isinstance(key, slice)
+            and key.stop is not None
+            and key.stop > len(self._items)
         ):
             raise IndexError("list index out of range")
         return self._items[key]
