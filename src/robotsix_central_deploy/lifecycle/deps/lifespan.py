@@ -59,6 +59,7 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
             github_app_id=cfg.github_app_id.get_secret_value(),
             github_app_private_key=cfg.github_app_private_key.get_secret_value(),
             installation_id=cfg.installation_id.get_secret_value(),
+            ghcr_pull_token=cfg.ghcr_pull_token.get_secret_value(),
         )
     if cfg.execution_backend == ExecutionBackendType.DOCKER:
         return DockerBackend()

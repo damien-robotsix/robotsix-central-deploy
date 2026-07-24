@@ -69,6 +69,7 @@ class DockerSdkBackend(ExecutionBackend):
         github_app_id: str = "",
         github_app_private_key: str = "",
         installation_id: str = "",
+        ghcr_pull_token: str = "",
     ) -> None:
         import docker
 
@@ -82,6 +83,7 @@ class DockerSdkBackend(ExecutionBackend):
             and self._github_app_private_key
             and self._installation_id
         )
+        self._ghcr_pull_token = ghcr_pull_token.strip()
         self._volume = VolumeOps(self._client)
 
     # -- helpers ------------------------------------------------------------
@@ -520,14 +522,24 @@ class DockerSdkBackend(ExecutionBackend):
     async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
         """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
 
-        Only ``ghcr.io`` images are authenticated.  When GitHub App
-        credentials are configured, a fresh installation token is minted
-        via ``robotsix-github-auth`` for each pull; anonymous pull is used
-        when the App is not configured (public images only — a 401 on a
-        private image surfaces a diagnostic error).
+        Only ``ghcr.io`` images are authenticated.  Auth priority:
+        1. Static ``ghcr_pull_token`` (PAT) — configured via the config UI.
+        2. GitHub App installation token (minted via ``robotsix-github-auth``).
+        3. Anonymous pull (public images only — a 401 on a private image
+           surfaces a diagnostic error).
         """
         if _image_registry_host(image_ref) != "ghcr.io":
             return None
+
+        # 1. Static GHCR PAT (ghcr_pull_token config field)
+        if self._ghcr_pull_token:
+            return {
+                "username": "robot",
+                "password": self._ghcr_pull_token,
+                "serveraddress": "ghcr.io",
+            }
+
+        # 2. GitHub App installation token
         if not self._github_app_configured:
             return None
         if not _HAS_GITHUB_AUTH:
@@ -584,9 +596,9 @@ class DockerSdkBackend(ExecutionBackend):
             ):
                 raise RuntimeError(
                     f"Image pull failed for {image_ref!r}: received 401 Unauthorized "
-                    "from ghcr.io. Configure github_app_id, github_app_private_key, "
-                    "and installation_id in config/config.json to authenticate with "
-                    "a GitHub App installation token."
+                    "from ghcr.io. Configure ghcr_pull_token (a read:packages PAT) "
+                    "or github_app_id / github_app_private_key / installation_id "
+                    "in config/config.json to authenticate."
                 ) from exc
             raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
         # Derive manifest digest from RepoDigests (comparable to registry

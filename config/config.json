@@ -69,6 +69,7 @@
     }
   ],
   "github_repo_create_token": "",
+  "ghcr_pull_token": "",
   "ovh_sftp": {
     "host": "",
     "port": 22,
