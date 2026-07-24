@@ -1362,7 +1362,7 @@
           "services"
         ],
         "summary": "Get config.json schema and current values for a service",
-        "description": "Return the config.json schema and current masked values for a service.\n\nRaises 404 if the service has no config schema.",
+        "description": "Return the config.json schema and current masked values for a service.\n\nRaises 404 if the service has no config schema.\n\nThe returned schema is annotated with ``x-deploy-plane`` on every\nproperty so the UI can distinguish deploy-plane keys (managed here)\nfrom component-owned keys (managed in the component's own Settings\npanel).",
         "operationId": "get_service_config_services__name__config_get",
         "parameters": [
           {
@@ -6531,6 +6531,18 @@
             "title": "Config Assist Seeds",
             "description": "ConfigAssistSeed entries registered for this component",
             "default": []
+          },
+          "component_settings_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Settings Url",
+            "description": "URL to the component's own Settings/Config panel when the gateway is configured; None otherwise.  Component-owned keys should be edited there, not in the deploy config form."
           }
         },
         "type": "object",

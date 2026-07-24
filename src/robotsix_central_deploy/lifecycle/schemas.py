@@ -339,6 +339,14 @@ class ConfigResponse(BaseModel):
         default=[],
         description="ConfigAssistSeed entries registered for this component",
     )
+    component_settings_url: str | None = Field(
+        default=None,
+        description=(
+            "URL to the component's own Settings/Config panel when the gateway "
+            "is configured; None otherwise.  Component-owned keys should be "
+            "edited there, not in the deploy config form."
+        ),
+    )
 
 
 class ConfigUpdate(BaseModel):
