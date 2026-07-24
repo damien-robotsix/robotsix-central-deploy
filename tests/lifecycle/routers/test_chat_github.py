@@ -3073,3 +3073,228 @@ class TestRelaxMergeGate:
         fake_branch.edit_required_pull_request_reviews.assert_called_once_with(
             required_approving_review_count=0
         )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchWorkflow:
+    @pytest.fixture(autouse=True)
+    def _clear_audit(self):
+        """Ensure audit store is clean before each test."""
+        server_mod.app.state.chat_agent_audit_store._entries = []
+        yield
+
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy.yml/dispatches",
+            json={"ref": "main"},
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy.yml/dispatches",
+            json={"ref": "main"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_dispatches_workflow(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {},
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy-ovh.yml/dispatches",
+            json={"ref": "main", "inputs": {"environment": "production"}},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {
+            "dispatched": True,
+            "workflow": "deploy-ovh.yml",
+            "ref": "main",
+        }
+        fake_client.requester.requestJsonAndCheck.assert_called_once_with(
+            "POST",
+            "/repos/acme/widget/actions/workflows/deploy-ovh.yml/dispatches",
+            input={"ref": "main", "inputs": {"environment": "production"}},
+        )
+
+    async def test_dispatches_workflow_without_inputs(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {},
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy.yml/dispatches",
+            json={"ref": "main"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {
+            "dispatched": True,
+            "workflow": "deploy.yml",
+            "ref": "main",
+        }
+        fake_client.requester.requestJsonAndCheck.assert_called_once_with(
+            "POST",
+            "/repos/acme/widget/actions/workflows/deploy.yml/dispatches",
+            input={"ref": "main", "inputs": {}},
+        )
+
+    async def test_records_audit_entry(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
+            {"Content-Type": "application/json"},
+            {},
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy-ovh.yml/dispatches",
+            json={"ref": "main", "inputs": {"environment": "production"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].component == "github"
+        assert entries[0].action == "dispatch_workflow"
+        assert entries[0].key == "acme/widget/deploy-ovh.yml"
+        assert entries[0].new_value == {
+            "ref": "main",
+            "inputs": {"environment": "production"},
+        }
+
+    async def test_unknown_workflow_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from github import UnknownObjectException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.side_effect = UnknownObjectException(
+            404, data={"message": "Not Found"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/missing.yml/dispatches",
+            json={"ref": "main"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_github_rejects_returns_422(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from github import GithubException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.side_effect = GithubException(
+            422,
+            data={"message": "Workflow does not have a 'workflow_dispatch' trigger"},
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/no-dispatch.yml/dispatches",
+            json={"ref": "main"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_missing_ref_returns_422(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        enable_github_app,
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy.yml/dispatches",
+            json={"inputs": {"env": "prod"}},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
