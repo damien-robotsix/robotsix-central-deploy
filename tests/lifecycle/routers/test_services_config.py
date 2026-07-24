@@ -69,7 +69,11 @@ class TestGetServiceConfig:
         assert resp.status_code == 200
         data = resp.json()
         assert "schema" in data
-        assert data["schema"] == schema
+        # Schema is annotated with config-ownership metadata
+        assert data["schema"]["type"] == "object"
+        assert "host" in data["schema"]["properties"]
+        assert data["schema"]["properties"]["host"]["x-deploy-plane"] == "component"
+        assert data["schema"]["properties"]["password"]["x-deploy-plane"] == "component"
         assert "current" in data
         assert data["current"]["host"] == "0.0.0.0"
         assert data["current"]["password"] == "***"
@@ -91,7 +95,10 @@ class TestGetServiceConfig:
         resp = await client.get("/services/chat/config", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["schema"] == template
+        # Schema is annotated with config-ownership metadata
+        assert data["schema"]["type"] == "object"
+        assert "host" in data["schema"]["properties"]
+        assert data["schema"]["properties"]["host"]["x-deploy-plane"] == "component"
         # No current stored — current is masked template (with defaults)
         assert data["current"]["host"] == "localhost"
         assert data["current"]["port"] == 8080

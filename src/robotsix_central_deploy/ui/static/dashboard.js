@@ -1053,6 +1053,7 @@ let _configAssistCommand = null;   // string|null
 let _configAssistSeeds = [];       // {key, label}[]
 let _componentSuggestions = [];    // [{id, container_name, container_port}]
 let _configRawMode = false;
+let _configComponentSettingsUrl = null;  // string|null — link to component's own Settings panel
 
 function openConfigModal(name) {
   _configComponent = name;
@@ -1061,6 +1062,7 @@ function openConfigModal(name) {
   _configAssistSeeds = [];
   _componentSuggestions = [];
   _configRawMode = false;
+  _configComponentSettingsUrl = null;
   document.getElementById('config-modal-component').textContent = name;
   document.getElementById('config-modal-error').style.display = 'none';
   document.getElementById('config-form-body').innerHTML = '';
@@ -1073,11 +1075,13 @@ function openConfigModal(name) {
   if (advBar) advBar.classList.add('hidden');
   const advCheckbox = document.getElementById('config-advanced-checkbox');
   if (advCheckbox) advCheckbox.checked = false;
-  // Remove any stale drift banner / conflict panel
+  // Remove any stale drift banner / conflict panel / ownership banner
   const driftBanner = document.getElementById('config-drift-banner');
   if (driftBanner) driftBanner.remove();
   const conflictPanel = document.getElementById('config-drift-conflict');
   if (conflictPanel) conflictPanel.remove();
+  const ownershipBanner = document.getElementById('config-ownership-banner');
+  if (ownershipBanner) ownershipBanner.remove();
   // Re-enable form inputs and Save button in case they were disabled
   document.querySelector('#config-modal .btn-primary').disabled = false;
   document.getElementById('config-modal').style.display = 'flex';
@@ -1194,9 +1198,14 @@ async function fetchConfigSchema(name) {
     _configSchema = data.schema || {};
     _configAssistCommand = data.config_assist_command || null;
     _configAssistSeeds   = data.config_assist_seeds   || [];
+    _configComponentSettingsUrl = data.component_settings_url || null;
 
     // Fetch component URL suggestions in the background
     _fetchComponentSuggestions();
+
+    // Show config-ownership deprecation banner when component-owned
+    // keys are present and the component has its own Settings surface.
+    _showOwnershipBanner(name);
 
     // Drift detection
     const hasDrift = data.drift === true;
@@ -1429,6 +1438,9 @@ function _renderConfigNode(schema, current, prefix, container) {
       if (resolvedSchema.advanced) {
         section.classList.add('advanced-setting');
       }
+      if ((resolvedSchema['x-deploy-plane'] || 'component') === 'component') {
+        section.classList.add('component-owned');
+      }
       const sectionDesc = resolvedSchema.description
         ? _renderSectionDesc(resolvedSchema.description)
         : '';
@@ -1536,6 +1548,11 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
   if (propSchema.advanced) {
     div.classList.add('advanced-setting');
   }
+  // Config-ownership: component-owned keys get a deprecation class.
+  var isComponentOwned = (propSchema['x-deploy-plane'] || 'component') === 'component';
+  if (isComponentOwned) {
+    div.classList.add('component-owned');
+  }
   const displayVal = (currentVal !== undefined && currentVal !== null)
     ? currentVal
     : (defaultVal !== undefined && defaultVal !== null ? defaultVal : '');
@@ -1549,8 +1566,10 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     ? '<span class="env-help">' + renderInlineMarkdown(propSchema.description) + '</span>'
     : '';
 
-  let inputHtml;
-  let urlSuggestHtml = '';
+  var inputHtml;
+  var urlSuggestHtml = '';
+  // Disabled attribute for component-owned keys (read-only, deprecation path).
+  var disabledAttr = isComponentOwned ? ' disabled' : '';
   if (isSecret) {
     const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
     const placeholder = alreadySet
@@ -1559,7 +1578,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     const badgeClass = alreadySet ? 'badge-secret-set' : 'badge-secret-unset';
     const badgeText = alreadySet ? 'set' : 'not set';
     inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
-      value="" placeholder="${escAttr(placeholder)}" autocomplete="off">`;
+      value="" placeholder="${escAttr(placeholder)}" autocomplete="off"${disabledAttr}>`;
     div.innerHTML = `
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
@@ -1574,7 +1593,7 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
     // and the stored value is kept (prefer_existing_for_unset on the server).
     const jsonVal = JSON.stringify(displayVal === '' ? [] : displayVal);
     inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
-      data-json="1" value="${escAttr(jsonVal)}" spellcheck="false">`;
+      data-json="1" value="${escAttr(jsonVal)}" spellcheck="false"${disabledAttr}>`;
     div.innerHTML = `
       <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
       ${inputHtml}
@@ -1592,23 +1611,23 @@ function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isR
       const selected = String(v) === selectedVal;
       return `<option value="${escAttr(String(v))}"${selected ? ' selected' : ''}>${escHtml(String(v))}</option>`;
     }).join('');
-    inputHtml = `<select class="env-value" data-key="${escAttr(fullKey)}">${options}</select>`;
+    inputHtml = `<select class="env-value" data-key="${escAttr(fullKey)}"${disabledAttr}>${options}</select>`;
   } else if (propSchema.type === 'integer' || propSchema.type === 'number') {
     const step = propSchema.type === 'integer' ? ' step="1"' : '';
     inputHtml = `<input type="number" class="env-value" data-key="${escAttr(fullKey)}"
-      value="${escAttr(String(displayVal))}"${step}>`;
+      value="${escAttr(String(displayVal))}"${step}${disabledAttr}>`;
   } else if (propSchema.type === 'boolean') {
     const checked = displayVal === true || displayVal === 'true' || displayVal === 1 || displayVal === '1';
     inputHtml = `<input type="checkbox" class="env-value" data-key="${escAttr(fullKey)}"
-      ${checked ? 'checked' : ''}>`;
+      ${checked ? 'checked' : ''}${disabledAttr}>`;
   } else {
     if (/_url$/.test(labelKey) || /_base_url$/.test(labelKey)) {
       const prefix = labelKey.replace(/(_base)?_url$/, '');
       urlSuggestHtml = `<button type="button" class="btn-suggest" title="Suggest URL from peer components"
-        data-suggest-for="${escAttr(fullKey)}" data-suggest-prefix="${escAttr(prefix)}">🔍</button>`;
+        data-suggest-for="${escAttr(fullKey)}" data-suggest-prefix="${escAttr(prefix)}"${disabledAttr}>🔍</button>`;
     }
     inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
-      value="${escAttr(String(displayVal))}">`;
+      value="${escAttr(String(displayVal))}"${disabledAttr}>`;
   }
 
   div.innerHTML = `
@@ -1648,6 +1667,12 @@ function _collectFromProperties(schema, result, container, prefix) {
     const fullKey = prefix ? prefix + '.' + key : key;
 
     const resolvedSchema = _resolveRef(propSchema, defs);
+
+    // Skip component-owned keys — they belong to the component's own
+    // config surface, not the deploy plane.
+    if ((resolvedSchema['x-deploy-plane'] || 'component') === 'component') {
+      continue;
+    }
 
     if (resolvedSchema.type === 'object') {
       const nestedResult = {};
@@ -1882,6 +1907,48 @@ function showConfigModalError(msg) {
 
 function hideConfigModalError() {
   document.getElementById('config-modal-error').style.display = 'none';
+}
+
+// ── Config-ownership deprecation banner ──────────────────────
+
+function _showOwnershipBanner(name) {
+  // Remove any existing banner first
+  const existing = document.getElementById('config-ownership-banner');
+  if (existing) existing.remove();
+
+  // Check whether the schema has any component-owned keys
+  var hasComponentKeys = _schemaHasComponentKeys(_configSchema);
+  if (!hasComponentKeys) return;
+
+  var banner = document.createElement('div');
+  banner.id = 'config-ownership-banner';
+  banner.className = 'banner-warning';
+
+  var msg = '<strong>&#x26A0; Config ownership:</strong> ';
+  if (_configComponentSettingsUrl) {
+    msg += 'This component has its own <a href="' + escAttr(_configComponentSettingsUrl) +
+           '" target="_blank" rel="noopener">Settings panel</a>. ';
+  }
+  msg += 'Settings shown below are owned by the component and should be edited ' +
+         'through the component&rsquo;s own config surface. ' +
+         'Deploy-plane settings (image, mounts, ports, env, restart) are managed ' +
+         'elsewhere in this dashboard.';
+
+  banner.innerHTML = msg;
+  var formBody = document.getElementById('config-form-body');
+  formBody.parentNode.insertBefore(banner, formBody);
+}
+
+function _schemaHasComponentKeys(schema) {
+  if (!schema || !schema.properties) return false;
+  var defs = schema.$defs || {};
+  for (var key in schema.properties) {
+    var prop = schema.properties[key];
+    var resolved = prop.$ref ? _resolveRef(prop, defs) : prop;
+    if ((resolved['x-deploy-plane'] || 'component') === 'component') return true;
+    if (resolved.type === 'object' && _schemaHasComponentKeys(resolved)) return true;
+  }
+  return false;
 }
 
 // ── Drift detection helpers ──────────────────────────────────
