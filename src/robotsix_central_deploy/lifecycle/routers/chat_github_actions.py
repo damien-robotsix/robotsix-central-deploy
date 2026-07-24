@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import itertools
 import zipfile
 from typing import Any
 
@@ -65,7 +66,11 @@ def _list_runs_sync(
     if run_status:
         kwargs["status"] = run_status
     paginated = repo_obj.get_workflow_runs(**kwargs)
-    return [_run_to_dict(run) for run in paginated[: min(per_page, 100)]]
+    # Iterate with islice rather than slicing the PaginatedList directly:
+    # ``paginated[:n]`` raises IndexError when the repo has fewer than *n*
+    # runs (PyGithub's slice does not clamp to the available count).
+    limit = min(per_page, 100)
+    return [_run_to_dict(run) for run in itertools.islice(paginated, limit)]
 
 
 def _get_run_sync(client: Any, owner: str, repo: str, run_id: int) -> dict[str, Any]:
@@ -102,7 +107,7 @@ class WorkflowPermissionsRequest(BaseModel):
 def _get_workflow_permissions_sync(
     client: Any, owner: str, repo: str
 ) -> dict[str, Any]:
-    _headers, data = client._requester.requestJsonAndCheck(
+    _headers, data = client.requester.requestJsonAndCheck(
         "GET", f"/repos/{owner}/{repo}/actions/permissions/workflow"
     )
     return {
@@ -114,7 +119,7 @@ def _get_workflow_permissions_sync(
 def _set_workflow_permissions_sync(
     client: Any, owner: str, repo: str, body: WorkflowPermissionsRequest
 ) -> dict[str, Any]:
-    _headers, data = client._requester.requestJsonAndCheck(
+    _headers, data = client.requester.requestJsonAndCheck(
         "PUT",
         f"/repos/{owner}/{repo}/actions/permissions/workflow",
         input=body.model_dump(),

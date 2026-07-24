@@ -159,7 +159,7 @@ def _merge_via_raw_requester(
     When a repository requires a merge queue, PyGithub's ``pr.merge()``
     returns 405 ``Method Not Allowed``.  The raw GitHub API can still
     enqueue the PR via the same endpoint with a POST-join approach — the
-    ``_requester`` bypasses PyGithub's method-guard and lets the GitHub
+    ``requester`` bypasses PyGithub's method-guard and lets the GitHub
     API decide whether to enqueue or merge directly.
     """
     input_params: dict[str, Any] = {}
@@ -168,7 +168,7 @@ def _merge_via_raw_requester(
     if body.sha:
         input_params["sha"] = body.sha
 
-    headers, data = client._requester.requestJsonAndCheck(
+    headers, data = client.requester.requestJsonAndCheck(
         "PUT",
         f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
         input=input_params if input_params else None,
@@ -375,7 +375,7 @@ def _create_review_via_raw_requester(
     if body.body:
         input_params["body"] = body.body
 
-    _headers, data = client._requester.requestJsonAndCheck(
+    _headers, data = client.requester.requestJsonAndCheck(
         "POST",
         f"/repos/{owner}/{repo}/pulls/{pull_number}/reviews",
         input=input_params,
