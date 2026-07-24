@@ -7,6 +7,7 @@ from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
 )
+from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.onboard.models import DerivedSpec, SiblingDerivedSpec
 from robotsix_central_deploy.registry.models import (
     VolumeMount,
@@ -156,3 +157,99 @@ class TestNamespaceSpecVolumes:
 # ---------------------------------------------------------------------------
 # GET /chat/components
 # ---------------------------------------------------------------------------
+
+
+# ===================================================================
+# TestPreflightConfigJsonValidation
+# ===================================================================
+
+
+class TestPreflightConfigJsonValidation:
+    """Tests for config/config.json validation gates in ``onboard_preflight``.
+
+    Validates that invalid JSON bytes and non-dict top-level values
+    both raise HTTP 422 before the spec is returned to the caller.
+    """
+
+    @staticmethod
+    def _mock_parse_compose(repo_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
+        """Return a minimal DerivedSpec — config_json validation fires before
+        the config_schema/config_volume precondition check."""
+        return DerivedSpec.model_construct(
+            name="my-svc",
+            git_url="https://github.com/org/my-svc",
+            image="ghcr.io/org/my-svc:main",
+            ports=[],
+            volume_mounts=[],
+            env={},
+            claude_mount=False,
+            siblings=[],
+        )
+
+    async def test_invalid_json_in_config_json_returns_422(
+        self, client, auth_headers, monkeypatch
+    ):
+        """POST /onboard/preflight with invalid config/config.json bytes → 422."""
+        from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+        from robotsix_central_deploy.onboard import parser as parser_mod
+
+        monkeypatch.setattr(
+            fetcher_mod,
+            "fetch_repo_files",
+            lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+                compose_bytes=b"services:\n  app:\n    image: img",
+                config_schema_json=b'{"type": "object"}',
+                config_json=b"invalid { json",
+                config_json_template=None,
+            ),
+        )
+        monkeypatch.setattr(parser_mod, "parse_compose", self._mock_parse_compose)
+
+        resp = await client.post(
+            "/onboard/preflight",
+            json={
+                "name": "my-svc",
+                "git_url": "https://github.com/org/my-svc",
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 422
+        body = resp.json()
+        # The http_exception_handler copies dict detail into content and
+        # sets "detail": "" when not present, so the real error is in "error".
+        assert "not valid JSON" in body["error"]
+
+    async def test_non_dict_config_json_returns_422(
+        self, client, auth_headers, monkeypatch
+    ):
+        """POST /onboard/preflight with a JSON array as config/config.json → 422."""
+        from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+        from robotsix_central_deploy.onboard import parser as parser_mod
+
+        monkeypatch.setattr(
+            fetcher_mod,
+            "fetch_repo_files",
+            lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+                compose_bytes=b"services:\n  app:\n    image: img",
+                config_schema_json=b'{"type": "object"}',
+                config_json=b'["item1", "item2"]',
+                config_json_template=None,
+            ),
+        )
+        monkeypatch.setattr(parser_mod, "parse_compose", self._mock_parse_compose)
+
+        resp = await client.post(
+            "/onboard/preflight",
+            json={
+                "name": "my-svc",
+                "git_url": "https://github.com/org/my-svc",
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 422
+        body = resp.json()
+        # The http_exception_handler copies dict detail into content and
+        # sets "detail": "" when not present, so the real error is in "error".
+        assert "top-level JSON object" in body["error"]
