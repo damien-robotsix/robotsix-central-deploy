@@ -7,10 +7,16 @@ server-side and never exposes the App private key to the chat container —
 the chat agent only ever sees this server's own ``X-API-Key`` (same as the
 ``deploy`` component).
 
-The authenticated ``Github`` client is cached per ``installation_id``:
-a single installation token covers all repos under that installation, so
-one cached client suffices.  Token refresh is handled by minting a fresh
-token on every cache miss (the library returns short-lived tokens).
+The authenticated ``Github`` client is cached per ``installation_id``
+*together with the token it wraps*: a single installation token covers all
+repos under that installation.  The client wraps a **static** bearer token
+with no self-refresh, so :func:`get_github_client` re-mints on every call
+(``robotsix-github-auth`` keeps an in-process TTL cache and only performs
+network I/O once the token is within 5 minutes of expiry) and rebuilds the
+client whenever the token rotates.  Caching the client by ``installation_id``
+*alone* — as an earlier version did — pins the very first token for the
+process lifetime, so every request 401s "Bad credentials" the moment that
+token expires (~1h after startup).
 """
 
 from __future__ import annotations
@@ -29,7 +35,11 @@ except ImportError:  # pragma: no cover
 
 from .config import LifecycleConfig
 
-_client_cache: dict[str, object] = {}
+# Maps ``installation_id`` -> ``(token, client)``. The token is stored
+# alongside the client so a rotated token (the library re-mints ~5 min
+# before expiry) invalidates the stale client instead of being served
+# indefinitely.
+_client_cache: dict[str, tuple[str, object]] = {}
 
 
 class GitHubAppNotConfiguredError(RuntimeError):
@@ -109,18 +119,27 @@ async def get_github_client(config: LifecycleConfig, owner: str, repo: str) -> o
             "must all be set to use the github chat component."
         )
 
-    client = _client_cache.get(installation_id)
-    if client is None:
-        if not _HAS_GITHUB_AUTH:
-            raise ImportError(
-                "robotsix-github-auth is required for GitHub App token minting. "
-                "Install it with 'pip install robotsix-github-auth'."
-            )
-        result = await asyncio.to_thread(
-            _mint_installation_token, app_id, private_key, installation_id
+    if not _HAS_GITHUB_AUTH:
+        raise ImportError(
+            "robotsix-github-auth is required for GitHub App token minting. "
+            "Install it with 'pip install robotsix-github-auth'."
         )
+
+    # Mint on every call. ``mint_installation_token`` keeps an in-process
+    # TTL cache and only performs network I/O once the token is within
+    # 5 minutes of expiry, so in steady state this is a cheap dict lookup.
+    # The bearer client wraps a *static* token, so the client must be
+    # rebuilt whenever the token rotates — otherwise it keeps sending the
+    # expired token and GitHub returns 401 "Bad credentials".
+    result = await asyncio.to_thread(
+        _mint_installation_token, app_id, private_key, installation_id
+    )
+    cached = _client_cache.get(installation_id)
+    if cached is None or cached[0] != result.token:
         client = _bearer_client(result.token)
-        _client_cache[installation_id] = client
+        _client_cache[installation_id] = (result.token, client)
+    else:
+        client = cached[1]
     return client
 
 

@@ -82,9 +82,13 @@ async def test_builds_client_via_mint_installation_token():
     mock_bearer.assert_called_once_with("ghs_test-token")
 
 
-async def test_client_is_cached_across_calls():
-    """A second call for the same installation_id reuses the cached
-    client instead of minting a new token."""
+async def test_client_reused_while_token_is_unchanged():
+    """While the minted token is unchanged the cached client is reused
+    (no rebuild), even though the token is re-minted each call.
+
+    ``mint_installation_token`` is called on every request — it keeps its
+    own TTL cache — but ``_bearer_client`` (which wraps the static token)
+    is only invoked once because the token string does not change."""
     cfg = _cfg(
         github_app_id="12345",
         github_app_private_key="pem-data",
@@ -99,12 +103,51 @@ async def test_client_is_cached_across_calls():
         with patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
             return_value=fake_client,
-        ):
+        ) as mock_bearer:
             first = await get_github_client(cfg, "owner-a", "repo-a")
             second = await get_github_client(cfg, "owner-b", "repo-b")
 
     assert first is second is fake_client
-    mock_mint.assert_called_once()
+    # Token minted on every call (cheap TTL-cached lookup)...
+    assert mock_mint.call_count == 2
+    # ...but the client is built only once while the token is unchanged.
+    mock_bearer.assert_called_once_with("ghs_test-token")
+
+
+async def test_client_rebuilt_when_token_rotates():
+    """Regression: when the installation token rotates (the library
+    re-mints ~5 min before expiry), a fresh client wrapping the new token
+    is built — the stale client must not be served indefinitely.
+
+    A client cached by ``installation_id`` alone would keep sending the
+    first, now-expired token and every request would 401 "Bad
+    credentials" ~1h after startup."""
+    cfg = _cfg(
+        github_app_id="12345",
+        github_app_private_key="pem-data",
+        installation_id="999",
+    )
+    old_client = MagicMock(name="old-client")
+    new_client = MagicMock(name="new-client")
+
+    with patch(
+        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
+        side_effect=[
+            SimpleNamespace(token="ghs_old-token"),
+            SimpleNamespace(token="ghs_new-token"),
+        ],
+    ) as mock_mint:
+        with patch(
+            "robotsix_central_deploy.lifecycle.github_app._bearer_client",
+            side_effect=[old_client, new_client],
+        ) as mock_bearer:
+            first = await get_github_client(cfg, "owner", "repo")
+            second = await get_github_client(cfg, "owner", "repo")
+
+    assert first is old_client
+    assert second is new_client
+    assert mock_mint.call_count == 2
+    assert mock_bearer.call_count == 2
 
 
 async def test_different_installation_ids_get_different_cache_entries():
