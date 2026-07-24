@@ -18,7 +18,6 @@ _LABEL_CONFIG_TEMPLATE = "robotsix.deploy.config-template"
 
 # Per robotsix-standards/docs/config-standard.md:
 #   https://damien-robotsix.github.io/robotsix-standards/config-standard/
-_STANDARD_CONFIG_DIR = "config"
 _STANDARD_CONFIG_FILE = "config/config.json"
 _STANDARD_CONFIG_SCHEMA_FILE = "config/config.schema.json"
 _STANDARD_CONFIG_EXAMPLE_FILE = "config/config.example.json"

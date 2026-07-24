@@ -308,17 +308,13 @@ async def onboard_preflight(
             raise HTTPException(
                 status_code=422,
                 detail={
-                    "error": (
-                        f"config/config.json is not valid JSON: {exc}"
-                    ),
+                    "error": (f"config/config.json is not valid JSON: {exc}"),
                 },
             )
         if not isinstance(parsed_example, dict):
             raise HTTPException(
                 status_code=422,
-                detail={
-                    "error": "config/config.json must be a top-level JSON object"
-                },
+                detail={"error": "config/config.json must be a top-level JSON object"},
             )
         derived_spec.config_example_values = parsed_example
     elif repo_files.config_json_template is not None:
