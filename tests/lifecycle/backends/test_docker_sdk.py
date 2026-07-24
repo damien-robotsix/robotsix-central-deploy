@@ -528,14 +528,14 @@ class TestDockerSdkBackendDeploy:
     async def test_deploy_401_on_ghcr_without_token_diagnostic(
         self, backend, monkeypatch
     ):
-        """401 on ghcr.io without ghcr_token raises RuntimeError mentioning ghcr_token."""
+        """401 on ghcr.io without GitHub App creds raises RuntimeError mentioning config."""
         b, client, dm = backend
         config = self._make_config()
         record = ServiceRecord(name="test-svc", container_name="test-svc")
 
         client.images.pull.side_effect = self._make_401_error(dm)
 
-        with pytest.raises(RuntimeError, match="ghcr_token"):
+        with pytest.raises(RuntimeError, match="github_app_id"):
             await b.deploy(record, config, "ghcr.io/o/img:main")
 
     async def test_deploy_401_on_non_ghcr_generic_error(self, backend):
@@ -549,13 +549,25 @@ class TestDockerSdkBackendDeploy:
         with pytest.raises(RuntimeError, match="Image pull failed for"):
             await b.deploy(record, config, "registry.example.com/app:v1")
 
-    async def test_deploy_401_on_ghcr_with_token_generic_error(
+    async def test_deploy_401_on_ghcr_with_creds_generic_error(
         self, backend, monkeypatch
     ):
-        """401 on ghcr.io with ghcr_token raises generic error (token may be
-        invalid/expired — don't mislead into thinking no token is set)."""
+        """401 on ghcr.io with GitHub App creds raises generic error (token may be
+        invalid/expired — don't mislead into thinking no creds are set)."""
         b, client, dm = backend
-        b._ghcr_token = "ghp_some_token"
+        b._github_app_configured = True
+        # Mock mint_installation_token so _build_auth_config returns an auth_config
+        fake_token = MagicMock()
+        fake_token.token = "ghs_test_token"
+        mock_mint = MagicMock(return_value=fake_token)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.backends.docker_sdk.mint_installation_token",
+            mock_mint,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.backends.docker_sdk._HAS_GITHUB_AUTH",
+            True,
+        )
         config = self._make_config()
         record = ServiceRecord(name="test-svc", container_name="test-svc")
 
@@ -575,47 +587,84 @@ class TestDockerSdkBackendBuildAuthConfig:
 
     @pytest.fixture
     def backend(self):
-        """Return a DockerSdkBackend with the given ghcr_token (default empty)."""
+        """Return a factory for DockerSdkBackend instances."""
         dm = _make_docker_mock()
         client = MagicMock()
         dm.DockerClient.return_value = client
         with patch.dict(sys.modules, {"docker": dm}):
 
-            def _make(ghcr_token: str = ""):
-                return DockerSdkBackend(ghcr_token=ghcr_token)
+            def _make(
+                github_app_id: str = "",
+                github_app_private_key: str = "",
+                installation_id: str = "",
+            ):
+                return DockerSdkBackend(
+                    github_app_id=github_app_id,
+                    github_app_private_key=github_app_private_key,
+                    installation_id=installation_id,
+                )
 
             yield _make
 
-    def test_non_ghcr_image_returns_none(self, backend):
+    @pytest.mark.asyncio
+    async def test_non_ghcr_image_returns_none(self, backend):
         """Images not starting with ghcr.io/ return None (anonymous pull)."""
         b = backend()
-        assert b._build_auth_config("docker.io/library/nginx:latest") is None
-        assert b._build_auth_config("registry.example.com/app:v1") is None
+        assert await b._build_auth_config("docker.io/library/nginx:latest") is None
+        assert await b._build_auth_config("registry.example.com/app:v1") is None
 
-    def test_ghcr_image_no_token_returns_none(self, backend):
-        """ghcr.io image without ghcr_token returns None."""
+    @pytest.mark.asyncio
+    async def test_ghcr_image_no_github_app_returns_none(self, backend):
+        """ghcr.io image without GitHub App creds returns None."""
         b = backend()
-        assert b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
 
-    def test_ghcr_image_empty_token_returns_none(self, backend):
-        """ghcr.io image with empty ghcr_token returns None."""
-        b = backend(ghcr_token="")
-        assert b._build_auth_config("ghcr.io/owner/repo:tag") is None
+    @pytest.mark.asyncio
+    async def test_ghcr_image_partial_creds_returns_none(self, backend):
+        """ghcr.io image with only some GitHub App creds returns None."""
+        b = backend(
+            github_app_id="123", github_app_private_key="key", installation_id=""
+        )
+        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
 
-    def test_ghcr_image_whitespace_token_returns_none(self, backend):
-        """ghcr.io image with whitespace-only ghcr_token returns None."""
-        b = backend(ghcr_token="   ")
-        assert b._build_auth_config("ghcr.io/owner/repo:tag") is None
+    @pytest.mark.asyncio
+    async def test_ghcr_image_whitespace_creds_returns_none(self, backend):
+        """ghcr.io image with whitespace-only creds returns None."""
+        b = backend(
+            github_app_id="   ",
+            github_app_private_key="   ",
+            installation_id="   ",
+        )
+        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
 
-    def test_ghcr_image_with_token_returns_auth_config(self, backend):
-        """ghcr.io image with a non-empty ghcr_token returns an auth_config dict."""
-        b = backend(ghcr_token="ghp_test123")
-        result = b._build_auth_config("ghcr.io/owner/repo:tag")
+    @pytest.mark.asyncio
+    async def test_ghcr_image_with_app_creds_returns_auth_config(
+        self, backend, monkeypatch
+    ):
+        """ghcr.io image with GitHub App creds mints token and returns auth_config."""
+        fake_token = MagicMock()
+        fake_token.token = "ghs_test_token"
+        mock_mint = MagicMock(return_value=fake_token)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.backends.docker_sdk.mint_installation_token",
+            mock_mint,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.backends.docker_sdk._HAS_GITHUB_AUTH",
+            True,
+        )
+        b = backend(
+            github_app_id="123",
+            github_app_private_key="key",
+            installation_id="456",
+        )
+        result = await b._build_auth_config("ghcr.io/owner/repo:tag")
         assert result == {
-            "username": "USERNAME",
-            "password": "ghp_test123",
+            "username": "x-access-token",
+            "password": "ghs_test_token",
             "serveraddress": "ghcr.io",
         }
+        mock_mint.assert_called_once_with("123", "key", "456")
 
 
 # ---------------------------------------------------------------------------

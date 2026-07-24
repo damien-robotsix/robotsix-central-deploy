@@ -154,15 +154,6 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    ghcr_token: SecretStr = Field(
-        SecretStr(""),
-        description=(
-            "GitHub personal access token with read:packages scope for "
-            "authenticated GHCR image pulls. Empty skips authentication "
-            "(public images only)."
-        ),
-    )
-
     # Disk usage monitoring
     disk_path: str = Field(
         "/",

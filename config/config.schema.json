@@ -206,14 +206,6 @@
       "title": "Docker Sdk Timeout",
       "type": "integer"
     },
-    "ghcr_token": {
-      "default": "",
-      "description": "GitHub personal access token with read:packages scope for authenticated GHCR image pulls. Empty skips authentication (public images only).",
-      "format": "password",
-      "title": "Ghcr Token",
-      "type": "string",
-      "writeOnly": true
-    },
     "disk_path": {
       "advanced": true,
       "default": "/",
