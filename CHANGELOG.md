@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix GitHub Actions-read endpoints returning 502 (401 "Bad credentials") ~1h after startup: the PyGithub bearer client was cached by ``installation_id`` alone and never rebuilt when the wrapped installation token expired. ``get_github_client`` now re-mints on every call and rebuilds the client whenever the token rotates.
 - Extract `_resolve_deploy_contract` helper from `chat_deploy` in `chat_services.py`, moving contract-resolution logic (~130 lines) into a standalone async function for improved testability and readability.
 - Fix unreadable warning banner text in the Add Component dialog: port-collision and deploy-warning boxes now use dark amber text (`#92400e`) on the light yellow background, meeting WCAG AA contrast (~5.3:1) in dark theme.
 - Added `POST /chat/disk/reclaim` — chat-agent-allowlisted endpoint to prune
