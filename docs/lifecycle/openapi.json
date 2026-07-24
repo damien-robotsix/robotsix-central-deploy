@@ -1845,7 +1845,7 @@
           "services"
         ],
         "summary": "Add env keys newly declared by the repo's compose contract",
-        "description": "Re-read the repo's compose env contract and seed newly declared keys.\n\nThe env key set belongs to the repo's contract, not the operator: keys\nwith a default value are added as plain env entries, keys declared empty\nare added as secret slots \u2014 mirroring onboard seeding. Existing values\nare never modified, and keys the contract no longer declares are only\nreported, not deleted.",
+        "description": "Re-read the repo's compose env contract and seed newly declared keys.\n\nThe env key set belongs to the repo's contract, not the operator: keys\nwith a default value are added as plain env entries, keys declared empty\nare added as secret slots \u2014 mirroring onboard seeding. Existing values\nare never modified. Keys the contract no longer declares are pruned\n(deleted) from the store.",
         "operationId": "sync_env_keys_services__name__env_sync_keys_post",
         "parameters": [
           {

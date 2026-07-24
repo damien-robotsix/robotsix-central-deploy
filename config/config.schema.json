@@ -405,6 +405,15 @@
       "type": "string",
       "writeOnly": true
     },
+    "ghcr_pull_token": {
+      "advanced": true,
+      "default": "",
+      "description": "A GitHub Personal Access Token (classic) with ``read:packages`` scope, used to authenticate private GHCR image pulls. When set, this static token is preferred over the GitHub App installation token for ``ghcr.io`` pulls. Empty falls back to App-token auth (if configured) or anonymous pull.",
+      "format": "password",
+      "title": "Ghcr Pull Token",
+      "type": "string",
+      "writeOnly": true
+    },
     "langfuse_projects": {
       "additionalProperties": {
         "$ref": "#/$defs/LangfuseProjectCreds"

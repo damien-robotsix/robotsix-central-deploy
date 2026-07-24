@@ -972,7 +972,7 @@ async function syncEnvKeys() {
     const added = (body.added_env || []).length + (body.added_secrets || []).length;
     const stale = (body.undeclared || []);
     let msg = added ? `Added ${added} new key(s) from the repo contract.` : 'No new keys — store matches the contract.';
-    if (stale.length) msg += ` Note: ${stale.length} stored key(s) no longer declared by the repo: ${stale.join(', ')}.`;
+    if (stale.length) msg += ` Pruned ${stale.length} stored key(s) no longer declared by the repo: ${stale.join(', ')}.`;
     showEnvModalError(msg);  // reuse the banner as an info line
   } catch (err) {
     showEnvModalError('Key sync failed: ' + err.message);

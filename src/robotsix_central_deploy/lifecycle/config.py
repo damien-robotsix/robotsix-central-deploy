@@ -352,6 +352,18 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    ghcr_pull_token: SecretStr = Field(
+        SecretStr(""),
+        description=(
+            "A GitHub Personal Access Token (classic) with ``read:packages`` "
+            "scope, used to authenticate private GHCR image pulls. When set, "
+            "this static token is preferred over the GitHub App installation "
+            "token for ``ghcr.io`` pulls. Empty falls back to App-token auth "
+            "(if configured) or anonymous pull."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+
     # Langfuse auth (chat-agent "langfuse" virtual component — trace read
     # proxy).  The chat container never sees these credentials — the deploy
     # server injects Basic Auth server-side when proxying Langfuse public-API

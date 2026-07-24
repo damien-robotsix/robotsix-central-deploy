@@ -147,8 +147,8 @@ async def sync_env_keys(
     The env key set belongs to the repo's contract, not the operator: keys
     with a default value are added as plain env entries, keys declared empty
     are added as secret slots — mirroring onboard seeding. Existing values
-    are never modified, and keys the contract no longer declares are only
-    reported, not deleted.
+    are never modified. Keys the contract no longer declares are pruned
+    (deleted) from the store.
     """
     from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
         ParseError,
@@ -173,12 +173,15 @@ async def sync_env_keys(
     add_secrets = {
         k: "" for k, v in declared.items() if not v and k not in existing_keys
     }
+    undeclared_keys = sorted(existing_keys - set(declared))
+    for key in undeclared_keys:
+        await env_store.delete_key(name, key)
     if add_env or add_secrets:
         await env_store.upsert(name, add_env, add_secrets)
     return EnvSyncResponse(
         added_env=sorted(add_env),
         added_secrets=sorted(add_secrets),
-        undeclared=sorted(existing_keys - set(declared)),
+        undeclared=undeclared_keys,
     )
 
 

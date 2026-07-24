@@ -6,6 +6,8 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `ghcr_pull_token` config field (config.json / config schema) for authenticating private GHCR image pulls with a static PAT. The token is preferred over the GitHub App installation token for ``ghcr.io`` pulls when set.
+- `POST /services/{name}/env/sync-keys` now prunes (deletes) stored keys the repo contract no longer declares, instead of only reporting them. The UI message updated to reflect pruning.
 - **Breaking:** `ghcr_token` field removed from `LifecycleConfig` and `config/config.json`. GHCR image-pull authentication now uses short-lived GitHub App installation tokens minted via `robotsix-github-auth` at pull time — configure `github_app_id`, `github_app_private_key`, and `installation_id` instead. Anonymous pulls remain available for public `ghcr.io` images when these fields are unset.
 - Fetch Spec / config-standard validation now reports the specific failing precondition (missing ``config/config.schema.json`` and/or missing ``robotsix.deploy.config-target`` label) instead of a single generic message, so operators can identify the exact issue without digging through logs.
 - Fix CSS styling on config-ownership deprecation banner: add padding, border-radius, margin, and font-size to `.banner-warning` rule (matching `.config-drift-banner`).
