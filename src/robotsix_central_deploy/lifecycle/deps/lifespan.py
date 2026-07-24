@@ -503,7 +503,7 @@ async def _seed_component_registry(
             auth_type=ventry.auth_type,
             auth_header_name=ventry.auth_header_name,
             auth_username_env=ventry.auth_username_env,
-            auth_password_env=ventry.auth_password_env,
+            auth_password_env=ventry.auth_password_env.get_secret_value(),
             auth_token_env=ventry.auth_token_env,
         )
         component_config_store.register(virtual_cfg)

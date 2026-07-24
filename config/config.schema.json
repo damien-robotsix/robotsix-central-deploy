@@ -113,8 +113,11 @@
         },
         "auth_password_env": {
           "default": "",
+          "description": "env var holding Basic-Auth password",
+          "format": "password",
           "title": "Auth Password Env",
-          "type": "string"
+          "type": "string",
+          "writeOnly": true
         },
         "auth_token_env": {
           "default": "",
