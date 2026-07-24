@@ -410,16 +410,26 @@ async def _resolve_deploy_contract(
 
     # --- Hard precondition: config contract must be satisfied ---
     if derived_spec.config_schema is None or derived_spec.config_volume is None:
+        missing: list[str] = []
+        if derived_spec.config_schema is None:
+            missing.append(
+                "missing config/config.schema.json — every deployed service "
+                "must ship config/config.schema.json "
+                "(robotsix-standards/docs/config-standard.md)"
+            )
+        if derived_spec.config_volume is None:
+            missing.append(
+                "missing robotsix.deploy.config-target label — the primary "
+                "service in deploy/docker-compose.yml must declare "
+                "robotsix.deploy.config-target "
+                "(robotsix-standards/docs/config-standard.md)"
+            )
         raise HTTPException(
             status_code=422,
             detail={
                 "error": (
-                    "Repo does not satisfy the robotsix config standard "
-                    "(robotsix-standards/docs/config-standard.md).  Every "
-                    "deployed service must ship config/config.json + "
-                    "config/config.schema.json and declare "
-                    "robotsix.deploy.config-target in "
-                    "deploy/docker-compose.yml."
+                    "Repo does not satisfy the robotsix config standard: "
+                    + "; ".join(missing)
                 ),
             },
         )

@@ -314,20 +314,31 @@ async def onboard_preflight(
     else:
         derived_spec.config_example_values = None
 
-    # Hard precondition: config/config.json + config/config.schema.json AND
-    # robotsix.deploy.config-target must all be present.  A repo lacking any
-    # of these does not satisfy the robotsix config standard and is not
+    # Hard precondition: config/config.schema.json AND
+    # robotsix.deploy.config-target must both be present.  A repo lacking
+    # either does not satisfy the robotsix config standard and is not
     # deployable.
     if derived_spec.config_schema is None or derived_spec.config_volume is None:
+        missing: list[str] = []
+        if derived_spec.config_schema is None:
+            missing.append(
+                "missing config/config.schema.json — every deployed service "
+                "must ship config/config.schema.json "
+                "(robotsix-standards/docs/config-standard.md)"
+            )
+        if derived_spec.config_volume is None:
+            missing.append(
+                "missing robotsix.deploy.config-target label — the primary "
+                "service in deploy/docker-compose.yml must declare "
+                "robotsix.deploy.config-target "
+                "(robotsix-standards/docs/config-standard.md)"
+            )
         raise HTTPException(
             status_code=422,
             detail={
                 "error": (
-                    "Repo does not satisfy the robotsix config standard "
-                    "(robotsix-standards/docs/config-standard.md).  Every "
-                    "deployed service must ship config/config.json + "
-                    "config/config.schema.json and declare "
-                    "robotsix.deploy.config-target in deploy/docker-compose.yml."
+                    "Repo does not satisfy the robotsix config standard: "
+                    + "; ".join(missing)
                 ),
             },
         )

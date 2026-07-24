@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fetch Spec / config-standard validation now reports the specific failing precondition (missing ``config/config.schema.json`` and/or missing ``robotsix.deploy.config-target`` label) instead of a single generic message, so operators can identify the exact issue without digging through logs.
 - Fix CSS styling on config-ownership deprecation banner: add padding, border-radius, margin, and font-size to `.banner-warning` rule (matching `.config-drift-banner`).
 - Adopt the config-ownership standard (robotsix-standards) in the deploy UI: config schemas are annotated with ``x-deploy-plane`` metadata so the dashboard can distinguish deploy-plane keys (image, mounts, ports, env, restart) from component-owned keys. Component-owned keys are rendered with a deprecation notice and link to the component's own Settings panel, preparing for the phased migration where component-owned config editing moves to each component's native surface.
 - New chat-allowlisted endpoint ``POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches`` enables the chat agent to trigger GitHub Actions workflows via ``workflow_dispatch``. Requires the GitHub App to have ``actions: write`` permission. Returns 404 when the workflow file has no ``workflow_dispatch`` trigger, and 422 when GitHub rejects the request. Audit-logged as ``dispatch_workflow``.
