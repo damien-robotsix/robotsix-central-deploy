@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import httpx
+from robotsix_http import ExternalHTTPError, RetryClient
 
 from .models import CaretakerFinding
 
@@ -24,7 +25,7 @@ class MillClient:
     degrades to local-JSONL fallback but does not crash the loop.
     """
 
-    def __init__(self, base_url: str, http_client: httpx.AsyncClient) -> None:
+    def __init__(self, base_url: str, http_client: RetryClient) -> None:
         self._base_url = base_url.rstrip("/")
         self._http = http_client
 
@@ -35,7 +36,7 @@ class MillClient:
         of a persisting problem do not spawn duplicate tickets.
         """
         try:
-            resp = await self._http.post(
+            await self._http.post(
                 f"{self._base_url}/tickets/ingest",
                 json={
                     "repo_id": finding.repo_id,
@@ -44,14 +45,14 @@ class MillClient:
                     "source_tag": f"caretaker/{finding.kind.value}",
                 },
             )
-            if resp.is_success:
-                return True
+            return True
+        except ExternalHTTPError as exc:
             logger.warning(
                 "mill ingest returned %d for finding %s/%s: %s",
-                resp.status_code,
+                exc.status_code,
                 finding.repo_id,
                 finding.title,
-                resp.text,
+                exc.response.text if exc.response is not None else str(exc),
             )
             return False
         except httpx.HTTPError as exc:
@@ -66,12 +67,12 @@ class MillClient:
         reachability signal; it is independent of ingest success.
         """
         try:
-            resp = await self._http.get(f"{self._base_url}/health")
-            if resp.is_success:
-                return True
+            await self._http.get(f"{self._base_url}/health")
+            return True
+        except ExternalHTTPError as exc:
             logger.warning(
                 "mill health probe returned %d",
-                resp.status_code,
+                exc.status_code,
             )
             return False
         except httpx.HTTPError as exc:
@@ -85,16 +86,16 @@ class MillClient:
         onboarding.
         """
         try:
-            resp = await self._http.post(
+            await self._http.post(
                 f"{self._base_url}/repos",
                 json={"repo_id": repo_id, "git_url": git_url},
             )
-            if resp.is_success:
-                logger.info("registered repo %s with mill", repo_id)
-                return True
+            logger.info("registered repo %s with mill", repo_id)
+            return True
+        except ExternalHTTPError as exc:
             logger.warning(
                 "mill repo registration returned %d for %s",
-                resp.status_code,
+                exc.status_code,
                 repo_id,
             )
             return False

@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Adopted `robotsix-http.RetryClient` to consolidate scattered `httpx.AsyncClient` instantiations, adding automatic retry with exponential backoff across lifecycle, caretaker, and registry-check modules. Created shared `retry_client_context` / `wrap_retry_client` factory in `_http.py`. Gateway proxy (`proxy.py`) and synchronous GH Actions log fetcher (`chat_github_actions.py`) remain unchanged — streaming and sync contexts are out of scope for retry wrapping.
 - Fix `/disk` `dangling_images_bytes` metric to use the same Docker API source (`images.list(dangling=True)`) as the reclaim endpoint's `prune_images()`, so the post-reclaim snapshot accurately reflects what remains instead of showing unreclaimable intermediate layers.
 - Add `ghcr_pull_token` config field (config.json / config schema) for authenticating private GHCR image pulls with a static PAT. The token is preferred over the GitHub App installation token for ``ghcr.io`` pulls when set.
 - `POST /services/{name}/env/sync-keys` now prunes (deletes) stored keys the repo contract no longer declares, instead of only reporting them. The UI message updated to reflect pruning.

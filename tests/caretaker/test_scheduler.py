@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import httpx
 import pytest
+from robotsix_http import ExternalHTTPError, RetryClient
 
 from robotsix_central_deploy.caretaker.models import CaretakerReport
 
@@ -74,7 +74,7 @@ def scheduler_fixtures(tmp_path):
         encoding="utf-8",
     )
 
-    http_client = MagicMock(spec=httpx.AsyncClient)
+    http_client = MagicMock(spec=RetryClient)
     deploy_history_store = DeployHistoryStore(tmp_path / "deploy_history.json")
     env_store = MagicMock()
     env_store.get_merged_env = AsyncMock(
@@ -151,8 +151,20 @@ class TestScheduler:
 
         _register_mill(ccs)
         # Health probe fails → mill_reachable=False, detail="health probe failed".
-        http.get = AsyncMock(return_value=MagicMock(is_success=False, status_code=503))
-        http.post = AsyncMock(return_value=MagicMock(is_success=False, status_code=500))
+        http.get = AsyncMock(
+            side_effect=ExternalHTTPError(
+                "health probe failed",
+                status_code=503,
+                response=MagicMock(),
+            )
+        )
+        http.post = AsyncMock(
+            side_effect=ExternalHTTPError(
+                "ingest failed",
+                status_code=500,
+                response=MagicMock(),
+            )
+        )
 
         record = ServiceRecord(
             name="svc",
@@ -186,6 +198,8 @@ class TestScheduler:
             "shutil.disk_usage",
             lambda path: (10**12, 9 * 10**11, 10**11),
         )
+
+        http.get = AsyncMock(return_value=MagicMock(is_success=True))
 
         report = await scheduler.run_once()
         # No findings → mill_reachable=True (no ingest attempted means we don't know

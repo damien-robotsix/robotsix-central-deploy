@@ -43,6 +43,45 @@ except ImportError:
     sys.modules["structlog.processors"] = _s.processors
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# robotsix_http may not be installed in lightweight test environments (e.g.
+# sandbox CI) when the test runner uses system Python instead of .venv.
+# Several modules under ``robotsix_central_deploy.lifecycle`` import
+# ``ExternalHTTPError``, ``RetryClient``, ``DEFAULT_CONFIG``, and
+# ``RetryConfig`` at the top level.  Inject minimal mocks before the first
+# real import so conftest and all downstream tests can load.
+# ---------------------------------------------------------------------------
+try:
+    __import__("robotsix_http")
+    _ROBOTSIX_HTTP_REAL = True
+except ImportError:
+    _ROBOTSIX_HTTP_REAL = False
+    _rh = MagicMock()
+
+    # ``ExternalHTTPError`` is caught in ``except … as exc`` clauses;
+    # it must be a real Exception subclass so ``isinstance`` checks work.
+    # Signature mirrors ``robotsix_http.ExternalHTTPError.__init__``:
+    #   (self, message: str, *, status_code: int, response: httpx.Response)
+    class _MockExternalHTTPError(Exception):
+        def __init__(
+            self,
+            message: str = "",
+            *,
+            status_code: int = 0,
+            response: object | None = None,
+        ) -> None:
+            super().__init__(message)
+            self.status_code = status_code
+            self.response = response
+
+    _rh.ExternalHTTPError = _MockExternalHTTPError
+    _rh.RetryClient = MagicMock
+    _rh.DEFAULT_CONFIG = MagicMock()
+    _rh.RetryConfig = MagicMock
+
+    sys.modules["robotsix_http"] = _rh
+# ---------------------------------------------------------------------------
+
 from unittest.mock import AsyncMock
 
 import pytest

@@ -8,7 +8,9 @@ import logging
 import time
 from typing import Any
 
-import httpx
+from robotsix_http import ExternalHTTPError
+
+from ..._http import retry_client_context
 
 from ..backends import ExecutionBackend
 from ..models import CLAUDE_AUTH_VOLUME, ServiceRecord
@@ -117,7 +119,7 @@ async def _refresh_claude_credentials(
     """
     refresh_token = oauth.get("refreshToken")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with retry_client_context(timeout=30.0) as client:
         try:
             resp = await client.post(
                 CLAUDE_AUTH_TOKEN_URL,
@@ -128,21 +130,27 @@ async def _refresh_claude_credentials(
                 },
                 headers={"User-Agent": CLAUDE_AUTH_USER_AGENT},
             )
+        except ExternalHTTPError as exc:
+            error_detail: str = (
+                exc.response.text[:500] if exc.response is not None else str(exc)
+            )
+            try:
+                error_detail = (
+                    exc.response.json().get("error", {}).get("message", error_detail)
+                    if exc.response is not None
+                    else error_detail
+                )
+            except Exception:  # noqa: S110 — non-JSON body is fine
+                pass
+            error_msg = f"Refresh failed ({exc.status_code}): {error_detail}"
+            logger.warning("Claude auth refresh: %s", error_detail)
+            return False, error_msg
         except Exception as exc:
             error_msg = f"Token endpoint unreachable: {exc}"
             logger.warning("Claude auth refresh: request failed: %s", exc)
             return False, error_msg
 
-    if resp.status_code != 200:
-        error_detail = resp.text[:500]
-        try:
-            error_detail = resp.json().get("error", {}).get("message", error_detail)
-        except Exception:  # noqa: S110 — non-JSON body is fine
-            pass
-        error_msg = f"Refresh failed ({resp.status_code}): {error_detail}"
-        logger.warning("Claude auth refresh: %s", error_detail)
-        return False, error_msg
-
+    # -- 2xx response ----------------------------------------------------
     try:
         payload: dict[str, Any] = resp.json()
     except Exception as exc:

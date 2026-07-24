@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import httpx
+from robotsix_http import RetryClient
 
 from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport
@@ -46,7 +46,7 @@ class CaretakerScheduler:
         component_config_store: ComponentConfigStore,
         volume_audit_scheduler: VolumeAuditScheduler | None,
         settings_store: SystemSettingsStore,
-        http_client: httpx.AsyncClient,
+        http_client: RetryClient,
         deploy_history_store: DeployHistoryStore,
         env_store: EnvStore,
     ) -> None:

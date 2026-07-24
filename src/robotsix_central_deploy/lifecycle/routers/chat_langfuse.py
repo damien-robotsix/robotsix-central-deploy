@@ -26,6 +26,9 @@ import urllib.parse
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import Response
+from robotsix_http import ExternalHTTPError
+
+from ..._http import retry_client_context
 
 from ..auth import verify_auth
 from ..config import LangfuseProjectCreds, LifecycleConfig
@@ -151,15 +154,17 @@ async def _proxy_to_langfuse(
 
     logger.debug("langfuse proxy: %s → %s", request.url, target_url)
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with retry_client_context(timeout=30.0) as client:
         try:
-            upstream = await client.get(target_url, headers=headers)
+            upstream = await client.get(str(target_url), headers=headers)
         except httpx.ConnectError:
             raise HTTPException(
                 status_code=502, detail="Bad Gateway — Langfuse unreachable"
             )
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="Gateway Timeout — Langfuse")
+        except ExternalHTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"Bad Gateway — {exc}")
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail=f"Bad Gateway — {exc}")
 

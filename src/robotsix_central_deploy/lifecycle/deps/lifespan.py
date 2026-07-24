@@ -11,6 +11,9 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI
+from robotsix_http import RetryClient
+
+from ..._http import wrap_retry_client
 
 from ..backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
 from ..config import LifecycleConfig, VirtualComponentEntry
@@ -36,7 +39,8 @@ logger = logging.getLogger(__name__)
 _config: LifecycleConfig | None = None
 _store: ServiceStore | None = None
 _backend: ExecutionBackend | None = None
-_http_client: httpx.AsyncClient | None = None
+_http_client: RetryClient | None = None
+_raw_http_client: httpx.AsyncClient | None = None
 _volume_audit_scheduler: VolumeAuditScheduler | None = None
 
 
@@ -352,19 +356,21 @@ async def _init_background_tasks(app: FastAPI) -> None:
     Attaches ``registry_checker``, ``http_client``, and ``_bg_task`` to
     ``app.state``.  Sets the module-level ``_http_client`` global.
     """
-    global _http_client
+    global _http_client, _raw_http_client
     assert _config is not None
     assert _store is not None
     assert _backend is not None
 
     # -- Registry checker ------------------------------------------------
-    http_client = httpx.AsyncClient(timeout=10.0)
+    raw_http_client = httpx.AsyncClient(timeout=10.0)
+    http_client = wrap_retry_client(raw_http_client)
     registry_checker = RegistryChecker(
         http_client,
         ttl_seconds=_config.registry_check_ttl,
     )
     app.state.registry_checker = registry_checker
     _http_client = http_client
+    _raw_http_client = raw_http_client
     app.state.http_client = http_client
 
     bg_task = None
@@ -657,7 +663,8 @@ async def _teardown(app: FastAPI) -> None:
         claude_auth_task.cancel()
         await asyncio.gather(claude_auth_task, return_exceptions=True)
 
-    await _http_client.aclose()
+    assert _raw_http_client is not None
+    await _raw_http_client.aclose()
 
 
 @asynccontextmanager

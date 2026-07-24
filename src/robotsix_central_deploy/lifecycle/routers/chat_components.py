@@ -10,8 +10,9 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Request
+
+from ..._http import retry_client_context
 
 from ..auth import verify_auth
 from ..deps import _get_component_config_store
@@ -156,7 +157,7 @@ async def list_chat_components(
         # Probe the component's chat-skill endpoint
         skill_body: str | None = None
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with retry_client_context(timeout=5.0) as client:
                 resp = await client.get(f"{base_url}{skill_endpoint}")
             if resp.status_code == 200 and resp.text.strip():
                 skill_body = resp.text
