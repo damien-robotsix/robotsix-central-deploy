@@ -5928,9 +5928,9 @@
       },
       "ChatAgentDiskReclaimRequest": {
         "properties": {
-          "dangling_images": {
+          "images": {
             "type": "boolean",
-            "title": "Dangling Images",
+            "title": "Images",
             "description": "Prune dangling (untagged) Docker images.",
             "default": false
           },

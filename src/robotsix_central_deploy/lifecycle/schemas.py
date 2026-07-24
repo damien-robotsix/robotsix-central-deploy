@@ -756,8 +756,11 @@ class ChatAgentDiskReclaimRequest(BaseModel):
     named volumes are never pruned.
     """
 
+    model_config = {"populate_by_name": True}
+
     dangling_images: bool = Field(
         default=False,
+        alias="images",
         description="Prune dangling (untagged) Docker images.",
     )
     build_cache: bool = Field(
