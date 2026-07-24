@@ -1339,6 +1339,14 @@ class TestDockerSdkBackendTryRestore:
         await b._try_restore("test-svc", config, "sha256:prior")
 
 
+def _make_dangling_mock(image_id: str, size: int) -> MagicMock:
+    """Return a MagicMock that quacks like a Docker SDK Image with Size."""
+    img = MagicMock()
+    img.id = image_id
+    img.attrs = {"Size": size}
+    return img
+
+
 # ---------------------------------------------------------------------------
 # disk_df
 # ---------------------------------------------------------------------------
@@ -1377,11 +1385,19 @@ class TestDockerSdkBackendDiskDf:
                 },
             ],
         }
+        # Dangling images now sourced from images.list(dangling=True),
+        # NOT from the df() Images array — so the metric matches what
+        # prune_images() can actually remove.
+        client.images.list.return_value = [
+            _make_dangling_mock("sha256:d1", 400),
+            _make_dangling_mock("sha256:d2", 600),
+        ]
 
         result = await b.disk_df()
 
         assert isinstance(result, DockerDfStats)
         assert result.images_size_bytes == 500  # LayersSize preferred
+        assert result.dangling_images_bytes == 1000  # 400 + 600 from list
         assert result.build_cache_size_bytes == 500  # 200 + 300
         assert result.build_cache_reclaimable_bytes == 300  # only InUse=False
         assert len(result.volumes) == 2
@@ -1390,6 +1406,7 @@ class TestDockerSdkBackendDiskDf:
         assert result.volumes[0].in_use is True
         assert result.volumes[1].name == "vol-b"
         assert result.volumes[1].in_use is False
+        client.images.list.assert_called_once_with(filters={"dangling": True})
 
     async def test_disk_df_layers_size_zero_falls_back_to_sum(self, backend):
         """When LayersSize is 0, falls back to sum of image sizes."""
@@ -1425,6 +1442,55 @@ class TestDockerSdkBackendDiskDf:
         }
         result = await b.disk_df()
         assert len(result.volumes) == 0
+
+    async def test_disk_df_dangling_list_failure_returns_zero(self, backend):
+        """When images.list fails, dangling_images_bytes is 0 (other stats OK)."""
+        b, client, dm = backend
+        client.api.df.return_value = {
+            "Images": [],
+            "BuildCache": [],
+            "LayersSize": 500,
+            "Volumes": [],
+        }
+        client.images.list.side_effect = dm.errors.APIError("daemon down")
+        result = await b.disk_df()
+        assert result.images_size_bytes == 500
+        assert result.dangling_images_bytes == 0
+
+    async def test_disk_df_dangling_matches_prune_source(self, backend):
+        """dangling_images_bytes matches sum of sizes from images.list(dangling=True).
+
+        This is the key consistency property: the metric and the prune
+        use the same Docker API source, so a post-reclaim snapshot
+        accurately reflects what remains.
+        """
+        b, client, dm = backend
+        client.api.df.return_value = {
+            "Images": [
+                # Simulate intermediate layers that df reports as untagged
+                # but images.list(dangling=True) excludes (they're parent
+                # layers referenced by tagged images).
+                {"RepoTags": ["<none>:<none>"], "Size": 3000},
+                {"RepoTags": ["<none>:<none>"], "Size": 2000},
+            ],
+            "BuildCache": [],
+            "LayersSize": 0,
+            "Volumes": [],
+        }
+        # Only truly dangling images (not intermediate parents) are returned.
+        client.images.list.return_value = [
+            _make_dangling_mock("sha256:real-dangling", 150),
+        ]
+
+        result = await b.disk_df()
+        # Not 5000 (the df sum), but 150 — what prune_images can remove.
+        assert result.dangling_images_bytes == 150
+
+        # And after pruning, the same list call would return empty (prune
+        # removed the only image), so a follow-up disk_df would show 0.
+        client.images.list.return_value = []
+        result2 = await b.disk_df()
+        assert result2.dangling_images_bytes == 0
 
 
 # ---------------------------------------------------------------------------

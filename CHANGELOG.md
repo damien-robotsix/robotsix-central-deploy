@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix `/disk` `dangling_images_bytes` metric to use the same Docker API source (`images.list(dangling=True)`) as the reclaim endpoint's `prune_images()`, so the post-reclaim snapshot accurately reflects what remains instead of showing unreclaimable intermediate layers.
 - Add `ghcr_pull_token` config field (config.json / config schema) for authenticating private GHCR image pulls with a static PAT. The token is preferred over the GitHub App installation token for ``ghcr.io`` pulls when set.
 - `POST /services/{name}/env/sync-keys` now prunes (deletes) stored keys the repo contract no longer declares, instead of only reporting them. The UI message updated to reflect pruning.
 - **Breaking:** `ghcr_token` field removed from `LifecycleConfig` and `config/config.json`. GHCR image-pull authentication now uses short-lived GitHub App installation tokens minted via `robotsix-github-auth` at pull time — configure `github_app_id`, `github_app_private_key`, and `installation_id` instead. Anonymous pulls remain available for public `ghcr.io` images when these fields are unset.
