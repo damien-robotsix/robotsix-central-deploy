@@ -1180,3 +1180,109 @@ async def test_chat_deploy_rate_limited(
     )
     assert resp2.status_code == 429
     assert "Rate limit" in resp2.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_chat_deploy_missing_config_schema_returns_422(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """POST /chat/deploy returns 422 when config/config.schema.json is missing."""
+    await store.put(ServiceRecord(name="auto-mail", state=ServiceState.RUNNING))
+
+    derived_spec = DerivedSpec(
+        name="auto-mail",
+        git_url="https://github.com/org/robotsix-auto-mail.git",
+        image="ghcr.io/test/robotsix-auto-mail:main",
+        ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        volume_mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        env={},
+        claude_mount=False,
+        host_docker_sock=False,
+        config_schema=None,
+        config_volume="auto-mail-config",
+    )
+
+    repo_files = RepoFiles(
+        compose_bytes=b"# central-deploy-contract-version: 1\nservices: {}",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.routers.chat_services.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.lifecycle.routers.chat_services.parse_compose",
+            return_value=derived_spec,
+        ),
+    ):
+        resp = await client.post(
+            "/chat/deploy",
+            json={
+                "name": "auto-mail",
+                "repo": "https://github.com/org/robotsix-auto-mail.git",
+            },
+            headers=auth_headers,
+        )
+    assert resp.status_code == 422
+    data = resp.json()
+    assert "missing config/config.schema.json" in data["error"]
+    assert "missing robotsix.deploy.config-target" not in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_chat_deploy_missing_config_target_returns_422(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """POST /chat/deploy returns 422 when robotsix.deploy.config-target is missing."""
+    await store.put(ServiceRecord(name="auto-mail", state=ServiceState.RUNNING))
+
+    derived_spec = DerivedSpec(
+        name="auto-mail",
+        git_url="https://github.com/org/robotsix-auto-mail.git",
+        image="ghcr.io/test/robotsix-auto-mail:main",
+        ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        volume_mounts=[VolumeMount(host="auto-mail-config", container="/config")],
+        env={},
+        claude_mount=False,
+        host_docker_sock=False,
+        config_schema={"type": "object", "properties": {}},
+        config_volume=None,
+    )
+
+    repo_files = RepoFiles(
+        compose_bytes=b"# central-deploy-contract-version: 1\nservices: {}",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=b'{"type":"object","properties":{}}',
+    )
+
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.routers.chat_services.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.lifecycle.routers.chat_services.parse_compose",
+            return_value=derived_spec,
+        ),
+    ):
+        resp = await client.post(
+            "/chat/deploy",
+            json={
+                "name": "auto-mail",
+                "repo": "https://github.com/org/robotsix-auto-mail.git",
+            },
+            headers=auth_headers,
+        )
+    assert resp.status_code == 422
+    data = resp.json()
+    assert "missing robotsix.deploy.config-target" in data["error"]
+    assert "missing config/config.schema.json" not in data["error"]

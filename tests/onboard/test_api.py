@@ -1286,7 +1286,8 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "robotsix config standard" in data["error"]
+        assert "missing config/config.schema.json" in data["error"]
+        assert "missing robotsix.deploy.config-target" not in data["error"]
 
     async def test_preflight_invalid_config_schema_json_returns_422(
         self, client: AsyncClient, auth_headers: dict
@@ -1353,7 +1354,8 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "robotsix.deploy.config-target" in data["error"]
+        assert "missing robotsix.deploy.config-target" in data["error"]
+        assert "missing config/config.schema.json" not in data["error"]
 
     async def test_preflight_gate_config_target_without_schema(
         self, client: AsyncClient, auth_headers: dict
@@ -1389,7 +1391,46 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "robotsix config standard" in data["error"]
+        assert "missing config/config.schema.json" in data["error"]
+        assert "missing robotsix.deploy.config-target" not in data["error"]
+
+    async def test_preflight_gate_both_missing(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Preflight returns 422 when both config schema and config-target are missing."""
+        spec = _make_derived_spec("cool-app")
+        spec.config_volume = None  # explicit — no config-target
+        # config_schema will be None because config_schema_json is None
+
+        with (
+            patch(
+                "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+                return_value=RepoFiles(
+                    compose_bytes=b"fake compose bytes",
+                    config_json=None,
+                    config_json_template=None,
+                    config_schema_json=None,
+                ),
+            ),
+            patch(
+                "robotsix_central_deploy.onboard.parser.parse_compose",
+                return_value=spec,
+            ),
+        ):
+            resp = await client.post(
+                "/onboard/preflight",
+                json={
+                    "git_url": "https://github.com/org/cool-app.git",
+                    "name": "cool-app",
+                },
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 422
+        data = resp.json()
+        assert "Repo does not satisfy the robotsix config standard" in data["error"]
+        assert "missing config/config.schema.json" in data["error"]
+        assert "missing robotsix.deploy.config-target" in data["error"]
 
     async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
@@ -1424,7 +1465,7 @@ class TestOnboardPreflightWithConfig:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "robotsix config standard" in data["error"]
+        assert "missing config/config.schema.json" in data["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -1925,7 +1966,7 @@ class TestOnboardConfigSchemaValidation:
 
         assert resp.status_code == 422
         data = resp.json()
-        assert "robotsix config standard" in data["error"]
+        assert "missing config/config.schema.json" in data["error"]
 
     async def test_confirm_missing_required_field_returns_422(
         self, client: AsyncClient, auth_headers: dict
