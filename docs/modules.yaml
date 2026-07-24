@@ -9,6 +9,7 @@ modules:
     dependencies: []
     paths:
       - src/robotsix_central_deploy/__init__.py
+      - src/robotsix_central_deploy/_http.py
       - src/robotsix_central_deploy/lifecycle/**/*
       - tests/lifecycle/**/*
       - tests/conftest.py

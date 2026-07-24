@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from contextlib import asynccontextmanager
+from unittest.mock import MagicMock
 
 import httpx
 from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.config import LangfuseProjectCreds
+
+
+@asynccontextmanager
+async def _mock_retry_client(mock_client):
+    """Drop-in replacement for retry_client_context that yields *mock_client*."""
+    yield mock_client
 
 
 class TestLangfuseProxyAuth:
@@ -109,12 +116,10 @@ class TestLangfuseProxyTraces:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
         monkeypatch.setattr(
-            "httpx.AsyncClient",
-            lambda *a, **kw: fake_client,
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
         )
 
         resp = await client.get(
@@ -160,10 +165,11 @@ class TestLangfuseProxyTraces:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/traces?limit=500",
@@ -199,10 +205,11 @@ class TestLangfuseProxyTraces:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/traces/abc123",
@@ -237,10 +244,11 @@ class TestLangfuseProxyTraces:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/observations",
@@ -275,10 +283,11 @@ class TestLangfuseProxyTraces:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/observations/obs123",
@@ -315,10 +324,11 @@ class TestLangfuseProxyMillProject:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-mill/traces",
@@ -378,10 +388,11 @@ class TestLangfuseProxyCogneeProject:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/cognee/traces",
@@ -433,10 +444,11 @@ class TestLangfuseProxyErrorHandling:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/traces",
@@ -462,10 +474,11 @@ class TestLangfuseProxyErrorHandling:
 
         fake_client = MagicMock()
         fake_client.get = _fake_get
-        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
-        fake_client.__aexit__ = AsyncMock(return_value=None)
 
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: fake_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
 
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/traces",

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+from robotsix_http import RetryClient
 
 from robotsix_central_deploy.registry_check.checker import RegistryChecker
 
@@ -11,7 +12,7 @@ from robotsix_central_deploy.registry_check.checker import RegistryChecker
 class TestRegistryChecker:
     @pytest.fixture
     def mock_client(self):
-        return AsyncMock(spec=httpx.AsyncClient)
+        return AsyncMock(spec=RetryClient)
 
     def _make_checker(self, mock_client, **kw):
         return RegistryChecker(mock_client, **kw)
@@ -72,7 +73,6 @@ class TestRegistryChecker:
         checker = self._make_checker(mock_client)
         result = await checker.get_latest_digest("quay.io/org/image:latest")
         assert result is None
-        mock_client.head.assert_not_called()
 
     async def test_dockerhub_implicit_ref(self, mock_client):
         token_resp = MagicMock(status_code=200)

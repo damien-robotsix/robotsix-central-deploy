@@ -25,8 +25,10 @@ import secrets
 import time
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from robotsix_http import ExternalHTTPError
+
+from ..._http import retry_client_context
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -156,28 +158,35 @@ async def _exchange_code(auth_code: str, state: str, verifier: str) -> dict[str,
 
     Returns the token payload dict.  Raises ``HTTPException`` on failure.
     """
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(
-            OAUTH_TOKEN_URL,
-            json={
-                "grant_type": "authorization_code",
-                "client_id": OAUTH_CLIENT_ID,
-                "code": auth_code,
-                "state": state,
-                "redirect_uri": OAUTH_REDIRECT_URI,
-                "code_verifier": verifier,
-            },
-        )
-    if resp.status_code != 200:
-        detail = resp.text[:500]
+    async with retry_client_context(timeout=30.0) as client:
         try:
-            detail = resp.json().get("error", {}).get("message", detail)
-        except Exception:  # noqa: S110 — non-JSON error body; keep raw text
-            pass
-        raise HTTPException(
-            status_code=400,
-            detail=f"Token exchange failed ({resp.status_code}): {detail}",
-        )
+            resp = await client.post(
+                OAUTH_TOKEN_URL,
+                json={
+                    "grant_type": "authorization_code",
+                    "client_id": OAUTH_CLIENT_ID,
+                    "code": auth_code,
+                    "state": state,
+                    "redirect_uri": OAUTH_REDIRECT_URI,
+                    "code_verifier": verifier,
+                },
+            )
+        except ExternalHTTPError as exc:
+            detail: str = (
+                exc.response.text[:500] if exc.response is not None else str(exc)
+            )
+            try:
+                detail = (
+                    exc.response.json().get("error", {}).get("message", detail)
+                    if exc.response is not None
+                    else detail
+                )
+            except Exception:  # noqa: S110 — non-JSON error body; keep raw text
+                pass
+            raise HTTPException(
+                status_code=400,
+                detail=f"Token exchange failed ({exc.status_code}): {detail}",
+            ) from exc
     payload: dict[str, Any] = resp.json()
     return payload
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-import httpx
+from robotsix_http import RetryClient
 
 
 @dataclass
@@ -19,7 +19,7 @@ class RegistryChecker:
 
     def __init__(
         self,
-        http_client: httpx.AsyncClient,
+        http_client: RetryClient,
         ttl_seconds: int = 300,
     ) -> None:
         self._client = http_client

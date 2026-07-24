@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import asynccontextmanager
 
 from httpx import AsyncClient
 
@@ -24,6 +25,12 @@ import robotsix_central_deploy.lifecycle.app as server_mod
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@asynccontextmanager
+async def _mock_retry_client(mock_client):
+    """Drop-in replacement for retry_client_context that yields *mock_client*."""
+    yield mock_client
 
 
 async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -> None:
@@ -97,9 +104,10 @@ class TestChatComponents:
         mock_response.text = "# Chatty Skill\nDo the thing."
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         # Clear the cache so we get a fresh probe.
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
@@ -131,9 +139,10 @@ class TestChatComponents:
         # Mock httpx.AsyncClient to raise an exception.
         mock_client = MagicMock()
         mock_client.get = AsyncMock(side_effect=Exception("boom"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -161,9 +170,10 @@ class TestChatComponents:
         # skill — the component must stay in the roster with that body.
         mock_client = MagicMock()
         mock_client.get = AsyncMock(side_effect=Exception("boom"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -199,9 +209,10 @@ class TestChatComponents:
         mock_response.text = "Internal Error"
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -230,9 +241,10 @@ class TestChatComponents:
         mock_response.text = "   "  # whitespace-only
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -268,9 +280,10 @@ class TestChatComponents:
 
         mock_client = MagicMock()
         mock_client.get = mock_get
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -359,9 +372,10 @@ class TestChatComponents:
 
         mock_client = MagicMock()
         mock_client.get = mock_get
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -394,9 +408,10 @@ class TestChatComponents:
         # Mock httpx so we can assert it is NOT called for the virtual component.
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=MagicMock())
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -435,9 +450,10 @@ class TestChatComponents:
 
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=MagicMock())
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -481,9 +497,10 @@ class TestChatComponents:
 
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=MagicMock())
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -521,9 +538,10 @@ class TestChatComponents:
 
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=MagicMock())
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 
@@ -577,9 +595,10 @@ class TestChatComponents:
 
         mock_client = MagicMock()
         mock_client.get = AsyncMock(return_value=MagicMock())
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        monkeypatch.setattr("httpx.AsyncClient", lambda *a, **kw: mock_client)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
 
         import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
 

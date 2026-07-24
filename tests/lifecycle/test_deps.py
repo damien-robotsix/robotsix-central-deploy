@@ -86,6 +86,9 @@ class TestClaudeAuthRefreshLoop:
 
     async def test_refresh_loop_success_path(self) -> None:
         """Full success path: authenticated, expiring soon, refresh succeeds."""
+        from contextlib import asynccontextmanager
+        from collections.abc import AsyncIterator
+
         backend = MagicMock()
         backend.check_claude_auth = AsyncMock(return_value={"status": "authenticated"})
         # Credentials with an access token expiring now (triggers refresh).
@@ -111,14 +114,17 @@ class TestClaudeAuthRefreshLoop:
             "expires_in": 3600,
         }
 
-        client_instance = MagicMock()
-        client_instance.post = AsyncMock(return_value=fake_response)
-        client_instance.__aenter__ = AsyncMock(return_value=client_instance)
-        client_instance.__aexit__ = AsyncMock(return_value=None)
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=fake_response)
 
+        @asynccontextmanager
+        async def _mock_retry_ctx(*, timeout: float = 30.0, **kwargs) -> AsyncIterator:  # type: ignore[misc]
+            yield mock_client
+
+        deps_mod_path = "robotsix_central_deploy.lifecycle.deps.background"
         with (
             patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]),
-            patch.object(deps_mod.httpx, "AsyncClient", return_value=client_instance),
+            patch(f"{deps_mod_path}.retry_client_context", _mock_retry_ctx),
         ):
             await deps_mod._claude_auth_refresh_loop(backend, 1)
 
