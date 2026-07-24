@@ -99,7 +99,14 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
           GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
         run: |
-          uv run --with pytest-xdist --with pytest-cov pytest tests/ -n auto --dist loadscope -x --tb=long --cov="robotsix_central_deploy" --cov-fail-under="80" --cov-report=term-missing
+          uv run --with pytest-xdist --with pytest-cov pytest tests/ -n auto --dist loadscope -x --tb=long --cov="robotsix_central_deploy" --cov-fail-under="80" --cov-report=term-missing --cov-report=html
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        if: always()
+        with:
+          name: coverage-html
+          path: htmlcov/
 
   docs:
     runs-on: ubuntu-latest
