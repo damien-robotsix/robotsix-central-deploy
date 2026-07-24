@@ -3286,6 +3286,63 @@ class TestDispatchWorkflow:
         )
         assert resp.status_code == 422
 
+    async def test_generic_github_error_returns_502(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        """A GithubException with a non-422 status (e.g. 500) should map to 502."""
+        from github import GithubException
+
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.side_effect = GithubException(
+            500, data={"message": "Internal Server Error"}
+        )
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/actions/workflows/deploy.yml/dispatches",
+            json={"ref": "main"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 502
+
+    async def test_repo_not_installed_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        """A repo outside the App's installation scope returns 404 from
+        ``_get_client_or_503`` before the workflow dispatch is attempted."""
+        from github import UnknownObjectException
+
+        async def _raise_not_found(config, owner, repo):
+            raise UnknownObjectException(404, data={"message": "Not Found"})
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _raise_not_found,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/nonexistent/actions/workflows/deploy.yml/dispatches",
+            json={"ref": "main"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
     async def test_missing_ref_returns_422(
         self,
         client: AsyncClient,
