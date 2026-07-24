@@ -152,7 +152,7 @@ async def test_restart_invalid_state_transition(
         headers=auth_headers,
     )
     assert resp.status_code == 409, resp.text
-    assert "Cannot restart from state" in resp.json()["detail"]
+    assert "Cannot restart from state" in resp.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +178,7 @@ async def test_restart_backend_failure(
         headers=auth_headers,
     )
     assert resp.status_code == 500, resp.text
-    assert "container vanished" in resp.json()["detail"]
+    assert "container vanished" in resp.json()["error"]
 
     # Record should be in FAILED state.
     stored = await server_mod.app.state.store.get("test-svc")
@@ -263,7 +263,7 @@ async def test_restart_rate_limited(
         headers=auth_headers,
     )
     assert resp2.status_code == 429, resp2.text
-    assert "Rate limit" in resp2.json()["detail"]
+    assert "Rate limit" in resp2.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +403,7 @@ async def test_update_service_not_found(
     _register_component("test-svc")
     await _seed_service_record("test-svc", state=ServiceState.RUNNING)
     # Remove from registry (but keep in config store, so allowlist passes).
-    server_mod.app.state.registry._components.pop("test-svc", None)
+    server_mod.app.state.registry._index.pop("test-svc", None)
 
     resp = await client.post(
         "/chat/services/test-svc/update",
@@ -438,7 +438,7 @@ async def test_update_lock_contention(
             headers=auth_headers,
         )
         assert resp.status_code == 409, resp.text
-        assert "already in progress" in resp.json()["detail"]
+        assert "already in progress" in resp.json()["error"]
     finally:
         from robotsix_central_deploy.lifecycle.deploy_lock import release_deploy_lock
 
@@ -468,7 +468,7 @@ async def test_update_backend_failure(
         headers=auth_headers,
     )
     assert resp.status_code == 500, resp.text
-    assert "pull failed" in resp.json()["detail"]
+    assert "pull failed" in resp.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +505,7 @@ async def test_update_rate_limited(
         headers=auth_headers,
     )
     assert resp2.status_code == 429, resp2.text
-    assert "Rate limit" in resp2.json()["detail"]
+    assert "Rate limit" in resp2.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -623,7 +623,7 @@ async def test_deploy_not_allowlisted(
         headers=auth_headers,
     )
     assert resp.status_code == 403, resp.text
-    assert "not in the deploy allowlist" in resp.json()["detail"]
+    assert "not in the deploy allowlist" in resp.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -652,7 +652,7 @@ async def test_deploy_lock_contention(
             headers=auth_headers,
         )
         assert resp.status_code == 409, resp.text
-        assert "already in progress" in resp.json()["detail"]
+        assert "already in progress" in resp.json()["error"]
     finally:
         from robotsix_central_deploy.lifecycle.deploy_lock import release_deploy_lock
 
@@ -683,7 +683,7 @@ async def test_deploy_backend_failure(
         headers=auth_headers,
     )
     assert resp.status_code == 500, resp.text
-    assert "image not found" in resp.json()["detail"]
+    assert "image not found" in resp.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -722,7 +722,7 @@ async def test_deploy_rate_limited(
         headers=auth_headers,
     )
     assert resp2.status_code == 429, resp2.text
-    assert "Rate limit" in resp2.json()["detail"]
+    assert "Rate limit" in resp2.json()["error"]
 
 
 # ---------------------------------------------------------------------------
