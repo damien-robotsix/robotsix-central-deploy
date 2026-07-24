@@ -95,13 +95,19 @@ def _annotate_config_ownership(schema: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(prop_schema, dict):
                 continue
             full_key = f"{parent_key}.{key}" if parent_key else key
-            # Resolve $ref before annotating
+            plane = "deploy" if key in DEPLOY_PLANE_KEYS else "component"
+            # Annotate the original wrapper so the annotation survives
+            # even when prop_schema is a $ref wrapper — _resolve_ref
+            # returns a *new* merged dict, so writing to that temporary
+            # object alone would silently drop the annotation.
+            prop_schema["x-deploy-plane"] = plane
             resolved = prop_schema
             if "$ref" in prop_schema:
                 resolved = _resolve_ref(prop_schema, obj.get("$defs", {}))
-            resolved["x-deploy-plane"] = (
-                "deploy" if key in DEPLOY_PLANE_KEYS else "component"
-            )
+                # Also annotate the resolved dict so the walker can
+                # inspect the correct ownership when recursing into
+                # nested objects behind $ref.
+                resolved["x-deploy-plane"] = plane
             if resolved.get("type") == "object":
                 _walk(resolved, full_key)
 

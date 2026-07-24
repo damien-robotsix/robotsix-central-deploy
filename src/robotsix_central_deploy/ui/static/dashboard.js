@@ -1321,7 +1321,7 @@ function _resolveRef(propSchema, defs) {
   // the pydantic Field) rather than the *type definition*.  When the field
   // uses a $ref or a nullable union, these annotations sit on the wrapper
   // schema — not on the $defs entry — so we must propagate them down.
-  var FIELD_EXTRAS = ['advanced', 'description', 'default', 'title'];
+  var FIELD_EXTRAS = ['advanced', 'description', 'default', 'title', 'x-deploy-plane'];
 
   function _propagateExtras(source, target) {
     var clone = Object.assign({}, target);
