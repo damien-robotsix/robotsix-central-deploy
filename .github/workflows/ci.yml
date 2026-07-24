@@ -234,6 +234,8 @@ jobs:
         run: pip install uv
       - name: Install dependencies
         run: uv sync --frozen
+        env:
+          UV_MALWARE_CHECK: '1'
       - name: Install pre-commit
         run: pip install pre-commit
       - name: Install TruffleHog
@@ -344,6 +346,8 @@ jobs:
         run: pip install uv
       - name: Install dependencies
         run: uv sync --frozen
+        env:
+          UV_MALWARE_CHECK: '1'
       - name: Validate module taxonomy
         run: uv run robotsix-modules-validate docs/modules.yaml
 
@@ -362,6 +366,8 @@ jobs:
         run: pip install uv
       - name: Install dependencies
         run: uv sync --frozen
+        env:
+          UV_MALWARE_CHECK: '1'
       - name: Check config/config.schema.json drift
         run: |
           uv run python - <<'EOF'
@@ -393,6 +399,8 @@ jobs:
         run: pip install uv
       - name: Install dependencies
         run: uv sync --frozen
+        env:
+          UV_MALWARE_CHECK: '1'
       - name: Regenerate OpenAPI spec
         run: uv run python _gen_openapi.py
       - name: Check for OpenAPI drift
@@ -435,6 +443,8 @@ jobs:
         run: pip install uv
       - name: Install dependencies
         run: uv sync --frozen
+        env:
+          UV_MALWARE_CHECK: '1'
       - name: Generate CycloneDX SBOM
         run: |
           uv tool run --from 'cyclonedx-bom>=4.0' cyclonedx-py environment \
