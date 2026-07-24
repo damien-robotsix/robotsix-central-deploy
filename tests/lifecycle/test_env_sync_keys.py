@@ -84,8 +84,8 @@ async def test_sync_adds_new_keys_without_touching_existing(
     assert stored.env["LOG_LEVEL"] == "DEBUG"
     assert stored.env["NEW_URL"] == "https://x"
     assert "NEW_SECRET" in stored.secret_tokens
-    # undeclared key reported but NOT deleted
-    assert "OLD_TOKEN" in stored.secret_tokens
+    # undeclared key reported AND pruned from the store
+    assert "OLD_TOKEN" not in stored.secret_tokens
 
 
 @pytest.mark.asyncio
