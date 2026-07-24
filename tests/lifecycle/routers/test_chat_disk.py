@@ -219,6 +219,45 @@ async def test_chat_disk_reclaim_rate_limited(
 
 
 # ---------------------------------------------------------------------------
+# Regression: "images" alias (chat agent sends "images", not "dangling_images")
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_disk_reclaim_images_alias(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """POST /chat/disk/reclaim with {"images": True} prunes dangling images.
+
+    Regression test: the chat agent sends ``images`` (not ``dangling_images``).
+    Prior to the fix the flag was silently ignored because Pydantic dropped
+    the unknown ``images`` key on the floor."""
+    _register_central_deploy()
+
+    mock = MagicMock()
+    mock.prune_builds = AsyncMock(return_value=0)
+    mock.prune_images = AsyncMock(return_value=2048)
+    mock.disk_df = AsyncMock(return_value=DockerDfStats())
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/disk/reclaim",
+        headers=auth_headers,
+        json={"images": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["space_reclaimed_bytes"] == 2048
+    assert "dangling_images=2048" in data["detail"]
+
+    audit_store: ChatAgentAuditStore = server_mod.app.state.chat_agent_audit_store
+    entries = await audit_store.list()
+    reclaim_entries = [e for e in entries if e.action == "disk-reclaim"]
+    assert len(reclaim_entries) == 1
+
+
+# ---------------------------------------------------------------------------
 # Unauthorized (401)
 # ---------------------------------------------------------------------------
 
