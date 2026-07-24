@@ -41,6 +41,32 @@ class _FakeRun:
         self.updated_at = datetime(2026, 7, 7, 12, 5, 0, tzinfo=timezone.utc)
 
 
+class _FakePaginatedList:
+    """Stand-in for a PyGithub ``PaginatedList``.
+
+    Faithfully reproduces the trait that breaks a naive ``[:n]`` slice:
+    slicing past the end raises ``IndexError`` (PyGithub does *not* clamp
+    the slice to the available count), while plain iteration is safe. A
+    plain Python list — as other tests use — would silently clamp and so
+    never exercise the bug the endpoint's ``islice`` guard fixes.
+    """
+
+    def __init__(self, items: list[_FakeRun]) -> None:
+        self._items = list(items)
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __getitem__(self, key):
+        if (
+            isinstance(key, slice)
+            and key.stop is not None
+            and key.stop > len(self._items)
+        ):
+            raise IndexError("list index out of range")
+        return self._items[key]
+
+
 def _fake_client(repo_obj: MagicMock) -> MagicMock:
     client = MagicMock(name="fake-github-client")
     client.get_repo.return_value = repo_obj
@@ -161,6 +187,55 @@ class TestListWorkflowRuns:
         assert (
             len(resp.json()) == 5
         )  # only 5 available; cap doesn't truncate below that
+
+    async def test_fewer_runs_than_per_page_does_not_500(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """Regression: a real ``PaginatedList`` raises ``IndexError`` when
+        sliced past its length, so a repo with fewer runs than ``per_page``
+        used to 500. The endpoint must return the available runs instead."""
+        repo_obj = MagicMock()
+        repo_obj.get_workflow_runs.return_value = _FakePaginatedList([_FakeRun(1)])
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs?per_page=10",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    async def test_empty_run_list_returns_empty(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """A repo with no workflow runs returns ``[]``, not a 500."""
+        repo_obj = MagicMock()
+        repo_obj.get_workflow_runs.return_value = _FakePaginatedList([])
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/runs", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == []
 
     async def test_unknown_repo_returns_404(
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
@@ -1584,8 +1659,8 @@ class TestMergePull:
             )
         )
         # Also make the raw requester path fail so we surface the 405
-        fake_pr._requester = MagicMock()
-        fake_pr._requester.requestJsonAndCheck = MagicMock(
+        fake_pr.requester = MagicMock()
+        fake_pr.requester.requestJsonAndCheck = MagicMock(
             side_effect=GithubException(
                 405, data={"message": "Merge queue is required for this repository"}
             )
@@ -1593,8 +1668,8 @@ class TestMergePull:
         repo_obj = MagicMock()
         repo_obj.get_pull.return_value = fake_pr
         fake_client = _fake_client(repo_obj)
-        # Attach _requester for the raw fallback path
-        fake_client._requester = fake_pr._requester
+        # Attach requester for the raw fallback path
+        fake_client.requester = fake_pr.requester
 
         async def _fake_get_client(config, owner, repo):
             return fake_client
@@ -1713,8 +1788,8 @@ class TestMergePull:
         repo_obj.get_pull.return_value = fake_pr
 
         fake_client = _fake_client(repo_obj)
-        fake_client._requester = MagicMock()
-        fake_client._requester.requestJsonAndCheck.return_value = (
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
             {"Content-Type": "application/json"},
             {
                 "merged": True,
@@ -1742,7 +1817,7 @@ class TestMergePull:
         assert body["merged"] is True
         assert body["sha"] == "sha-enqueued"
         # Raw requester should have been called with the right params
-        fake_client._requester.requestJsonAndCheck.assert_called_once_with(
+        fake_client.requester.requestJsonAndCheck.assert_called_once_with(
             "PUT",
             "/repos/acme/widget/pulls/42/merge",
             input={"merge_method": "squash", "sha": "abc123"},
@@ -1789,8 +1864,8 @@ class TestGetWorkflowPermissions:
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
     ):
         fake_client = MagicMock(name="fake-github-client")
-        fake_client._requester = MagicMock()
-        fake_client._requester.requestJsonAndCheck.return_value = (
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
             {"Content-Type": "application/json"},
             {
                 "default_workflow_permissions": "read",
@@ -1817,7 +1892,7 @@ class TestGetWorkflowPermissions:
             "default_workflow_permissions": "read",
             "can_approve_pull_request_reviews": False,
         }
-        fake_client._requester.requestJsonAndCheck.assert_called_once_with(
+        fake_client.requester.requestJsonAndCheck.assert_called_once_with(
             "GET", "/repos/acme/widget/actions/permissions/workflow"
         )
 
@@ -1827,8 +1902,8 @@ class TestGetWorkflowPermissions:
         from github import UnknownObjectException
 
         fake_client = MagicMock(name="fake-github-client")
-        fake_client._requester = MagicMock()
-        fake_client._requester.requestJsonAndCheck.side_effect = UnknownObjectException(
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.side_effect = UnknownObjectException(
             404, data={"message": "Not Found"}
         )
 
@@ -1880,8 +1955,8 @@ class TestSetWorkflowPermissions:
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
     ):
         fake_client = MagicMock(name="fake-github-client")
-        fake_client._requester = MagicMock()
-        fake_client._requester.requestJsonAndCheck.return_value = (
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
             {"Content-Type": "application/json"},
             {
                 "default_workflow_permissions": "write",
@@ -1912,7 +1987,7 @@ class TestSetWorkflowPermissions:
             "default_workflow_permissions": "write",
             "can_approve_pull_request_reviews": True,
         }
-        fake_client._requester.requestJsonAndCheck.assert_called_once_with(
+        fake_client.requester.requestJsonAndCheck.assert_called_once_with(
             "PUT",
             "/repos/acme/widget/actions/permissions/workflow",
             input={
@@ -1925,8 +2000,8 @@ class TestSetWorkflowPermissions:
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
     ):
         fake_client = MagicMock(name="fake-github-client")
-        fake_client._requester = MagicMock()
-        fake_client._requester.requestJsonAndCheck.return_value = (
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.return_value = (
             {"Content-Type": "application/json"},
             {
                 "default_workflow_permissions": "write",
@@ -1968,8 +2043,8 @@ class TestSetWorkflowPermissions:
         from github import UnknownObjectException
 
         fake_client = MagicMock(name="fake-github-client")
-        fake_client._requester = MagicMock()
-        fake_client._requester.requestJsonAndCheck.side_effect = UnknownObjectException(
+        fake_client.requester = MagicMock()
+        fake_client.requester.requestJsonAndCheck.side_effect = UnknownObjectException(
             404, data={"message": "Not Found"}
         )
 
@@ -2480,8 +2555,8 @@ class TestCreateReview:
 
         # PAT client — used for fallback via raw requester
         fake_pat_client = MagicMock(name="fake-pat-client")
-        fake_pat_client._requester = MagicMock()
-        fake_pat_client._requester.requestJsonAndCheck.return_value = (
+        fake_pat_client.requester = MagicMock()
+        fake_pat_client.requester.requestJsonAndCheck.return_value = (
             {"Content-Type": "application/json"},
             {
                 "id": 99,
