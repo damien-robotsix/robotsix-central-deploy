@@ -390,7 +390,9 @@
 
   /* Warning banners (display:none + amber styling) */
   .banner-warning {
-    background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid #fb923c;
+    background: rgba(251,146,60,0.15); color: #fb923c;
+    border: 1px solid #fb923c; padding: 10px 14px;
+    border-radius: 4px; margin-bottom: 12px; font-size: 0.82rem;
   }
   /* Close button inside banners */
   .banner-close-btn {

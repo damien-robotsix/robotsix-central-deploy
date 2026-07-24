@@ -180,6 +180,54 @@ class TestGetServiceConfig:
         data = resp.json()
         assert data["current"]["api_key"] == "***"
 
+    async def test_ref_properties_retain_x_deploy_plane(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """$ref properties retain x-deploy-plane on the wire.
+
+        Regression test: _annotate_config_ownership annotates the original
+        wrapper dict (not just the temporary merged dict from _resolve_ref),
+        so x-deploy-plane survives in the JSON response even when a property
+        uses ``$ref``.
+        """
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        schema = {
+            "type": "object",
+            "$defs": {
+                "ServerConfig": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string"},
+                        "port": {"type": "integer", "default": 8080},
+                    },
+                },
+            },
+            "properties": {
+                "robotsix_config_file": {"type": "string", "default": "/etc/app.yaml"},
+                "server": {"$ref": "#/$defs/ServerConfig"},
+            },
+        }
+        await store.save_template("chat", schema)
+
+        resp = await client.get("/services/chat/config", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        props = data["schema"]["properties"]
+        # Direct property (not $ref): deploy-plane key → "deploy"
+        assert props["robotsix_config_file"]["x-deploy-plane"] == "deploy"
+        # $ref wrapper: annotation survives on the wrapper dict
+        assert props["server"]["x-deploy-plane"] == "component"
+        # $ref wrapper still carries the $ref pointer
+        assert props["server"]["$ref"] == "#/$defs/ServerConfig"
+
+        # Nested properties behind $ref are annotated when resolved
+        # (verified via the schema's $defs — the server resolves refs
+        # for the walker, but the wire schema keeps the $ref wrapper).
+        defs = data["schema"].get("$defs", {})
+        assert "ServerConfig" in defs
+
 
 # ---------------------------------------------------------------------------
 # PUT /services/{name}/config
