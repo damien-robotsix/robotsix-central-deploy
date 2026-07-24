@@ -5,6 +5,10 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
+from robotsix_central_deploy.lifecycle._config_utils import (
+    _merge_config,
+    _strip_secret_values,
+)
 from robotsix_central_deploy.lifecycle.deps.seed import (
     _build_component_config_from_spec,
     _derive_account_id,
@@ -698,3 +702,61 @@ class TestRelocateAccountSeedValues:
         _relocate_account_seed_values(values, seeds, src_idx=0, dst_idx=3)
         assert "accounts" in values
         assert len(values["accounts"]) == 4
+
+
+# ===================================================================
+# TestConfigDefaultSeeding
+# ===================================================================
+
+
+class TestConfigDefaultSeeding:
+    """Tests for the seeding pipeline used by ``onboard_confirm``.
+
+    Exercises the exact sequence::
+
+        base_values = _strip_secret_values(spec.config_schema, spec.config_example_values or {})
+        merged = _merge_config(spec.config_schema, base_values, req.config_values or {}, prefer_existing_for_unset=True)
+        _validate_config_or_422(spec.config_schema, merged)
+    """
+
+    def test_empty_current_seeded_from_repo_default(self) -> None:
+        """When the operator submits nothing, the repo default flows into current."""
+        schema = {
+            "type": "object",
+            "properties": {"log_level": {"type": "string"}},
+            "additionalProperties": False,
+        }
+        config_example_values = {"log_level": "debug"}
+        req_config_values: dict[str, str] = {}
+
+        base_values = _strip_secret_values(schema, config_example_values)
+        merged = _merge_config(
+            schema,
+            base_values,
+            req_config_values,
+            prefer_existing_for_unset=True,
+        )
+        _validate_config_or_422(schema, merged)  # must not raise
+
+        assert merged["log_level"] == "debug"
+
+    def test_operator_values_take_priority_over_repo_default(self) -> None:
+        """Operator-supplied values override the repo default."""
+        schema = {
+            "type": "object",
+            "properties": {"log_level": {"type": "string"}},
+            "additionalProperties": False,
+        }
+        config_example_values = {"log_level": "debug"}
+        req_config_values = {"log_level": "warning"}
+
+        base_values = _strip_secret_values(schema, config_example_values)
+        merged = _merge_config(
+            schema,
+            base_values,
+            req_config_values,
+            prefer_existing_for_unset=True,
+        )
+        _validate_config_or_422(schema, merged)  # must not raise
+
+        assert merged["log_level"] == "warning"
