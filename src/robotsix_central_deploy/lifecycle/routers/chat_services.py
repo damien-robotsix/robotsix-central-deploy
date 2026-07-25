@@ -22,6 +22,7 @@ from ..deps import (
     _get_registry,
     _get_sibling_pairs,
     _get_store,
+    _require_config_standard,
 )
 from .._config_utils import _sanitize_log
 from ._chat_common import (
@@ -521,30 +522,7 @@ async def _resolve_deploy_contract(
         derived_spec.config_schema = None
 
     # --- Hard precondition: config contract must be satisfied ---
-    if derived_spec.config_schema is None or derived_spec.config_volume is None:
-        missing: list[str] = []
-        if derived_spec.config_schema is None:
-            missing.append(
-                "missing config/config.schema.json — every deployed service "
-                "must ship config/config.schema.json "
-                "(robotsix-standards/docs/config-standard.md)"
-            )
-        if derived_spec.config_volume is None:
-            missing.append(
-                "missing robotsix.deploy.config-target label — the primary "
-                "service in deploy/docker-compose.yml must declare "
-                "robotsix.deploy.config-target "
-                "(robotsix-standards/docs/config-standard.md)"
-            )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": (
-                    "Repo does not satisfy the robotsix config standard: "
-                    + "; ".join(missing)
-                ),
-            },
-        )
+    _require_config_standard(derived_spec)
 
     # --- Namespace volume names ---
     derived_spec = _namespace_spec_volumes(derived_spec, body.name)
