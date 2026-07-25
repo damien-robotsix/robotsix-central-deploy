@@ -316,6 +316,7 @@ async def _init_settings(app: FastAPI) -> None:
                     caretaker_enabled=_config.caretaker_enabled,
                     caretaker_interval_hours=_config.caretaker_interval_hours,
                     claude_auth_refresh_interval=_config.claude_auth_refresh_interval,
+                    ghcr_pull_token=_config.ghcr_pull_token.get_secret_value(),
                 )
             )
             logger.info(

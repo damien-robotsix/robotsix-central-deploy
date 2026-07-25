@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..auth import verify_auth
+from ..backends import ExecutionBackend
 from ..deps import (
     _fetch_component_repo_files,
+    _get_backend,
     _get_component_config_store,
     _get_env_store,
     _get_or_create_record,
     _get_registry,
+    _get_settings_store,
     _get_store,
 )
 from ..models import ErrorDetail
@@ -20,6 +24,9 @@ from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
+from ...registry.settings_store import SystemSettingsStore
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["services"])
 
@@ -40,6 +47,7 @@ async def get_service_env(
     store: ServiceStore = Depends(_get_store),
     env_store: EnvStore = Depends(_get_env_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),
     _auth: None = Depends(verify_auth),
 ) -> EnvResponse:
     """Return stored environment variables and masked secret keys for a service.
@@ -49,7 +57,17 @@ async def get_service_env(
     """
     await _get_or_create_record(name, store)
     config = await env_store.get(name)
-    secrets_masked = {key: "***" for key in config.secret_tokens}
+    secrets_masked: dict[str, str] = {key: "***" for key in config.secret_tokens}
+
+    # For central-deploy, surface the fleet-wide ghcr_pull_token as a
+    # masked secret so the operator can set/rotate it from the dashboard.
+    if name == "central-deploy":
+        stored = await settings_store.get()
+        if stored.ghcr_pull_token:
+            secrets_masked["ghcr_pull_token"] = "***"  # noqa: S105
+        else:
+            secrets_masked["ghcr_pull_token"] = ""
+
     comp_cfg = component_config_store.get(name)
     mem_limit = comp_cfg.mem_limit if comp_cfg else "2g"
     allow_chat_access = comp_cfg.allow_chat_access if comp_cfg else False
@@ -83,6 +101,8 @@ async def put_service_env(
     env_store: EnvStore = Depends(_get_env_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     registry: ComponentRegistry = Depends(_get_registry),
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),
+    backend: "ExecutionBackend" = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Create or update environment variables and secrets for a service.
@@ -91,6 +111,20 @@ async def put_service_env(
     Returns 204 No Content on success. Raises 404 if the service is not found.
     """
     await _get_or_create_record(name, store)
+
+    # Intercept ghcr_pull_token for central-deploy: update the backend
+    # and persist to system settings so it survives restarts.
+    ghcr_token = body.secrets.pop("ghcr_pull_token", None)
+    if name == "central-deploy" and ghcr_token is not None:
+        stored = await settings_store.get()
+        stored.ghcr_pull_token = ghcr_token
+        await settings_store.put(stored)
+        # Propagate to the running backend immediately so the next pull
+        # authenticates without a restart.
+        if hasattr(backend, "ghcr_pull_token"):
+            backend.ghcr_pull_token = ghcr_token
+            logger.info("ghcr_pull_token updated on running backend")
+
     await env_store.upsert(
         name,
         body.env,
@@ -203,6 +237,8 @@ async def delete_service_env_key(
     key: str,
     store: ServiceStore = Depends(_get_store),
     env_store: EnvStore = Depends(_get_env_store),
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),
+    backend: "ExecutionBackend" = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Delete a single environment-variable or secret key for a service.
@@ -211,6 +247,18 @@ async def delete_service_env_key(
     is not found.
     """
     await _get_or_create_record(name, store)
+
+    # Intercept ghcr_pull_token for central-deploy: clear the token
+    # from system settings and the running backend.
+    if name == "central-deploy" and key == "ghcr_pull_token":
+        stored = await settings_store.get()
+        stored.ghcr_pull_token = ""
+        await settings_store.put(stored)
+        if hasattr(backend, "ghcr_pull_token"):
+            backend.ghcr_pull_token = ""
+            logger.info("ghcr_pull_token cleared on running backend")
+        return
+
     found = await env_store.delete_key(name, key)
     if not found:
         raise HTTPException(

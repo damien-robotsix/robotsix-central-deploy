@@ -24,6 +24,7 @@ from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryS
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
+from robotsix_central_deploy.registry.settings_store import SystemSettingsStore
 
 import robotsix_central_deploy.lifecycle.app as server_mod
 
@@ -58,6 +59,9 @@ def _reset_globals(monkeypatch, tmp_path):
     chat_agent_audit_store = ChatAgentAuditStore(state_dir / "chat_agent_audit.json")
     registry = ComponentRegistry([])
 
+    # Settings store (needed for ghcr_pull_token via env endpoints)
+    settings_store = SystemSettingsStore(state_dir / "settings.json")
+
     # Set both the module-level globals and app.state so all code paths work.
     server_mod._config = cfg
     server_mod._store = store
@@ -76,6 +80,7 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
     server_mod.app.state.job_registry = JobRegistry()
+    server_mod.app.state.settings_store = settings_store
 
 
 @pytest.fixture

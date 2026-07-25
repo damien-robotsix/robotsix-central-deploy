@@ -66,6 +66,9 @@ class SystemSettings(BaseModel):
     volume_audit_min_delta_bytes: int = SETTINGS_DEFAULTS[
         "volume_audit_min_delta_bytes"
     ]
+    ghcr_pull_token: str = SETTINGS_DEFAULTS[
+        "ghcr_pull_token"
+    ]  # read:packages PAT for private GHCR pulls
 
     @field_validator("volume_audit_interval_seconds")
     @classmethod
