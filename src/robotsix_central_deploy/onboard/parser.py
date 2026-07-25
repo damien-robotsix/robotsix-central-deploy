@@ -48,6 +48,37 @@ LABEL_CHAT_AGENT_MUTATABLE = "robotsix.deploy.chat-agent-mutatable"  # "true" / 
 _SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
+def _normalize_labels(raw: Any) -> dict[str, Any]:
+    """Normalize Docker Compose labels to a ``dict`` regardless of source form.
+
+    Docker Compose supports two equivalent label forms::
+
+        labels:
+          robotsix.deploy.config-target: "/app/config/config.json"
+
+        labels:
+          - "robotsix.deploy.config-target=/app/config/config.json"
+
+    This function normalizes both to a ``dict``.  List entries are split on
+    the first ``=``; entries without ``=`` map to the empty string.
+    ``None`` or any other non-dict, non-list value produces an empty dict.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, list):
+        result: dict[str, Any] = {}
+        for item in raw:
+            if not isinstance(item, str):
+                continue
+            if "=" in item:
+                key, _, value = item.partition("=")
+                result[key] = value
+            else:
+                result[item] = ""
+        return result
+    return {}
+
+
 def _parse_go_duration(s: str) -> int:
     """Convert a Go duration string (e.g. ``30s``, ``1m30s``) to integer seconds.
 
@@ -430,7 +461,7 @@ def _parse_one_service(
     violations.extend(f"{prefix}{v}" for v in hc_violations)
 
     # Labels
-    labels = svc.get("labels")
+    labels = _normalize_labels(svc.get("labels"))
     claude_mount = False
     claude_mount_path = "/home/app/.claude"
     host_docker_sock = False
@@ -593,8 +624,10 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
             k
             for k, svc_dict in services.items()
             if isinstance(svc_dict, dict)
-            and isinstance(svc_dict.get("labels"), dict)
-            and str(svc_dict["labels"].get(PRIMARY_LABEL, "")).strip().lower() == "true"
+            and str(_normalize_labels(svc_dict.get("labels")).get(PRIMARY_LABEL, ""))
+            .strip()
+            .lower()
+            == "true"
         ]
         if len(primary_keys) == 0:
             violations.append(
