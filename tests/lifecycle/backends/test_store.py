@@ -104,3 +104,39 @@ class TestFileStoreSpecific:
             assert got.name == "survivor"
             assert got.state == ServiceState.RUNNING
             assert got.image == "i:v2"
+
+    async def test_load_tolerates_empty_state_file(self):
+        """A 0-byte/None state file self-heals to empty instead of crashing.
+
+        Guards the 07-24 gateway outage: a truncated lifecycle_state.yaml
+        parsed to None at the top level and crash-looped startup.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "state.yaml"
+            path.write_text("", encoding="utf-8")  # truncated file
+            store = FileStore(path)
+            assert await store.get("anything") is None
+            assert await store.list_all() == []
+            assert await store.count() == 0
+            # And it recovers: a subsequent write repopulates cleanly.
+            await store.put(ServiceRecord(name="rebuilt", state=ServiceState.RUNNING))
+            got = await store.get("rebuilt")
+            assert got is not None and got.state == ServiceState.RUNNING
+
+    async def test_load_tolerates_explicit_null_top_level(self):
+        """`null`/`~` (yaml None) top level also self-heals rather than crashing."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "state.yaml"
+            path.write_text("null\n", encoding="utf-8")
+            store = FileStore(path)
+            assert await store.list_all() == []
+
+    async def test_save_leaves_no_temp_files(self):
+        """Atomic write must not leave .tmp artifacts in the state directory."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "state.yaml"
+            store = FileStore(path)
+            await store.put(ServiceRecord(name="a", state=ServiceState.RUNNING))
+            await store.put(ServiceRecord(name="b", state=ServiceState.STOPPED))
+            leftovers = [p.name for p in Path(td).iterdir() if p.name != "state.yaml"]
+            assert leftovers == [], f"unexpected files left behind: {leftovers}"
