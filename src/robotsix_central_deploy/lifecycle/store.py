@@ -8,15 +8,24 @@ Provides an abstract ``ServiceStore`` and two implementations:
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
+import os
+import tempfile
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 import yaml
 
-from robotsix_central_deploy.lifecycle._yaml_utils import read_yaml_file
+from robotsix_central_deploy.lifecycle._yaml_utils import (
+    InvalidConfigStructureError,
+    read_yaml_file,
+)
 
 from .models import ServiceRecord, ServiceState
+
+logger = logging.getLogger(__name__)
 
 
 class ServiceStore(ABC):
@@ -87,7 +96,19 @@ class FileStore(ServiceStore):
     async def _load(self) -> dict[str, ServiceRecord]:
         if not self._path.exists():
             return {}
-        raw = read_yaml_file(self._path)
+        try:
+            raw = read_yaml_file(self._path)
+        except InvalidConfigStructureError:
+            # A truncated/empty state file (e.g. from an interrupted write on a
+            # prior version) parses to None at the top level. Crashing here
+            # takes the whole gateway down in a restart loop; instead self-heal
+            # by treating it as empty so the registry re-seeds the records.
+            logger.warning(
+                "State file %s is empty/invalid (top-level not a mapping); "
+                "treating as empty and re-seeding from the component registry.",
+                self._path,
+            )
+            return {}
         records: dict[str, ServiceRecord] = {}
         for name, d in raw.items():
             d = d or {}
@@ -128,9 +149,32 @@ class FileStore(ServiceStore):
                 "repo_id": r.repo_id,
             }
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            yaml.safe_dump(raw, default_flow_style=False), encoding="utf-8"
+        text = yaml.safe_dump(raw, default_flow_style=False)
+        # Atomic write: render to a temp file in the same directory, fsync it,
+        # then os.replace onto the target. os.replace is atomic on POSIX (same
+        # filesystem), so a crash/kill/disk-pressure mid-write can never leave a
+        # truncated state file behind — the old file survives intact until the
+        # complete new one swaps in. (Root cause of the 07-24 gateway outage.)
+        fd, tmp = tempfile.mkstemp(
+            dir=str(self._path.parent), prefix=f"{self._path.name}.", suffix=".tmp"
         )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self._path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
+        # Best-effort: fsync the directory so the rename itself is durable.
+        with contextlib.suppress(OSError):
+            dir_fd = os.open(str(self._path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
 
     async def get(self, name: str) -> ServiceRecord | None:
         records = await self._load()
