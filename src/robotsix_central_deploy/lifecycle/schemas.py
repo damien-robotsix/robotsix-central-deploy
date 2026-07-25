@@ -48,6 +48,14 @@ class PortShift(BaseModel):
 class OnboardPreflightRequest(BaseModel):
     git_url: str = Field(description="Git clone URL of the repository to onboard")
     name: str = Field(description="Component name; must match ^[a-z0-9][a-z0-9-]*$")
+    target_disk: str = Field(
+        default="",
+        description=(
+            "Target disk identifier (device path, mount point, or label) "
+            "for volume placement. Empty means use the config default or "
+            "Docker's default volume location."
+        ),
+    )
 
 
 class OnboardPreflightResponse(BaseModel):
@@ -75,6 +83,14 @@ class OnboardConfirmRequest(BaseModel):
     port_shifts: list[PortShift] = Field(
         default=[],
         description="Port shift list echoed from preflight; used for collision ticket filing",
+    )
+    target_disk: str = Field(
+        default="",
+        description=(
+            "Target disk identifier (device path, mount point, or label) "
+            "for volume placement. Overrides the value in spec when set. "
+            "Empty means use the spec value or config default."
+        ),
     )
 
 

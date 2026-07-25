@@ -207,6 +207,21 @@ async def deploy_service(
 
     image_ref = body.image or config.image
 
+    # Apply per-deploy target_disk override.
+    if body.target_disk:
+        from robotsix_central_deploy.lifecycle._disk_utils import (  # noqa: PLC0415
+            resolve_target_disk,
+        )
+
+        try:
+            resolved = resolve_target_disk(body.target_disk)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"Invalid target_disk: {exc}"},
+            )
+        config = config.model_copy(update={"target_disk": resolved})
+
     # If an API-initiated deploy job is already active for this component,
     # return its job_id so the caller can poll the existing deploy.
     existing_job_id = job_registry.active_deploy_job_id_for(name)
