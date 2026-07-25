@@ -618,6 +618,43 @@ class ChatAgentDeployResponse(BaseModel):
     )
 
 
+class ChatAgentRegisterRequest(BaseModel):
+    """Request body for POST /chat/services — register a new managed component.
+
+    Registers a component with minimal metadata so it appears in the
+    service inventory.  Registration does NOT auto-start or auto-deploy
+    the component — those remain separate gated actions.
+    """
+
+    name: str = Field(
+        description="Component name; must match ^[a-z0-9][a-z0-9-]*$",
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+    )
+    image: str = Field(
+        description="Container image reference (e.g. ghcr.io/org/repo:tag)",
+    )
+    owner_repo: str = Field(
+        default="",
+        description="Git clone URL of the repository owning the deploy contract",
+    )
+
+
+class ChatAgentRegisterResponse(BaseModel):
+    """Response body for POST /chat/services — register confirmation."""
+
+    name: str = Field(description="Component name")
+    action: str = Field(default="register", description="Always 'register'")
+    image: str = Field(description="Container image reference")
+    owner_repo: str = Field(
+        default="", description="Owning repository URL (empty when not supplied)"
+    )
+    detail: str = Field(default="", description="Human-readable summary")
+    existed: bool = Field(
+        default=False,
+        description="True when the component was already registered (idempotent re-registration)",
+    )
+
+
 class ChatAgentSelfUpdateResponse(BaseModel):
     """Response body for POST /chat/services/central-deploy/update."""
 

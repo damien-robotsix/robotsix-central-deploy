@@ -467,6 +467,17 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Chat agent registration toggle — when True the chat agent may register
+    # new components via POST /chat/services without a pre-existing config.
+    chat_agent_registration_enabled: bool = Field(
+        False,
+        description=(
+            "When True, the chat agent may register new managed components "
+            "via POST /chat/services.  Registration only persists metadata — "
+            "it does NOT auto-start or auto-deploy the component."
+        ),
+    )
+
     # Generic deploy allowlist — component names the chat agent may deploy
     # via POST /chat/deploy even when no ComponentConfig exists yet.
     chat_agent_deployable_components: list[str] = Field(
