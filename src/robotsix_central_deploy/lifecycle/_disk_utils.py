@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 _FINDMNT = "/usr/bin/findmnt"
 
 # Pseudo and virtual filesystem types to exclude from disk discovery.
+#
+# ``findmnt --real`` already skips pseudo filesystems, but this list acts
+# as a belt-and-suspenders safety net for older findmnt versions that may
+# lack the ``--real`` flag, and for the /proc/mounts fallback path which
+# has no kernel-side pseudo-fs filtering.
 _PSEUDO_FS_TYPES: frozenset[str] = frozenset(
     {
         "proc",
@@ -127,7 +132,7 @@ def discover_mounted_disks() -> list[DiskInfo]:
             text=True,
             timeout=10,
         )
-    except subprocess.CalledProcessError, FileNotFoundError, OSError:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         raw = ""
 
     if not raw.strip():
@@ -179,7 +184,7 @@ def _mount_point_of(source_spec: str) -> str | None:
             text=True,
             timeout=10,
         )
-    except subprocess.CalledProcessError, FileNotFoundError, OSError:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return None
     mp = out.strip()
     return mp if mp else None
@@ -195,7 +200,7 @@ def _is_mount_point(path: str) -> bool:
             timeout=10,
         )
         return True
-    except subprocess.CalledProcessError, FileNotFoundError, OSError:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return False
 
 

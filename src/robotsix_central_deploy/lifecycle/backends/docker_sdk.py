@@ -472,16 +472,26 @@ class DockerSdkBackend(ExecutionBackend):
         # Resolve target disk path for volume placement
         target_disk_path: str = ""
         if config.target_disk:
-            from robotsix_central_deploy.lifecycle._disk_utils import (
-                resolve_target_disk,
-            )
+            # Callers (deploy endpoint, onboard flow) already resolve the
+            # identifier via resolve_target_disk() and store the canonical
+            # mount point in config.target_disk.  If we received an absolute
+            # directory path, use it directly to avoid a redundant findmnt
+            # call; otherwise fall back to full resolution for callers that
+            # pass a raw identifier.
+            candidate = os.path.realpath(config.target_disk)
+            if os.path.isdir(candidate):
+                target_disk_path = candidate
+            else:
+                from robotsix_central_deploy.lifecycle._disk_utils import (
+                    resolve_target_disk,
+                )
 
-            try:
-                target_disk_path = resolve_target_disk(config.target_disk)
-            except ValueError as exc:
-                raise RuntimeError(
-                    f"Invalid target_disk for component {config.id!r}: {exc}"
-                ) from exc
+                try:
+                    target_disk_path = resolve_target_disk(config.target_disk)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        f"Invalid target_disk for component {config.id!r}: {exc}"
+                    ) from exc
 
         for vol_name in volumes_to_create:
             vol_path: str = ""
@@ -502,7 +512,10 @@ class DockerSdkBackend(ExecutionBackend):
                     "o": "bind",
                 }
 
-            def _create_volume() -> None:
+            def _create_volume(
+                vol_name: str = vol_name,
+                driver_opts: dict[str, str] | None = driver_opts,
+            ) -> None:
                 if driver_opts:
                     self._client.volumes.create(
                         vol_name,
