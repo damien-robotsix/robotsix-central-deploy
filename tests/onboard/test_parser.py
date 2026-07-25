@@ -9,6 +9,7 @@ from robotsix_central_deploy.onboard.models import (
     ParseError,
 )
 from robotsix_central_deploy.onboard.parser import (
+    _normalize_labels,
     _parse_chat_access,
     _parse_chat_agent_mutatable,
     _parse_claude_mount,
@@ -171,8 +172,40 @@ class TestParseHostDockerSock:
         assert violations[0].startswith("[service 'foo'] ")
 
 
+class TestNormalizeLabels:
+    def test_dict_passthrough(self):
+        labels = {"robotsix.deploy.config-target": "/app/config/config.yaml"}
+        assert _normalize_labels(labels) == labels
+
+    def test_list_form(self):
+        labels = ["robotsix.deploy.config-target=/app/config/config.yaml"]
+        result = _normalize_labels(labels)
+        assert result == {"robotsix.deploy.config-target": "/app/config/config.yaml"}
+
+    def test_list_form_without_equals(self):
+        labels = ["robotsix.deploy.claude-mount"]
+        result = _normalize_labels(labels)
+        assert result == {"robotsix.deploy.claude-mount": ""}
+
+    def test_none_returns_empty(self):
+        assert _normalize_labels(None) == {}
+
+    def test_other_type_returns_empty(self):
+        assert _normalize_labels(42) == {}
+
+
 class TestParseConfigTarget:
     def test_resolves_volume_name(self):
+        volume_mounts = [VolumeMount(host="app-config", container="/home/app/config")]
+        config_volume, violations = _parse_config_target(
+            {"robotsix.deploy.config-target": "/home/app/config/config.yaml"},
+            volume_mounts,
+        )
+        assert config_volume == "app-config"
+        assert violations == []
+
+    def test_resolves_volume_name_list_form(self):
+        """List-form labels should resolve identically to map form."""
         volume_mounts = [VolumeMount(host="app-config", container="/home/app/config")]
         config_volume, violations = _parse_config_target(
             {"robotsix.deploy.config-target": "/home/app/config/config.yaml"},
@@ -703,6 +736,23 @@ volumes:
 """
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.config_volume == "myapp-conf"
+
+    def test_config_target_list_form(self):
+        """robotsix.deploy.config-target in list form resolves to the named volume."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      - "robotsix.deploy.config-target=/home/app/config/config.yaml"
+    volumes:
+      - app-config:/home/app/config
+volumes:
+  app-config: {}
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.config_volume == "app-config"
 
 
 class TestParseComposeHealthcheck:

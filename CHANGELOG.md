@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Added `POST /chat/services` endpoint for chat-agent component registration, gated behind `chat_agent_registration_enabled` server config toggle (off by default). Creates a minimal `ComponentConfig` and a `ServiceRecord` in STOPPED state without auto-starting or auto-deploying.
+- Preflight config-standard parser now normalises Docker Compose labels to dict form regardless of source notation. Labels declared in list form (``- "key=value"``) are parsed identically to map-form labels, fixing a false-negative where ``robotsix.deploy.config-target`` was reported as missing even when present.
 - Split `services.py` (856 lines) into `services.py` (313 lines) and new `services_maintenance.py` (358 lines). The new module holds `refresh_contract` and `delete_service` endpoints plus the `_delete_component_volumes` helper, keeping all module files well within size limits.
 - Extract lifecycle-action endpoints (start/stop/restart) from `services.py` into new `services_lifecycle.py` router to keep module size within healthy range.
 - Split `tests/lifecycle/routers/test_chat_github.py` (3507 lines) into three focused test files: `test_chat_github_actions.py` (workflow runs + dispatch), `test_chat_github_repos.py` (repo CRUD + security), and `test_chat_github_pulls.py` (PRs, reviews, merge gate, permissions).
