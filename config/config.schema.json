@@ -516,6 +516,12 @@
       "type": "string",
       "writeOnly": true
     },
+    "chat_agent_registration_enabled": {
+      "default": false,
+      "description": "When True, the chat agent may register new managed components via POST /chat/services.  Registration only persists metadata \u2014 it does NOT auto-start or auto-deploy the component.",
+      "title": "Chat Agent Registration Enabled",
+      "type": "boolean"
+    },
     "chat_agent_deployable_components": {
       "description": "Component names the chat agent is allowed to deploy via the generic POST /chat/deploy endpoint. Each entry must match ^[a-z0-9][a-z0-9-]*$. Distinct from chat_agent_mutatable (per-component flag) \u2014 this is a server-level allowlist for components that may not have a persisted ComponentConfig yet.",
       "items": {
@@ -541,3 +547,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+
