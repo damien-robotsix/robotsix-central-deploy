@@ -47,7 +47,7 @@ async def report_finding(
             else "[]"
         )
         existing: list[dict[str, Any]] = json.loads(raw)
-    except json.JSONDecodeError, OSError:
+    except (json.JSONDecodeError, OSError):
         existing = []
     existing.append(finding.model_dump(mode="json"))
     if len(existing) > _MAX_FINDINGS:

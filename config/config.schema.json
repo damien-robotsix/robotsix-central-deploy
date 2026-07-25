@@ -223,6 +223,12 @@
       "title": "Disk Warn Pct",
       "type": "number"
     },
+    "target_disk": {
+      "default": "",
+      "description": "Default target disk mount point for new component volumes. Empty means use Docker's default volume location. Overridden by per-deploy / onboard target-disk values.",
+      "title": "Target Disk",
+      "type": "string"
+    },
     "env_store_path": {
       "advanced": true,
       "default": "component_env.json",
@@ -547,3 +553,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+

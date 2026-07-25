@@ -364,7 +364,7 @@ def _derive_account_id(
             elif isinstance(node, list):
                 try:
                     node = node[int(part)]
-                except ValueError, IndexError:
+                except (ValueError, IndexError):
                     node = None
             else:
                 node = None

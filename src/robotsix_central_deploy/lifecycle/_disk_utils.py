@@ -82,6 +82,10 @@ def resolve_target_disk(identifier: str) -> str:
     if not identifier or not identifier.strip():
         raise ValueError("target_disk identifier is empty")
 
+    # Sanitize: reject null bytes and path-traversal attempts in the
+    # user-supplied identifier before any filesystem operation.
+    _validate_disk_identifier(identifier)
+
     identifier = identifier.strip()
 
     # 1. Device path
@@ -174,6 +178,24 @@ def discover_mounted_disks() -> list[DiskInfo]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _validate_disk_identifier(value: str) -> None:
+    """Reject obviously-malicious disk-identifier inputs.
+
+    This is a defense-in-depth check against path-injection: null bytes
+    are always illegal, and bare ``..`` path components are rejected.
+    """
+    if "\0" in value:
+        raise ValueError("target_disk identifier contains null bytes")
+    # Only check for traversal when the value looks like a path (starts
+    # with /).  Labels (e.g. "mydisk") are not checked.
+    if value.startswith("/"):
+        parts = os.path.normpath(value).split(os.sep)
+        if ".." in parts:
+            raise ValueError(
+                f"target_disk identifier contains path traversal: {value!r}"
+            )
 
 
 def _mount_point_of(source_spec: str) -> str | None:
