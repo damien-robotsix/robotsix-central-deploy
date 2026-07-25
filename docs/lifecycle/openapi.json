@@ -7816,7 +7816,18 @@
             },
             "type": "array",
             "title": "Test",
-            "description": "Health check command array, e.g. ['CMD', 'curl', '-f', 'http://localhost:8080/']"
+            "description": "Health check command array, e.g. ['CMD', 'curl', '-f', 'http://localhost:8080/']",
+            "default": [
+              "CMD",
+              "echo",
+              "ok"
+            ]
+          },
+          "disable": {
+            "type": "boolean",
+            "title": "Disable",
+            "description": "When True, the container health check is explicitly disabled (Docker receives Test: ['NONE']).  When False, *test* is applied.",
+            "default": false
           },
           "interval_seconds": {
             "type": "integer",
@@ -7844,9 +7855,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "test"
-        ],
         "title": "HealthCheck",
         "description": "Mirrors the Docker HealthCheck spec."
       },
