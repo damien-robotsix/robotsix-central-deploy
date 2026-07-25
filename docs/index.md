@@ -54,15 +54,26 @@ local development.
 
 ### GHCR image-pull authentication
 
-Private `ghcr.io` container images are pulled using **short-lived GitHub
-App installation tokens** minted by the
-[`robotsix-github-auth`](https://github.com/damien-robotsix/robotsix-github-auth)
-library.  A fresh token is generated per pull operation — no static PAT
-or durable credential is stored on disk.  The three GitHub App fields
-(`github_app_id`, `github_app_private_key`, `installation_id`) in
-`config/config.json` control which App installation is used; when these
-fields are unset, `ghcr.io` pulls fall back to anonymous access (public
-images only).
+Private `ghcr.io` container images can be authenticated using one of two
+methods, tried in priority order:
+
+1. **Static PAT (`ghcr_pull_token`)** — a classic GitHub personal access token
+   with ``read:packages`` scope, set from the dashboard's **Env & Secrets** tab
+   for the ``central-deploy`` service. This token covers ALL private GHCR
+   packages fleet-wide — a single PAT works for every managed component. Set
+   or rotate it without editing ``config.json`` or restarting the server; the
+   new value takes effect on the very next image pull.
+
+2. **GitHub App installation tokens** — short-lived tokens minted by the
+   [`robotsix-github-auth`](https://github.com/damien-robotsix/robotsix-github-auth)
+   library. A fresh token is generated per pull operation. The three GitHub App
+   fields (`github_app_id`, `github_app_private_key`, `installation_id`) in
+   `config/config.json` control which App installation is used.
+
+When neither credential is configured, `ghcr.io` pulls fall back to anonymous
+access (public images only). A 403 ``denied`` error means the configured
+credential lacks ``read:packages`` on the target package — check the PAT scope
+or App installation permissions.
 
 ### Example `.env.lifecycle` snippet
 

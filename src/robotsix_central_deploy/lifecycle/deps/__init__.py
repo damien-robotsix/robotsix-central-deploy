@@ -29,6 +29,7 @@ from .dependencies import (
     _get_or_create_record,
     _get_registry,
     _get_registry_checker,
+    _get_settings_store,
     _get_sibling_pairs,
     _get_store,
 )
@@ -120,6 +121,7 @@ __all__ = [
     "_get_or_create_record",
     "_get_registry",
     "_get_registry_checker",
+    "_get_settings_store",
     "_get_sibling_pairs",
     "_get_store",
     # jobs

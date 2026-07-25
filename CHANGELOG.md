@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Surface `ghcr_pull_token` as an editable secret in the central-deploy dashboard (Env & Secrets tab). The token is a single fleet-wide `read:packages` PAT for private GHCR pulls — set it once from the UI and it takes effect immediately without a restart. Stored as a masked secret in system settings.
 - Added `POST /chat/services` endpoint for chat-agent component registration, gated behind `chat_agent_registration_enabled` server config toggle (off by default). Creates a minimal `ComponentConfig` and a `ServiceRecord` in STOPPED state without auto-starting or auto-deploying.
 - Split `services.py` (856 lines) into `services.py` (313 lines) and new `services_maintenance.py` (358 lines). The new module holds `refresh_contract` and `delete_service` endpoints plus the `_delete_component_volumes` helper, keeping all module files well within size limits.
 - Extract lifecycle-action endpoints (start/stop/restart) from `services.py` into new `services_lifecycle.py` router to keep module size within healthy range.

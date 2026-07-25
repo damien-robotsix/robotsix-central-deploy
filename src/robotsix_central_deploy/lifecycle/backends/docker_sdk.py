@@ -86,6 +86,15 @@ class DockerSdkBackend(ExecutionBackend):
         self._ghcr_pull_token = ghcr_pull_token.strip()
         self._volume = VolumeOps(self._client)
 
+    @property
+    def ghcr_pull_token(self) -> str:
+        """The fleet-wide read:packages PAT for private GHCR pulls."""
+        return self._ghcr_pull_token
+
+    @ghcr_pull_token.setter
+    def ghcr_pull_token(self, value: str) -> None:
+        self._ghcr_pull_token = value.strip()
+
     # -- helpers ------------------------------------------------------------
 
     def _container_name(self, service: ServiceRecord) -> str:
