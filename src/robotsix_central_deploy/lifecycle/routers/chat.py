@@ -26,6 +26,7 @@ from .chat_env import router as _env_router
 from .chat_self import router as _self_router
 from .chat_services import router as _services_router
 from .chat_audit import router as _audit_router
+from .chat_test_deploy import router as _test_deploy_router
 
 router = APIRouter()
 router.include_router(_components_router)
@@ -35,3 +36,4 @@ router.include_router(_env_router)
 router.include_router(_self_router)
 router.include_router(_services_router)
 router.include_router(_audit_router)
+router.include_router(_test_deploy_router)
