@@ -8,6 +8,7 @@ All notable changes to robotsix-central-deploy.
 
 - Replace inline config-standard validation in `onboard.py` preflight endpoint with the shared `_require_config_standard` helper (DRY refactor, matching `chat_services.py`)
 - Replace inline config-standard validation in `chat_services.py` register endpoint with a call to the shared `_require_config_standard` helper (DRY refactor)
+- Re-export `_require_config_standard` from `lifecycle.deps` alongside other seed helpers.
 - Onboard healthcheck-disable checkbox: fix one-way behavior where unchecking a pre-disabled healthcheck still sent `disable: true`. Unchecking now restores the original test array with `disable: false`.
 - Target-disk selection for component volumes: new `target_disk` config field, CLI flag, and API parameter allow placing named volumes on a specific disk at deploy time. Supports device-path, mount-point, and filesystem-label resolution. `GET /disk` now reports per-disk usage for all mounted data disks with an aggregate total.
 - Onboard healthcheck disable: per-component healthcheck override at onboard time, mirroring compose's `healthcheck.disable`.  The "Disable healthcheck" checkbox in the Add-Component panel disables the container healthcheck for worker/serverless components that run no HTTP server.  Also captures container logs and writes a deploy-history entry before rollback on failed onboards so the forensic trail survives the cleanup.
