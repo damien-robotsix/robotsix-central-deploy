@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Onboard healthcheck disable: per-component healthcheck override at onboard time, mirroring compose's `healthcheck.disable`.  The "Disable healthcheck" checkbox in the Add-Component panel disables the container healthcheck for worker/serverless components that run no HTTP server.  Also captures container logs and writes a deploy-history entry before rollback on failed onboards so the forensic trail survives the cleanup.
 - Added `POST /chat/deploy/test` endpoint for validation-mode deployments. Accepts a `stub_name` (component id) and a `website` (probe URL), deploys the container, probes the supplied URL, and returns a structured pass/fail result with HTTP status, response snippet, and container logs. On failure, the container is rolled back but the audit entry and logs are retained for investigation.
 - Surface `ghcr_pull_token` as an editable secret in the central-deploy dashboard (Env & Secrets tab). The token is a single fleet-wide `read:packages` PAT for private GHCR pulls — set it once from the UI and it takes effect immediately without a restart. Stored as a masked secret in system settings.
 - Added `POST /chat/services` endpoint for chat-agent component registration, gated behind `chat_agent_registration_enabled` server config toggle (off by default). Creates a minimal `ComponentConfig` and a `ServiceRecord` in STOPPED state without auto-starting or auto-deploying.

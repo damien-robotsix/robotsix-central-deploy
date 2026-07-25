@@ -332,7 +332,7 @@ async def _run_deploy_job(
         )
 
         # Deploy — update job phase for health-wait visibility.
-        if config.health_check is not None:
+        if config.health_check is not None and not config.health_check.disable:
             job_registry.update_phase(job_id, DeployJobPhase.WAITING_HEALTH)
 
         outcome = await backend.deploy(record, config, image_ref)

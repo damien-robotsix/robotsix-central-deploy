@@ -794,6 +794,57 @@ services:
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.health_check is None
 
+    def test_disable_true(self):
+        """``disable: true`` produces HealthCheck with disable=True, test=["NONE"]."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    healthcheck:
+      disable: true
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.health_check is not None
+        assert spec.health_check.disable is True
+        assert spec.health_check.test == ["NONE"]
+
+    def test_test_none_string(self):
+        """``test: "NONE"`` (string) disables the healthcheck."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    healthcheck:
+      test: "NONE"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.health_check is not None
+        assert spec.health_check.disable is True
+        assert spec.health_check.test == ["NONE"]
+
+    def test_test_none_list(self):
+        """``test: ["NONE"]`` (list form) flows through the normal parse path.
+
+        The disable flag stays False because the parser only special-cases the
+        string form; the Docker SDK's _create_container still sends
+        ``Test: ["NONE"]`` to the daemon when test equals ["NONE"] regardless
+        of the disable flag.
+        """
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    healthcheck:
+      test: ["NONE"]
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.health_check is not None
+        assert spec.health_check.disable is False
+        assert spec.health_check.test == ["NONE"]
+
 
 # ---------------------------------------------------------------------------
 # parse_compose — environment

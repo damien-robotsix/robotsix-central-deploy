@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -20,6 +21,7 @@ from ..deps import (
     _get_env_store,
     _get_job_registry,
     _get_config,
+    _get_deploy_history_store,
     _namespace_spec_volumes,
     _validate_config_or_422,
     _build_component_config_from_spec,
@@ -28,6 +30,8 @@ from ..deps import (
 from .._config_utils import _canonical_hash, _merge_config, _strip_secret_values
 from ..config import LifecycleConfig
 from ..models import (
+    DeployHistoryEntry,
+    DeploySource,
     OnboardJobPhase,
     ServiceRecord,
 )
@@ -42,6 +46,7 @@ from ..schemas import (
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
@@ -446,6 +451,7 @@ async def _run_onboard_deploy_job(
     env_store: EnvStore,
     env_was_seeded: bool,
     job_registry: JobRegistry,
+    deploy_history_store: DeployHistoryStore,
     http_client: Any = None,
     settings_store: Any = None,
     port_shifts: list[PortShift] | None = None,
@@ -456,7 +462,7 @@ async def _run_onboard_deploy_job(
     """
     try:
         # Deploy primary
-        if config.health_check is not None:
+        if config.health_check is not None and not config.health_check.disable:
             job_registry.update_phase(job_id, OnboardJobPhase.WAITING_HEALTH)
         else:
             job_registry.update_phase(job_id, OnboardJobPhase.DEPLOYING_PRIMARY)
@@ -542,6 +548,25 @@ async def _run_onboard_deploy_job(
                         spec_name,
                         exc_info=True,
                     )
+            # Write a deploy-history entry before rollback so the failed
+            # attempt survives cleanup for post-mortem.
+            try:
+                await deploy_history_store.append(
+                    spec_name,
+                    DeployHistoryEntry(
+                        digest=record.deployed_image_digest or "",
+                        image_ref=spec_image,
+                        timestamp=time.time(),
+                        source=DeploySource.MANUAL,
+                        previous_digest=record.previous_image_digest or "",
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "onboard %s: failed to record history entry",
+                    spec_name,
+                    exc_info=True,
+                )
             await _rollback_onboard(
                 spec_name,
                 config.id,
@@ -577,6 +602,25 @@ async def _run_onboard_deploy_job(
         except Exception:
             logger.warning(
                 "onboard %s: failed to capture container logs",
+                spec_name,
+                exc_info=True,
+            )
+        # Write a deploy-history entry before rollback so the failed
+        # attempt survives cleanup for post-mortem.
+        try:
+            await deploy_history_store.append(
+                spec_name,
+                DeployHistoryEntry(
+                    digest=record.deployed_image_digest or "",
+                    image_ref=spec_image,
+                    timestamp=time.time(),
+                    source=DeploySource.MANUAL,
+                    previous_digest=record.previous_image_digest or "",
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "onboard %s: failed to record history entry",
                 spec_name,
                 exc_info=True,
             )
@@ -617,6 +661,7 @@ async def onboard_confirm(
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     env_store: EnvStore = Depends(_get_env_store),
     job_registry: JobRegistry = Depends(_get_job_registry),
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
 ) -> OnboardConfirmAcceptedResponse:
     """Persist a reviewed DerivedSpec, then schedule the deploy as a background job.
 
@@ -775,6 +820,7 @@ async def onboard_confirm(
             env_store=env_store,
             env_was_seeded=env_was_seeded,
             job_registry=job_registry,
+            deploy_history_store=deploy_history_store,
             http_client=request.app.state.http_client
             if hasattr(request.app.state, "http_client")
             else None,

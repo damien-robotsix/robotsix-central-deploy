@@ -29,6 +29,7 @@ from robotsix_central_deploy.onboard.models import (
 from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
+from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import PortMapping, VolumeMount
@@ -120,6 +121,9 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.config_yaml_store = ConfigYamlStore(
         tmp_path / "config_json.json"
+    )
+    server_mod.app.state.deploy_history_store = DeployHistoryStore(
+        tmp_path / "deploy_history.json"
     )
     server_mod.app.state.env_store = EnvStore(
         tmp_path / "env_store.json", SecretKeyManager(tmp_path / "secret_key")

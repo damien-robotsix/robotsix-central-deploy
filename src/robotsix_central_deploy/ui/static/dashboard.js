@@ -2573,6 +2573,17 @@ function populateStep2(spec, portShifts) {
 
   // Chat access toggle
   document.getElementById('ob-chat-access').checked = !!spec.allow_chat_access;
+
+  // Healthcheck disable toggle — only show when the spec has a healthcheck
+  var hcDisableLabel = document.getElementById('ob-disable-healthcheck-label');
+  var hcDisableCheck = document.getElementById('ob-disable-healthcheck');
+  if (spec.health_check) {
+    hcDisableLabel.classList.remove('hidden');
+    hcDisableCheck.checked = !!spec.health_check.disable;
+  } else {
+    hcDisableLabel.classList.add('hidden');
+    hcDisableCheck.checked = false;
+  }
 }
 
 async function onboardDeploy() {
@@ -2600,6 +2611,11 @@ async function onboardDeploy() {
 
   // Chat access toggle
   finalSpec.allow_chat_access = document.getElementById('ob-chat-access').checked;
+
+  // Healthcheck disable toggle — explicitly disable the container healthcheck
+  if (document.getElementById('ob-disable-healthcheck').checked) {
+    finalSpec.health_check = { disable: true, test: ["NONE"] };
+  }
 
   // Build the confirm body
   var body = { spec: finalSpec };

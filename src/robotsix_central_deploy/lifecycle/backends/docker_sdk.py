@@ -323,16 +323,19 @@ class DockerSdkBackend(ExecutionBackend):
                 "bind": "/var/run/docker.sock",
                 "mode": "ro",
             }
-        healthcheck = None
+        healthcheck: dict[str, Any] | None = None
         if config.health_check:
             hc = config.health_check
-            healthcheck = {
-                "Test": hc.test,
-                "Interval": hc.interval_seconds * int(1e9),
-                "Timeout": hc.timeout_seconds * int(1e9),
-                "Retries": hc.retries,
-                "StartPeriod": hc.start_period_seconds * int(1e9),
-            }
+            if hc.disable:
+                healthcheck = {"Test": ["NONE"]}
+            else:
+                healthcheck = {
+                    "Test": hc.test,
+                    "Interval": hc.interval_seconds * int(1e9),
+                    "Timeout": hc.timeout_seconds * int(1e9),
+                    "Retries": hc.retries,
+                    "StartPeriod": hc.start_period_seconds * int(1e9),
+                }
         return self._client.containers.create(
             image=image_ref,
             name=config.container_name,
@@ -651,8 +654,8 @@ class DockerSdkBackend(ExecutionBackend):
                     f"Container create/start failed for {name!r}: {exc}"
                 ) from exc
 
-            # Step 4 — health wait (if configured)
-            if config.health_check:
+            # Step 4 — health wait (if configured and not disabled)
+            if config.health_check and not config.health_check.disable:
                 await self._wait_healthy(name, timeout=60.0)
         finally:
             release_inflight_image_refs(inflight_refs)
@@ -717,7 +720,7 @@ class DockerSdkBackend(ExecutionBackend):
                 f"Rollback container create/start failed for {name!r}: {exc}"
             ) from exc
 
-        if config.health_check:
+        if config.health_check and not config.health_check.disable:
             await self._wait_healthy(name, timeout=60.0)
 
         return RollbackOutcome(
