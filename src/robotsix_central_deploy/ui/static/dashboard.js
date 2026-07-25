@@ -2615,6 +2615,9 @@ async function onboardDeploy() {
   // Healthcheck disable toggle — explicitly disable the container healthcheck
   if (document.getElementById('ob-disable-healthcheck').checked) {
     finalSpec.health_check = { disable: true, test: ["NONE"] };
+  } else if (finalSpec.health_check && finalSpec.health_check.disable) {
+    // Restore the original test array but with disable: false
+    finalSpec.health_check.disable = false;
   }
 
   // Build the confirm body
