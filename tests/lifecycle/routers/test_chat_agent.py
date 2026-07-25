@@ -1286,3 +1286,218 @@ async def test_chat_deploy_missing_config_target_returns_422(
     data = resp.json()
     assert "missing robotsix.deploy.config-target" in data["error"]
     assert "missing config/config.schema.json" not in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/services — register
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_register_happy_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+):
+    """POST /chat/services registers a new component and it appears in GET /chat/components."""
+    # Enable registration in the server config.
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    resp = await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "hexarchy"
+    assert data["action"] == "register"
+    assert data["image"] == "ghcr.io/damien-robotsix/hexarchy:main"
+    assert data["owner_repo"] == "https://github.com/damien-robotsix/hexarchy"
+    assert data["existed"] is False
+
+    # Verify it appears in the component roster.
+    roster_resp = await client.get("/chat/components", headers=auth_headers)
+    assert roster_resp.status_code == 200
+    # The new component won't show in the roster unless allow_chat_access is set,
+    # but it should be in the component_config_store.
+    stored = component_config_store.get("hexarchy")
+    assert stored is not None
+    assert stored.id == "hexarchy"
+    assert stored.image == "ghcr.io/damien-robotsix/hexarchy:main"
+
+
+@pytest.mark.asyncio
+async def test_chat_register_idempotent(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+):
+    """Re-registering the same component id returns the existing entry."""
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    # First registration.
+    resp1 = await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
+        },
+        headers=auth_headers,
+    )
+    assert resp1.status_code == 200
+    assert resp1.json()["existed"] is False
+
+    # Second registration with a different image — should return existing.
+    resp2 = await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:other-tag",
+            "owner_repo": "https://github.com/other/hexarchy",
+        },
+        headers=auth_headers,
+    )
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["existed"] is True
+    # The stored entry is unchanged.
+    assert data2["image"] == "ghcr.io/damien-robotsix/hexarchy:main"
+    assert data2["owner_repo"] == "https://github.com/damien-robotsix/hexarchy"
+
+
+@pytest.mark.asyncio
+async def test_chat_register_not_enabled_returns_403(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+):
+    """Registration returns 403 when the toggle is off."""
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = False
+
+    resp = await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403
+    assert "registration is not enabled" in resp.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_chat_register_invalid_name_returns_422(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+):
+    """Registration with an invalid component name returns 422."""
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    resp = await client.post(
+        "/chat/services",
+        json={
+            "name": "INVALID_NAME",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_chat_register_appears_in_service_list(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+):
+    """Registered component appears in the GET /services inventory."""
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+        },
+        headers=auth_headers,
+    )
+
+    # The component should appear in the service list.
+    resp = await client.get("/services", headers=auth_headers)
+    assert resp.status_code == 200
+    services = resp.json()
+    names = [s["name"] for s in services["services"]]
+    assert "hexarchy" in names
+
+
+@pytest.mark.asyncio
+async def test_chat_register_audit_entry(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    audit_store: ChatAgentAuditStore,
+):
+    """Registration writes an audit entry."""
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
+        },
+        headers=auth_headers,
+    )
+
+    entries = await audit_store.list(limit=5, component="hexarchy")
+    assert len(entries) >= 1
+    entry = entries[0]
+    assert entry.action == "register"
+    assert entry.component == "hexarchy"
+    assert "ghcr.io/damien-robotsix/hexarchy:main" in entry.detail
+    assert "https://github.com/damien-robotsix/hexarchy" in entry.detail
+
+
+@pytest.mark.asyncio
+async def test_chat_register_applies_default_image_tag_when_missing(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+):
+    """When image has no tag, ':latest' is appended."""
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    resp = await client.post(
+        "/chat/services",
+        json={
+            "name": "no-tag-svc",
+            "image": "ghcr.io/damien-robotsix/no-tag-svc",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["image"] == "ghcr.io/damien-robotsix/no-tag-svc:latest"
+
+    stored = component_config_store.get("no-tag-svc")
+    assert stored is not None
+    assert stored.image == "ghcr.io/damien-robotsix/no-tag-svc:latest"

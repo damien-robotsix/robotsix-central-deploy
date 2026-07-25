@@ -2844,6 +2844,57 @@
         }
       }
     },
+    "/chat/services": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Register a new managed component (idempotent)",
+        "description": "Register a new managed component in the service inventory.\n\nCreates a minimal ``ComponentConfig`` from the request body and\npersists it, alongside a ``ServiceRecord`` in STOPPED state.\nThe component is NOT auto-started \u2014 this endpoint only registers\nmetadata.\n\nIdempotent: re-registering an existing component id returns the\nexisting entry unchanged.\n\nRequires ``chat_agent_registration_enabled`` to be ``True`` in the\nserver config.",
+        "operationId": "chat_register_component_chat_services_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentRegisterResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Registration not enabled"
+          },
+          "409": {
+            "description": "Name conflict with an existing component"
+          },
+          "422": {
+            "description": "Invalid request body"
+          }
+        }
+      }
+    },
     "/chat/services/{name}/restart": {
       "post": {
         "tags": [
@@ -6123,6 +6174,79 @@
         "type": "object",
         "title": "ChatAgentPreviewTeardownResponse",
         "description": "Response body for POST /chat/preview/teardown."
+      },
+      "ChatAgentRegisterRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Name",
+            "description": "Component name; must match ^[a-z0-9][a-z0-9-]*$"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "description": "Container image reference (e.g. ghcr.io/org/repo:tag)"
+          },
+          "owner_repo": {
+            "type": "string",
+            "title": "Owner Repo",
+            "description": "Git clone URL of the repository owning the deploy contract",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "image"
+        ],
+        "title": "ChatAgentRegisterRequest",
+        "description": "Request body for POST /chat/services \u2014 register a new managed component.\n\nRegisters a component with minimal metadata so it appears in the\nservice inventory.  Registration does NOT auto-start or auto-deploy\nthe component \u2014 those remain separate gated actions."
+      },
+      "ChatAgentRegisterResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'register'",
+            "default": "register"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "description": "Container image reference"
+          },
+          "owner_repo": {
+            "type": "string",
+            "title": "Owner Repo",
+            "description": "Owning repository URL (empty when not supplied)",
+            "default": ""
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          },
+          "existed": {
+            "type": "boolean",
+            "title": "Existed",
+            "description": "True when the component was already registered (idempotent re-registration)",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "image"
+        ],
+        "title": "ChatAgentRegisterResponse",
+        "description": "Response body for POST /chat/services \u2014 register confirmation."
       },
       "ChatAgentRestartResponse": {
         "properties": {
