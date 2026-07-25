@@ -450,6 +450,10 @@ class DockerSdkBackend(ExecutionBackend):
         """Pre-create named volumes and validate claude credentials.
 
         Returns deploy warnings collected during credential validation.
+
+        When *config.target_disk* is set, volumes are created under
+        ``{target_disk}/robotsix-volumes/{vol_name}`` using the local
+        driver's bind mount option so data lives on the chosen disk.
         """
         import docker
 
@@ -465,9 +469,64 @@ class DockerSdkBackend(ExecutionBackend):
         if config.claude_mount:
             volumes_to_create.append(CLAUDE_AUTH_VOLUME)
 
+        # Resolve target disk path for volume placement
+        target_disk_path: str = ""
+        if config.target_disk:
+            # Callers (deploy endpoint, onboard flow) already resolve the
+            # identifier via resolve_target_disk() and store the canonical
+            # mount point in config.target_disk.  If we received an absolute
+            # directory path, use it directly to avoid a redundant findmnt
+            # call; otherwise fall back to full resolution for callers that
+            # pass a raw identifier.
+            candidate = os.path.realpath(config.target_disk)
+            if os.path.isdir(candidate):
+                target_disk_path = candidate
+            else:
+                from robotsix_central_deploy.lifecycle._disk_utils import (
+                    resolve_target_disk,
+                )
+
+                try:
+                    target_disk_path = resolve_target_disk(config.target_disk)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        f"Invalid target_disk for component {config.id!r}: {exc}"
+                    ) from exc
+
         for vol_name in volumes_to_create:
+            vol_path: str = ""
+            driver_opts: dict[str, str] | None = None
+            if target_disk_path:
+                vol_path = os.path.join(target_disk_path, "robotsix-volumes", vol_name)
+                # Create the backing directory on the target disk before
+                # handing it to Docker's local driver via bind options.
+                try:
+                    os.makedirs(vol_path, mode=0o755, exist_ok=True)
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"Failed to create volume directory {vol_path!r}: {exc}"
+                    ) from exc
+                driver_opts = {
+                    "type": "none",
+                    "device": vol_path,
+                    "o": "bind",
+                }
+
+            def _create_volume(
+                vol_name: str = vol_name,
+                driver_opts: dict[str, str] | None = driver_opts,
+            ) -> None:
+                if driver_opts:
+                    self._client.volumes.create(
+                        vol_name,
+                        driver="local",
+                        driver_opts=driver_opts,
+                    )
+                else:
+                    self._client.volumes.create(vol_name)
+
             try:
-                await loop.run_in_executor(None, self._client.volumes.create, vol_name)
+                await loop.run_in_executor(None, _create_volume)
             except docker.errors.APIError as exc:
                 if exc.status_code == 409:
                     logger.info("Volume %s already exists, skipping creation", vol_name)

@@ -97,6 +97,7 @@ def _build_component_config_from_spec(
         allow_chat_access=spec.allow_chat_access,
         chat_agent_mutatable=spec.chat_agent_mutatable,
         user=spec.user,
+        target_disk=spec.target_disk,
         **overrides,
     )
     return config
@@ -363,7 +364,7 @@ def _derive_account_id(
             elif isinstance(node, list):
                 try:
                     node = node[int(part)]
-                except ValueError, IndexError:
+                except (ValueError, IndexError):
                     node = None
             else:
                 node = None

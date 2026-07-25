@@ -15,7 +15,7 @@
           "health"
         ],
         "summary": "Get Disk Usage",
-        "description": "Host disk usage and Docker storage breakdown.",
+        "description": "Host disk usage and Docker storage breakdown.\n\nReports usage for every mounted data disk individually, plus an\naggregate total across all discovered disks.",
         "operationId": "get_disk_usage_disk_get",
         "responses": {
           "200": {
@@ -7288,11 +7288,17 @@
               }
             ],
             "title": "Image"
+          },
+          "target_disk": {
+            "type": "string",
+            "title": "Target Disk",
+            "description": "Target disk identifier (device path, mount point, or label) for volume placement. Overrides ComponentConfig.target_disk for this deploy. Empty means use the stored value.",
+            "default": ""
           }
         },
         "type": "object",
         "title": "DeployRequest",
-        "description": "Optional image override for a deploy request."
+        "description": "Optional overrides for a deploy request."
       },
       "DeploySource": {
         "type": "string",
@@ -7501,6 +7507,11 @@
               }
             ],
             "title": "User"
+          },
+          "target_disk": {
+            "type": "string",
+            "title": "Target Disk",
+            "default": ""
           }
         },
         "type": "object",
@@ -7537,6 +7548,14 @@
           },
           "docker": {
             "$ref": "#/components/schemas/DockerDfStats"
+          },
+          "disks": {
+            "items": {
+              "$ref": "#/components/schemas/PerDiskUsage"
+            },
+            "type": "array",
+            "title": "Disks",
+            "default": []
           }
         },
         "type": "object",
@@ -7548,7 +7567,7 @@
           "docker"
         ],
         "title": "DiskUsageResponse",
-        "description": "Host disk usage + Docker storage breakdown."
+        "description": "Host disk usage + Docker storage breakdown.\n\n``disks`` lists every mounted data disk individually.\n``total_bytes`` / ``used_bytes`` / ``free_bytes`` are an aggregate\nacross all discovered disks."
       },
       "DismissReviewRequest": {
         "properties": {
@@ -7943,6 +7962,12 @@
             "title": "Port Shifts",
             "description": "Port shift list echoed from preflight; used for collision ticket filing",
             "default": []
+          },
+          "target_disk": {
+            "type": "string",
+            "title": "Target Disk",
+            "description": "Target disk identifier (device path, mount point, or label) for volume placement. Overrides the value in spec when set. Empty means use the spec value or config default.",
+            "default": ""
           }
         },
         "type": "object",
@@ -8070,6 +8095,12 @@
             "type": "string",
             "title": "Name",
             "description": "Component name; must match ^[a-z0-9][a-z0-9-]*$"
+          },
+          "target_disk": {
+            "type": "string",
+            "title": "Target Disk",
+            "description": "Target disk identifier (device path, mount point, or label) for volume placement. Empty means use the config default or Docker's default volume location.",
+            "default": ""
           }
         },
         "type": "object",
@@ -8142,6 +8173,45 @@
         },
         "type": "object",
         "title": "OrphanVolumesResponse"
+      },
+      "PerDiskUsage": {
+        "properties": {
+          "device": {
+            "type": "string",
+            "title": "Device"
+          },
+          "mount_point": {
+            "type": "string",
+            "title": "Mount Point"
+          },
+          "fs_type": {
+            "type": "string",
+            "title": "Fs Type",
+            "default": ""
+          },
+          "total_bytes": {
+            "type": "integer",
+            "title": "Total Bytes"
+          },
+          "used_bytes": {
+            "type": "integer",
+            "title": "Used Bytes"
+          },
+          "free_bytes": {
+            "type": "integer",
+            "title": "Free Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device",
+          "mount_point",
+          "total_bytes",
+          "used_bytes",
+          "free_bytes"
+        ],
+        "title": "PerDiskUsage",
+        "description": "Usage for a single mounted data disk."
       },
       "PortMapping": {
         "properties": {

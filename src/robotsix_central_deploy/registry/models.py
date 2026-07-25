@@ -240,3 +240,10 @@ class ComponentConfig(BaseModel):
         default_factory=list,
         description="Scope glob patterns (e.g. 'website:ovh'), resolved at deploy time",
     )
+    target_disk: str = Field(
+        default="",
+        description=(
+            "Target disk mount point where this component's named volumes "
+            "are placed. Empty means use Docker's default volume location."
+        ),
+    )

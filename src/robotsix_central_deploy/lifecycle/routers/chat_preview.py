@@ -187,7 +187,7 @@ def _parse_ports(svc: dict[str, Any]) -> list[PortMapping]:
                             protocol=proto,
                         )
                     )
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     continue
         elif isinstance(entry, dict):
             try:
@@ -198,7 +198,7 @@ def _parse_ports(svc: dict[str, Any]) -> list[PortMapping]:
                         protocol=entry.get("protocol", "tcp"),
                     )
                 )
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 continue
     return ports
 

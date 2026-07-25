@@ -170,6 +170,14 @@ class LifecycleConfig(BaseModel):
         description="Warn on the dashboard when free disk space drops below this percentage.",
         json_schema_extra={"advanced": True},
     )
+    target_disk: str = Field(
+        "",
+        description=(
+            "Default target disk mount point for new component volumes. "
+            "Empty means use Docker's default volume location. Overridden "
+            "by per-deploy / onboard target-disk values."
+        ),
+    )
 
     # Env / secrets persistence
     env_store_path: str = Field(

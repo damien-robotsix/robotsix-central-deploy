@@ -300,10 +300,18 @@ class RollbackOutcome:
 
 
 class DeployRequest(BaseModel):
-    """Optional image override for a deploy request."""
+    """Optional overrides for a deploy request."""
 
     image: Optional[str] = (
         None  # override image ref; if None, uses ComponentConfig.image
+    )
+    target_disk: str = Field(
+        default="",
+        description=(
+            "Target disk identifier (device path, mount point, or label) "
+            "for volume placement. Overrides ComponentConfig.target_disk "
+            "for this deploy. Empty means use the stored value."
+        ),
     )
 
 
@@ -370,14 +378,31 @@ class DockerDfStats(BaseModel):
     volumes: list[VolumeStat] = []
 
 
+class PerDiskUsage(BaseModel):
+    """Usage for a single mounted data disk."""
+
+    device: str  # e.g. "/dev/sdb1"
+    mount_point: str  # e.g. "/mnt/data"
+    fs_type: str = ""  # e.g. "ext4"
+    total_bytes: int
+    used_bytes: int
+    free_bytes: int
+
+
 class DiskUsageResponse(BaseModel):
-    """Host disk usage + Docker storage breakdown."""
+    """Host disk usage + Docker storage breakdown.
+
+    ``disks`` lists every mounted data disk individually.
+    ``total_bytes`` / ``used_bytes`` / ``free_bytes`` are an aggregate
+    across all discovered disks.
+    """
 
     total_bytes: int
     used_bytes: int
     free_bytes: int
     warn_threshold_pct: float
     docker: DockerDfStats
+    disks: list[PerDiskUsage] = []
 
 
 class ReclaimResponse(BaseModel):

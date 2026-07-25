@@ -290,6 +290,22 @@ async def onboard_preflight(
             detail={"error": "compose validation failed", "violations": e.violations},
         )
 
+    # Resolve target_disk: explicit request value > config default > empty
+    resolved_target_disk = req.target_disk or lifecycle_config.target_disk
+    if resolved_target_disk:
+        from robotsix_central_deploy.lifecycle._disk_utils import (  # noqa: PLC0415
+            resolve_target_disk,
+        )
+
+        try:
+            resolved_target_disk = resolve_target_disk(resolved_target_disk)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"Invalid target_disk: {exc}"},
+            )
+    derived_spec.target_disk = resolved_target_disk
+
     # Parse config/config.schema.json if present
     if repo_files.config_schema_json is not None:
         try:
@@ -673,6 +689,20 @@ async def onboard_confirm(
     # Namespace volume names so two components from the same image
     # never share Docker named volumes.
     spec = _namespace_spec_volumes(spec, spec.name)
+
+    # Apply target_disk override from confirm request (overrides preflight value).
+    if req.target_disk:
+        from robotsix_central_deploy.lifecycle._disk_utils import (  # noqa: PLC0415
+            resolve_target_disk,
+        )
+
+        try:
+            spec.target_disk = resolve_target_disk(req.target_disk)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": f"Invalid target_disk: {exc}"},
+            )
 
     # Active-job guard: a second confirm for the same component while a
     # job is in flight is rejected with 409.

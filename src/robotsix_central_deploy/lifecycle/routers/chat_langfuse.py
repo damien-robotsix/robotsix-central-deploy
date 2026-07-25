@@ -117,7 +117,7 @@ async def _proxy_to_langfuse(
         if key == "limit":
             try:
                 ival = int(value)
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 params[key] = value
             else:
                 params[key] = str(min(ival, 100))

@@ -29,6 +29,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--api-key", default=None, help="API key for mutating endpoints"
     )
+    parser.add_argument(
+        "--target-disk",
+        default=None,
+        help=(
+            "Default target disk for new component volumes "
+            "(device path, mount point, or label)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     import robotsix_config
@@ -46,6 +54,8 @@ def main(argv: list[str] | None = None) -> None:
         cfg.execution_backend = args.execution_backend
     if args.api_key is not None:
         cfg.api_key = args.api_key
+    if args.target_disk is not None:
+        cfg.target_disk = args.target_disk
 
     import uvicorn
 

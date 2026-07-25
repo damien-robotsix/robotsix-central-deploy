@@ -64,6 +64,7 @@ class DerivedSpec(BaseModel):
         False  # from robotsix.deploy.chat-agent-mutatable label
     )
     user: Optional[str] = None  # container user override (e.g. "1000:1000" or "root")
+    target_disk: str = ""  # disk mount point for volume placement; empty = default
 
 
 class ParseError(Exception):

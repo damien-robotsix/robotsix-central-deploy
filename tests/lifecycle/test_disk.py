@@ -10,6 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle._disk_utils import DiskInfo
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
@@ -69,9 +70,17 @@ class TestDiskEndpoint:
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         monkeypatch.setattr(
-            shutil,
-            "disk_usage",
-            lambda path: DiskUsage(total=100_000_000, used=60_000_000, free=40_000_000),
+            "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
+            lambda: [
+                DiskInfo(
+                    device="/dev/sda1",
+                    mount_point="/",
+                    fs_type="ext4",
+                    total_bytes=100_000_000,
+                    used_bytes=60_000_000,
+                    free_bytes=40_000_000,
+                )
+            ],
         )
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
@@ -81,17 +90,29 @@ class TestDiskEndpoint:
         assert "free_bytes" in data
         assert "warn_threshold_pct" in data
         assert "docker" in data
+        assert "disks" in data
         assert data["total_bytes"] == 100_000_000
         assert data["used_bytes"] == 60_000_000
         assert data["free_bytes"] == 40_000_000
+        assert len(data["disks"]) == 1
+        assert data["disks"][0]["device"] == "/dev/sda1"
+        assert data["disks"][0]["mount_point"] == "/"
 
     async def test_docker_df_is_zeros_for_noop(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         monkeypatch.setattr(
-            shutil,
-            "disk_usage",
-            lambda path: DiskUsage(total=1000, used=500, free=500),
+            "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
+            lambda: [
+                DiskInfo(
+                    device="/dev/sda1",
+                    mount_point="/",
+                    fs_type="ext4",
+                    total_bytes=1000,
+                    used_bytes=500,
+                    free_bytes=500,
+                )
+            ],
         )
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
@@ -104,13 +125,17 @@ class TestDiskEndpoint:
     ):
         # free=10 GiB, warn=5 GiB → free > threshold
         monkeypatch.setattr(
-            shutil,
-            "disk_usage",
-            lambda path: DiskUsage(
-                total=100_000_000_000,
-                used=89_263_000_000,  # ~10.7 GiB free
-                free=10_737_000_000,
-            ),
+            "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
+            lambda: [
+                DiskInfo(
+                    device="/dev/sda1",
+                    mount_point="/",
+                    fs_type="ext4",
+                    total_bytes=100_000_000_000,
+                    used_bytes=89_263_000_000,  # ~10.7 GiB free
+                    free_bytes=10_737_000_000,
+                )
+            ],
         )
         server_mod.app.state.config.disk_warn_pct = 10.0
         resp = await client.get("/disk", headers=auth_headers)
@@ -123,19 +148,56 @@ class TestDiskEndpoint:
     ):
         # free=2 GiB, warn=5 GiB → free < threshold
         monkeypatch.setattr(
-            shutil,
-            "disk_usage",
-            lambda path: DiskUsage(
-                total=100_000_000_000,
-                used=97_853_000_000,
-                free=2_147_000_000,
-            ),
+            "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
+            lambda: [
+                DiskInfo(
+                    device="/dev/sda1",
+                    mount_point="/",
+                    fs_type="ext4",
+                    total_bytes=100_000_000_000,
+                    used_bytes=97_853_000_000,
+                    free_bytes=2_147_000_000,
+                )
+            ],
         )
         server_mod.app.state.config.disk_warn_pct = 10.0
         resp = await client.get("/disk", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["warn_threshold_pct"] == 10.0
+
+    async def test_multiple_disks_aggregate(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
+            lambda: [
+                DiskInfo(
+                    device="/dev/sda1",
+                    mount_point="/",
+                    fs_type="ext4",
+                    total_bytes=100_000,
+                    used_bytes=60_000,
+                    free_bytes=40_000,
+                ),
+                DiskInfo(
+                    device="/dev/sdb1",
+                    mount_point="/mnt/data",
+                    fs_type="ext4",
+                    total_bytes=200_000,
+                    used_bytes=50_000,
+                    free_bytes=150_000,
+                ),
+            ],
+        )
+        resp = await client.get("/disk", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_bytes"] == 300_000
+        assert data["used_bytes"] == 110_000
+        assert data["free_bytes"] == 190_000
+        assert len(data["disks"]) == 2
+        assert data["disks"][1]["mount_point"] == "/mnt/data"
 
     async def test_disk_path_used(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -147,6 +209,11 @@ class TestDiskEndpoint:
             return DiskUsage(total=1000, used=500, free=500)
 
         monkeypatch.setattr(shutil, "disk_usage", fake_disk_usage)
+        # Return empty list so the fallback to config.disk_path triggers.
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
+            lambda: [],
+        )
         server_mod.app.state.config.disk_path = "/host_root"
 
         resp = await client.get("/disk", headers=auth_headers)
