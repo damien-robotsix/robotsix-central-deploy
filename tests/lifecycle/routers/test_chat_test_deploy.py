@@ -8,7 +8,11 @@ import pytest
 from httpx import AsyncClient, ConnectError, Response, TimeoutException
 
 import robotsix_central_deploy.lifecycle.app as server_mod
-from robotsix_central_deploy.lifecycle.models import DeployOutcome, ServiceState
+from robotsix_central_deploy.lifecycle.models import (
+    DeployOutcome,
+    ServiceRecord,
+    ServiceState,
+)
 from robotsix_central_deploy.registry.chat_agent_audit_store import ChatAgentAuditStore
 from robotsix_central_deploy.registry.models import ComponentConfig
 
@@ -269,9 +273,7 @@ async def test_deploy_no_config_no_repo(
         headers=auth_headers,
         json={"stub_name": "unknown-app", "website": "http://localhost:8080/health"},
     )
-    # _require_allowed_service returns 403 before we hit the 404 — since the
-    # component config is None, chat_agent_mutatable is effectively False.
-    assert resp.status_code in (403, 404), resp.text
+    assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -367,3 +369,125 @@ async def test_deploy_lock_conflict(
         )
 
         release_deploy_lock("test-app")
+
+
+# ---------------------------------------------------------------------------
+# Deploy-phase failure (500)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deploy_phase_failure(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """When backend.deploy() raises, handler returns 500 with audit entry."""
+    _register_test_component()
+    mock_backend = _mock_backend_deploy()
+    mock_backend.deploy = AsyncMock(side_effect=RuntimeError("pull failed"))
+
+    resp = await client.post(
+        "/chat/deploy/test",
+        headers=auth_headers,
+        json={"stub_name": "test-app", "website": "http://localhost:8080/health"},
+    )
+
+    assert resp.status_code == 500, resp.text
+    assert "Test-deploy failed during deploy phase" in resp.json()["error"]
+
+    # Verify audit entry was written.
+    audit_store: ChatAgentAuditStore = server_mod.app.state.chat_agent_audit_store
+    entries = await audit_store.list()
+    td_entries = [e for e in entries if e.action == "test-deploy"]
+    assert len(td_entries) == 1
+    assert "Deploy phase failed" in td_entries[0].detail
+
+
+# ---------------------------------------------------------------------------
+# Rollback with previous digest
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deploy_rollback_with_previous_digest(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """On probe failure, rolls back to previous digest when one exists."""
+    _register_test_component()
+    _mock_backend_deploy(previous="sha256:previous")
+
+    # Pre-seed a ServiceRecord with a deployed digest so the handler
+    # takes the "previous digest → rollback" branch rather than the
+    # "no previous digest → stop container" branch.
+    store = server_mod.app.state.store
+    await store.put(
+        ServiceRecord(
+            name="test-app",
+            state=ServiceState.RUNNING,
+            deployed_image_digest="sha256:previous",
+        )
+    )
+
+    mock_response = _make_httpx_response(500, "internal error")
+
+    with patch(
+        "robotsix_central_deploy.lifecycle.routers.chat_test_deploy.httpx.AsyncClient"
+    ) as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        resp = await client.post(
+            "/chat/deploy/test",
+            headers=auth_headers,
+            json={"stub_name": "test-app", "website": "http://localhost:8080/health"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["pass_fail"] == "fail"
+    assert "Rolled back to" in data["detail"]
+
+    # Verify backend.rollback was called (not just stop).
+    mock_backend = server_mod.app.state.backend
+    mock_backend.rollback.assert_awaited_once()
+    mock_backend.stop.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Rollback failure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deploy_rollback_failure(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """When rollback itself raises, handler catches and reports it inline."""
+    _register_test_component()
+    mock_backend = _mock_backend_deploy()
+    mock_backend.stop = AsyncMock(side_effect=RuntimeError("cannot stop"))
+
+    mock_response = _make_httpx_response(500, "internal error")
+
+    with patch(
+        "robotsix_central_deploy.lifecycle.routers.chat_test_deploy.httpx.AsyncClient"
+    ) as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        resp = await client.post(
+            "/chat/deploy/test",
+            headers=auth_headers,
+            json={"stub_name": "test-app", "website": "http://localhost:8080/health"},
+        )
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["pass_fail"] == "fail"
+    assert "Rollback also failed" in data["detail"]

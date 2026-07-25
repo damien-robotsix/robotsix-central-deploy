@@ -31,7 +31,7 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.loader import ComponentRegistry
 from .._config_utils import _sanitize_log
 
-from ._chat_common import _check_rate_limit, _require_allowed_service, logger
+from ._chat_common import _check_rate_limit, logger
 from .chat_services import _resolve_deploy_contract
 
 router = APIRouter(tags=["chat"])
@@ -78,12 +78,13 @@ async def chat_test_deploy(
     Synchronous — waits for deploy + probe to complete before returning.
     Rate-limited to one test-deploy per 300 seconds per component.
     """
-    await _require_allowed_service(body.stub_name, component_config_store)
     _check_rate_limit(request.app.state, body.stub_name, "test_deploy")
 
     lifecycle_config = await _get_config(request)
 
-    # --- Resolve the deploy contract ---
+    # --- Resolve the deploy contract (before mutatability check so
+    #     the 404 branch is reachable when no config and no repo are
+    #     supplied). ---
     comp_cfg = component_config_store.get(body.stub_name)
     if comp_cfg is None:
         if body.repo is None:
@@ -105,6 +106,13 @@ async def chat_test_deploy(
             component_config_store,
             registry,
             backend,
+        )
+
+    # --- Enforce chat-agent mutatability on the resolved config ---
+    if not (comp_cfg.chat_agent_mutatable or comp_cfg.allow_chat_access):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Chat agent is not permitted to mutate service '{body.stub_name}'.",
         )
 
     # --- Merge env overrides ---

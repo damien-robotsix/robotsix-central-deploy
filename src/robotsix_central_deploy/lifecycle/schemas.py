@@ -817,7 +817,7 @@ class ChatAgentTestDeployResponse(BaseModel):
     """Response body for POST /chat/deploy/test."""
 
     stub_name: str = Field(description="Component/service name")
-    pass_fail: str = Field(description="'pass' or 'fail'")
+    pass_fail: Literal["pass", "fail"] = Field(description="'pass' or 'fail'")
     http_status: int | None = Field(
         default=None,
         description="HTTP status code returned by the probe; None when the connection failed",
