@@ -231,13 +231,19 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
         )
         return None, violations
 
+    # Compose `disable: true` (or YAML boolean) — explicitly disable the
+    # healthcheck even when the image has a baked-in HEALTHCHECK directive.
+    disable_val = raw_hc.get("disable")
+    if disable_val in (True, "true"):
+        return HealthCheck(disable=True, test=["NONE"]), violations
+
     test = raw_hc.get("test")
     if test is None:
         violations.append("healthcheck.test is required")
         return None, violations
     if isinstance(test, str) and test.upper() == "NONE":
         # NONE disables healthcheck
-        return None, violations
+        return HealthCheck(disable=True, test=["NONE"]), violations
     if not isinstance(test, list) or not all(isinstance(t, str) for t in test):
         violations.append(f"healthcheck.test must be a list of strings, got {test!r}")
         return None, violations

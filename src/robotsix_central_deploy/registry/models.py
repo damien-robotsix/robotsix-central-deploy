@@ -23,7 +23,13 @@ class HealthCheck(BaseModel):
     """Mirrors the Docker HealthCheck spec."""
 
     test: list[str] = Field(
-        description="Health check command array, e.g. ['CMD', 'curl', '-f', 'http://localhost:8080/']"
+        default=["CMD", "echo", "ok"],
+        description="Health check command array, e.g. ['CMD', 'curl', '-f', 'http://localhost:8080/']",
+    )
+    disable: bool = Field(
+        default=False,
+        description="When True, the container health check is explicitly disabled "
+        "(Docker receives Test: ['NONE']).  When False, *test* is applied.",
     )
     interval_seconds: int = Field(30, description="Seconds between health check runs")
     timeout_seconds: int = Field(
