@@ -8,7 +8,6 @@ disks for multi-disk usage reporting.
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 from dataclasses import dataclass
 
@@ -68,22 +67,6 @@ class DiskInfo:
     free_bytes: int
 
 
-def _resolve_user_path(raw: str) -> str:
-    """Resolve a user-supplied absolute path to a canonical, safe form.
-
-    Returns the resolved absolute path, or raises ``ValueError`` for
-    inputs that contain null bytes or resolve to a non-absolute path.
-    """
-    if "\0" in raw:
-        raise ValueError("target_disk path contains null bytes")
-    resolved = os.path.realpath(raw)
-    # realpath always returns an absolute path for existing paths; for
-    # non-existing paths it may return a relative one.  Reject those.
-    if not resolved.startswith("/"):
-        raise ValueError(f"target_disk path resolution failed: {raw!r}")
-    return resolved
-
-
 def resolve_target_disk(identifier: str) -> str:
     """Resolve a target-disk identifier to a canonical mount-point path.
 
@@ -98,37 +81,32 @@ def resolve_target_disk(identifier: str) -> str:
     if not identifier or not identifier.strip():
         raise ValueError("target_disk identifier is empty")
 
-    # Reject null bytes in any identifier (label or path).
+    # Reject null bytes in any identifier.
     if "\0" in identifier:
         raise ValueError("target_disk identifier contains null bytes")
 
     identifier = identifier.strip()
 
-    # Resolve all path-like identifiers through realpath early so
-    # that every downstream filesystem operation receives a canonical,
-    # already-validated path.
-    if identifier.startswith("/"):
-        identifier = _resolve_user_path(identifier)
-
-    # 1. Device path
+    # 1. Device path: ask findmnt directly (safe — uses execve semantics).
     if identifier.startswith("/dev/"):
-        if not os.path.exists(identifier):
-            raise ValueError(f"device path does not exist: {identifier!r}")
         mp = _mount_point_of(identifier)
-        if mp is None:
-            raise ValueError(
-                f"device {identifier!r} is not mounted — cannot resolve to mount point"
-            )
-        return mp
+        if mp is not None:
+            return mp
+        raise ValueError(f"device {identifier!r} is not mounted")
 
-    # 2. Mount point (must be a directory and a mount point).
-    #    *identifier* is already resolved at this point.
-    if os.path.isdir(identifier) and _is_mount_point(identifier):
-        return identifier
+    # 2. Mount point: ask findmnt whether *identifier* is a mount point.
+    #    findmnt --target resolves symlinks internally.
+    if identifier.startswith("/"):
+        if _is_mount_point(identifier):
+            return identifier
+        # Maybe it's a device path that doesn't start with /dev/.
+        mp = _mount_point_of(identifier)
+        if mp is not None:
+            return mp
+        raise ValueError(f"{identifier!r} is not a recognised mount point")
 
-    # 3. Filesystem label (non-path identifier — already checked for
-    #    null bytes above, and *findmnt --source* uses execve semantics
-    #    so shell metacharacters are harmless).
+    # 3. Filesystem label.  findmnt --source uses execve semantics so
+    #    shell metacharacters in *identifier* are harmless.
     mp = _mount_point_of(f"LABEL={identifier}")
     if mp is not None:
         return mp
