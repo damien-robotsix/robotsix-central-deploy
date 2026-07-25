@@ -31,6 +31,11 @@ _HOP_BY_HOP: frozenset[str] = frozenset(
         "keep-alive",
         "proxy-authenticate",
         "proxy-authorization",
+        "sec-websocket-accept",
+        "sec-websocket-extensions",
+        "sec-websocket-key",
+        "sec-websocket-protocol",
+        "sec-websocket-version",
         "te",
         "trailers",
         "transfer-encoding",
@@ -157,10 +162,20 @@ async def ws_proxy(
     """
     import websockets
 
-    async with websockets.connect(
-        target_ws_url,
-        additional_headers=additional_headers,
-    ) as backend_ws:
+    try:
+        connect_ctx = websockets.connect(
+            target_ws_url,
+            additional_headers=additional_headers,
+        )
+    except websockets.exceptions.InvalidStatus as status_exc:
+        logger.warning(
+            "ws_proxy: upstream rejected WebSocket handshake (%s) for %s",
+            status_exc,
+            target_ws_url,
+        )
+        return
+
+    async with connect_ctx as backend_ws:
 
         async def _client_to_backend() -> None:
             try:

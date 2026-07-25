@@ -169,6 +169,8 @@ async def gateway_ws(websocket: WebSocket, path: str) -> None:
     assert config is not None
 
     target = f"ws://{config.container_name}:{config.ports[0].container}/{path}"
+    if websocket.url.query:
+        target += f"?{websocket.url.query}"
     fwd_headers = filter_hop_by_hop(dict(websocket.headers))
 
     await websocket.accept()
