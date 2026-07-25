@@ -3155,6 +3155,66 @@
         }
       }
     },
+    "/chat/deploy/test": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Test-deploy a component and validate with a probe URL",
+        "description": "Test-deploy a component and validate by probing *website*.\n\nBrings the container up, issues an HTTP GET to the supplied probe\nURL, captures the container logs, and returns a structured result.\nOn failure the container is rolled back, but the audit entry and\nlogs are retained so the operator or chat agent can investigate.\n\nSynchronous \u2014 waits for deploy + probe to complete before returning.\nRate-limited to one test-deploy per 300 seconds per component.",
+        "operationId": "chat_test_deploy_chat_deploy_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentTestDeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentTestDeployResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted for chat-agent mutation"
+          },
+          "404": {
+            "description": "Component config not found and no repo supplied"
+          },
+          "409": {
+            "description": "Deploy already in progress"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "422": {
+            "description": "Invalid request body or unresolvable deploy contract"
+          },
+          "503": {
+            "description": "Registry not loaded"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/actions/runs": {
       "get": {
         "tags": [
@@ -6351,6 +6411,107 @@
         ],
         "title": "ChatAgentSelfUpdateResponse",
         "description": "Response body for POST /chat/services/central-deploy/update."
+      },
+      "ChatAgentTestDeployRequest": {
+        "properties": {
+          "stub_name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Stub Name",
+            "description": "Component/service name; must match ^[a-z0-9][a-z0-9-]*$"
+          },
+          "website": {
+            "type": "string",
+            "title": "Website",
+            "description": "Probe URL (e.g. http://localhost:8080/health) to validate the deployed container"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo",
+            "description": "Optional Git clone URL of the repository; used to resolve the deploy contract when no persisted ComponentConfig exists"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stub_name",
+          "website"
+        ],
+        "title": "ChatAgentTestDeployRequest",
+        "description": "Request body for POST /chat/deploy/test.\n\nValidates a deployment by bringing the container up, probing the\nsupplied *website* URL, and returning a structured pass/fail result\ntogether with the container logs.  On failure the container is\nrolled back, but the audit entry and logs are retained so the\noperator or chat agent can investigate."
+      },
+      "ChatAgentTestDeployResponse": {
+        "properties": {
+          "stub_name": {
+            "type": "string",
+            "title": "Stub Name",
+            "description": "Component/service name"
+          },
+          "pass_fail": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail"
+            ],
+            "title": "Pass Fail",
+            "description": "'pass' or 'fail'"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status",
+            "description": "HTTP status code returned by the probe; None when the connection failed"
+          },
+          "response_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Snippet",
+            "description": "First 500 characters of the probe response body; None when unavailable"
+          },
+          "container_logs": {
+            "type": "string",
+            "title": "Container Logs",
+            "description": "Last 200 lines of container stdout/stderr captured after the probe",
+            "default": ""
+          },
+          "deployed_digest": {
+            "type": "string",
+            "title": "Deployed Digest",
+            "description": "Digest of the deployed image",
+            "default": ""
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "stub_name",
+          "pass_fail"
+        ],
+        "title": "ChatAgentTestDeployResponse",
+        "description": "Response body for POST /chat/deploy/test."
       },
       "ChatAgentUpdateResponse": {
         "properties": {

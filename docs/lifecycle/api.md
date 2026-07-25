@@ -44,6 +44,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_services
 
+::: robotsix_central_deploy.lifecycle.routers.chat_test_deploy
+
 ::: robotsix_central_deploy.lifecycle.routers.claude_auth
 
 ::: robotsix_central_deploy.lifecycle.routers.services_config

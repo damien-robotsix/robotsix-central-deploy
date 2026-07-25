@@ -785,6 +785,58 @@ class ChatAgentEnvResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# POST /chat/deploy/test
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentTestDeployRequest(BaseModel):
+    """Request body for POST /chat/deploy/test.
+
+    Validates a deployment by bringing the container up, probing the
+    supplied *website* URL, and returning a structured pass/fail result
+    together with the container logs.  On failure the container is
+    rolled back, but the audit entry and logs are retained so the
+    operator or chat agent can investigate.
+    """
+
+    stub_name: str = Field(
+        description="Component/service name; must match ^[a-z0-9][a-z0-9-]*$",
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+    )
+    website: str = Field(
+        description="Probe URL (e.g. http://localhost:8080/health) to validate the deployed container",
+    )
+    repo: str | None = Field(
+        default=None,
+        description="Optional Git clone URL of the repository; used to resolve the deploy contract when no persisted ComponentConfig exists",
+    )
+
+
+class ChatAgentTestDeployResponse(BaseModel):
+    """Response body for POST /chat/deploy/test."""
+
+    stub_name: str = Field(description="Component/service name")
+    pass_fail: Literal["pass", "fail"] = Field(description="'pass' or 'fail'")
+    http_status: int | None = Field(
+        default=None,
+        description="HTTP status code returned by the probe; None when the connection failed",
+    )
+    response_snippet: str | None = Field(
+        default=None,
+        description="First 500 characters of the probe response body; None when unavailable",
+    )
+    container_logs: str = Field(
+        default="",
+        description="Last 200 lines of container stdout/stderr captured after the probe",
+    )
+    deployed_digest: str = Field(
+        default="",
+        description="Digest of the deployed image",
+    )
+    detail: str = Field(default="", description="Human-readable summary")
+
+
 class ChatAgentDiskReclaimRequest(BaseModel):
     """Request body for POST /chat/disk/reclaim.
 
