@@ -68,6 +68,22 @@ class DiskInfo:
     free_bytes: int
 
 
+def _resolve_user_path(raw: str) -> str:
+    """Resolve a user-supplied absolute path to a canonical, safe form.
+
+    Returns the resolved absolute path, or raises ``ValueError`` for
+    inputs that contain null bytes or resolve to a non-absolute path.
+    """
+    if "\0" in raw:
+        raise ValueError("target_disk path contains null bytes")
+    resolved = os.path.realpath(raw)
+    # realpath always returns an absolute path for existing paths; for
+    # non-existing paths it may return a relative one.  Reject those.
+    if not resolved.startswith("/"):
+        raise ValueError(f"target_disk path resolution failed: {raw!r}")
+    return resolved
+
+
 def resolve_target_disk(identifier: str) -> str:
     """Resolve a target-disk identifier to a canonical mount-point path.
 
@@ -82,11 +98,17 @@ def resolve_target_disk(identifier: str) -> str:
     if not identifier or not identifier.strip():
         raise ValueError("target_disk identifier is empty")
 
-    # Sanitize: reject null bytes and path-traversal attempts in the
-    # user-supplied identifier before any filesystem operation.
-    _validate_disk_identifier(identifier)
+    # Reject null bytes in any identifier (label or path).
+    if "\0" in identifier:
+        raise ValueError("target_disk identifier contains null bytes")
 
     identifier = identifier.strip()
+
+    # Resolve all path-like identifiers through realpath early so
+    # that every downstream filesystem operation receives a canonical,
+    # already-validated path.
+    if identifier.startswith("/"):
+        identifier = _resolve_user_path(identifier)
 
     # 1. Device path
     if identifier.startswith("/dev/"):
@@ -99,12 +121,14 @@ def resolve_target_disk(identifier: str) -> str:
             )
         return mp
 
-    # 2. Mount point (must exist, be a directory, and be a mount point)
-    candidate = os.path.realpath(identifier)
-    if os.path.isdir(candidate) and _is_mount_point(candidate):
-        return candidate
+    # 2. Mount point (must be a directory and a mount point).
+    #    *identifier* is already resolved at this point.
+    if os.path.isdir(identifier) and _is_mount_point(identifier):
+        return identifier
 
-    # 3. Filesystem label
+    # 3. Filesystem label (non-path identifier — already checked for
+    #    null bytes above, and *findmnt --source* uses execve semantics
+    #    so shell metacharacters are harmless).
     mp = _mount_point_of(f"LABEL={identifier}")
     if mp is not None:
         return mp
@@ -178,24 +202,6 @@ def discover_mounted_disks() -> list[DiskInfo]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _validate_disk_identifier(value: str) -> None:
-    """Reject obviously-malicious disk-identifier inputs.
-
-    This is a defense-in-depth check against path-injection: null bytes
-    are always illegal, and bare ``..`` path components are rejected.
-    """
-    if "\0" in value:
-        raise ValueError("target_disk identifier contains null bytes")
-    # Only check for traversal when the value looks like a path (starts
-    # with /).  Labels (e.g. "mydisk") are not checked.
-    if value.startswith("/"):
-        parts = os.path.normpath(value).split(os.sep)
-        if ".." in parts:
-            raise ValueError(
-                f"target_disk identifier contains path traversal: {value!r}"
-            )
 
 
 def _mount_point_of(source_spec: str) -> str | None:
