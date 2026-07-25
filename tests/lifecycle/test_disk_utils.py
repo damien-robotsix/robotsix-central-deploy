@@ -33,7 +33,7 @@ class TestResolveTargetDisk:
             resolve_target_disk("   ")
 
     def test_device_path_nonexistent_raises(self):
-        with pytest.raises(ValueError, match="device path does not exist"):
+        with pytest.raises(ValueError, match="is not mounted"):
             resolve_target_disk("/dev/nonexistent_xyz")
 
     def test_device_path_exists_but_not_mounted_raises(self, monkeypatch):
