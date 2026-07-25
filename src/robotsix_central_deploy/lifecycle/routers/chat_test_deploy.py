@@ -8,6 +8,10 @@ container is rolled back but the audit trail and logs are preserved.
 
 from __future__ import annotations
 
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -33,6 +37,73 @@ from .._config_utils import _sanitize_log
 
 from ._chat_common import _check_rate_limit, logger
 from .chat_services import _resolve_deploy_contract
+
+# Hostnames that must never be probed, even if they resolve to a
+# non-private address.
+_BLOCKED_HOSTNAMES: frozenset[str] = frozenset(
+    {
+        "metadata.google.internal",
+        "169.254.169.254",
+    }
+)
+
+# IPv4 / IPv6 networks that the probe must never target.
+_BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
+    # AWS / cloud metadata endpoint (link-local).
+    ipaddress.IPv4Network("169.254.169.254/32"),
+    # Shared address space (RFC 6598) — often used by cloud metadata.
+    ipaddress.IPv4Network("100.64.0.0/10"),
+    # IPv4 link-local.
+    ipaddress.IPv4Network("169.254.0.0/16"),
+    # IPv6 link-local.
+    ipaddress.IPv6Network("fe80::/10"),
+)
+
+
+def _validate_probe_url(raw: str) -> None:
+    """Validate *raw* as a safe probe URL, raising HTTP 422 on failure.
+
+    Permits only ``http`` / ``https`` schemes and blocks metadata-service
+    IPs (cloud metadata endpoints, link-local, shared address space).
+    """
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Probe URL scheme must be http or https, got {parsed.scheme!r}.",
+        )
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Probe URL must include a hostname.",
+        )
+    if hostname in _BLOCKED_HOSTNAMES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Probe URL hostname {hostname!r} is blocked.",
+        )
+    # Resolve hostname → IP and check against blocked networks.
+    try:
+        addr_info = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Probe URL hostname {hostname!r} could not be resolved.",
+        )
+    for _family, _socktype, _proto, _canonname, sockaddr in addr_info:
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        for net in _BLOCKED_NETWORKS:
+            if ip in net:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Probe URL resolves to blocked IP {ip_str}.",
+                )
+
 
 router = APIRouter(tags=["chat"])
 
@@ -162,6 +233,8 @@ async def chat_test_deploy(
     await store.put(record)
 
     # --- Probe the supplied website ---
+    _validate_probe_url(body.website)
+
     probe_pass: bool = False
     probe_status: int | None = None
     probe_snippet: str | None = None
