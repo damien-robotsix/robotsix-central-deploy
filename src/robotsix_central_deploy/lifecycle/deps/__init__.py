@@ -144,6 +144,7 @@ __all__ = [
     "_resolve_placeholders",
     "_seed_for_detect",
     "_seed_list_item",
+    "_require_config_standard",
     "_validate_account_ids",
     "_validate_config_or_422",
     # volume
