@@ -179,7 +179,7 @@ async def ws_proxy(
                         elif "text" in data:
                             await backend_ws.send(data["text"])
                 except websockets.exceptions.ConnectionClosed:
-                    pass
+                    pass  # backend closed; task done
                 except Exception:
                     logger.debug("client→backend task exiting", exc_info=True)
 
@@ -219,7 +219,7 @@ async def ws_proxy(
                     logger.warning("ws_proxy task error: %s", exc)
     except websockets.exceptions.InvalidStatus as status_exc:
         logger.warning(
-            "ws_proxy: upstream rejected WebSocket handshake (%s) for %s",
+            "ws_proxy: upstream rejected WebSocket handshake (%s) for %r",
             status_exc,
             target_ws_url,
         )

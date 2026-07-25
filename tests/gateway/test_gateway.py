@@ -460,9 +460,7 @@ class TestWsProxy:
         client_ws.send_bytes = AsyncMock()
         client_ws.send_text = AsyncMock()
 
-        connect = MagicMock(
-            return_value=_FakeConnectRaises(_InvalidStatus("HTTP 400"))
-        )
+        connect = MagicMock(return_value=_FakeConnectRaises(_InvalidStatus("HTTP 400")))
         fake_ws = _fake_websockets_module(connect)
 
         with patch.dict(sys.modules, {"websockets": fake_ws}):
