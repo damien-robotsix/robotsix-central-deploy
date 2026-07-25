@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Enable `module_size` periodic workflow and remove dead `security_posture` / `state_sync` presence files.
 - Config default resolution now cites the **robotsix-standards config-standard** convention. The standardized repo paths (`config/config.json`, `config/config.schema.json`, `config/config.example.json`) are defined as module-level constants in `onboard/fetcher.py` referencing `robotsix-standards/docs/config-standard.md`, replacing ad-hoc hardcoded strings. Invalid JSON in a committed `config/config.json` now surfaces as HTTP 422 during preflight instead of being silently swallowed.
 - Added `GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/jobs` — list jobs for a workflow run with step names, conclusions, and timestamps. Read-only; no confirmation gate. Uses the same GitHub App installation token and `X-API-Key` auth as the existing GitHub chat endpoints.
 - Fixed `POST /chat/disk/reclaim` silently ignoring the `images` flag sent by the chat agent. The request field is now aliased so both `images` (what the agent sends) and `dangling_images` (the canonical name) are accepted, and the prune_images path now executes correctly.
