@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Onboard healthcheck-disable checkbox: fix one-way behavior where unchecking a pre-disabled healthcheck still sent `disable: true`. Unchecking now restores the original test array with `disable: false`.
 - Target-disk selection for component volumes: new `target_disk` config field, CLI flag, and API parameter allow placing named volumes on a specific disk at deploy time. Supports device-path, mount-point, and filesystem-label resolution. `GET /disk` now reports per-disk usage for all mounted data disks with an aggregate total.
 - Onboard healthcheck disable: per-component healthcheck override at onboard time, mirroring compose's `healthcheck.disable`.  The "Disable healthcheck" checkbox in the Add-Component panel disables the container healthcheck for worker/serverless components that run no HTTP server.  Also captures container logs and writes a deploy-history entry before rollback on failed onboards so the forensic trail survives the cleanup.
 - Added `POST /chat/deploy/test` endpoint for validation-mode deployments. Accepts a `stub_name` (component id) and a `website` (probe URL), deploys the container, probes the supplied URL, and returns a structured pass/fail result with HTTP status, response snippet, and container logs. On failure, the container is rolled back but the audit entry and logs are retained for investigation.
