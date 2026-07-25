@@ -339,6 +339,24 @@ class _FakeConnect:
         return False
 
 
+class _FakeConnectRaises:
+    """Connect context manager whose ``__aenter__`` raises the given exception.
+
+    Used to simulate ``InvalidStatus`` (handshake rejection), which the real
+    ``websockets`` library raises during ``__aenter__``, not when ``connect()``
+    is called.
+    """
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+
+    async def __aenter__(self) -> object:
+        raise self._exc
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
 class _InvalidStatus(Exception):
     pass
 
@@ -442,7 +460,9 @@ class TestWsProxy:
         client_ws.send_bytes = AsyncMock()
         client_ws.send_text = AsyncMock()
 
-        connect = MagicMock(side_effect=_InvalidStatus("HTTP 400"))
+        connect = MagicMock(
+            return_value=_FakeConnectRaises(_InvalidStatus("HTTP 400"))
+        )
         fake_ws = _fake_websockets_module(connect)
 
         with patch.dict(sys.modules, {"websockets": fake_ws}):
