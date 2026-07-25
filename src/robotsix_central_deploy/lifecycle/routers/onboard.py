@@ -23,6 +23,7 @@ from ..deps import (
     _get_config,
     _get_deploy_history_store,
     _namespace_spec_volumes,
+    _require_config_standard,
     _validate_config_or_422,
     _build_component_config_from_spec,
     JobRegistry,
@@ -349,34 +350,8 @@ async def onboard_preflight(
     else:
         derived_spec.config_example_values = None
 
-    # Hard precondition: config/config.schema.json AND
-    # robotsix.deploy.config-target must both be present.  A repo lacking
-    # either does not satisfy the robotsix config standard and is not
-    # deployable.
-    if derived_spec.config_schema is None or derived_spec.config_volume is None:
-        missing: list[str] = []
-        if derived_spec.config_schema is None:
-            missing.append(
-                "missing config/config.schema.json — every deployed service "
-                "must ship config/config.schema.json "
-                "(robotsix-standards/docs/config-standard.md)"
-            )
-        if derived_spec.config_volume is None:
-            missing.append(
-                "missing robotsix.deploy.config-target label — the primary "
-                "service in deploy/docker-compose.yml must declare "
-                "robotsix.deploy.config-target "
-                "(robotsix-standards/docs/config-standard.md)"
-            )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": (
-                    "Repo does not satisfy the robotsix config standard: "
-                    + "; ".join(missing)
-                ),
-            },
-        )
+    # Hard precondition: config standard must be satisfied
+    _require_config_standard(derived_spec)
 
     # Volume-collision preflight: check that would-be namespaced volume names
     # do not collide with any existing component's named_volumes.
