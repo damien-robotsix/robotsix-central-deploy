@@ -40,6 +40,7 @@ from .models import ErrorDetail
 from .rate_limiter import RateLimitMiddleware
 from .routers.health import router as health_router
 from .routers.services import router as services_router
+from .routers.services_lifecycle import router as services_lifecycle_router
 from .routers.services_deploy import router as services_deploy_router
 from .routers.services_config import router as services_config_router
 from .routers.services_env import router as services_env_router
@@ -127,6 +128,7 @@ app.include_router(services_router)
 app.include_router(services_deploy_router)
 app.include_router(services_config_router)
 app.include_router(services_env_router)
+app.include_router(services_lifecycle_router)
 app.include_router(caretaker_router)
 app.include_router(onboard_router)
 app.include_router(claude_auth_router)
