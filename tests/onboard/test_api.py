@@ -1216,6 +1216,57 @@ class TestMultiServiceOnboardConfirm:
         assert len(data["spec"]["siblings"]) == 1
         assert data["spec"]["siblings"][0]["service_key"] == "worker"
 
+    async def test_confirm_multi_service_healthcheck_disable_applies_to_siblings(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """When a multi-service spec has 'disable: true' on a sibling's
+        health_check, _deploy_onboard_siblings passes it through and
+        the sibling deploys with its container healthcheck disabled."""
+        from robotsix_central_deploy.registry.models import HealthCheck
+
+        spec = _make_multi_service_derived_spec("hc-disable-svc")
+        # Give the sibling a healthcheck with disable: true
+        spec.siblings[0].health_check = HealthCheck(disable=True, test=["NONE"])
+        store: InMemoryStore = server_mod.app.state.store
+        config_store: ComponentConfigStore = server_mod.app.state.component_config_store
+
+        resp = await client.post(
+            "/onboard/confirm",
+            json={"spec": spec.model_dump()},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 202
+        job_id = resp.json()["job_id"]
+
+        # Poll until done
+        job_status = await _poll_job_until_done(client, job_id, auth_headers)
+        assert job_status["phase"] == "done"
+
+        # Primary + sibling should both be running
+        primary = await store.get("hc-disable-svc")
+        assert primary is not None
+        assert primary.state == ServiceState.RUNNING
+
+        sib_record = await store.get("hc-disable-svc-worker")
+        assert sib_record is not None
+        assert sib_record.state == ServiceState.RUNNING
+
+        # The persisted ComponentConfig should have the sibling with
+        # disable: true
+        all_configs = config_store.all()
+        assert len(all_configs) == 1
+        cfg = all_configs[0]
+        assert cfg.id == "hc-disable-svc"
+        assert len(cfg.siblings) == 1
+        sib_cfg = cfg.siblings[0]
+        assert sib_cfg.service_key == "worker"
+        assert sib_cfg.health_check is not None
+        assert sib_cfg.health_check.disable is True
+        assert sib_cfg.health_check.test == ["NONE"]
+
 
 # ---------------------------------------------------------------------------
 # Preflight with config.json
