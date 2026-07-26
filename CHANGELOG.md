@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Added `services_lifecycle` and `services_maintenance` to the lifecycle API docs (`docs/lifecycle/api.md`)
 - Onboard "Disable healthcheck" checkbox now applies to sibling services
   (worker/serverless containers) in addition to the primary, so
   multi-service components with siblings that lack a reachable HTTP
