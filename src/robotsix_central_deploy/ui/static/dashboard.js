@@ -2574,12 +2574,21 @@ function populateStep2(spec, portShifts) {
   // Chat access toggle
   document.getElementById('ob-chat-access').checked = !!spec.allow_chat_access;
 
-  // Healthcheck disable toggle — only show when the spec has a healthcheck
+  // Healthcheck disable toggle — show when primary or any sibling has a healthcheck
   var hcDisableLabel = document.getElementById('ob-disable-healthcheck-label');
   var hcDisableCheck = document.getElementById('ob-disable-healthcheck');
-  if (spec.health_check) {
+  var anyHealthCheck = !!spec.health_check;
+  if (!anyHealthCheck && spec.siblings && spec.siblings.length > 0) {
+    for (var si = 0; si < spec.siblings.length; si++) {
+      if (spec.siblings[si].health_check) {
+        anyHealthCheck = true;
+        break;
+      }
+    }
+  }
+  if (anyHealthCheck) {
     hcDisableLabel.classList.remove('hidden');
-    hcDisableCheck.checked = !!spec.health_check.disable;
+    hcDisableCheck.checked = !!spec.health_check && !!spec.health_check.disable;
   } else {
     hcDisableLabel.classList.add('hidden');
     hcDisableCheck.checked = false;
@@ -2613,11 +2622,27 @@ async function onboardDeploy() {
   finalSpec.allow_chat_access = document.getElementById('ob-chat-access').checked;
 
   // Healthcheck disable toggle — explicitly disable the container healthcheck
+  // Applies to primary AND all siblings so worker/serverless containers
+  // are not held up by unreachable HTTP healthchecks at deploy time.
   if (document.getElementById('ob-disable-healthcheck').checked) {
     finalSpec.health_check = { disable: true, test: ["NONE"] };
-  } else if (finalSpec.health_check && finalSpec.health_check.disable) {
-    // Restore the original test array but with disable: false
-    finalSpec.health_check.disable = false;
+    if (finalSpec.siblings) {
+      finalSpec.siblings.forEach(function(sib) {
+        sib.health_check = { disable: true, test: ["NONE"] };
+      });
+    }
+  } else {
+    if (finalSpec.health_check && finalSpec.health_check.disable) {
+      // Restore the original test array but with disable: false
+      finalSpec.health_check.disable = false;
+    }
+    if (finalSpec.siblings) {
+      finalSpec.siblings.forEach(function(sib) {
+        if (sib.health_check && sib.health_check.disable) {
+          sib.health_check.disable = false;
+        }
+      });
+    }
   }
 
   // Build the confirm body

@@ -6,6 +6,12 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Onboard "Disable healthcheck" checkbox now applies to sibling services
+  (worker/serverless containers) in addition to the primary, so
+  multi-service components with siblings that lack a reachable HTTP
+  healthcheck deploy successfully when the toggle is checked. The
+  checkbox also appears when any sibling has a healthcheck, not only
+  the primary.
 - Replace inline config-standard validation in `onboard.py` preflight endpoint with the shared `_require_config_standard` helper (DRY refactor, matching `chat_services.py`)
 - Replace inline config-standard validation in `chat_services.py` register endpoint with a call to the shared `_require_config_standard` helper (DRY refactor)
 - Re-export `_require_config_standard` from `lifecycle.deps` alongside other seed helpers.
