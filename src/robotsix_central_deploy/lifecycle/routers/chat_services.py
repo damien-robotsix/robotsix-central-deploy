@@ -881,21 +881,15 @@ async def chat_enable_mutation(
 
     if body.ttl_seconds is not None and body.ttl_seconds > 0:
         _cancel_ttl_task(name)
-        _schedule_ttl_task(
-            name, body.ttl_seconds, component_config_store, audit_store
-        )
+        _schedule_ttl_task(name, body.ttl_seconds, component_config_store, audit_store)
 
     await audit_store.append(
         ChatAgentAuditEntry(
             component=name,
             action="enable-mutation",
             detail=(
-                f"chat_agent_mutatable: False → True"
-                + (
-                    f"; TTL={body.ttl_seconds}s"
-                    if body.ttl_seconds
-                    else ""
-                )
+                "chat_agent_mutatable: False → True"
+                + (f"; TTL={body.ttl_seconds}s" if body.ttl_seconds else "")
             ),
         )
     )

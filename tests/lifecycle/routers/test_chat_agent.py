@@ -1685,7 +1685,8 @@ async def test_enable_mutation_with_ttl(
     # Verify an auto-disable audit entry was written.
     entries = await audit_store.list(limit=10, component="other-svc")
     auto_entries = [
-        e for e in entries
+        e
+        for e in entries
         if e.action == "disable-mutation" and "Auto-disabled" in e.detail
     ]
     assert len(auto_entries) >= 1

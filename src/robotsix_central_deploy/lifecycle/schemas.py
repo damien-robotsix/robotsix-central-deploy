@@ -832,9 +832,13 @@ class ChatAgentMutationEnableResponse(BaseModel):
     """Response body for POST /chat/services/{name}/enable-mutation."""
 
     name: str = Field(description="Component name")
-    action: str = Field(default="enable-mutation", description="Always 'enable-mutation'")
+    action: str = Field(
+        default="enable-mutation", description="Always 'enable-mutation'"
+    )
     previous: bool = Field(description="Previous chat_agent_mutatable value")
-    current: bool = Field(description="Current chat_agent_mutatable value (always True)")
+    current: bool = Field(
+        description="Current chat_agent_mutatable value (always True)"
+    )
     ttl_seconds: int | None = Field(
         default=None, description="TTL echoed from the request body"
     )
@@ -845,9 +849,13 @@ class ChatAgentMutationDisableResponse(BaseModel):
     """Response body for POST /chat/services/{name}/disable-mutation."""
 
     name: str = Field(description="Component name")
-    action: str = Field(default="disable-mutation", description="Always 'disable-mutation'")
+    action: str = Field(
+        default="disable-mutation", description="Always 'disable-mutation'"
+    )
     previous: bool = Field(description="Previous chat_agent_mutatable value")
-    current: bool = Field(description="Current chat_agent_mutatable value (always False)")
+    current: bool = Field(
+        description="Current chat_agent_mutatable value (always False)"
+    )
     detail: str = Field(default="", description="Human-readable summary")
 
 
