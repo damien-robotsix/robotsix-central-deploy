@@ -34,3 +34,4 @@ services:
       robotsix.deploy.settings.volume-audit-interval-seconds: "3600"
       robotsix.deploy.settings.volume-audit-growth-threshold-pct: "10.0"
       robotsix.deploy.settings.volume-audit-min-delta-bytes: "10485760"
+      robotsix.deploy.settings.chat-agent-registration-enabled: "true"

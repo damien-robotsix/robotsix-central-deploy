@@ -195,6 +195,7 @@ def _parse_self_contract_settings(config: LifecycleConfig) -> "SystemSettings | 
             "caretaker_enabled",
             "image_auto_prune",
             "volume_audit_enabled",
+            "chat_agent_registration_enabled",
         ):
             settings_kwargs[field_name] = str_value.lower() in ("true", "1", "yes")
         elif field_name == "llmio_tier_config":

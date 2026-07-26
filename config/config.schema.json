@@ -523,7 +523,7 @@
       "writeOnly": true
     },
     "chat_agent_registration_enabled": {
-      "default": false,
+      "default": true,
       "description": "When True, the chat agent may register new managed components via POST /chat/services.  Registration only persists metadata \u2014 it does NOT auto-start or auto-deploy the component.",
       "title": "Chat Agent Registration Enabled",
       "type": "boolean"

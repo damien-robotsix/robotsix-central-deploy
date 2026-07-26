@@ -27,6 +27,7 @@ All notable changes to robotsix-central-deploy.
   healthcheck deploy successfully when the toggle is checked. The
   checkbox also appears when any sibling has a healthcheck, not only
   the primary.
+- Add `chat_agent_registration_enabled` to `SystemSettings` and `SETTINGS_DEFAULTS` (default `true`) so the deploy-contract overlay correctly propagates the toggle to the runtime config, and add the corresponding label to `deploy/docker-compose.yml`.  The `config/config.json` default was already `true`, but the running server's persisted `/data/config.json` volume lacked the field, causing it to fall back to the `LifecycleConfig` Field default (`false`).  Moving it into the shared settings tier fixes the drift.
 - Replace inline config-standard validation in `onboard.py` preflight endpoint with the shared `_require_config_standard` helper (DRY refactor, matching `chat_services.py`)
 - Replace inline config-standard validation in `chat_services.py` register endpoint with a call to the shared `_require_config_standard` helper (DRY refactor)
 - Re-export `_require_config_standard` from `lifecycle.deps` alongside other seed helpers.
