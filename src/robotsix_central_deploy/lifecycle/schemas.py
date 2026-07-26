@@ -806,6 +806,59 @@ class ChatAgentEnvResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# POST /chat/services/{name}/enable-mutation  +  /disable-mutation
+# ---------------------------------------------------------------------------
+
+
+class ChatAgentMutationEnableRequest(BaseModel):
+    """Request body for POST /chat/services/{name}/enable-mutation.
+
+    Grants the chat agent permission to mutate (restart / update / deploy
+    / config-write / env-write / test-deploy) a single named stub.
+    """
+
+    ttl_seconds: int | None = Field(
+        default=None,
+        description=(
+            "Optional TTL in seconds.  When set, the mutation grant is "
+            "automatically disabled after this many seconds (best-effort; "
+            "a server restart cancels the timer)."
+        ),
+    )
+
+
+class ChatAgentMutationEnableResponse(BaseModel):
+    """Response body for POST /chat/services/{name}/enable-mutation."""
+
+    name: str = Field(description="Component name")
+    action: str = Field(
+        default="enable-mutation", description="Always 'enable-mutation'"
+    )
+    previous: bool = Field(description="Previous chat_agent_mutatable value")
+    current: bool = Field(
+        description="Current chat_agent_mutatable value (always True)"
+    )
+    ttl_seconds: int | None = Field(
+        default=None, description="TTL echoed from the request body"
+    )
+    detail: str = Field(default="", description="Human-readable summary")
+
+
+class ChatAgentMutationDisableResponse(BaseModel):
+    """Response body for POST /chat/services/{name}/disable-mutation."""
+
+    name: str = Field(description="Component name")
+    action: str = Field(
+        default="disable-mutation", description="Always 'disable-mutation'"
+    )
+    previous: bool = Field(description="Previous chat_agent_mutatable value")
+    current: bool = Field(
+        description="Current chat_agent_mutatable value (always False)"
+    )
+    detail: str = Field(default="", description="Human-readable summary")
+
+
 class ChatAgentTestDeployRequest(BaseModel):
     """Request body for POST /chat/deploy/test.
 

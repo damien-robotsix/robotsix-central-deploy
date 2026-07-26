@@ -3092,6 +3092,128 @@
         }
       }
     },
+    "/chat/services/{name}/enable-mutation": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Grant chat-agent mutation permission for a named stub",
+        "description": "Enable the per-service ``chat_agent_mutatable`` flag for *name*.\n\nThis endpoint is **not** gated by ``_require_allowed_service`` \u2014\nthe whole point is to grant access when it is currently denied.\nEvery enable writes a ``ChatAgentAuditEntry``.\n\nAn optional ``ttl_seconds`` schedules a best-effort auto-disable\nafter the given number of seconds.  The timer is cancelled if the\nserver restarts.",
+        "operationId": "chat_enable_mutation_chat_services__name__enable_mutation_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentMutationEnableRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentMutationEnableResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/disable-mutation": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Revoke chat-agent mutation permission for a named stub",
+        "description": "Disable the per-service ``chat_agent_mutatable`` flag for *name*.\n\nCancels any pending TTL auto-disable task.  Every disable writes a\n``ChatAgentAuditEntry``.  Idempotent \u2014 disabling an already-disabled\nstub is a no-op.",
+        "operationId": "chat_disable_mutation_chat_services__name__disable_mutation_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentMutationDisableResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Component not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/audit-log": {
       "get": {
         "tags": [
@@ -6179,6 +6301,115 @@
         "type": "object",
         "title": "ChatAgentEnvUpdate",
         "description": "Request body for PUT /chat/env/{name}.\n\nSecret values are accepted in the ``secrets`` dict and are encrypted\nat rest \u2014 they are never logged or echoed in responses."
+      },
+      "ChatAgentMutationDisableResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'disable-mutation'",
+            "default": "disable-mutation"
+          },
+          "previous": {
+            "type": "boolean",
+            "title": "Previous",
+            "description": "Previous chat_agent_mutatable value"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "Current",
+            "description": "Current chat_agent_mutatable value (always False)"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "previous",
+          "current"
+        ],
+        "title": "ChatAgentMutationDisableResponse",
+        "description": "Response body for POST /chat/services/{name}/disable-mutation."
+      },
+      "ChatAgentMutationEnableRequest": {
+        "properties": {
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds",
+            "description": "Optional TTL in seconds.  When set, the mutation grant is automatically disabled after this many seconds (best-effort; a server restart cancels the timer)."
+          }
+        },
+        "type": "object",
+        "title": "ChatAgentMutationEnableRequest",
+        "description": "Request body for POST /chat/services/{name}/enable-mutation.\n\nGrants the chat agent permission to mutate (restart / update / deploy\n/ config-write / env-write / test-deploy) a single named stub."
+      },
+      "ChatAgentMutationEnableResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'enable-mutation'",
+            "default": "enable-mutation"
+          },
+          "previous": {
+            "type": "boolean",
+            "title": "Previous",
+            "description": "Previous chat_agent_mutatable value"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "Current",
+            "description": "Current chat_agent_mutatable value (always True)"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds",
+            "description": "TTL echoed from the request body"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "previous",
+          "current"
+        ],
+        "title": "ChatAgentMutationEnableResponse",
+        "description": "Response body for POST /chat/services/{name}/enable-mutation."
       },
       "ChatAgentPreviewDeployRequest": {
         "properties": {
