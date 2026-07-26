@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -790,6 +791,8 @@ async def test_chat_endpoints_require_auth(
             "/chat/deploy",
             {"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
         ),
+        ("POST", "/chat/services/chat/enable-mutation", {"ttl_seconds": 60}),
+        ("POST", "/chat/services/chat/disable-mutation", None),
     ]
     for method, path, body in endpoints:
         if body is not None:
@@ -1501,3 +1504,285 @@ async def test_chat_register_applies_default_image_tag_when_missing(
     stored = component_config_store.get("no-tag-svc")
     assert stored is not None
     assert stored.image == "ghcr.io/damien-robotsix/no-tag-svc:latest"
+
+
+# ---------------------------------------------------------------------------
+# Enable / disable mutation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_enable_mutation_happy_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+    audit_store: ChatAgentAuditStore,
+):
+    """POST /chat/services/{name}/enable-mutation sets chat_agent_mutatable=True."""
+    # other-svc starts with chat_agent_mutatable=False.
+    cfg_before = component_config_store.get("other-svc")
+    assert cfg_before is not None
+    assert cfg_before.chat_agent_mutatable is False
+
+    resp = await client.post(
+        "/chat/services/other-svc/enable-mutation",
+        json={},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "other-svc"
+    assert data["action"] == "enable-mutation"
+    assert data["previous"] is False
+    assert data["current"] is True
+    assert data["ttl_seconds"] is None
+
+    # Verify the flag was persisted.
+    cfg_after = component_config_store.get("other-svc")
+    assert cfg_after is not None
+    assert cfg_after.chat_agent_mutatable is True
+
+    # Verify audit entry.
+    entries = await audit_store.list(limit=5, component="other-svc")
+    assert len(entries) >= 1
+    entry = entries[0]
+    assert entry.action == "enable-mutation"
+    assert entry.component == "other-svc"
+    assert "False → True" in entry.detail
+
+
+@pytest.mark.asyncio
+async def test_disable_mutation_happy_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+    audit_store: ChatAgentAuditStore,
+):
+    """POST /chat/services/{name}/disable-mutation sets chat_agent_mutatable=False."""
+    # chat starts with chat_agent_mutatable=True (from fixture).
+    cfg_before = component_config_store.get("chat")
+    assert cfg_before is not None
+    assert cfg_before.chat_agent_mutatable is True
+
+    resp = await client.post(
+        "/chat/services/chat/disable-mutation",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "chat"
+    assert data["action"] == "disable-mutation"
+    assert data["previous"] is True
+    assert data["current"] is False
+
+    # Verify the flag was persisted.
+    cfg_after = component_config_store.get("chat")
+    assert cfg_after is not None
+    assert cfg_after.chat_agent_mutatable is False
+
+    # Verify audit entry.
+    entries = await audit_store.list(limit=5, component="chat")
+    enable_entries = [e for e in entries if e.action == "disable-mutation"]
+    assert len(enable_entries) >= 1
+    entry = enable_entries[0]
+    assert "True → False" in entry.detail
+
+
+@pytest.mark.asyncio
+async def test_enable_mutation_idempotent(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+    audit_store: ChatAgentAuditStore,
+):
+    """Enabling an already-enabled stub is idempotent."""
+    # chat already has chat_agent_mutatable=True.
+    resp = await client.post(
+        "/chat/services/chat/enable-mutation",
+        json={},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["previous"] is True
+    assert data["current"] is True
+    assert "idempotent" in data["detail"].lower()
+
+    # Flag unchanged.
+    cfg = component_config_store.get("chat")
+    assert cfg is not None
+    assert cfg.chat_agent_mutatable is True
+
+    # Audit entry still written.
+    entries = await audit_store.list(limit=5, component="chat")
+    enable_entries = [e for e in entries if e.action == "enable-mutation"]
+    assert len(enable_entries) >= 1
+
+
+@pytest.mark.asyncio
+async def test_disable_mutation_idempotent(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+    audit_store: ChatAgentAuditStore,
+):
+    """Disabling an already-disabled stub is idempotent."""
+    # other-svc already has chat_agent_mutatable=False.
+    resp = await client.post(
+        "/chat/services/other-svc/disable-mutation",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["previous"] is False
+    assert data["current"] is False
+    assert "idempotent" in data["detail"].lower()
+
+    # Flag unchanged.
+    cfg = component_config_store.get("other-svc")
+    assert cfg is not None
+    assert cfg.chat_agent_mutatable is False
+
+    # Audit entry still written.
+    entries = await audit_store.list(limit=5, component="other-svc")
+    disable_entries = [e for e in entries if e.action == "disable-mutation"]
+    assert len(disable_entries) >= 1
+
+
+@pytest.mark.asyncio
+async def test_enable_mutation_with_ttl(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+    audit_store: ChatAgentAuditStore,
+):
+    """Enabling with ttl_seconds auto-disables after the TTL."""
+    # Use a short TTL for the test.
+    resp = await client.post(
+        "/chat/services/other-svc/enable-mutation",
+        json={"ttl_seconds": 1},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["previous"] is False
+    assert data["current"] is True
+    assert data["ttl_seconds"] == 1
+
+    # Immediately after, the flag should be True.
+    cfg = component_config_store.get("other-svc")
+    assert cfg is not None
+    assert cfg.chat_agent_mutatable is True
+
+    # Wait for the TTL to fire (plus a small buffer).
+    await asyncio.sleep(1.5)
+
+    # After the TTL, the flag should be False.
+    cfg = component_config_store.get("other-svc")
+    assert cfg is not None
+    assert cfg.chat_agent_mutatable is False
+
+    # Verify an auto-disable audit entry was written.
+    entries = await audit_store.list(limit=10, component="other-svc")
+    auto_entries = [
+        e for e in entries
+        if e.action == "disable-mutation" and "Auto-disabled" in e.detail
+    ]
+    assert len(auto_entries) >= 1
+
+
+@pytest.mark.asyncio
+async def test_enable_mutation_nonexistent_component(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+):
+    """Enabling mutation on a non-existent component returns 404."""
+    resp = await client.post(
+        "/chat/services/no-such-component/enable-mutation",
+        json={},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_disable_mutation_nonexistent_component(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+):
+    """Disabling mutation on a non-existent component returns 404."""
+    resp = await client.post(
+        "/chat/services/no-such-component/disable-mutation",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_mutation_not_gated_by_allowlist(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+):
+    """Enable/disable endpoints work even when chat_agent_mutatable is False.
+
+    This is the key design property: the grant endpoint must NOT be
+    gated behind the very toggle it sets.
+    """
+    # other-svc has chat_agent_mutatable=False but the enable endpoint
+    # should still succeed.
+    resp_enable = await client.post(
+        "/chat/services/other-svc/enable-mutation",
+        json={},
+        headers=auth_headers,
+    )
+    assert resp_enable.status_code == 200
+
+    # Now disable it again.
+    resp_disable = await client.post(
+        "/chat/services/other-svc/disable-mutation",
+        headers=auth_headers,
+    )
+    assert resp_disable.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_enable_mutation_unlocks_test_deploy(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    component_config_store: ComponentConfigStore,
+):
+    """After enable-mutation, test-deploy no longer returns 403."""
+    # other-svc starts with chat_agent_mutatable=False.
+    # test-deploy should return 403.
+    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
+
+    # First, verify test-deploy would fail with 403.
+    resp_fail = await client.post(
+        "/chat/deploy/test",
+        json={"stub_name": "other-svc", "website": "http://localhost:9999/health"},
+        headers=auth_headers,
+    )
+    assert resp_fail.status_code == 403
+    assert "not permitted to mutate" in resp_fail.json()["error"]
+
+    # Enable mutation.
+    resp_enable = await client.post(
+        "/chat/services/other-svc/enable-mutation",
+        json={},
+        headers=auth_headers,
+    )
+    assert resp_enable.status_code == 200
+
+    # Now test-deploy should proceed past the 403 (it will fail at the
+    # probe stage because there's no real container, but the gate is open).
+    resp_test = await client.post(
+        "/chat/deploy/test",
+        json={"stub_name": "other-svc", "website": "http://localhost:9999/health"},
+        headers=auth_headers,
+    )
+    # No longer 403 — should be a different error (deploy or probe phase).
+    assert resp_test.status_code != 403, (
+        f"Expected non-403 after enable, got {resp_test.status_code}: {resp_test.text}"
+    )
