@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Add `POST /chat/services/{name}/deploy` endpoint: first-boot deploy of a registered component. Idempotent — returns the current status without re-deploying when the component is already running. Gated by the existing chat-agent allowlist (`chat_agent_mutatable` / `allow_chat_access`).
 - Added `services_lifecycle` and `services_maintenance` to the lifecycle API docs (`docs/lifecycle/api.md`)
 - Onboard "Disable healthcheck" checkbox now applies to sibling services
   (worker/serverless containers) in addition to the primary, so
