@@ -31,6 +31,11 @@ _HOP_BY_HOP: frozenset[str] = frozenset(
         "keep-alive",
         "proxy-authenticate",
         "proxy-authorization",
+        "sec-websocket-accept",
+        "sec-websocket-extensions",
+        "sec-websocket-key",
+        "sec-websocket-protocol",
+        "sec-websocket-version",
         "te",
         "trailers",
         "transfer-encoding",
@@ -157,57 +162,64 @@ async def ws_proxy(
     """
     import websockets
 
-    async with websockets.connect(
-        target_ws_url,
-        additional_headers=additional_headers,
-    ) as backend_ws:
+    try:
+        async with websockets.connect(
+            target_ws_url,
+            additional_headers=additional_headers,
+        ) as backend_ws:
 
-        async def _client_to_backend() -> None:
-            try:
-                while True:
-                    data = await client_ws.receive()
-                    if data["type"] == "websocket.disconnect":
-                        break
-                    if "bytes" in data:
-                        await backend_ws.send(data["bytes"])
-                    elif "text" in data:
-                        await backend_ws.send(data["text"])
-            except websockets.exceptions.ConnectionClosed:
-                pass
-            except Exception:
-                logger.debug("client→backend task exiting", exc_info=True)
+            async def _client_to_backend() -> None:
+                try:
+                    while True:
+                        data = await client_ws.receive()
+                        if data["type"] == "websocket.disconnect":
+                            break
+                        if "bytes" in data:
+                            await backend_ws.send(data["bytes"])
+                        elif "text" in data:
+                            await backend_ws.send(data["text"])
+                except websockets.exceptions.ConnectionClosed:
+                    pass  # backend closed; task done
+                except Exception:
+                    logger.debug("client→backend task exiting", exc_info=True)
 
-        async def _backend_to_client() -> None:
-            try:
-                async for message in backend_ws:
-                    if isinstance(message, bytes):
-                        await client_ws.send_bytes(message)
-                    else:
-                        await client_ws.send_text(message)
-            except websockets.exceptions.ConnectionClosed:
-                pass
-            except Exception:
-                logger.debug("backend→client task exiting", exc_info=True)
+            async def _backend_to_client() -> None:
+                try:
+                    async for message in backend_ws:
+                        if isinstance(message, bytes):
+                            await client_ws.send_bytes(message)
+                        else:
+                            await client_ws.send_text(message)
+                except websockets.exceptions.ConnectionClosed:
+                    pass
+                except Exception:
+                    logger.debug("backend→client task exiting", exc_info=True)
 
-        task_a = asyncio.create_task(_client_to_backend())
-        task_b = asyncio.create_task(_backend_to_client())
+            task_a = asyncio.create_task(_client_to_backend())
+            task_b = asyncio.create_task(_backend_to_client())
 
-        done, pending = await asyncio.wait(
-            {task_a, task_b},
-            return_when=asyncio.FIRST_COMPLETED,
+            done, pending = await asyncio.wait(
+                {task_a, task_b},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # Cancel whichever task is still running so the endpoint never hangs
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+
+            for task in done:
+                if task.cancelled():
+                    continue
+                exc = task.exception()
+                if exc is not None and not isinstance(
+                    exc, websockets.exceptions.ConnectionClosed
+                ):
+                    logger.warning("ws_proxy task error: %s", exc)
+    except websockets.exceptions.InvalidStatus as status_exc:
+        logger.warning(
+            "ws_proxy: upstream rejected WebSocket handshake (%s) for %r",
+            status_exc,
+            target_ws_url,
         )
-
-        # Cancel whichever task is still running so the endpoint never hangs
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
-
-        for task in done:
-            if task.cancelled():
-                continue
-            exc = task.exception()
-            if exc is not None and not isinstance(
-                exc, websockets.exceptions.ConnectionClosed
-            ):
-                logger.warning("ws_proxy task error: %s", exc)

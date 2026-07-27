@@ -10,6 +10,7 @@ All external calls (httpx, websockets) are mocked — no real network or Docker.
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import types
 from types import SimpleNamespace
@@ -160,6 +161,25 @@ class TestFilterHopByHop:
         out = filter_hop_by_hop(headers)
         assert out == {"keep": "me"}
         assert headers == {"host": "x", "keep": "me"}
+
+    def test_strips_websocket_handshake_headers(self):
+        headers = {
+            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version": "13",
+            "Sec-WebSocket-Extensions": "permessage-deflate",
+            "Sec-WebSocket-Protocol": "chat",
+            "Sec-WebSocket-Accept": "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+            "Authorization": "Bearer token",
+            "Cookie": "session=abc",
+        }
+        out = filter_hop_by_hop(headers)
+        assert "Sec-WebSocket-Key" not in out
+        assert "Sec-WebSocket-Version" not in out
+        assert "Sec-WebSocket-Extensions" not in out
+        assert "Sec-WebSocket-Protocol" not in out
+        assert "Sec-WebSocket-Accept" not in out
+        assert out["Authorization"] == "Bearer token"
+        assert out["Cookie"] == "session=abc"
 
 
 # ---------------------------------------------------------------------------
@@ -319,11 +339,34 @@ class _FakeConnect:
         return False
 
 
+class _FakeConnectRaises:
+    """Connect context manager whose ``__aenter__`` raises the given exception.
+
+    Used to simulate ``InvalidStatus`` (handshake rejection), which the real
+    ``websockets`` library raises during ``__aenter__``, not when ``connect()``
+    is called.
+    """
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+
+    async def __aenter__(self) -> object:
+        raise self._exc
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+class _InvalidStatus(Exception):
+    pass
+
+
 def _fake_websockets_module(connect: MagicMock) -> types.ModuleType:
     mod = types.ModuleType("websockets")
     mod.connect = connect  # type: ignore[attr-defined]
     exc_mod = types.ModuleType("websockets.exceptions")
     exc_mod.ConnectionClosed = _ConnectionClosed  # type: ignore[attr-defined]
+    exc_mod.InvalidStatus = _InvalidStatus  # type: ignore[attr-defined]
     mod.exceptions = exc_mod  # type: ignore[attr-defined]
     return mod
 
@@ -409,6 +452,34 @@ class TestWsProxy:
 
         with patch.dict(sys.modules, {"websockets": fake_ws}):
             await ws_proxy(client_ws, "ws://backend:9000/path")
+
+    async def test_invalid_status_is_logged_not_raised(self, caplog):
+        """Upstream handshake rejection (InvalidStatus) is caught and logged."""
+        client_ws = MagicMock()
+        client_ws.receive = AsyncMock()
+        client_ws.send_bytes = AsyncMock()
+        client_ws.send_text = AsyncMock()
+
+        connect = MagicMock(return_value=_FakeConnectRaises(_InvalidStatus("HTTP 400")))
+        fake_ws = _fake_websockets_module(connect)
+
+        with patch.dict(sys.modules, {"websockets": fake_ws}):
+            with caplog.at_level(logging.WARNING):
+                await ws_proxy(
+                    client_ws,
+                    "ws://backend:9000/path",
+                    additional_headers={"x-fwd": "1"},
+                )
+
+        connect.assert_called_once_with(
+            "ws://backend:9000/path", additional_headers={"x-fwd": "1"}
+        )
+        assert "upstream rejected WebSocket handshake" in caplog.text
+        assert "HTTP 400" in caplog.text
+        # No further relay since connect failed; client receives / sends nothing.
+        client_ws.receive.assert_not_awaited()
+        client_ws.send_bytes.assert_not_awaited()
+        client_ws.send_text.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -571,6 +642,7 @@ def _make_ws(
     ws.app.state.session_store = MagicMock()
     ws.app.state.session_store.validate = MagicMock(return_value=valid)
     ws.headers = {"host": host, "connection": "upgrade"}
+    ws.url.query = ""
     ws.accept = AsyncMock()
     ws.close = AsyncMock()
     return ws
@@ -660,6 +732,18 @@ class TestGatewayWs:
         ws.close.assert_awaited_once_with(code=4004)
         ws.accept.assert_not_awaited()
         mock.assert_not_awaited()
+
+    async def test_query_string_preserved_in_target_url(self):
+        """Query params like ?show_closed=false are forwarded to the upstream."""
+        cfg = _make_config("svc", container_name="svc-ctr")
+        ws = _make_ws(auth_required=False, registry=ComponentRegistry([cfg]))
+        ws.url.query = "show_closed=false"
+
+        with patch.object(router_mod, "ws_proxy", new=AsyncMock()) as mock:
+            await gateway_ws(ws, "ws/board")
+
+        target = mock.call_args.args[1]
+        assert target == "ws://svc-ctr:9000/ws/board?show_closed=false"
 
 
 # ---------------------------------------------------------------------------
