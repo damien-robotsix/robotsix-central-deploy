@@ -88,7 +88,7 @@ Docker volume growth over time.
 > settings defined in each component's `config/config.schema.json` are managed
 > through that component's own `/config` surface, not the deploy plane. See the
 > [config-ownership standard](
->   https://damien-robotsix.github.io/robotsix-standards/config-ownership/
+> https://damien-robotsix.github.io/robotsix-standards/config-ownership/
 > ) for the "Two invariants" (deploy-plane exclusivity + cross-UI uniformity).
 
 ### `gateway/` — Reverse proxy
