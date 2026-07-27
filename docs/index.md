@@ -18,8 +18,14 @@ Langfuse.
   [deploy contract](ui/DEPLOY_CONTRACT.md).
 - **Reverse-proxy gateway** — each component reachable at a well-known URL
   under the deploy domain (HTTP + WebSocket).
-- **Dashboard UI** — live status, logs, env/secrets and config management at
-  `/ui`.
+- **Dashboard UI** — live status, logs, and env/secrets management at `/ui`.
+  The deploy UI surfaces **only** deploy-plane-allowlisted settings (image/tag,
+  volumes, ports, restart policy, resource limits, env/secrets) and no
+  component-internal `config.json` schema. Component-owned settings are managed
+  through each component's own `/config` surface. See the
+  [config-ownership standard](
+    https://damien-robotsix.github.io/robotsix-standards/config-ownership/
+  ) for the "Two invariants" (deploy-plane exclusivity + cross-UI uniformity).
 - **Registry update checks** — polls GHCR for newer image digests.
 - **Volume audit** — background growth tracking of managed named volumes.
 

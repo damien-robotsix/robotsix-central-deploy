@@ -82,6 +82,15 @@ Docker volume growth over time.
 `POST /services/{name}/config/import`, `POST /services/{name}/config/refresh-schema`,
 `GET /services/{name}/env`, `PUT /services/{name}/env`, `DELETE /services/{name}/env/{key}`.
 
+> **Config ownership:** the `/services/{name}/config` endpoints exist and are
+> fully functional, but the deploy UI at `/ui` renders **only** deploy-plane keys
+> (image/tag, volumes, ports, restart policy, resource limits) — component-internal
+> settings defined in each component's `config/config.schema.json` are managed
+> through that component's own `/config` surface, not the deploy plane. See the
+> [config-ownership standard](
+> https://damien-robotsix.github.io/robotsix-standards/config-ownership/
+> ) for the "Two invariants" (deploy-plane exclusivity + cross-UI uniformity).
+
 ### `gateway/` — Reverse proxy
 
 | File | Role |
