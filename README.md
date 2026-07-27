@@ -62,4 +62,16 @@ uv run mypy src/        # Type check
 
 For a detailed walkthrough of the codebase, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Deploy UI scope
+
+The dashboard UI at `/ui` surfaces **only** deploy-plane-allowlisted settings:
+image/tag, volumes, ports, restart policy, resource limits, and the
+`/services/{name}/env` surface for environment variables and secrets.
+Component-internal settings (anything defined in a component's own
+`config/config.schema.json`) are **not** rendered or editable in the deploy UI;
+they are managed through each component's own `/config` HTTP surface. This
+follows the [config-ownership standard](
+  https://damien-robotsix.github.io/robotsix-standards/config-ownership/
+) "Two invariants": deploy-plane exclusivity and cross-UI uniformity.
+
 Contributions welcome — see the [documentation](https://robotsix.net/central-deploy/).
