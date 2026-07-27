@@ -776,6 +776,293 @@ async def test_deploy_sibling_deploy(
 
 
 # ---------------------------------------------------------------------------
+# Service deploy (POST /chat/services/{name}/deploy) — happy path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_happy_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """POST /chat/services/{name}/deploy deploys a STOPPED component."""
+    _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    outcome = DeployOutcome(
+        deployed_digest="sha256:firstboot123",
+        previous_digest="",
+        state=ServiceState.RUNNING,
+    )
+    mock = MagicMock()
+    mock.deploy = AsyncMock(return_value=outcome)
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "test-svc"
+    assert data["action"] == "deploy"
+    assert data["deployed_digest"] == "sha256:firstboot123"
+    assert data["previous_digest"] == ""
+    assert data["current_state"] == "running"
+    assert "Deploy completed" in data["detail"]
+
+    # Verify the record was updated.
+    stored = await server_mod.app.state.store.get("test-svc")
+    assert stored is not None
+    assert stored.state == ServiceState.RUNNING
+    assert stored.deployed_image_digest == "sha256:firstboot123"
+
+    # Verify audit entry.
+    audit_store: ChatAgentAuditStore = server_mod.app.state.chat_agent_audit_store
+    entries = await audit_store.list()
+    deploy_entries = [e for e in entries if e.action == "deploy"]
+    assert len(deploy_entries) >= 1
+    assert deploy_entries[-1].component == "test-svc"
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — already running (idempotent)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_already_running(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Deploy on an already RUNNING component returns 200 without re-deploying."""
+    _register_component("test-svc")
+    record = await _seed_service_record("test-svc", state=ServiceState.RUNNING)
+    record.deployed_image_digest = "sha256:existing"
+    record.previous_image_digest = "sha256:prev-existing"
+    record.health = "healthy"
+    await server_mod.app.state.store.put(record)
+
+    mock = MagicMock()
+    mock.deploy = AsyncMock()
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "test-svc"
+    assert data["deployed_digest"] == "sha256:existing"
+    assert data["previous_digest"] == "sha256:prev-existing"
+    assert data["current_state"] == "running"
+    assert data["health"] == "healthy"
+    assert "already running" in data["detail"].lower()
+
+    # Backend.deploy must NOT have been called.
+    mock.deploy.assert_not_called()
+
+    # Verify audit entry.
+    audit_store: ChatAgentAuditStore = server_mod.app.state.chat_agent_audit_store
+    entries = await audit_store.list()
+    deploy_entries = [e for e in entries if e.action == "deploy"]
+    assert len(deploy_entries) >= 1
+    assert "already running" in deploy_entries[-1].detail.lower()
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — component not found (404)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_service_not_found(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Deploy returns 404 when no ServiceRecord exists."""
+    _register_component("test-svc")
+    # No seeded ServiceRecord — _get_or_create_record raises 404.
+
+    resp = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — not allowlisted (403)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_not_allowlisted(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Deploy returns 403 when component is not chat-agent-mutatable."""
+    _register_component("test-svc", mutatable=False)
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    resp = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — backend failure (500)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_backend_failure(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Backend.deploy raising an exception results in 500."""
+    _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    mock = MagicMock()
+    mock.deploy = AsyncMock(side_effect=RuntimeError("pull failed"))
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 500, resp.text
+    assert "pull failed" in resp.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — rate limited (429)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_rate_limited(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Second deploy within cooldown window returns 429."""
+    _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    outcome = DeployOutcome(
+        deployed_digest="sha256:abc",
+        previous_digest="",
+        state=ServiceState.RUNNING,
+    )
+    mock = MagicMock()
+    mock.deploy = AsyncMock(return_value=outcome)
+    server_mod.app.state.backend = mock
+
+    resp1 = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp1.status_code == 200
+
+    # Re-seed STOPPED record (first deploy transitioned to RUNNING).
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    resp2 = await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+    assert resp2.status_code == 429, resp2.text
+    assert "Rate limit" in resp2.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — lock contention (409)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_lock_contention(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Deploy returns 409 when a deploy is already in progress."""
+    from robotsix_central_deploy.lifecycle.deploy_lock import try_acquire_deploy_lock
+
+    _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    acquired = await try_acquire_deploy_lock("test-svc")
+    assert acquired
+
+    try:
+        resp = await client.post(
+            "/chat/services/test-svc/deploy",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 409, resp.text
+        assert "already in progress" in resp.json()["error"]
+    finally:
+        from robotsix_central_deploy.lifecycle.deploy_lock import release_deploy_lock
+
+        release_deploy_lock("test-svc")
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — missing auth (401)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_missing_auth(
+    client: AsyncClient,
+) -> None:
+    """Deploy without auth headers returns 401."""
+    resp = await client.post("/chat/services/test-svc/deploy")
+    assert resp.status_code == 401, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Service deploy — audit entry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_service_deploy_audit_entry(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Successful deploy writes an audit entry with 'deploy' action."""
+    _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+
+    outcome = DeployOutcome(
+        deployed_digest="sha256:firstboot",
+        previous_digest="",
+        state=ServiceState.RUNNING,
+    )
+    mock = MagicMock()
+    mock.deploy = AsyncMock(return_value=outcome)
+    server_mod.app.state.backend = mock
+
+    await client.post(
+        "/chat/services/test-svc/deploy",
+        headers=auth_headers,
+    )
+
+    audit_store: ChatAgentAuditStore = server_mod.app.state.chat_agent_audit_store
+    entries = await audit_store.list()
+    deploy_entries = [e for e in entries if e.action == "deploy"]
+    assert len(deploy_entries) >= 1
+    entry = deploy_entries[-1]
+    assert entry.component == "test-svc"
+    assert "sha256:firstboot" in entry.detail
+
+
+# ---------------------------------------------------------------------------
 # Authentication — missing auth (401)
 # ---------------------------------------------------------------------------
 

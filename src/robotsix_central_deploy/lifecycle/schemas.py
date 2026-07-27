@@ -634,6 +634,34 @@ class ChatAgentDeployResponse(BaseModel):
     )
 
 
+class ChatAgentServiceDeployResponse(BaseModel):
+    """Response body for POST /chat/services/{name}/deploy.
+
+    Returns the result of a first-boot deploy of an already-registered
+    component: image digests, resulting state, and optional health status.
+    """
+
+    name: str = Field(description="Component name")
+    action: str = Field(default="deploy", description="Always 'deploy'")
+    deployed_digest: str = Field(
+        default="",
+        description="Digest of the newly deployed image; empty when unchanged",
+    )
+    previous_digest: str = Field(
+        default="", description="Digest of the previously deployed image"
+    )
+    current_state: str = Field(description="Container state after deploy")
+    health: str = Field(
+        default="",
+        description="Health status string (empty when not yet checked)",
+    )
+    detail: str = Field(default="", description="Human-readable summary")
+    deployed_siblings: list[str] = Field(
+        default_factory=list,
+        description="Sibling service names that were deployed alongside the primary",
+    )
+
+
 class ChatAgentRegisterRequest(BaseModel):
     """Request body for POST /chat/services — register a new managed component.
 

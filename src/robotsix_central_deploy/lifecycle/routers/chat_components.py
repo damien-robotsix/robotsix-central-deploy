@@ -75,6 +75,7 @@ async def deploy_chat_skill() -> str:
         "- `PUT /chat/config/{name}` — update non-secret config keys\n"
         "- `POST /chat/config/{name}/rollback` — restore previous config version\n"
         "- `POST /chat/services` — register a new managed component (registration only; no auto-start)\n"
+        "- `POST /chat/services/{name}/deploy` — first-boot deploy a newly-registered component (create + start container)\n"
         "- `POST /chat/services/{name}/restart` — restart a service\n"
         "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n"
         "- `POST /chat/disk/reclaim` — prune dangling Docker images and/or reclaimable build cache\n\n"

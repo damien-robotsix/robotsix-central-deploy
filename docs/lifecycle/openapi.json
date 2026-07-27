@@ -3028,6 +3028,74 @@
         }
       }
     },
+    "/chat/services/{name}/deploy": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "First-boot deploy an already-registered component (idempotent)",
+        "description": "Deploy an already-registered component for the first time.\n\nBrings a previously-registered (but not yet started) component up\nby pulling its image, creating its container, and starting it.\n\nIdempotent: if the component is already running the endpoint returns\na clear success response without re-deploying.\n\nAccess is gated by the same allowlist used by restart and update\n(``chat_agent_mutatable`` / ``allow_chat_access``).\nRate-limited to one deploy per 300 seconds per service.",
+        "operationId": "chat_deploy_service_chat_services__name__deploy_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentServiceDeployResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service not found"
+          },
+          "409": {
+            "description": "Deploy already in progress"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "503": {
+            "description": "Registry not loaded"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/deploy": {
       "post": {
         "tags": [
@@ -6642,6 +6710,65 @@
         ],
         "title": "ChatAgentSelfUpdateResponse",
         "description": "Response body for POST /chat/services/central-deploy/update."
+      },
+      "ChatAgentServiceDeployResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'deploy'",
+            "default": "deploy"
+          },
+          "deployed_digest": {
+            "type": "string",
+            "title": "Deployed Digest",
+            "description": "Digest of the newly deployed image; empty when unchanged",
+            "default": ""
+          },
+          "previous_digest": {
+            "type": "string",
+            "title": "Previous Digest",
+            "description": "Digest of the previously deployed image",
+            "default": ""
+          },
+          "current_state": {
+            "type": "string",
+            "title": "Current State",
+            "description": "Container state after deploy"
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "description": "Health status string (empty when not yet checked)",
+            "default": ""
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable summary",
+            "default": ""
+          },
+          "deployed_siblings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deployed Siblings",
+            "description": "Sibling service names that were deployed alongside the primary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "current_state"
+        ],
+        "title": "ChatAgentServiceDeployResponse",
+        "description": "Response body for POST /chat/services/{name}/deploy.\n\nReturns the result of a first-boot deploy of an already-registered\ncomponent: image digests, resulting state, and optional health status."
       },
       "ChatAgentTestDeployRequest": {
         "properties": {
