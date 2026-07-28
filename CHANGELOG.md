@@ -6,6 +6,15 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove the per-service **Configure** modal from the deploy dashboard.
+  Component configuration is owned by each component's own Settings surface
+  (robotsix-standards config-ownership "Two invariants"); the deploy plane
+  keeps only deploy-plane controls and the Env & Secrets modal. Drops the
+  Configure button, the `#config-modal` markup, and its config-assist / drift
+  / ownership JS+CSS. Shared config-form rendering (`generateConfigForm`,
+  `collectConfigValues`, the URL-suggest dropdown) is retained — the
+  Add-Component onboarding flow still uses it — and all backend routes are
+  unchanged (removed separately in the backend slices).
 - Document deploy UI scope: surface only deploy-plane-allowlisted settings
   (image/tag, volumes, ports, restart policy, resource limits, env/secrets);
   cross-link robotsix-standards config-ownership "Two invariants".

@@ -157,33 +157,6 @@
   </div>
 </div>
 
-<div id="config-modal" class="env-overlay hidden" role="dialog" aria-modal="true"
-     aria-labelledby="config-modal-title">
-  <div class="env-panel">
-    <div class="env-header">
-      <span id="config-modal-title">Configure</span>
-      <span id="config-modal-component"></span>
-    </div>
-    <div id="config-modal-error" class="env-modal-error"></div>
-    <div id="config-advanced-bar" class="hidden">
-      <label class="flex-label">
-        <input type="checkbox" id="config-advanced-checkbox" class="accent-blue">
-        Show advanced settings
-      </label>
-    </div>
-    <div id="config-form-body"></div>
-    <textarea id="config-raw-body" class="config-raw-textarea hidden" spellcheck="false" placeholder="Paste or edit raw JSON config here..."></textarea>
-    <div class="env-footer">
-      <button class="btn-primary" data-action="saveConfigValues">Save</button>
-      <button class="btn-secondary" data-action="closeConfigModal">Close</button>
-      <button id="config-raw-toggle-btn" class="btn-secondary ml-auto" data-action="toggleConfigMode"
-              title="Toggle between field-by-field form and raw JSON editing">{ } Raw</button>
-      <button id="config-refresh-schema-btn" class="btn-secondary ml-auto" data-action="refreshConfigSchema"
-              title="Refetch config/config.schema.json from the component's repo — picks up new fields, types, and descriptions without re-onboarding. Stored values are kept.">↻ Refresh schema</button>
-    </div>
-  </div>
-</div>
-
 <div id="log-modal" class="log-overlay" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
   <div class="log-panel">
     <div class="log-header">
