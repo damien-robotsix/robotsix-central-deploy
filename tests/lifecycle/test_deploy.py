@@ -368,6 +368,43 @@ class TestDeployEndpoint:
         resp = await client.post("/services/svc-a/rollback")
         assert resp.status_code == 401
 
+    # -- self-targeted deploy / rollback guards -------------------------------
+
+    async def test_deploy_central_deploy_self_target_returns_409(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """POST /services/central-deploy/deploy must reject self-targeted deploys
+        with 409, directing operators to POST /system/update."""
+        await self._seed("central-deploy")
+        resp = await client.post(
+            "/services/central-deploy/deploy", headers=auth_headers
+        )
+        assert resp.status_code == 409
+        data = resp.json()
+        assert "Cannot deploy central-deploy" in data["error"]
+        assert "/system/update" in data["error"]
+
+    async def test_rollback_central_deploy_self_target_returns_409(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """POST /services/central-deploy/rollback must reject self-targeted
+        rollbacks with 409, directing operators to POST /system/update."""
+        await self._seed("central-deploy")
+        # Give central-deploy a prior digest so the rollback would otherwise
+        # proceed past the no-prior-digest guard.
+        store = server_mod.app.state.store
+        rec = await store.get("central-deploy")
+        rec.previous_image_digest = "sha256:old456"
+        await store.put(rec)
+
+        resp = await client.post(
+            "/services/central-deploy/rollback", headers=auth_headers
+        )
+        assert resp.status_code == 409
+        data = resp.json()
+        assert "Cannot rollback central-deploy" in data["error"]
+        assert "/system/update" in data["error"]
+
 
 # ---------------------------------------------------------------------------
 # Deploy drift guard — auto-import live config so stale stored defaults

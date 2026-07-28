@@ -322,6 +322,21 @@ async def chat_update_service(
     await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "update")
 
+    # Guard: central-deploy cannot update itself through this path.
+    # Self-updates must use the detached updater via
+    # POST /chat/services/central-deploy/update.
+    if name == "central-deploy":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": (
+                    "Cannot update central-deploy through this endpoint. "
+                    "The management plane cannot safely replace itself from inside. "
+                    "Use POST /chat/services/central-deploy/update for self-updates."
+                ),
+            },
+        )
+
     record = await _get_or_create_record(name, store)
 
     config = registry.get(name)
@@ -478,6 +493,21 @@ async def chat_deploy_service(
     """
     await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "deploy")
+
+    # Guard: central-deploy cannot deploy itself through this path.
+    # Self-updates must use the detached updater via
+    # POST /chat/services/central-deploy/update.
+    if name == "central-deploy":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": (
+                    "Cannot deploy central-deploy through this endpoint. "
+                    "The management plane cannot safely replace itself from inside. "
+                    "Use POST /chat/services/central-deploy/update for self-updates."
+                ),
+            },
+        )
 
     record = await _get_or_create_record(name, store)
 

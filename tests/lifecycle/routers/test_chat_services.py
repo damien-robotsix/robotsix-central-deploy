@@ -1206,3 +1206,57 @@ async def test_deploy_audit_entry(
     entry = deploy_entries[-1]
     assert entry.component == "test-svc"
     assert "sha256:deploy123" in entry.detail
+
+
+# ---------------------------------------------------------------------------
+# Self-targeted central-deploy guards
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_central_deploy_routes_to_self_update_path(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """POST /chat/services/central-deploy/update must route through the
+    dedicated self-update endpoint (chat_self.py), NOT the generic
+    chat_services.py handler.  The self-update path uses the detached
+    updater so the management plane never tears itself down from inside.
+
+    With the NoopBackend, self-inspect raises NotImplementedError, so
+    the self-update endpoint returns 503 (unsupported) rather than
+    proceeding with an unsafe in-process deploy.
+    """
+    _register_component("central-deploy")
+    await _seed_service_record("central-deploy", state=ServiceState.RUNNING)
+
+    resp = await client.post(
+        "/chat/services/central-deploy/update",
+        headers=auth_headers,
+    )
+    # 503 = self-update path correctly engaged but backend doesn't support it.
+    # If the generic chat_services handler were reached instead we'd see 200
+    # (or 409 from the guard), not 503.
+    assert resp.status_code == 503, resp.text
+    data = resp.json()
+    assert "self-update" in data.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_deploy_service_central_deploy_self_target_returns_409(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """POST /chat/services/central-deploy/deploy must reject self-targeted
+    deploys with 409, directing to POST /chat/services/central-deploy/update."""
+    _register_component("central-deploy")
+    await _seed_service_record("central-deploy", state=ServiceState.STOPPED)
+
+    resp = await client.post(
+        "/chat/services/central-deploy/deploy",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    data = resp.json()
+    assert "Cannot deploy central-deploy" in data["error"]
+    assert "/chat/services/central-deploy/update" in data["error"]

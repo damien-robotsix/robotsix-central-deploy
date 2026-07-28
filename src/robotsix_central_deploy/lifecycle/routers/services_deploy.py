@@ -187,6 +187,21 @@ async def deploy_service(
 
     record = await _get_or_create_record(name, store)
 
+    # Guard: central-deploy cannot deploy itself through this path.
+    # Self-updates must use the detached updater via POST /system/update —
+    # the management plane cannot safely tear itself down from inside.
+    if name == "central-deploy":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": (
+                    "Cannot deploy central-deploy through this endpoint. "
+                    "The management plane cannot safely replace itself from inside. "
+                    "Use POST /system/update to trigger a detached self-update."
+                ),
+            },
+        )
+
     config = registry.get(name)
     if config is None:
         raise HTTPException(
@@ -552,6 +567,20 @@ async def rollback_service(
     (one-step behaviour only).
     """
     record = await _get_or_create_record(name, store)
+
+    # Guard: central-deploy cannot rollback itself through this path.
+    # Self-updates must use the detached updater via POST /system/update.
+    if name == "central-deploy":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": (
+                    "Cannot rollback central-deploy through this endpoint. "
+                    "The management plane cannot safely replace itself from inside. "
+                    "Use POST /system/update to trigger a detached self-update."
+                ),
+            },
+        )
 
     config = registry.get(name)
     if config is None:
