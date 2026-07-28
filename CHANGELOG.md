@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Changed ``chat_agent_registration_enabled`` default from ``False`` to ``True`` so the chat agent can register new managed components via ``POST /chat/services`` without an explicit operator toggle. Registration remains gated by the existing auth layer; operators who want to disable it can set the field to ``false`` explicitly.
 - Document deploy UI scope: surface only deploy-plane-allowlisted settings
   (image/tag, volumes, ports, restart policy, resource limits, env/secrets);
   cross-link robotsix-standards config-ownership "Two invariants".

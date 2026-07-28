@@ -478,7 +478,7 @@ class LifecycleConfig(BaseModel):
     # Chat agent registration toggle — when True the chat agent may register
     # new components via POST /chat/services without a pre-existing config.
     chat_agent_registration_enabled: bool = Field(
-        False,
+        True,
         description=(
             "When True, the chat agent may register new managed components "
             "via POST /chat/services.  Registration only persists metadata — "
