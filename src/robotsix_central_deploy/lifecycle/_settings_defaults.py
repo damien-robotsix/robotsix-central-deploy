@@ -33,6 +33,7 @@ class _SettingsDefaults(TypedDict):
     volume_audit_growth_threshold_pct: float
     volume_audit_min_delta_bytes: int
     ghcr_pull_token: str
+    chat_agent_registration_enabled: bool
 
 
 SETTINGS_DEFAULTS: _SettingsDefaults = {
@@ -57,4 +58,5 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "volume_audit_growth_threshold_pct": 10.0,
     "volume_audit_min_delta_bytes": 10_485_760,
     "ghcr_pull_token": "",
+    "chat_agent_registration_enabled": True,
 }

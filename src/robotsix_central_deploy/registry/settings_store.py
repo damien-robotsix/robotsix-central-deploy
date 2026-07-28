@@ -69,6 +69,9 @@ class SystemSettings(BaseModel):
     ghcr_pull_token: str = SETTINGS_DEFAULTS[
         "ghcr_pull_token"
     ]  # read:packages PAT for private GHCR pulls
+    chat_agent_registration_enabled: bool = SETTINGS_DEFAULTS[
+        "chat_agent_registration_enabled"
+    ]  # allow chat agent to register components via POST /chat/services
 
     @field_validator("volume_audit_interval_seconds")
     @classmethod
