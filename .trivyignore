@@ -153,3 +153,15 @@ CVE-2018-1000021
 CVE-2025-5278
 CVE-2017-18018
 TEMP-0841856-B18BAF
+
+# libssh2 CVEs in Debian base-image (python:3.14-slim) — libssh2-1t64.
+# Not exploitable in this container's attack surface.
+CVE-2026-66032
+CVE-2026-66033
+CVE-2026-66034
+CVE-2026-66035
+
+# coreutils CVEs in Debian base-image (python:3.14-slim).
+# Not exploitable in this container's attack surface.
+CVE-2026-56391
+CVE-2026-56392
