@@ -1,0 +1,1 @@
+ci_fix: out-of-scope CI failure — config-schema-drift (CVE-2026-66035, CVE-2026-66034, CVE-2026-66033, CVE-2026-66032, CVE-2026-56391, CVE-2026-56392) in Docker image / Dockerfile / .trivyignore — update base image or add trivy suppressions for CVE-2026-66032 through CVE-2026-66035 (libssh2), CVE-2026-56391, CVE-2026-56392 (coreutils)
