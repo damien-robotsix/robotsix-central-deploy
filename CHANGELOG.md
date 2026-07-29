@@ -6,6 +6,10 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- GatewayAwareDocsMiddleware: intercept ``/docs`` and ``/openapi.json`` on
+  component subdomains and proxy to the component container, preventing
+  central-deploy's Lifecycle API docs (with mutating/destructive endpoints)
+  from being served under component vhosts.
 - Add 409 Conflict guard on `POST /services/{name}/deploy`, `POST /services/{name}/rollback`, `POST /chat/services/{name}/update`, and `POST /chat/services/{name}/deploy` for `central-deploy` self-targeted operations. The management plane cannot safely tear itself down from inside; self-updates must use the detached updater path (`POST /system/update` or `POST /chat/services/central-deploy/update`).
 - Remove the per-service **Configure** modal from the deploy dashboard.
   Component configuration is owned by each component's own Settings surface
