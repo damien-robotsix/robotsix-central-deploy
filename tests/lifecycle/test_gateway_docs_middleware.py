@@ -8,9 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from starlette.responses import JSONResponse, Response
 
 from robotsix_central_deploy.lifecycle.gateway_docs_middleware import (
     GatewayAwareDocsMiddleware,
@@ -87,9 +86,7 @@ def _fake_upstream_response(
     resp = MagicMock()
     resp.status_code = status_code
     resp.headers = {"content-type": content_type}
-    resp.aiter_bytes = MagicMock(
-        return_value=_async_iter([body])
-    )
+    resp.aiter_bytes = MagicMock(return_value=_async_iter([body]))
     return resp
 
 
@@ -112,8 +109,9 @@ class TestGatewayAwareDocsMiddleware:
         """GET /docs on a component subdomain proxies to the component."""
         registry = {"invest": _component_config()}
         app = _build_app(registry=registry)
-        upstream = _fake_upstream_response(body=b"<html>Invest Docs</html>",
-                                           content_type="text/html")
+        upstream = _fake_upstream_response(
+            body=b"<html>Invest Docs</html>", content_type="text/html"
+        )
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
@@ -257,9 +255,7 @@ class TestGatewayAwareDocsMiddleware:
         """Query strings on /docs are forwarded to the component."""
         registry = {"invest": _component_config()}
         app = _build_app(registry=registry)
-        upstream = _fake_upstream_response(
-            body=b'{"openapi":"3.0.0"}'
-        )
+        upstream = _fake_upstream_response(body=b'{"openapi":"3.0.0"}')
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()

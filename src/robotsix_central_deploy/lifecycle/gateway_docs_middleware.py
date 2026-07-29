@@ -10,15 +10,14 @@ mutating/destructive endpoints under component vhosts).
 from __future__ import annotations
 
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 import httpx
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from ..gateway.router import RESERVED_NAMES, _extract_subdomain_name, _resolve
-from ..registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,9 @@ class GatewayAwareDocsMiddleware(BaseHTTPMiddleware):
     through unchanged.
     """
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # -- Only intercept docs / openapi paths ------------------------
         if request.url.path not in _INTERCEPT_PATHS:
             return await call_next(request)
@@ -66,9 +67,7 @@ class GatewayAwareDocsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # -- Proxy to the component container --------------------------
-        target_base = (
-            f"http://{config.container_name}:{config.ports[0].container}"
-        )
+        target_base = f"http://{config.container_name}:{config.ports[0].container}"
         url = f"{target_base}{request.url.path}"
         if request.url.query:
             url += f"?{request.url.query}"
@@ -121,9 +120,7 @@ class GatewayAwareDocsMiddleware(BaseHTTPMiddleware):
             )
         except httpx.TimeoutException:
             await client.aclose()
-            return JSONResponse(
-                status_code=504, content={"detail": "Gateway Timeout"}
-            )
+            return JSONResponse(status_code=504, content={"detail": "Gateway Timeout"})
         except httpx.HTTPError as exc:
             await client.aclose()
             return JSONResponse(
