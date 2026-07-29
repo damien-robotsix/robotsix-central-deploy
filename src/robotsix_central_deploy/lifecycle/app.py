@@ -37,6 +37,7 @@ from .csrf import get_csrf_secret
 from .deps import lifespan
 from .error_handlers import register_error_handlers
 from .models import ErrorDetail
+from .gateway_docs_middleware import GatewayAwareDocsMiddleware
 from .rate_limiter import RateLimitMiddleware
 from .routers.health import router as health_router
 from .routers.services import router as services_router
@@ -95,6 +96,7 @@ app = FastAPI(
 register_error_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(GatewayAwareDocsMiddleware)
 
 if _HAS_CSRF:
     _initial_csrf_secret = get_csrf_secret("")
