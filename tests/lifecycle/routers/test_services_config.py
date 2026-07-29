@@ -348,23 +348,41 @@ class TestGetServiceConfigAssistFields:
         assert data["config_assist_seeds"] == []
 
 
-
 class TestRemovedConfigWriteEndpoints:
-    async def test_put_config_returns_404(self, client: AsyncClient, auth_headers: dict):
-        resp = await client.put("/services/test-comp/config", json={"values": {}}, headers=auth_headers)
+    async def test_put_config_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.put(
+            "/services/test-comp/config", json={"values": {}}, headers=auth_headers
+        )
         assert resp.status_code == 404
 
-    async def test_config_import_returns_404(self, client: AsyncClient, auth_headers: dict):
-        resp = await client.post("/services/test-comp/config/import", headers=auth_headers)
+    async def test_config_import_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/services/test-comp/config/import", headers=auth_headers
+        )
         assert resp.status_code == 404
 
-    async def test_config_refresh_schema_returns_404(self, client: AsyncClient, auth_headers: dict):
-        resp = await client.post("/services/test-comp/config/refresh-schema", headers=auth_headers)
+    async def test_config_refresh_schema_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/services/test-comp/config/refresh-schema", headers=auth_headers
+        )
         assert resp.status_code == 404
 
-    async def test_config_assist_returns_404(self, client: AsyncClient, auth_headers: dict):
-        resp = await client.post("/services/test-comp/config/assist", json={"values": {}}, headers=auth_headers)
+    async def test_config_assist_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/services/test-comp/config/assist",
+            json={"values": {}},
+            headers=auth_headers,
+        )
         assert resp.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # _namespace_spec_volumes unit tests
