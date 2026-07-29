@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover — optional dep
 from .csrf import get_csrf_secret
 from .deps import lifespan
 from .error_handlers import register_error_handlers
+from .gateway_docs_middleware import GatewayAwareDocsMiddleware
 from .models import ErrorDetail
 from .rate_limiter import RateLimitMiddleware
 from .routers.health import router as health_router
@@ -95,6 +96,12 @@ app = FastAPI(
 register_error_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
+
+# Intercept /docs, /openapi.json, /redoc on component subdomains so they
+# proxy to the target component instead of serving central-deploy's own
+# Swagger UI (FastAPI's built-in docs endpoints match before the gateway
+# catch-all regardless of Host header).
+app.add_middleware(GatewayAwareDocsMiddleware)
 
 if _HAS_CSRF:
     _initial_csrf_secret = get_csrf_secret("")
