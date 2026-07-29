@@ -1203,8 +1203,8 @@
         "tags": [
           "services"
         ],
-        "summary": "Merge and save config.json values for a service",
-        "description": "Merge and save config.json values for a service, then write to the config volume.\n\nRestarts the running container (and any siblings sharing the config\nvolume) so new values take effect immediately. Returns 204 No Content.\nRaises 404 if the service has no config schema.",
+        "summary": "[Removed] PUT config",
+        "description": "This endpoint was removed. Config is now component-owned.",
         "operationId": "put_service_config_services__name__config_put",
         "parameters": [
           {
@@ -1217,32 +1217,23 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfigUpdate"
-              }
-            }
-          }
-        },
         "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
+          "404": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Service Config Services  Name  Config Put"
                 }
               }
             }
           },
-          "404": {
-            "description": "Service has no config schema",
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
             "content": {
               "application/json": {
                 "schema": {
@@ -1269,9 +1260,9 @@
         "tags": [
           "services"
         ],
-        "summary": "Import live volume content into the config store, clearing drift",
-        "description": "Read the live volume file and store it as the new *current*, clearing drift.\n\nThe imported dict is stored as-is (real secret values preserved, since the\nvolume holds real values). The volume hash is updated to match, so subsequent\ndrift checks see a clean state.",
-        "operationId": "import_service_config_services__name__config_import_post",
+        "summary": "[Removed] POST config import",
+        "description": "This endpoint was removed. Config is now component-owned.",
+        "operationId": "config_import_services__name__config_import_post",
         "parameters": [
           {
             "name": "name",
@@ -1284,28 +1275,22 @@
           }
         ],
         "responses": {
-          "200": {
+          "404": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigImportResponse"
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Config Import Services  Name  Config Import Post"
                 }
               }
             }
           },
           "401": {
             "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Service has no config schema or config volume",
             "content": {
               "application/json": {
                 "schema": {
@@ -1332,9 +1317,9 @@
         "tags": [
           "services"
         ],
-        "summary": "Refetch config/config.schema.json from the repo and replace the stored template",
-        "description": "Replace the stored config template with the repo's committed schema.\n\nComponents onboarded before the schema-driven config keep the legacy raw\ntemplate captured at onboard time; this refetches ``config/config.schema.json``\nfrom the repo HEAD so the typed schema (field types, enums, descriptions)\nreaches the dashboard without re-onboarding. Stored *values* are untouched.",
-        "operationId": "refresh_config_schema_services__name__config_refresh_schema_post",
+        "summary": "[Removed] POST config refresh-schema",
+        "description": "This endpoint was removed. Config is now component-owned.",
+        "operationId": "config_refresh_schema_services__name__config_refresh_schema_post",
         "parameters": [
           {
             "name": "name",
@@ -1347,12 +1332,16 @@
           }
         ],
         "responses": {
-          "200": {
+          "404": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigSchemaRefreshResponse"
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Config Refresh Schema Services  Name  Config Refresh Schema Post"
                 }
               }
             }
@@ -1367,32 +1356,12 @@
               }
             }
           },
-          "400": {
-            "description": "Component has no git_url",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Component not found or repo has no config/config.schema.json",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
           "422": {
-            "description": "Repo fetch failed or schema is invalid JSON",
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1405,9 +1374,9 @@
         "tags": [
           "services"
         ],
-        "summary": "Run a repo-declared config-assist command in a one-shot container and return auto-filled config",
-        "description": "Run a repo-declared config-assist command in a one-shot container.\n\nFetches fresh config-assist metadata from the component's git repo, runs\nthe detect/assist command inside a temporary container with the config\nvolume mounted, and merges detected fields into the user-submitted values.\nRaises 400 if no config-assist command or config volume is configured,\n404 if the component is not found, and 504 if the assist command times out.",
-        "operationId": "run_config_assist_services__name__config_assist_post",
+        "summary": "[Removed] POST config assist",
+        "description": "This endpoint was removed. Config is now component-owned.",
+        "operationId": "config_assist_services__name__config_assist_post",
         "parameters": [
           {
             "name": "name",
@@ -1419,59 +1388,23 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfigAssistRequest"
-              }
-            }
-          }
-        },
         "responses": {
-          "200": {
+          "404": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigAssistResponse"
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Config Assist Services  Name  Config Assist Post"
                 }
               }
             }
           },
           "401": {
             "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "No config-assist command or config volume configured",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Component not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Assist command timed out",
             "content": {
               "application/json": {
                 "schema": {
@@ -7115,66 +7048,6 @@
         ],
         "title": "ComponentSuggestResponse"
       },
-      "ConfigAssistRequest": {
-        "properties": {
-          "values": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Values",
-            "description": "Current (partial) form values to seed the assist command"
-          },
-          "target_account_index": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Account Index",
-            "description": "Optional target account index for multi-account configs"
-          },
-          "account_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Account Name",
-            "description": "Optional account name for account-scoped config assist"
-          }
-        },
-        "type": "object",
-        "required": [
-          "values"
-        ],
-        "title": "ConfigAssistRequest"
-      },
-      "ConfigAssistResponse": {
-        "properties": {
-          "config": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Config",
-            "description": "Auto-filled config dict read back from the volume after the command ran"
-          },
-          "output": {
-            "type": "string",
-            "title": "Output",
-            "description": "Captured stdout and stderr from the one-shot container"
-          }
-        },
-        "type": "object",
-        "required": [
-          "config",
-          "output"
-        ],
-        "title": "ConfigAssistResponse"
-      },
       "ConfigAssistSeed": {
         "properties": {
           "key": {
@@ -7200,28 +7073,6 @@
           "key"
         ],
         "title": "ConfigAssistSeed"
-      },
-      "ConfigImportResponse": {
-        "properties": {
-          "current": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Current",
-            "description": "Imported config values; secrets masked"
-          },
-          "volume_hash": {
-            "type": "string",
-            "title": "Volume Hash",
-            "description": "Canonical hash of the imported content for drift tracking"
-          }
-        },
-        "type": "object",
-        "required": [
-          "current",
-          "volume_hash"
-        ],
-        "title": "ConfigImportResponse",
-        "description": "Body of the 200 response from POST /services/{name}/config/import."
       },
       "ConfigResponse": {
         "properties": {
@@ -7283,43 +7134,6 @@
           "current"
         ],
         "title": "ConfigResponse"
-      },
-      "ConfigSchemaRefreshResponse": {
-        "properties": {
-          "schema": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Schema",
-            "description": "Refreshed JSON Schema for the component's config.json"
-          }
-        },
-        "type": "object",
-        "required": [
-          "schema"
-        ],
-        "title": "ConfigSchemaRefreshResponse",
-        "description": "Body of the 200 response from POST /services/{name}/config/refresh-schema."
-      },
-      "ConfigUpdate": {
-        "properties": {
-          "values": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Values",
-            "description": "Key-value pairs to write to the component's config volume"
-          },
-          "force_overwrite": {
-            "type": "boolean",
-            "title": "Force Overwrite",
-            "description": "When True, overwrite even when config drift is detected",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "values"
-        ],
-        "title": "ConfigUpdate"
       },
       "ContainerHealthSummary": {
         "properties": {

@@ -365,16 +365,6 @@ class ConfigResponse(BaseModel):
     )
 
 
-class ConfigUpdate(BaseModel):
-    values: dict[str, Any] = Field(
-        description="Key-value pairs to write to the component's config volume"
-    )
-    force_overwrite: bool = Field(
-        default=False,
-        description="When True, overwrite even when config drift is detected",
-    )
-
-
 class ComponentSuggestItem(BaseModel):
     """Lightweight component info for the config-form URL suggest feature."""
 
@@ -389,40 +379,6 @@ class ComponentSuggestItem(BaseModel):
 class ComponentSuggestResponse(BaseModel):
     components: list[ComponentSuggestItem] = Field(
         description="Matching component suggestions"
-    )
-
-
-class ConfigDriftConflict(BaseModel):
-    """Body of the 409 Conflict response when drift is detected on Save."""
-
-    drift: Literal[True] = Field(
-        default=True, description="Always True; signals a drift conflict"
-    )
-    live_config: dict[str, Any] = Field(
-        description="Current config volume content; secrets masked"
-    )
-    stored_config: dict[str, Any] = Field(
-        description="Last stored config snapshot; secrets masked"
-    )
-
-
-class ConfigImportResponse(BaseModel):
-    """Body of the 200 response from POST /services/{name}/config/import."""
-
-    current: dict[str, Any] = Field(
-        description="Imported config values; secrets masked"
-    )
-    volume_hash: str = Field(
-        description="Canonical hash of the imported content for drift tracking"
-    )
-
-
-class ConfigSchemaRefreshResponse(BaseModel):
-    """Body of the 200 response from POST /services/{name}/config/refresh-schema."""
-
-    config_schema: dict[str, Any] = Field(
-        serialization_alias="schema",
-        description="Refreshed JSON Schema for the component's config.json",
     )
 
 
@@ -441,29 +397,6 @@ class ContractRefreshResponse(BaseModel):
     current: dict[str, Any] = Field(
         default={},
         description="Snapshot of the contract after refresh",
-    )
-
-
-class ConfigAssistRequest(BaseModel):
-    values: dict[str, Any] = Field(
-        description="Current (partial) form values to seed the assist command"
-    )
-    target_account_index: int | None = Field(
-        default=None,
-        description="Optional target account index for multi-account configs",
-    )
-    account_name: str | None = Field(
-        default=None,
-        description="Optional account name for account-scoped config assist",
-    )
-
-
-class ConfigAssistResponse(BaseModel):
-    config: dict[str, Any] = Field(
-        description="Auto-filled config dict read back from the volume after the command ran"
-    )
-    output: str = Field(
-        description="Captured stdout and stderr from the one-shot container"
     )
 
 
