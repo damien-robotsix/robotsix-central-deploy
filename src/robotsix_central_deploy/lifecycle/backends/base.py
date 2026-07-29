@@ -126,6 +126,22 @@ class ExecutionBackend(ABC):
         pass
 
     @abstractmethod
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        """Run a one-shot container from *image* executing *command_str* with the config
+        volume mounted at *volume_mount_path*. Returns captured stdout+stderr.
+        Raises TimeoutError if the container does not exit within *timeout_seconds*.
+        Always removes the container on exit or timeout."""
+        pass
+
+    @abstractmethod
     async def measure_volume_bytes(self, volume_name: str) -> int:
         """Return effective total bytes for *volume_name*, excluding SQLite
         transient sidecars (*.db-wal, *.db-shm, *.db-journal).

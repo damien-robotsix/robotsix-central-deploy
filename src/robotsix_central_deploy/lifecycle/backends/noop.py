@@ -93,6 +93,17 @@ class NoopBackend(ExecutionBackend):
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         return {}
 
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        return "[noop backend]"
+
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0
 

@@ -191,3 +191,82 @@ async def get_service_config(
         config_assist_seeds=comp_cfg.config_assist_seeds if comp_cfg else [],
         component_settings_url=component_settings_url,
     )
+
+
+# ---------------------------------------------------------------------------
+# Removed config-write endpoints — 404 guards
+#
+# These routes were removed as part of the config-ownership migration
+# (robotsix-standards: the deploy plane must not write component-internal
+# config.json).  Explicit 404 handlers prevent the requests from falling
+# through to the gateway catch-all (/{path:path}) which uses session-auth
+# and returns 303 instead of 404.
+# ---------------------------------------------------------------------------
+
+
+@router.put(
+    "/services/{name}/config",
+    status_code=status.HTTP_404_NOT_FOUND,
+    summary="[Removed] PUT config",
+)
+async def put_service_config(
+    name: str,
+    _auth: None = Depends(verify_auth),
+) -> dict[str, str]:
+    """This endpoint was removed. Config is now component-owned."""
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="PUT /services/{name}/config has been removed. "
+        "Config is owned by the component, not the deploy plane.",
+    )
+
+
+@router.post(
+    "/services/{name}/config/import",
+    status_code=status.HTTP_404_NOT_FOUND,
+    summary="[Removed] POST config import",
+)
+async def config_import(
+    name: str,
+    _auth: None = Depends(verify_auth),
+) -> dict[str, str]:
+    """This endpoint was removed. Config is now component-owned."""
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="POST /services/{name}/config/import has been removed. "
+        "Config is owned by the component, not the deploy plane.",
+    )
+
+
+@router.post(
+    "/services/{name}/config/refresh-schema",
+    status_code=status.HTTP_404_NOT_FOUND,
+    summary="[Removed] POST config refresh-schema",
+)
+async def config_refresh_schema(
+    name: str,
+    _auth: None = Depends(verify_auth),
+) -> dict[str, str]:
+    """This endpoint was removed. Config is now component-owned."""
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="POST /services/{name}/config/refresh-schema has been removed. "
+        "Config is owned by the component, not the deploy plane.",
+    )
+
+
+@router.post(
+    "/services/{name}/config/assist",
+    status_code=status.HTTP_404_NOT_FOUND,
+    summary="[Removed] POST config assist",
+)
+async def config_assist(
+    name: str,
+    _auth: None = Depends(verify_auth),
+) -> dict[str, str]:
+    """This endpoint was removed. Config is now component-owned."""
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="POST /services/{name}/config/assist has been removed. "
+        "Config is owned by the component, not the deploy plane.",
+    )
