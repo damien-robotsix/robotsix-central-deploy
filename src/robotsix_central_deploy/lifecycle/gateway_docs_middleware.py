@@ -13,10 +13,9 @@ import logging
 from typing import AsyncIterator, Optional
 
 import httpx
-from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response, StreamingResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from ..gateway.router import RESERVED_NAMES, _extract_subdomain_name, _resolve
 from ..registry.models import ComponentConfig
@@ -116,16 +115,19 @@ class GatewayAwareDocsMiddleware(BaseHTTPMiddleware):
             logger.warning(
                 "GatewayAwareDocsMiddleware: upstream unreachable at %s", url
             )
-            raise HTTPException(
-                status_code=502, detail="Bad Gateway — upstream unreachable"
+            return JSONResponse(
+                status_code=502,
+                content={"detail": "Bad Gateway — upstream unreachable"},
             )
         except httpx.TimeoutException:
             await client.aclose()
-            raise HTTPException(status_code=504, detail="Gateway Timeout")
+            return JSONResponse(
+                status_code=504, content={"detail": "Gateway Timeout"}
+            )
         except httpx.HTTPError as exc:
             await client.aclose()
-            raise HTTPException(
-                status_code=502, detail=f"Bad Gateway — {exc}"
+            return JSONResponse(
+                status_code=502, content={"detail": f"Bad Gateway — {exc}"}
             )
 
         resp_headers = {
