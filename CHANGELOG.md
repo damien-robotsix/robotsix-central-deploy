@@ -18,6 +18,11 @@ All notable changes to robotsix-central-deploy.
   env/secrets — retained) and runtime config (config.json — component-owned).
 - Add missing `gateway_docs_middleware` module to the Lifecycle Internals section in `docs/lifecycle/api.md`
 - Extract `_fanout_siblings_deploy_best_effort` helper into `_sibling_utils.py`, replacing three duplicated sibling deploy fan-out blocks in `chat_services.py`
+- `/chat/disk/reclaim`: the response now includes per-category skip counts
+  (`images_skipped_protected`, `images_skipped_in_use`, `images_skipped_error`,
+  `images_error_summary`) so operators can diagnose why dangling images were not
+  reclaimed.  A new `force` request flag removes stopped containers before
+  pruning, freeing images only referenced by exited containers.
 - GatewayAwareDocsMiddleware: intercept ``/docs`` and ``/openapi.json`` on
   component subdomains and proxy to the component container, preventing
   central-deploy's Lifecycle API docs (with mutating/destructive endpoints)

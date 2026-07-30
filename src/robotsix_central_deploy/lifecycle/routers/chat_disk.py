@@ -9,7 +9,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from ..auth import verify_auth
-from ..backends import ExecutionBackend, collect_protected_image_refs
+from ..backends import (
+    ExecutionBackend,
+    PruneImagesResult,
+    collect_protected_image_refs,
+)
 from ..config import LifecycleConfig
 from ..deps import (
     _get_backend,
@@ -70,6 +74,7 @@ async def chat_disk_reclaim(
 
     space_reclaimed: int = 0
     operations: list[str] = []
+    prune_result = PruneImagesResult()
 
     if body.build_cache:
         freed = await backend.prune_builds()
@@ -78,9 +83,27 @@ async def chat_disk_reclaim(
 
     if body.dangling_images:
         protected = await collect_protected_image_refs(store)
-        freed = await backend.prune_images(protected)
-        space_reclaimed += freed
-        operations.append(f"dangling_images={freed}")
+        prune_result = await backend.prune_images(protected, force=body.force)
+        space_reclaimed += prune_result.space_reclaimed_bytes
+        parts: list[str] = [f"dangling_images={prune_result.space_reclaimed_bytes}"]
+        if prune_result.removed_count:
+            parts.append(f"removed={prune_result.removed_count}")
+        if prune_result.stopped_containers_removed:
+            parts.append(
+                f"stopped_containers_removed={prune_result.stopped_containers_removed}"
+            )
+        skipped_bits: list[str] = []
+        if prune_result.skipped_protected:
+            skipped_bits.append(f"protected={prune_result.skipped_protected}")
+        if prune_result.skipped_in_use:
+            skipped_bits.append(f"in_use={prune_result.skipped_in_use}")
+        if prune_result.skipped_error:
+            skipped_bits.append(f"error={prune_result.skipped_error}")
+        if skipped_bits:
+            parts.append("skipped(" + ", ".join(skipped_bits) + ")")
+        if prune_result.error_summary:
+            parts.append(f"errors={prune_result.error_summary!r}")
+        operations.append(" ".join(parts))
 
     # Take a post-reclaim disk snapshot.
     disk_path = os.path.realpath(str(config.disk_path))
@@ -113,4 +136,10 @@ async def chat_disk_reclaim(
         space_reclaimed_bytes=space_reclaimed,
         detail=detail,
         disk_snapshot=disk_snapshot,
+        images_removed=prune_result.removed_count,
+        images_skipped_protected=prune_result.skipped_protected,
+        images_skipped_in_use=prune_result.skipped_in_use,
+        images_skipped_error=prune_result.skipped_error,
+        images_error_summary=prune_result.error_summary,
+        stopped_containers_removed=prune_result.stopped_containers_removed,
     )

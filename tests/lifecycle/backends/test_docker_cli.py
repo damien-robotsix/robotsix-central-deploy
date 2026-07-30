@@ -445,7 +445,7 @@ class TestStubReturnValues:
 
     async def test_prune_images_returns_zero(self, backend):
         result = await backend.prune_images(set())
-        assert result == 0
+        assert result.space_reclaimed_bytes == 0
 
     async def test_measure_volume_bytes_returns_zero(self, backend):
         result = await backend.measure_volume_bytes("vol")

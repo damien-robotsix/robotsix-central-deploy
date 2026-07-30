@@ -450,7 +450,8 @@ async def _run_deploy_job(
             )
             if settings is not None and settings.image_auto_prune:
                 protected = await collect_protected_image_refs(store)
-                reclaimed = await backend.prune_images(protected)
+                result = await backend.prune_images(protected)
+                reclaimed = result.space_reclaimed_bytes
                 if reclaimed:
                     logger.info(
                         "deploy %s: image auto-prune reclaimed %d bytes",

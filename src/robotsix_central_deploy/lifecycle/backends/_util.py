@@ -2,12 +2,54 @@
 
 from __future__ import annotations
 
+import dataclasses
 import threading
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any
 
 from ..models import ServiceState
+
+
+# ---------------------------------------------------------------------------
+# PruneImagesResult — rich return from prune_images()
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class PruneImagesResult:
+    """Outcome of a ``prune_images()`` call.
+
+    All fields default to 0 so stub backends can return ``PruneImagesResult()``
+    without change, and existing callers that only consume
+    ``space_reclaimed_bytes`` are upward-compatible.
+    """
+
+    space_reclaimed_bytes: int = 0
+    """Bytes actually freed (sum of Docker-reported sizes of removed images)."""
+
+    removed_count: int = 0
+    """Number of dangling images successfully removed."""
+
+    skipped_protected: int = 0
+    """Images skipped because they match a protected ref (rollback target)."""
+
+    skipped_in_use: int = 0
+    """Images skipped because they are still referenced by a container."""
+
+    skipped_error: int = 0
+    """Images skipped because Docker returned an unexpected error."""
+
+    error_summary: str = ""
+    """First distinct error message (if any), for operator visibility."""
+
+    stopped_containers_removed: int = 0
+    """When *force* was set: number of stopped containers removed first."""
+
+
+# ---------------------------------------------------------------------------
+# In-flight image ref registry
+# ---------------------------------------------------------------------------
 
 # Image refs (ids / digests) belonging to deploys currently in flight.
 # A digest-pulled image carries no tag, so Docker reports it as dangling

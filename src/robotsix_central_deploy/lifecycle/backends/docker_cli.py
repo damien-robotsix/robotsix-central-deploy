@@ -7,7 +7,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
-from ._util import docker_status_to_service_state
+from ._util import PruneImagesResult, docker_status_to_service_state
 from .base import ExecutionBackend
 from ..models import (
     ComponentInspect,
@@ -171,9 +171,11 @@ class DockerBackend(ExecutionBackend):
         # CLI backend does not support build prune.
         return 0
 
-    async def prune_images(self, protected_refs: set[str]) -> int:
+    async def prune_images(
+        self, protected_refs: set[str], *, force: bool = False
+    ) -> PruneImagesResult:
         # CLI backend does not support image prune.
-        return 0
+        return PruneImagesResult()
 
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]

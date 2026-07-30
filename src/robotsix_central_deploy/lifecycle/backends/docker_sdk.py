@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
 
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
 from ._util import (
+    PruneImagesResult,
     docker_status_to_service_state,
     inflight_image_refs,
     register_inflight_image_refs,
@@ -1039,25 +1040,58 @@ class DockerSdkBackend(ExecutionBackend):
         )
         return int(result.get("SpaceReclaimed", 0))
 
-    async def prune_images(self, protected_refs: set[str]) -> int:
+    async def prune_images(
+        self, protected_refs: set[str], *, force: bool = False
+    ) -> PruneImagesResult:
         """Remove dangling (untagged) images one by one, skipping protected refs.
 
         Docker's bulk prune API has no exclusion list, so images are removed
         individually. An image is protected when its id or any of its repo
         digests appears in *protected_refs*; images still used by a container
-        fail removal with a 409, which is swallowed.
+        fail removal with a 409, which is tracked in the result.
+
+        When *force* is ``True``, stopped containers are removed first so
+        that images they hold references to can be pruned.
         """
         import docker  # noqa: PLC0415
 
         loop = asyncio.get_running_loop()
 
-        def _prune() -> int:
-            reclaimed = 0
+        def _prune() -> PruneImagesResult:
+            result = PruneImagesResult()
+
+            # -- force: remove stopped containers first -----------------------
+            if force:
+                try:
+                    stopped = self._client.containers.list(
+                        all=True,
+                        filters={"status": "exited"},
+                    )
+                except docker.errors.APIError as exc:
+                    logger.warning(
+                        "image prune: list stopped containers failed: %s", exc
+                    )
+                    stopped = []
+                for c in stopped:
+                    try:
+                        c.remove()
+                        result.stopped_containers_removed += 1
+                    except docker.errors.APIError as exc:
+                        logger.debug(
+                            "image prune: skip stopped container %s: %s",
+                            c.id,
+                            exc,
+                        )
+
+            # -- list dangling images ----------------------------------------
             try:
                 dangling = self._client.images.list(filters={"dangling": True})
             except docker.errors.APIError as exc:
                 logger.warning("image prune: list failed: %s", exc)
-                return 0
+                return result
+
+            errors: list[str] = []
+
             for img in dangling:
                 digests = {
                     rd.split("@")[1]
@@ -1069,14 +1103,31 @@ class DockerSdkBackend(ExecutionBackend):
                 # register) an image while the prune is running.
                 live_refs = protected_refs | inflight_image_refs()
                 if img.id in live_refs or digests & live_refs:
+                    result.skipped_protected += 1
                     continue
                 size = int(img.attrs.get("Size", 0))
                 try:
                     self._client.images.remove(img.id)
-                    reclaimed += size
+                    result.space_reclaimed_bytes += size
+                    result.removed_count += 1
                 except docker.errors.APIError as exc:
+                    msg = str(exc)
+                    if (
+                        "image is being used" in msg
+                        or "image is referenced" in msg
+                        or "conflict" in msg.lower()
+                    ):
+                        result.skipped_in_use += 1
+                    else:
+                        result.skipped_error += 1
+                        if len(errors) < 3:
+                            short_id = (img.id or "???")[:19]
+                            errors.append(f"{short_id}: {msg}")
                     logger.debug("image prune: skipped %s: %s", img.id, exc)
-            return reclaimed
+
+            if errors:
+                result.error_summary = "; ".join(errors)
+            return result
 
         return await loop.run_in_executor(None, _prune)
 

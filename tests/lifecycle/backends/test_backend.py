@@ -293,8 +293,9 @@ class TestDockerSdkBackendPruneImages:
             _make_image("sha256:old1", 100),
             _make_image("sha256:old2", 250),
         ]
-        reclaimed = await b.prune_images(set())
-        assert reclaimed == 350
+        result = await b.prune_images(set())
+        assert result.space_reclaimed_bytes == 350
+        assert result.removed_count == 2
         removed = [c.args[0] for c in client.images.remove.call_args_list]
         assert removed == ["sha256:old1", "sha256:old2"]
         client.images.list.assert_called_once_with(filters={"dangling": True})
@@ -310,10 +311,12 @@ class TestDockerSdkBackendPruneImages:
             ),
             _make_image("sha256:prunable", 50),
         ]
-        reclaimed = await b.prune_images(
+        result = await b.prune_images(
             {"sha256:rollback-target", "sha256:manifest-digest"}
         )
-        assert reclaimed == 50
+        assert result.space_reclaimed_bytes == 50
+        assert result.removed_count == 1
+        assert result.skipped_protected == 2
         removed = [c.args[0] for c in client.images.remove.call_args_list]
         assert removed == ["sha256:prunable"]
 
@@ -329,13 +332,17 @@ class TestDockerSdkBackendPruneImages:
                 raise docker_mock.errors.APIError("conflict: image is in use")
 
         client.images.remove.side_effect = _remove
-        reclaimed = await b.prune_images(set())
-        assert reclaimed == 70
+        result = await b.prune_images(set())
+        assert result.space_reclaimed_bytes == 70
+        assert result.removed_count == 1
+        assert result.skipped_in_use == 1
 
     async def test_prune_list_failure_returns_zero(self, backend):
         b, client, docker_mock = backend
         client.images.list.side_effect = docker_mock.errors.APIError("boom")
-        assert await b.prune_images(set()) == 0
+        result = await b.prune_images(set())
+        assert result.space_reclaimed_bytes == 0
+        assert result.removed_count == 0
 
     async def test_prune_skips_inflight_deploy_images(self, backend):
         from robotsix_central_deploy.lifecycle.backends._util import (
@@ -356,17 +363,17 @@ class TestDockerSdkBackendPruneImages:
         refs = {"sha256:just-pulled", "sha256:pinned-digest"}
         register_inflight_image_refs(refs)
         try:
-            reclaimed = await b.prune_images(set())
+            result = await b.prune_images(set())
         finally:
             release_inflight_image_refs(refs)
-        assert reclaimed == 50
+        assert result.space_reclaimed_bytes == 50
         removed = [c.args[0] for c in client.images.remove.call_args_list]
         assert removed == ["sha256:prunable"]
 
         # After release the same images are prunable again.
         client.images.remove.reset_mock()
-        reclaimed = await b.prune_images(set())
-        assert reclaimed == 350
+        result = await b.prune_images(set())
+        assert result.space_reclaimed_bytes == 350
         removed = [c.args[0] for c in client.images.remove.call_args_list]
         assert removed == [
             "sha256:just-pulled",

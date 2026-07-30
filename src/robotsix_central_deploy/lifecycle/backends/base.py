@@ -19,6 +19,7 @@ from ..models import (
 
 if TYPE_CHECKING:
     from ...registry.models import ComponentConfig
+    from ._util import PruneImagesResult
 
 logger = logging.getLogger(__name__)
 
@@ -99,11 +100,19 @@ class ExecutionBackend(ABC):
         pass
 
     @abstractmethod
-    async def prune_images(self, protected_refs: set[str]) -> int:
+    async def prune_images(
+        self, protected_refs: set[str], *, force: bool = False
+    ) -> "PruneImagesResult":
         """Remove dangling images, skipping any whose image id or repo digest
         is in *protected_refs* (rollback targets must stay pullable-free —
         rollback recreates containers from a local image id, which Docker
-        cannot re-pull). Returns bytes reclaimed."""
+        cannot re-pull).
+
+        When *force* is ``True``, stopped containers are removed first so
+        that images they reference become eligible for pruning.
+
+        Returns a ``PruneImagesResult`` with counts and error details.
+        """
         pass
 
     @abstractmethod

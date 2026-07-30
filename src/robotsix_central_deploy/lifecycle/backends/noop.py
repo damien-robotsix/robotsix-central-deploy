@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 
+from ._util import PruneImagesResult
 from .base import ExecutionBackend
 from ..models import (
     ComponentInspect,
@@ -77,8 +78,10 @@ class NoopBackend(ExecutionBackend):
     async def prune_builds(self) -> int:
         return 0
 
-    async def prune_images(self, protected_refs: set[str]) -> int:
-        return 0
+    async def prune_images(
+        self, protected_refs: set[str], *, force: bool = False
+    ) -> PruneImagesResult:
+        return PruneImagesResult()
 
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
