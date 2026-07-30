@@ -37,6 +37,10 @@ class PruneImagesResult:
     skipped_in_use: int = 0
     """Images skipped because they are still referenced by a container."""
 
+    skipped_intermediate: int = 0
+    """Images skipped because they are intermediate parent layers
+    referenced by another (tagged) image — not prunable."""
+
     skipped_error: int = 0
     """Images skipped because Docker returned an unexpected error."""
 

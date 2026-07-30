@@ -97,6 +97,8 @@ async def chat_disk_reclaim(
             skipped_bits.append(f"protected={prune_result.skipped_protected}")
         if prune_result.skipped_in_use:
             skipped_bits.append(f"in_use={prune_result.skipped_in_use}")
+        if prune_result.skipped_intermediate:
+            skipped_bits.append(f"intermediate={prune_result.skipped_intermediate}")
         if prune_result.skipped_error:
             skipped_bits.append(f"error={prune_result.skipped_error}")
         if skipped_bits:
@@ -139,6 +141,7 @@ async def chat_disk_reclaim(
         images_removed=prune_result.removed_count,
         images_skipped_protected=prune_result.skipped_protected,
         images_skipped_in_use=prune_result.skipped_in_use,
+        images_skipped_intermediate=prune_result.skipped_intermediate,
         images_skipped_error=prune_result.skipped_error,
         images_error_summary=prune_result.error_summary,
         stopped_containers_removed=prune_result.stopped_containers_removed,

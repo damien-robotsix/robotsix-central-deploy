@@ -947,6 +947,11 @@ class ChatAgentDiskReclaimResponse(BaseModel):
         default=0,
         description="Dangling images skipped because a container still references them.",
     )
+    images_skipped_intermediate: int = Field(
+        default=0,
+        description="Dangling images skipped because they are intermediate parent "
+        "layers referenced by another (tagged) image — cannot be pruned.",
+    )
     images_skipped_error: int = Field(
         default=0,
         description="Dangling images skipped because Docker returned an error.",

@@ -18,6 +18,14 @@ All notable changes to robotsix-central-deploy.
   env/secrets — retained) and runtime config (config.json — component-owned).
 - Add missing `gateway_docs_middleware` module to the Lifecycle Internals section in `docs/lifecycle/api.md`
 - Extract `_fanout_siblings_deploy_best_effort` helper into `_sibling_utils.py`, replacing three duplicated sibling deploy fan-out blocks in `chat_services.py`
+- **Disk reclaim:** ``DockerDfStats`` now includes ``dangling_images_reclaimable_bytes`` —
+  the subset of dangling images that are actually prunable (leaf nodes not
+  referenced as a parent by any other image). The ``POST /chat/disk/reclaim``
+  response now reports ``images_skipped_intermediate`` to distinguish
+  intermediate parent layers from container-referenced images. The reclaim
+  endpoint's exception handling separates "image has dependent child images"
+  (intermediate) from other in-use conflicts, giving operators an accurate
+  picture of what can and cannot be freed during low-disk remediation.
 - `/chat/disk/reclaim`: the response now includes per-category skip counts
   (`images_skipped_protected`, `images_skipped_in_use`, `images_skipped_error`,
   `images_error_summary`) so operators can diagnose why dangling images were not

@@ -381,6 +381,28 @@ class TestDockerSdkBackendPruneImages:
             "sha256:prunable",
         ]
 
+    async def test_prune_tracks_intermediate_images(self, backend):
+        """Images that are intermediate parent layers are tracked as skipped_intermediate."""
+        b, client, docker_mock = backend
+        client.images.list.return_value = [
+            _make_image("sha256:intermediate", 400),
+            _make_image("sha256:leaf-dangling", 150),
+        ]
+
+        def _remove(image_id):
+            if image_id == "sha256:intermediate":
+                raise docker_mock.errors.APIError(
+                    "conflict: unable to delete (cannot be forced) - "
+                    "image has dependent child images"
+                )
+
+        client.images.remove.side_effect = _remove
+        result = await b.prune_images(set())
+        assert result.space_reclaimed_bytes == 150
+        assert result.removed_count == 1
+        assert result.skipped_intermediate == 1
+        assert result.skipped_in_use == 0
+
 
 class TestInflightImageRefRegistry:
     def test_refcounted_register_release(self):

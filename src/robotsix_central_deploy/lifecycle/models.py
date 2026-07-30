@@ -369,10 +369,18 @@ class VolumeStat(BaseModel):
 
 
 class DockerDfStats(BaseModel):
-    """Docker storage breakdown from ``docker system df``."""
+    """Docker storage breakdown from ``docker system df``.
+
+    ``dangling_images_bytes`` is the total virtual size of ALL untagged
+    images including intermediate parent layers.  Only a subset of those
+    (leaf dangling images that are not referenced as a parent by any
+    other image) are actually prunable — that subset is reported in
+    ``dangling_images_reclaimable_bytes``.
+    """
 
     images_size_bytes: int = 0
     dangling_images_bytes: int = 0
+    dangling_images_reclaimable_bytes: int = 0
     build_cache_size_bytes: int = 0
     build_cache_reclaimable_bytes: int = 0
     volumes: list[VolumeStat] = []

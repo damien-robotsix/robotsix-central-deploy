@@ -1010,9 +1010,22 @@ class DockerSdkBackend(ExecutionBackend):
         ]
         # Dangling images — use the same ``images.list(dangling=True)``
         # source as ``prune_images()`` so the metric matches what the
-        # reclaim endpoint can actually remove.  The ``df()`` Images array
-        # includes intermediate/parent layers that have no tag but are
-        # still referenced by tagged images; those are not prunable.
+        # reclaim endpoint can actually remove.  Only leaf dangling images
+        # (those not referenced as a parent by any other image) are
+        # actually prunable — intermediate parent layers fail with a 409
+        # "image has dependent child images" at prune time.
+        try:
+            all_non_intermediate = await loop.run_in_executor(
+                None, self._client.images.list
+            )
+        except docker.errors.APIError as exc:
+            logger.warning("docker image list failed: %s", exc)
+            all_non_intermediate = []
+        parent_ids: set[str] = set()
+        for img in all_non_intermediate:
+            pid = img.attrs.get("ParentId", "")
+            if pid:
+                parent_ids.add(pid)
         try:
             dangling_images = await loop.run_in_executor(
                 None,
@@ -1022,9 +1035,15 @@ class DockerSdkBackend(ExecutionBackend):
             logger.warning("docker image list (dangling) failed: %s", exc)
             dangling_images = []
         dangling_size = sum(int(img.attrs.get("Size", 0)) for img in dangling_images)
+        reclaimable_dangling_size = sum(
+            int(img.attrs.get("Size", 0))
+            for img in dangling_images
+            if img.id not in parent_ids
+        )
         return DockerDfStats(
             images_size_bytes=images_size,
             dangling_images_bytes=dangling_size,
+            dangling_images_reclaimable_bytes=reclaimable_dangling_size,
             build_cache_size_bytes=build_cache_size,
             build_cache_reclaimable_bytes=reclaimable,
             volumes=volumes,
@@ -1112,7 +1131,9 @@ class DockerSdkBackend(ExecutionBackend):
                     result.removed_count += 1
                 except docker.errors.APIError as exc:
                     msg = str(exc)
-                    if (
+                    if "dependent child images" in msg:
+                        result.skipped_intermediate += 1
+                    elif (
                         "image is being used" in msg
                         or "image is referenced" in msg
                         or "conflict" in msg.lower()
