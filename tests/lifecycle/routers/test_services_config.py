@@ -418,9 +418,7 @@ class TestExportServiceConfig:
             },
         }
         await store.save_template("chat", schema)
-        await store.update_current(
-            "chat", {"host": "0.0.0.0", "api_key": "sk-abc123"}
-        )
+        await store.update_current("chat", {"host": "0.0.0.0", "api_key": "sk-abc123"})
 
         resp = await client.get("/services/chat/config/export", headers=auth_headers)
         assert resp.status_code == 200

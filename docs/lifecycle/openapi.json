@@ -1203,9 +1203,10 @@
         "tags": [
           "services"
         ],
-        "summary": "[Removed] PUT config",
-        "description": "This endpoint was removed. Config is now component-owned.",
+        "summary": "[Deprecated] PUT config",
+        "description": "Deprecated: config is now component-owned, not deploy-plane.",
         "operationId": "put_service_config_services__name__config_put",
+        "deprecated": true,
         "parameters": [
           {
             "name": "name",
@@ -1218,17 +1219,11 @@
           }
         ],
         "responses": {
-          "404": {
+          "410": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Put Service Config Services  Name  Config Put"
-                }
+                "schema": {}
               }
             }
           },
@@ -1255,14 +1250,14 @@
         }
       }
     },
-    "/services/{name}/config/import": {
-      "post": {
+    "/services/{name}/config/export": {
+      "get": {
         "tags": [
           "services"
         ],
-        "summary": "[Removed] POST config import",
-        "description": "This endpoint was removed. Config is now component-owned.",
-        "operationId": "config_import_services__name__config_import_post",
+        "summary": "[Migration] Export full config including unmasked secrets",
+        "description": "Export the full current config INCLUDING unmasked secret values.\n\nRestricted to localhost + API-key auth.  This is a **migration-only**\nendpoint \u2014 components call it exactly once to import their config, then\nthe endpoint is decommissioned.\n\nAfter migration, config ownership lives in the component per the\nrobotsix-standards per-component settings standard.  The deploy plane\nretains only Docker-boundary settings (image, ports, mounts, env/secrets).",
+        "operationId": "export_service_config_services__name__config_export_get",
         "parameters": [
           {
             "name": "name",
@@ -1275,17 +1270,78 @@
           }
         ],
         "responses": {
-          "404": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Config Import Services  Name  Config Import Post"
+                  "$ref": "#/components/schemas/ConfigExportResponse"
                 }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not localhost"
+          },
+          "404": {
+            "description": "Service has no config schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/services/{name}/config/import": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "[Deprecated] POST config import",
+        "description": "Deprecated: config is now component-owned, not deploy-plane.",
+        "operationId": "config_import_services__name__config_import_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "410": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1317,9 +1373,10 @@
         "tags": [
           "services"
         ],
-        "summary": "[Removed] POST config refresh-schema",
-        "description": "This endpoint was removed. Config is now component-owned.",
+        "summary": "[Deprecated] POST config refresh-schema",
+        "description": "Deprecated: config is now component-owned, not deploy-plane.",
         "operationId": "config_refresh_schema_services__name__config_refresh_schema_post",
+        "deprecated": true,
         "parameters": [
           {
             "name": "name",
@@ -1332,17 +1389,11 @@
           }
         ],
         "responses": {
-          "404": {
+          "410": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Config Refresh Schema Services  Name  Config Refresh Schema Post"
-                }
+                "schema": {}
               }
             }
           },
@@ -1374,9 +1425,10 @@
         "tags": [
           "services"
         ],
-        "summary": "[Removed] POST config assist",
-        "description": "This endpoint was removed. Config is now component-owned.",
+        "summary": "[Deprecated] POST config assist",
+        "description": "Deprecated: config is now component-owned, not deploy-plane.",
         "operationId": "config_assist_services__name__config_assist_post",
+        "deprecated": true,
         "parameters": [
           {
             "name": "name",
@@ -1389,17 +1441,11 @@
           }
         ],
         "responses": {
-          "404": {
+          "410": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Config Assist Services  Name  Config Assist Post"
-                }
+                "schema": {}
               }
             }
           },
@@ -2442,6 +2488,7 @@
         "summary": "Update non-secret config keys for an allowlisted service",
         "description": "Update non-secret config keys for an allowlisted service.\n\nSaves the current config as a rollback snapshot before applying the\nupdate.  Secret keys are rejected with 403.  Writes the merged config\nto the service's config volume and records an audit entry for every\nchanged key.",
         "operationId": "chat_update_config_chat_config__name__put",
+        "deprecated": true,
         "parameters": [
           {
             "name": "name",
@@ -7073,6 +7120,34 @@
           "key"
         ],
         "title": "ConfigAssistSeed"
+      },
+      "ConfigExportResponse": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "title": "Component",
+            "description": "Component name"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values",
+            "description": "Full current config values with unmasked secrets"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "description": "Usage note about the sensitivity of the payload",
+            "default": "Migration-only endpoint. Secrets are included in plaintext \u2014 treat this payload as sensitive."
+          }
+        },
+        "type": "object",
+        "required": [
+          "component",
+          "values"
+        ],
+        "title": "ConfigExportResponse",
+        "description": "Response body for GET /services/{name}/config/export (migration-only).\n\nReturns the full current config WITH unmasked secret values so\ncomponents can import their config exactly once during the\nconfig-ownership migration.\n\nAccess is restricted to localhost + API-key auth."
       },
       "ConfigResponse": {
         "properties": {
