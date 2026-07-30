@@ -389,5 +389,116 @@ class TestDeprecatedConfigWriteEndpoints:
 
 
 # ---------------------------------------------------------------------------
+# GET /services/{name}/config/export  (migration-only)
+# ---------------------------------------------------------------------------
+
+
+class TestExportServiceConfig:
+    """Tests for GET /services/{name}/config/export.
+
+    This is a security-sensitive, migration-only endpoint that returns
+    plaintext secrets.  It is restricted to localhost + API-key auth.
+    """
+
+    async def test_export_returns_unmasked_secrets(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Full config is returned with secrets in plaintext (not ***)."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string"},
+                "api_key": {
+                    "type": "string",
+                    "format": "password",
+                    "writeOnly": True,
+                },
+            },
+        }
+        await store.save_template("chat", schema)
+        await store.update_current(
+            "chat", {"host": "0.0.0.0", "api_key": "sk-abc123"}
+        )
+
+        resp = await client.get("/services/chat/config/export", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["component"] == "chat"
+        assert data["values"]["host"] == "0.0.0.0"
+        # Secrets MUST be in plaintext — this is a migration export endpoint.
+        assert data["values"]["api_key"] == "sk-abc123"
+
+    async def test_export_returns_template_defaults_when_no_current(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """When no current config is stored, template defaults are returned."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        schema = {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "default": "localhost"},
+                "port": {"type": "integer", "default": 8080},
+            },
+        }
+        await store.save_template("chat", schema)
+
+        resp = await client.get("/services/chat/config/export", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["values"]["host"] == "localhost"
+        assert data["values"]["port"] == 8080
+
+    async def test_export_includes_note_field(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """The 'note' field is present in every response."""
+        await _seed_store("chat")
+        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
+        schema = {"type": "object", "properties": {"host": {"type": "string"}}}
+        await store.save_template("chat", schema)
+
+        resp = await client.get("/services/chat/config/export", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "note" in data
+        assert isinstance(data["note"], str)
+        assert "Migration-only" in data["note"]
+
+    async def test_non_localhost_returns_403(self, auth_headers: dict):
+        """Requests from non-localhost addresses are rejected with 403."""
+        from httpx import ASGITransport
+
+        transport = ASGITransport(
+            app=server_mod.app,  # type: ignore[arg-type]
+            client=("10.0.0.1", 12345),
+        )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get(
+                "/services/chat/config/export", headers=auth_headers
+            )
+        assert resp.status_code == 403
+        assert "localhost" in resp.json()["error"].lower()
+
+    async def test_no_config_schema_returns_404(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """404 when the component has no stored config schema."""
+        await _seed_store("chat")
+        # No template saved for "chat".
+
+        resp = await client.get("/services/chat/config/export", headers=auth_headers)
+        assert resp.status_code == 404
+        assert "No config schema" in resp.json()["error"]
+
+    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+        """401 when the X-API-Key header is missing."""
+        resp = await client.get("/services/chat/config/export")
+        assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # _namespace_spec_volumes unit tests
 # ---------------------------------------------------------------------------
