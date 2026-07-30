@@ -6304,11 +6304,17 @@
             "title": "Build Cache",
             "description": "Prune reclaimable Docker build cache.",
             "default": false
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Remove stopped containers before pruning images so that images referenced only by stopped containers can be reclaimed.",
+            "default": false
           }
         },
         "type": "object",
         "title": "ChatAgentDiskReclaimRequest",
-        "description": "Request body for POST /chat/disk/reclaim.\n\nSelects which safe reclaim targets to prune.  Only ``dangling_images``\nand ``build_cache`` are accepted \u2014 tagged images, in-use images, and\nnamed volumes are never pruned."
+        "description": "Request body for POST /chat/disk/reclaim.\n\nSelects which safe reclaim targets to prune.  Only ``dangling_images``\nand ``build_cache`` are accepted \u2014 tagged images, in-use images, and\nnamed volumes are never pruned.\n\nWhen *force* is ``True``, stopped containers are removed before the\nimage prune so that images they reference become eligible for removal."
       },
       "ChatAgentDiskReclaimResponse": {
         "properties": {
@@ -6343,6 +6349,48 @@
               }
             ],
             "description": "Full disk-usage snapshot taken after the reclaim operation."
+          },
+          "images_removed": {
+            "type": "integer",
+            "title": "Images Removed",
+            "description": "Number of dangling images successfully removed.",
+            "default": 0
+          },
+          "images_skipped_protected": {
+            "type": "integer",
+            "title": "Images Skipped Protected",
+            "description": "Dangling images skipped because they are rollback targets.",
+            "default": 0
+          },
+          "images_skipped_in_use": {
+            "type": "integer",
+            "title": "Images Skipped In Use",
+            "description": "Dangling images skipped because a container still references them.",
+            "default": 0
+          },
+          "images_skipped_intermediate": {
+            "type": "integer",
+            "title": "Images Skipped Intermediate",
+            "description": "Dangling images skipped because they are intermediate parent layers referenced by another (tagged) image \u2014 cannot be pruned.",
+            "default": 0
+          },
+          "images_skipped_error": {
+            "type": "integer",
+            "title": "Images Skipped Error",
+            "description": "Dangling images skipped because Docker returned an error.",
+            "default": 0
+          },
+          "images_error_summary": {
+            "type": "string",
+            "title": "Images Error Summary",
+            "description": "First few distinct prune errors, if any.",
+            "default": ""
+          },
+          "stopped_containers_removed": {
+            "type": "integer",
+            "title": "Stopped Containers Removed",
+            "description": "When force=True: number of stopped containers removed.",
+            "default": 0
           }
         },
         "type": "object",
@@ -7928,6 +7976,11 @@
             "title": "Dangling Images Bytes",
             "default": 0
           },
+          "dangling_images_reclaimable_bytes": {
+            "type": "integer",
+            "title": "Dangling Images Reclaimable Bytes",
+            "default": 0
+          },
           "build_cache_size_bytes": {
             "type": "integer",
             "title": "Build Cache Size Bytes",
@@ -7949,7 +8002,7 @@
         },
         "type": "object",
         "title": "DockerDfStats",
-        "description": "Docker storage breakdown from ``docker system df``."
+        "description": "Docker storage breakdown from ``docker system df``.\n\n``dangling_images_bytes`` is the total virtual size of ALL untagged\nimages including intermediate parent layers.  Only a subset of those\n(leaf dangling images that are not referenced as a parent by any\nother image) are actually prunable \u2014 that subset is reported in\n``dangling_images_reclaimable_bytes``."
       },
       "EnvResponse": {
         "properties": {
