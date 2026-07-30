@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Fix hadolint warnings DL3066 (use numeric UID in USER) and DL3025 (use JSON notation for CMD arguments) in Dockerfile
 - GatewayAwareDocsMiddleware: intercept ``/docs`` and ``/openapi.json`` on
   component subdomains and proxy to the component container, preventing
   central-deploy's Lifecycle API docs (with mutating/destructive endpoints)

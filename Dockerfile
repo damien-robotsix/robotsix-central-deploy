@@ -58,11 +58,11 @@ COPY --from=builder /usr/local/bin/robotsix-lifecycle /usr/local/bin/robotsix-li
 # (secrets.key, lifecycle_state.yaml, …) are relative when the
 # ROBOTSIX_LIFECYCLE_*_PATH variables are unset.
 RUN useradd -u 1000 -m app && mkdir /data && chown app:app /data /app
-USER app
+USER 1000
 
 EXPOSE 8100
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health').status==200 else 1)"
+  CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health').status==200 else 1)"]
 
 CMD ["robotsix-lifecycle"]
