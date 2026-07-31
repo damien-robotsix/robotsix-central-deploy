@@ -66,12 +66,14 @@ def _build_component_config_from_spec(
     *git_url* is required explicitly because the two callers source it
     differently (onboard uses ``spec.git_url``; refresh preserves the
     existing config's URL).  *overrides* lets the refresh path layer on
-    operator-set fields (``repo_id``, ``caretaker_auto_update``)
-    without branching.
+    operator-set fields (``repo_id``, ``caretaker_auto_update``,
+    ``mem_limit``, ``allow_chat_access``, ``claude_mount``) without
+    branching — an override always wins over the spec-derived value, including
+    for fields this factory also sets from *spec*.
     """
     from robotsix_central_deploy.registry.models import ComponentConfig  # noqa: PLC0415
 
-    config = ComponentConfig(
+    fields: dict[str, Any] = dict(
         id=spec.name,
         image=spec.image,
         container_name=spec.container_name or spec.name,
@@ -98,9 +100,9 @@ def _build_component_config_from_spec(
         chat_agent_mutatable=spec.chat_agent_mutatable,
         user=spec.user,
         target_disk=spec.target_disk,
-        **overrides,
     )
-    return config
+    fields.update(overrides)
+    return ComponentConfig(**fields)
 
 
 def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> None:

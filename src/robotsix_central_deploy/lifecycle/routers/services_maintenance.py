@@ -11,11 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from ..config import LifecycleConfig
 from ..deps import (
     _build_component_config_from_spec,
     _fetch_component_repo_files,
     _get_backend,
     _get_component_config_store,
+    _get_config,
     _get_config_yaml_store,
     _get_env_store,
     _get_registry,
@@ -31,6 +33,10 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
+from ...onboard.port_utils import (
+    collect_occupied_host_ports,
+    preserve_host_port_assignments,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -103,16 +109,19 @@ async def refresh_contract(
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     registry: ComponentRegistry = Depends(_get_registry),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> ContractRefreshResponse:
     """Re-parse the component's deploy/docker-compose.yml and update stored settings.
 
-    Contract-derived fields (image, ports, mounts, command, entrypoint,
-    health check, siblings, labels, etc.) are refreshed from the repo HEAD.
-    Operator-set fields (repo_id, caretaker_auto_update, mem_limit) and
-    environment overrides in the EnvStore are left untouched.  The endpoint
-    returns which fields changed so the operator can decide whether a
-    redeploy is needed.
+    Contract-derived fields (image, mounts, command, entrypoint, health check,
+    siblings, labels, etc.) are refreshed from the repo HEAD.  Operator-set
+    fields (``repo_id``, ``caretaker_auto_update``, ``mem_limit``,
+    ``allow_chat_access``, ``claude_mount``) and environment overrides in the
+    EnvStore are left untouched, as are existing host-port assignments —
+    the manifest's host ports are only honoured for container ports this
+    component did not already expose.  The endpoint returns which fields
+    changed so the operator can decide whether a redeploy is needed.
     """
     from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
         ParseError,
@@ -147,13 +156,38 @@ async def refresh_contract(
     # Namespace volume names (same as onboard confirm)
     spec = _namespace_spec_volumes(spec, name)
 
+    # Carry over host-port assignments before building the config. The manifest
+    # states the port the repo author picked; the port this component actually
+    # runs on was assigned at onboarding and may have been shifted to dodge a
+    # collision. Re-reading the manifest previously reset it, which silently
+    # pointed two components at the same host port.
+    occupied = collect_occupied_host_ports(
+        component_config_store, lifecycle_config.port, exclude_id=name
+    )
+    preserve_host_port_assignments(spec.ports, comp_cfg.ports, occupied)
+    old_sibling_ports = {sib.service_key: sib.ports for sib in comp_cfg.siblings}
+    for sib in spec.siblings:
+        preserve_host_port_assignments(
+            sib.ports, old_sibling_ports.get(sib.service_key, []), occupied
+        )
+
     # Build the new ComponentConfig from the DerivedSpec (same logic as onboard confirm).
     # Preserve operator-set / system-set fields from the existing config.
+    #
+    # mem_limit, allow_chat_access and claude_mount are settable by the operator
+    # through PUT /services/{name}/env, so the stored value outranks whatever the
+    # manifest's labels imply — the manifest simply has no way to know an operator
+    # turned chat access on. Omitting them here reset them to the label defaults:
+    # claude_mount flipping back to false strips a component's claude-auth volume
+    # on its next deploy, and allow_chat_access drops it from the chat roster.
     new_config = _build_component_config_from_spec(
         spec,
         git_url=comp_cfg.git_url,
         repo_id=comp_cfg.repo_id,
         caretaker_auto_update=comp_cfg.caretaker_auto_update,
+        mem_limit=comp_cfg.mem_limit,
+        allow_chat_access=comp_cfg.allow_chat_access,
+        claude_mount=comp_cfg.claude_mount,
     )
 
     # Diff: collect which contract-derived fields changed.

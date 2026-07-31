@@ -744,7 +744,7 @@
           "services"
         ],
         "summary": "Refetch deploy/docker-compose.yml from the repo and update stored contract",
-        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, ports, mounts, command, entrypoint,\nhealth check, siblings, labels, etc.) are refreshed from the repo HEAD.\nOperator-set fields (repo_id, caretaker_auto_update, mem_limit) and\nenvironment overrides in the EnvStore are left untouched.  The endpoint\nreturns which fields changed so the operator can decide whether a\nredeploy is needed.",
+        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, mounts, command, entrypoint, health check,\nsiblings, labels, etc.) are refreshed from the repo HEAD.  Operator-set\nfields (``repo_id``, ``caretaker_auto_update``, ``mem_limit``,\n``allow_chat_access``, ``claude_mount``) and environment overrides in the\nEnvStore are left untouched, as are existing host-port assignments \u2014\nthe manifest's host ports are only honoured for container ports this\ncomponent did not already expose.  The endpoint returns which fields\nchanged so the operator can decide whether a redeploy is needed.",
         "operationId": "refresh_contract_services__name__refresh_contract_post",
         "parameters": [
           {
