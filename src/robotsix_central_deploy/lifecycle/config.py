@@ -25,17 +25,21 @@ class VirtualComponentEntry(BaseModel):
     id: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]*$")
     chat_base_url: str = ""
     chat_skill_endpoint: str = "/chat-skill"
-    chat_skill: str = ""  # static skill body; when non-empty, used without probing
+    chat_skill: str = Field(
+        "", description="static skill body; when non-empty, used without probing"
+    )
     # --- Auth metadata for the chat agent ---
     # "basic" → HTTP Basic Auth (username_env / password_env)
     # "header" → custom header (header_name + token_env)
-    auth_type: str = ""  # "basic" | "header" | ""
-    auth_header_name: str = ""  # header name when auth_type="header"
-    auth_username_env: str = ""  # env var holding Basic-Auth username
+    auth_type: str = Field("", description='"basic" | "header" | ""')
+    auth_header_name: str = Field("", description='header name when auth_type="header"')
+    auth_username_env: str = Field(
+        "", description="env var holding Basic-Auth username"
+    )
     auth_password_env: SecretStr = Field(
         SecretStr(""), description="env var holding Basic-Auth password"
     )
-    auth_token_env: str = ""  # env var holding a bearer/header token
+    auth_token_env: str = Field("", description="env var holding a bearer/header token")
 
 
 class LangfuseProjectCreds(BaseModel):

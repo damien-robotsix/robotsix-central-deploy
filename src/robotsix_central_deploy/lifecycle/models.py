@@ -203,8 +203,8 @@ class ServiceRecord:
 class ContainerHealthSummary(BaseModel):
     """Health snapshot for one sibling container."""
 
-    name: str  # sibling service name (e.g. "mail-ingester")
-    health: str = ""  # HealthStatus value or "" (no healthcheck)
+    name: str = Field(description='sibling service name (e.g. "mail-ingester")')
+    health: str = Field("", description='HealthStatus value or "" (no healthcheck)')
     state: ServiceState = ServiceState.UNKNOWN
 
 
@@ -226,12 +226,14 @@ class ServiceStatus(BaseModel):
     last_error: Optional[str] = None
     updated_at: float = Field(default_factory=time.time)
     update_available: bool = False
-    running_digest: str = ""  # deployed_image_digest short-form (full sha256)
-    latest_digest: str = ""  # last known registry manifest digest
+    running_digest: str = Field(
+        "", description="deployed_image_digest short-form (full sha256)"
+    )
+    latest_digest: str = Field("", description="last known registry manifest digest")
     update_state: UpdateState = UpdateState.UNKNOWN
     sibling_health: list[ContainerHealthSummary] = []
     sibling_update_states: list[SiblingUpdateSummary] = []
-    overall_health: str = ""  # rollup: HealthStatus value or ""
+    overall_health: str = Field("", description='rollup: HealthStatus value or ""')
 
 
 class ServiceListItem(BaseModel):
@@ -240,8 +242,8 @@ class ServiceListItem(BaseModel):
     name: str
     state: ServiceState
     update_available: bool = False
-    component_id: str = (
-        ""  # non-empty for sibling records; equals the primary service name
+    component_id: str = Field(
+        "", description="non-empty for sibling records; equals the primary service name"
     )
 
 
@@ -272,7 +274,7 @@ class ServiceHealthResponse(BaseModel):
     """Response for ``GET /services/{name}/health``."""
 
     name: str
-    health: str  # HealthStatus value
+    health: str = Field(description="HealthStatus value")
 
 
 # ---------------------------------------------------------------------------
@@ -302,8 +304,8 @@ class RollbackOutcome:
 class DeployRequest(BaseModel):
     """Optional overrides for a deploy request."""
 
-    image: Optional[str] = (
-        None  # override image ref; if None, uses ComponentConfig.image
+    image: Optional[str] = Field(
+        None, description="override image ref; if None, uses ComponentConfig.image"
     )
     target_disk: str = Field(
         default="",
@@ -341,11 +343,13 @@ class DeployHistoryEntry(BaseModel):
     Recorded on every successful deploy (manual, caretaker, or rollback).
     """
 
-    digest: str  # resolved sha256:... of the deployed image
-    image_ref: str  # the ref actually deployed (tag or digest pin)
-    timestamp: float  # unix seconds (time.time())
+    digest: str = Field(description="resolved sha256:... of the deployed image")
+    image_ref: str = Field(description="the ref actually deployed (tag or digest pin)")
+    timestamp: float = Field(description="unix seconds (time.time())")
     source: DeploySource
-    previous_digest: str = ""  # sha256 that was running before this deploy
+    previous_digest: str = Field(
+        "", description="sha256 that was running before this deploy"
+    )
 
 
 class DeployHistoryResponse(BaseModel):
@@ -389,9 +393,9 @@ class DockerDfStats(BaseModel):
 class PerDiskUsage(BaseModel):
     """Usage for a single mounted data disk."""
 
-    device: str  # e.g. "/dev/sdb1"
-    mount_point: str  # e.g. "/mnt/data"
-    fs_type: str = ""  # e.g. "ext4"
+    device: str = Field(description='e.g. "/dev/sdb1"')
+    mount_point: str = Field(description='e.g. "/mnt/data"')
+    fs_type: str = Field("", description='e.g. "ext4"')
     total_bytes: int
     used_bytes: int
     free_bytes: int
