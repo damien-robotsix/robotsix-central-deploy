@@ -93,21 +93,25 @@
         },
         "chat_skill": {
           "default": "",
+          "description": "static skill body; when non-empty, used without probing",
           "title": "Chat Skill",
           "type": "string"
         },
         "auth_type": {
           "default": "",
+          "description": "\"basic\" | \"header\" | \"\"",
           "title": "Auth Type",
           "type": "string"
         },
         "auth_header_name": {
           "default": "",
+          "description": "header name when auth_type=\"header\"",
           "title": "Auth Header Name",
           "type": "string"
         },
         "auth_username_env": {
           "default": "",
+          "description": "env var holding Basic-Auth username",
           "title": "Auth Username Env",
           "type": "string"
         },
@@ -121,6 +125,7 @@
         },
         "auth_token_env": {
           "default": "",
+          "description": "env var holding a bearer/header token",
           "title": "Auth Token Env",
           "type": "string"
         }
@@ -553,3 +558,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+
