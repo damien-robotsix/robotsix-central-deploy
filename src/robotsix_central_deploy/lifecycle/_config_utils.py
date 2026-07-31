@@ -661,7 +661,7 @@ def _restore_secrets_from_current(
 
 
 # ---------------------------------------------------------------------------
-# llmio tier config writer (shared by services_config, services_deploy)
+# llmio tier config writer (shared by services_deploy)
 # ---------------------------------------------------------------------------
 
 

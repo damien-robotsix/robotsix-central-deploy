@@ -18,8 +18,7 @@ models.py  (Pydantic schemas)
    │
    └── _store_utils.py → JsonFileStore   (atomic write + asyncio.Lock base)
           ├── env_store.py → EnvStore
-          ├── config_yaml_store.py → ConfigYamlStore
-          ├── deploy_history_store.py → DeployHistoryStore
+                    ├── deploy_history_store.py → DeployHistoryStore
           └── chat_agent_audit_store.py → ChatAgentAuditStore
 ```
 
@@ -61,7 +60,6 @@ provides atomic writes (write to tmp file, then rename) guarded by an
 | Store | Purpose | Key methods |
 | ------- | --------- | ------------- |
 | `EnvStore` | Per-component env overrides and encrypted secrets | `get(name)`, `upsert(name, env, secrets)`, `delete_key(name, key)` |
-| `ConfigYamlStore` | Per-component `config.yaml` schema + current values + rollback snapshots | `get_current(name)`, `update_current(name, vals)`, `save_previous(name)`, `get_previous(name)` |
 | `DeployHistoryStore` | Per-component deploy history (most-recent-first, capped at 20) | `append(name, entry)`, `list(name)` |
 | `ChatAgentAuditStore` | Global audit log for chat-agent mutations (capped at 200) | `append(entry)`, `list(limit, component)` |
 | `SystemSettingsStore` | Operator-configurable global settings | `get()`, `put(settings)`, `overlay(lifecycle_config)` |

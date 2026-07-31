@@ -248,13 +248,6 @@
       "title": "Secret Key Path",
       "type": "string"
     },
-    "config_yaml_store_path": {
-      "advanced": true,
-      "default": "data/component_config_yaml.json",
-      "description": "Path of the per-component config template/values store.",
-      "title": "Config Yaml Store Path",
-      "type": "string"
-    },
     "deploy_history_store_path": {
       "advanced": true,
       "default": "data/deploy_history.json",

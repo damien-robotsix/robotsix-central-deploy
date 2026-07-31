@@ -23,11 +23,9 @@ from ..deps import (
     _get_deploy_history_store,
     _namespace_spec_volumes,
     _require_config_standard,
-    _validate_config_or_422,
     _build_component_config_from_spec,
     JobRegistry,
 )
-from .._config_utils import _canonical_hash, _merge_config, _strip_secret_values
 from ..config import LifecycleConfig
 from ..models import (
     DeployHistoryEntry,

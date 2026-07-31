@@ -62,11 +62,6 @@ from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
 from robotsix_central_deploy.lifecycle.deps.seed import (
     _build_component_config_from_spec,
     _namespace_spec_volumes,
-    _validate_config_or_422,
-)
-from robotsix_central_deploy.lifecycle._config_utils import (
-    _canonical_hash,
-    _merge_config,
 )
 from ..config import LifecycleConfig
 from .onboard import _parse_github_owner_repo as _parse_gh

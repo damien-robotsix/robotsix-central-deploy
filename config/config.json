@@ -14,7 +14,6 @@
   "disk_warn_pct": 10.0,
   "env_store_path": "component_env.json",
   "secret_key_path": "secrets.key",
-  "config_yaml_store_path": "data/component_config_yaml.json",
   "self_update_watchtower_image": "containrrr/watchtower:1.7.1",
   "self_update_docker_api_version": "1.44",
   "registry_check_ttl": 300,

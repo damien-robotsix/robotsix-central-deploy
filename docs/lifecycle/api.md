@@ -24,8 +24,6 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_components
 
-::: robotsix_central_deploy.lifecycle.routers.chat_config
-
 ::: robotsix_central_deploy.lifecycle.routers.chat_disk
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_env
@@ -55,8 +53,6 @@
 ::: robotsix_central_deploy.lifecycle.routers.chat_test_deploy
 
 ::: robotsix_central_deploy.lifecycle.routers.claude_auth
-
-::: robotsix_central_deploy.lifecycle.routers.services_config
 
 ::: robotsix_central_deploy.lifecycle.routers.services_deploy
 
@@ -167,8 +163,6 @@
 ::: robotsix_central_deploy.registry.models
 
 ::: robotsix_central_deploy.registry.config_store
-
-::: robotsix_central_deploy.registry.config_yaml_store
 
 ::: robotsix_central_deploy.registry.env_store
 

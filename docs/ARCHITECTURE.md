@@ -120,7 +120,6 @@ localhost + API-key restricted),
 | `loader.py` | `ComponentRegistry` | Reads **static** YAML manifest (`registry.yaml`) into an in-memory index. Backs the gateway's component name resolution. |
 | `config_store.py` | `ComponentConfigStore` | JSON store for **dynamically onboarded** components. Async-locked, atomic write (tmp + rename). |
 | `env_store.py` | `EnvStore` | JSON store for per-component environment variables and Fernet-encrypted secrets. |
-| `config_yaml_store.py` | `ConfigYamlStore` | JSON store for per-component `config.yaml` templates and user-saved values. |
 | `settings_store.py` | `SystemSettingsStore` | JSON store for system-wide operator settings (auth, disk warn %, registry check interval, log level, gateway base domain). |
 | `secret_key.py` | `SecretKeyManager` | Fernet encryption/decryption wrapper. **Key loss is irrecoverable** — secrets must be re-entered if `secrets.key` is deleted. |
 
@@ -189,7 +188,6 @@ localhost + API-key restricted),
       ▼
 4.  POST /onboard/confirm {DerivedSpec}
       persist ComponentConfig → ComponentConfigStore
-      optionally save config.yaml template → ConfigYamlStore
       │
       ▼
 5.  DockerSdkBackend.deploy()
@@ -396,4 +394,6 @@ Two background `asyncio.Task` loops run in the same process:
    persisted to disk, and optionally filed as board tickets.
 
 Both are started during app startup and run for the lifetime of the
+process.
+up and run for the lifetime of the
 process.

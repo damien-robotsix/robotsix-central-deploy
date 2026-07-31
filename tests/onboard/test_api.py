@@ -1525,9 +1525,10 @@ class TestOnboardPreflightWithConfig:
 
 
 class TestOnboardConfirmWithConfig:
-    async def test_confirm_with_config_schema_saves_template_and_writes_volume(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_confirm_with_config_schema_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
+        """config_schema present — onboard succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-svc")
         spec.config_schema = {
             "type": "object",
@@ -1541,20 +1542,6 @@ class TestOnboardConfirmWithConfig:
         spec.config_volume = "cfg-svc-data"
         spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
 
-        # Track write_config_to_volume calls
-        captured: list[tuple] = []
-        original_write = server_mod.app.state.backend.write_config_to_volume
-
-        async def _fake_write(volume_name: str, config_dict: dict) -> None:
-            captured.append((volume_name, config_dict))
-            return await original_write(volume_name, config_dict)
-
-        monkeypatch.setattr(
-            server_mod.app.state.backend,
-            "write_config_to_volume",
-            _fake_write,
-        )
-
         resp = await client.post(
             "/onboard/confirm",
             json={"spec": spec.model_dump()},
@@ -1567,16 +1554,13 @@ class TestOnboardConfirmWithConfig:
         # Poll until done
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
-        # Volume written via backend — uses the real config volume (now namespaced), not synthetic
-        assert len(captured) == 1
-        assert captured[0][0] == "cfg-svc-cfg-svc-data"
-        assert captured[0][1] == {"host": "", "password": ""}
 
         # named_volumes includes the config volume (from spec.volume_mounts)
         registry_obj: ComponentRegistry = server_mod.app.state.registry
         in_memory_config = registry_obj.get("cfg-svc")
         assert in_memory_config is not None
         assert "cfg-svc-cfg-svc-data" in in_memory_config.named_volumes
+
     async def test_confirm_without_config_schema_no_template_saved(
         self, client: AsyncClient, auth_headers: dict
     ):
@@ -1596,10 +1580,10 @@ class TestOnboardConfirmWithConfig:
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
 
-    async def test_confirm_with_config_values_merges_and_writes_volume(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_confirm_with_config_values_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """config_values from the UI are merged with template and written to volume."""
+        """config_values from the UI are accepted; onboard succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-svc")
         spec.config_schema = {
             "type": "object",
@@ -1611,20 +1595,6 @@ class TestOnboardConfirmWithConfig:
         }
         spec.config_volume = "cfg-svc-data"
         spec.volume_mounts.append(VolumeMount(host="cfg-svc-data", container="/cfg"))
-
-        # Track write_config_to_volume calls
-        captured: list[tuple] = []
-        original_write = server_mod.app.state.backend.write_config_to_volume
-
-        async def _fake_write(volume_name: str, config_dict: dict) -> None:
-            captured.append((volume_name, config_dict))
-            return await original_write(volume_name, config_dict)
-
-        monkeypatch.setattr(
-            server_mod.app.state.backend,
-            "write_config_to_volume",
-            _fake_write,
-        )
 
         resp = await client.post(
             "/onboard/confirm",
@@ -1642,19 +1612,10 @@ class TestOnboardConfirmWithConfig:
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
 
-        # Merged config written to volume — user values overlay template defaults
-        assert len(captured) == 1
-        assert captured[0][0] == "cfg-svc-cfg-svc-data"
-        assert captured[0][1] == {
-            "host": "10.0.0.1",
-            "password": "s3cret",
-            "port": 8080,
-        }
-
-    async def test_confirm_without_config_values_writes_template_only(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_confirm_without_config_values_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """Without config_values, the template is written as-is (back-compat)."""
+        """Without config_values, onboard still succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-svc2")
         spec.config_schema = {
             "type": "object",
@@ -1665,19 +1626,6 @@ class TestOnboardConfirmWithConfig:
         }
         spec.config_volume = "cfg-svc2-data"
         spec.volume_mounts.append(VolumeMount(host="cfg-svc2-data", container="/cfg"))
-
-        captured: list[tuple] = []
-        original_write = server_mod.app.state.backend.write_config_to_volume
-
-        async def _fake_write(volume_name: str, config_dict: dict) -> None:
-            captured.append((volume_name, config_dict))
-            return await original_write(volume_name, config_dict)
-
-        monkeypatch.setattr(
-            server_mod.app.state.backend,
-            "write_config_to_volume",
-            _fake_write,
-        )
 
         # No config_values field at all
         resp = await client.post(
@@ -1693,10 +1641,6 @@ class TestOnboardConfirmWithConfig:
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
 
-        # Template written as-is (empty defaults)
-        assert len(captured) == 1
-        assert captured[0][1] == {"host": "", "password": ""}
-
 
 # ---------------------------------------------------------------------------
 # config.example.json seed values (deploy defaults) tests
@@ -1704,9 +1648,11 @@ class TestOnboardConfirmWithConfig:
 
 
 class TestOnboardConfigExampleValues:
-    """config.example.json values seed the onboard config as deploy defaults.
+    """config.example.json values are accepted during onboard (config storage decommissioned).
 
-    Precedence: user form values > config.example.json values > schema default.
+    Central-deploy no longer writes or validates config values — each component
+    manages its own settings.  These tests verify that onboard still succeeds
+    with config_schema and example values present.
     """
 
     @staticmethod
@@ -1730,25 +1676,10 @@ class TestOnboardConfigExampleValues:
             },
         }
 
-    @staticmethod
-    def _wire_capture(monkeypatch) -> list:
-        captured: list[tuple] = []
-        original_write = server_mod.app.state.backend.write_config_to_volume
-
-        async def _fake_write(volume_name: str, config_dict: dict) -> None:
-            captured.append((volume_name, config_dict))
-            return await original_write(volume_name, config_dict)
-
-        monkeypatch.setattr(
-            server_mod.app.state.backend, "write_config_to_volume", _fake_write
-        )
-        return captured
-
-    async def test_example_value_wins_over_schema_default_when_user_untouched(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_example_value_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """Example api_host=0.0.0.0 (≠ schema default 127.0.0.1); user leaves it
-        untouched → merged config carries the EXAMPLE value."""
+        """config_schema with example values — onboard succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("ex-svc")
         spec.config_schema = self._schema()
         spec.config_example_values = {
@@ -1757,8 +1688,6 @@ class TestOnboardConfigExampleValues:
         }
         spec.config_volume = "ex-svc-data"
         spec.volume_mounts.append(VolumeMount(host="ex-svc-data", container="/cfg"))
-
-        captured = self._wire_capture(monkeypatch)
 
         resp = await client.post(
             "/onboard/confirm",
@@ -1769,26 +1698,15 @@ class TestOnboardConfigExampleValues:
         job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
         assert job["phase"] == "done"
 
-        assert len(captured) == 1
-        written = captured[0][1]
-        # Example value wins over schema default 127.0.0.1
-        assert written["settings"]["api_host"] == "0.0.0.0"
-        # Port unset in example → schema default fills in
-        assert written["settings"]["port"] == 8080
-        # Empty-placeholder secret stays empty (never set from example)
-        assert written["api_key"] == ""
-
-    async def test_user_value_overrides_example_value(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_user_value_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """A user-supplied form value beats the example value."""
+        """config_values supplied — onboard succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("ex-svc2")
         spec.config_schema = self._schema()
         spec.config_example_values = {"settings": {"api_host": "0.0.0.0"}}
         spec.config_volume = "ex-svc2-data"
         spec.volume_mounts.append(VolumeMount(host="ex-svc2-data", container="/cfg"))
-
-        captured = self._wire_capture(monkeypatch)
 
         resp = await client.post(
             "/onboard/confirm",
@@ -1802,20 +1720,16 @@ class TestOnboardConfigExampleValues:
         job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
         assert job["phase"] == "done"
 
-        assert captured[0][1]["settings"]["api_host"] == "10.0.0.5"
-
-    async def test_absent_example_values_falls_back_to_schema_default(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_absent_example_values_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """No config.example.json → schema defaults (unchanged legacy behavior)."""
+        """No config.example.json — onboard succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("ex-svc3")
         spec.config_schema = self._schema()
         spec.config_example_values = None
         spec.config_volume = "ex-svc3-data"
         spec.volume_mounts.append(VolumeMount(host="ex-svc3-data", container="/cfg"))
 
-        captured = self._wire_capture(monkeypatch)
-
         resp = await client.post(
             "/onboard/confirm",
             json={"spec": spec.model_dump()},
@@ -1825,23 +1739,18 @@ class TestOnboardConfigExampleValues:
         job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
         assert job["phase"] == "done"
 
-        assert captured[0][1]["settings"]["api_host"] == "127.0.0.1"
-
-    async def test_example_secret_placeholder_never_injected(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_example_secret_placeholder_onboards_successfully(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """A NON-empty secret placeholder in the example must not become set —
-        the operator still has to supply the secret."""
+        """Secret placeholder in example — onboard succeeds (config storage decommissioned)."""
         spec = _make_derived_spec("ex-svc4")
         spec.config_schema = self._schema()
         spec.config_example_values = {
             "settings": {"api_host": "0.0.0.0"},
-            "api_key": "REPLACE_ME",  # bogus placeholder that must be stripped
+            "api_key": "REPLACE_ME",  # bogus placeholder
         }
         spec.config_volume = "ex-svc4-data"
         spec.volume_mounts.append(VolumeMount(host="ex-svc4-data", container="/cfg"))
-
-        captured = self._wire_capture(monkeypatch)
 
         resp = await client.post(
             "/onboard/confirm",
@@ -1851,11 +1760,6 @@ class TestOnboardConfigExampleValues:
         assert resp.status_code == 202
         job = await _poll_job_until_done(client, resp.json()["job_id"], auth_headers)
         assert job["phase"] == "done"
-
-        # Secret stripped from example → falls to "" (unset), not "REPLACE_ME"
-        assert captured[0][1]["api_key"] == ""
-        # Non-secret example value still seeds
-        assert captured[0][1]["settings"]["api_host"] == "0.0.0.0"
 
 
 # ---------------------------------------------------------------------------
@@ -1967,10 +1871,15 @@ class TestOnboardConfigSchemaValidation:
         data = resp.json()
         assert "missing config/config.schema.json" in data["error"]
 
-    async def test_confirm_missing_required_field_returns_422(
+    async def test_confirm_config_values_accepted_no_validation(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Submit invalid type for a field → 422."""
+        """config_values with missing required field — accepted (config storage decommissioned).
+
+        Central-deploy no longer validates config values; the endpoint always
+        returns 202 for well-formed requests.  Each component validates its own
+        settings at startup.
+        """
         spec = _make_derived_spec("cfg-req")
         spec.config_schema = {
             "type": "object",
@@ -1991,14 +1900,12 @@ class TestOnboardConfigSchemaValidation:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 422
-        error_msg = resp.json()["error"]
-        assert "integer" in error_msg.lower() or "port" in error_msg.lower()
+        assert resp.status_code == 202
 
-    async def test_confirm_wrong_type_returns_422(
+    async def test_confirm_wrong_type_accepted_no_validation(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Submit {"port": "not-a-number"} for integer field → 422."""
+        """Submit {"port": "not-a-number"} for integer field — accepted (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-type")
         spec.config_schema = {
             "type": "object",
@@ -2018,14 +1925,12 @@ class TestOnboardConfigSchemaValidation:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 422
-        error_msg = resp.json()["error"]
-        assert "integer" in error_msg.lower()
+        assert resp.status_code == 202
 
-    async def test_confirm_invalid_enum_returns_422(
+    async def test_confirm_invalid_enum_accepted_no_validation(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Submit {"mode": "invalid"} for enum field → 422."""
+        """Submit {"mode": "invalid"} for enum field — accepted (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-enum")
         spec.config_schema = {
             "type": "object",
@@ -2044,9 +1949,7 @@ class TestOnboardConfigSchemaValidation:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 422
-        error_msg = resp.json()["error"]
-        assert "enum" in error_msg.lower() or "invalid" in error_msg.lower()
+        assert resp.status_code == 202
 
     async def test_confirm_omitted_nullable_object_field_validates(
         self, client: AsyncClient, auth_headers: dict
@@ -2089,13 +1992,10 @@ class TestOnboardConfigSchemaValidation:
 
         assert resp.status_code == 202
 
-    async def test_confirm_empty_string_for_nullable_object_field_returns_422(
+    async def test_confirm_empty_string_for_nullable_object_field_accepted(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """The pre-fix failure mode: submitting "" for a nullable-object field
-        fails validation (anyOf[object, null]) → 422. This is exactly what the
-        JS form used to emit; the client-side fix omits the field instead.
-        """
+        """Submitting "" for a nullable-object field — accepted (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-nullable-bad")
         spec.config_schema = {
             "type": "object",
@@ -2126,13 +2026,12 @@ class TestOnboardConfigSchemaValidation:
             headers=auth_headers,
         )
 
-        assert resp.status_code == 422
+        assert resp.status_code == 202
 
-    async def test_confirm_secret_preserved_when_sentinel_submitted(
-        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    async def test_confirm_secret_sentinel_accepted_no_validation(
+        self, client: AsyncClient, auth_headers: dict
     ):
-        """During confirm with no existing config, "***" for a secret field
-        defaults to empty string since there's no existing value to preserve."""
+        """config_values with "***" sentinel for secret field — accepted (config storage decommissioned)."""
         spec = _make_derived_spec("cfg-secret")
         spec.config_schema = {
             "type": "object",
@@ -2147,19 +2046,6 @@ class TestOnboardConfigSchemaValidation:
         }
         spec.config_volume = "cfg-secret-data"
 
-        captured: list[dict] = []
-        original_write = server_mod.app.state.backend.write_config_to_volume
-
-        async def _fake_write(volume_name: str, config_dict: dict) -> None:
-            captured.append(config_dict)
-            return await original_write(volume_name, config_dict)
-
-        monkeypatch.setattr(
-            server_mod.app.state.backend,
-            "write_config_to_volume",
-            _fake_write,
-        )
-
         resp = await client.post(
             "/onboard/confirm",
             json={
@@ -2173,11 +2059,6 @@ class TestOnboardConfigSchemaValidation:
         job_id = resp.json()["job_id"]
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
-
-        # "***" with no existing → empty string
-        assert len(captured) == 1
-        assert captured[0]["api_key"] == ""
-        assert captured[0]["host"] == "10.0.0.1"
 
     async def test_confirm_secret_detected_by_format_writeonly_not_sentinel(
         self, client: AsyncClient, auth_headers: dict

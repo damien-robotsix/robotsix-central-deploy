@@ -76,8 +76,6 @@ async def deploy_chat_skill() -> str:
         "- `GET /chat/services/{name}/volumes` — list named volumes for a service (per-component gate)\n"
         "- `GET /chat/services/{name}/volumes/{vol}/files?path=…` — read-only file inspection within a volume (per-component gate)\n\n"
         "## Scoped write endpoints (chat-agent allowlisted)\n"
-        "- `PUT /chat/config/{name}` — update non-secret config keys\n"
-        "- `POST /chat/config/{name}/rollback` — restore previous config version\n"
         "- `POST /chat/services` — register a new managed component (registration only; no auto-start)\n"
         "- `POST /chat/services/{name}/deploy` — first-boot deploy a newly-registered component (create + start container)\n"
         "- `POST /chat/services/{name}/restart` — restart a service\n"

@@ -45,7 +45,6 @@ for local development builds from the checkout).
       "docker_socket_url": "tcp://socket-proxy:2375",
       "env_store_path": "/data/component_env.json",
       "secret_key_path": "/data/secrets.key",
-      "config_yaml_store_path": "/data/component_config_yaml.json",
       "system_settings_path": "/data/system_settings.json",
       "disk_path": "/host_root"
     }

@@ -44,7 +44,6 @@ from .routers.services import router as services_router
 from .routers.services_maintenance import router as services_maintenance_router
 from .routers.services_lifecycle import router as services_lifecycle_router
 from .routers.services_deploy import router as services_deploy_router
-from .routers.services_config import router as services_config_router
 from .routers.services_env import router as services_env_router
 from .routers.system import router as system_router
 from .routers.volumes import router as volumes_router

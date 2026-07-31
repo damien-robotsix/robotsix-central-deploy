@@ -204,91 +204,6 @@ def auth_headers() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-
-
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_not_allowlisted(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """PUT /chat/config/other-svc returns 403 for non-allowlisted service."""
-    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/other-svc",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_no_schema_returns_404(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """PUT /chat/config/chat with no stored template returns 404."""
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_chat_config_write_follows_restart_access(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """Services the chat agent can restart are also config-writable.
-
-    Verifies acceptance criterion: restart and config-write authorizations
-    are coupled through the single ``chat_agent_mutatable`` flag.  An
-    allowlisted service returns 200 on both; a non-allowlisted service
-    returns 403 on both.
-    """
-    # -- Allowlisted service: both restart and config-write succeed -----
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp_restart = await client.post(
-        "/chat/services/chat/restart",
-        headers=auth_headers,
-    )
-    assert resp_restart.status_code == 200, f"restart failed: {resp_restart.text}"
-
-    resp_config = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp_config.status_code == 200, (
-        f"config-write should succeed when restart succeeds; "
-        f"got {resp_config.status_code}: {resp_config.text}"
-    )
-
-    # -- Non-allowlisted service: both return 403 -----------------------
-    resp_restart2 = await client.post(
-        "/chat/services/other-svc/restart",
-        headers=auth_headers,
-    )
-    assert resp_restart2.status_code == 403
-
-    resp_config2 = await client.put(
-        "/chat/config/other-svc",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp_config2.status_code == 403
-
-
 @pytest.mark.asyncio
 async def test_chat_mutation_allowed_via_allow_chat_access_flag(
     client: AsyncClient,
@@ -310,18 +225,7 @@ async def test_chat_mutation_allowed_via_allow_chat_access_flag(
 
     await store.put(ServiceRecord(name="chat-access-only", state=ServiceState.RUNNING))
 
-    # Config-write must succeed.
-    resp_config = await client.put(
-        "/chat/config/chat-access-only",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp_config.status_code == 200, (
-        f"config-write should succeed when allow_chat_access=True; "
-        f"got {resp_config.status_code}: {resp_config.text}"
-    )
-
-    # Restart must also succeed.
+    # Restart must succeed.
     resp_restart = await client.post(
         "/chat/services/chat-access-only/restart",
         headers=auth_headers,
@@ -330,50 +234,6 @@ async def test_chat_mutation_allowed_via_allow_chat_access_flag(
         f"restart should succeed when allow_chat_access=True; "
         f"got {resp_restart.status_code}: {resp_restart.text}"
     )
-
-
-@pytest.mark.asyncio
-async def test_chat_mutation_denied_when_both_flags_are_false(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    component_config_store: ComponentConfigStore,
-):
-    """Both flags false → 403, even when the service record exists."""
-    cfg = _make_config("no-access", "ghcr.io/test/no-access:main")
-    # Explicitly confirm both flags are false.
-    cfg.allow_chat_access = False
-    cfg.chat_agent_mutatable = False
-    component_config_store.register(cfg)
-
-    await store.put(ServiceRecord(name="no-access", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/no-access",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 403
-
-
-# ---------------------------------------------------------------------------
-# Config rollback
-# ---------------------------------------------------------------------------
-
-
-
-
-@pytest.mark.asyncio
-async def test_chat_config_rollback_not_allowlisted(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-):
-    """POST /chat/config/other-svc/rollback returns 403."""
-    resp = await client.post(
-        "/chat/config/other-svc/rollback",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -526,10 +386,9 @@ async def test_chat_audit_log(
     """GET /chat/audit-log returns recent audit entries."""
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
-    # Perform a config update to generate an audit entry.
-    await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
+    # Perform a restart to generate an audit entry.
+    await client.post(
+        "/chat/services/chat/restart",
         headers=auth_headers,
     )
 
@@ -543,9 +402,7 @@ async def test_chat_audit_log(
     assert len(data["entries"]) >= 1
     entry = data["entries"][0]
     assert entry["component"] == "chat"
-    assert entry["action"] == "config_update"
-    assert entry["key"] == "debug"
-    assert entry["new_value"] is True
+    assert entry["action"] == "restart"
 
 
 @pytest.mark.asyncio
@@ -558,9 +415,8 @@ async def test_chat_audit_log_filtered(
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
     await store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
 
-    await client.put(
-        "/chat/config/cognee",
-        json={"values": {"debug": True}},
+    await client.post(
+        "/chat/services/cognee/restart",
         headers=auth_headers,
     )
 
@@ -588,8 +444,6 @@ async def test_chat_endpoints_require_auth(
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     endpoints = [
-        ("PUT", "/chat/config/chat", {"values": {"debug": True}}),
-        ("POST", "/chat/config/chat/rollback", None),
         ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
         ("POST", "/chat/services/chat/restart", None),
         ("POST", "/chat/services/chat/update", None),

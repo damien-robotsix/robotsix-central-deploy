@@ -1,6 +1,6 @@
 """Chat agent router — router aggregation for the chat-agent endpoints.
 
-The domain modules (chat_components, chat_config, chat_self, chat_services,
+The domain modules (chat_components, chat_self, chat_services,
 chat_audit) each define their own ``APIRouter``.  This module aggregates them
 into a single ``router`` so ``app.py`` only needs a single ``include_router``
 call.
