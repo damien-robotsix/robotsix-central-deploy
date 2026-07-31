@@ -110,20 +110,24 @@ def _get_pull_sync(client: Any, owner: str, repo: str, number: int) -> dict[str,
 class MergePullRequest(BaseModel):
     """Body for ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge``.
 
-    Both fields are optional; GitHub applies the repo/PR-appropriate
-    defaults when they are omitted.
+    All fields are optional; *merge_method* defaults to ``"squash"``.
     """
 
     merge_method: str | None = Field(
-        None,
-        description="Merge method: ``merge`` (default for most repos), "
-        "``squash``, or ``rebase``. Omit to use the repo/PR default.",
+        "squash",
+        description="Merge method: ``merge``, ``squash`` (default), or ``rebase``.",
     )
     sha: str | None = Field(
         None,
         description="Expected HEAD SHA of the pull request. When provided "
         "this is passed through to GitHub as a guard against merging a "
-        "branch that has moved since the operator last reviewed it.",
+        "branch that has moved since the operator last reviewed it. "
+        "GitHub returns 409 when the head SHA has moved away from this value.",
+    )
+    commit_title: str | None = Field(
+        None,
+        description="Title for the merge commit (optional). Passed through "
+        "to GitHub as ``commit_title``.",
     )
 
 
@@ -142,6 +146,8 @@ def _merge_pull_sync(
         kwargs["sha"] = body.sha
     else:
         kwargs["sha"] = GithubObject.NotSet
+    if body.commit_title:
+        kwargs["commit_title"] = body.commit_title
 
     merge_status = pr.merge(**kwargs)
     return {
@@ -167,6 +173,8 @@ def _merge_via_raw_requester(
         input_params["merge_method"] = body.merge_method
     if body.sha:
         input_params["sha"] = body.sha
+    if body.commit_title:
+        input_params["commit_title"] = body.commit_title
 
     headers, data = client.requester.requestJsonAndCheck(
         "PUT",

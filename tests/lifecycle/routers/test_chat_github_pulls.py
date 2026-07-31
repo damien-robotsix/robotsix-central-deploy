@@ -381,7 +381,7 @@ class TestMergePull:
     async def test_merges_without_body_fields(
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
     ):
-        """Empty body — merge with defaults, sha=NotSet."""
+        """Empty body — merge with squash default, sha=NotSet."""
         fake_pr = _FakePull(42)
         fake_pr.merge = MagicMock(return_value=_FakeMergeStatus())
         repo_obj = MagicMock()
@@ -404,6 +404,38 @@ class TestMergePull:
 
         assert resp.status_code == 200
         fake_pr.merge.assert_called_once()
+        # Default merge_method is "squash"
+        assert fake_pr.merge.call_args.kwargs["merge_method"] == "squash"
+
+    async def test_merges_with_commit_title(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        """commit_title is passed through to pr.merge()."""
+        fake_pr = _FakePull(42)
+        fake_pr.merge = MagicMock(return_value=_FakeMergeStatus(sha="sha-commit"))
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/merge",
+            json={"merge_method": "squash", "commit_title": "My merge title"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        fake_pr.merge.assert_called_once()
+        kwargs = fake_pr.merge.call_args.kwargs
+        assert kwargs["merge_method"] == "squash"
+        assert kwargs["commit_title"] == "My merge title"
 
     async def test_records_audit_entry(
         self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
