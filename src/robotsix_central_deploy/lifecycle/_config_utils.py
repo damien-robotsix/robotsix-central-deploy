@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -17,27 +17,6 @@ if TYPE_CHECKING:
     from ..registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# _deep_merge (from services.py)
-# ---------------------------------------------------------------------------
-
-
-def _deep_merge(
-    base: dict[str, object], override: dict[str, object]
-) -> dict[str, object]:
-    """Recursively merge *override* into *base*; override values win on conflict."""
-    result: dict[str, object] = dict(base)
-    for key, val in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(
-                cast("dict[str, object]", result[key]),
-                cast("dict[str, object]", val),
-            )
-        else:
-            result[key] = val
-    return result
 
 
 # ---------------------------------------------------------------------------
