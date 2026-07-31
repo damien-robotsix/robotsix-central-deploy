@@ -18,7 +18,6 @@ from ..deps import (
     _get_backend,
     _get_component_config_store,
     _get_config,
-    _get_config_yaml_store,
     _get_env_store,
     _get_registry,
     _get_sibling_pairs,
@@ -29,7 +28,6 @@ from ..models import ErrorDetail
 from ..schemas import ContractRefreshResponse
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
@@ -107,7 +105,6 @@ async def _delete_component_volumes(
 async def refresh_contract(
     name: str,
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     registry: ComponentRegistry = Depends(_get_registry),
     lifecycle_config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
@@ -248,12 +245,6 @@ async def refresh_contract(
     await component_config_store.put(new_config)
     registry.register(new_config)
 
-    # If the config schema changed (new or removed), refresh the stored template.
-    if spec.config_schema is not None:
-        await config_yaml_store.save_template(name, spec.config_schema)
-    # Note: we do NOT remove the template if the schema is now absent —
-    # the operator may still want the old schema in the dashboard.
-
     logger.info(
         "Refreshed contract for %s from repo: %d field(s) changed (%s)",
         _sanitize_log(name),
@@ -291,7 +282,6 @@ async def delete_service(
     store: ServiceStore = Depends(_get_store),
     config_store: ComponentConfigStore = Depends(_get_component_config_store),
     env_store: EnvStore = Depends(_get_env_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
@@ -382,11 +372,8 @@ async def delete_service(
     # 7. Delete primary env/secrets
     await env_store.delete(name)
 
-    # 8. Delete primary config.json
-    await config_yaml_store.delete(name)
-
-    # 9. Delete from config store (no-op if absent)
+    # 8. Delete from config store (no-op if absent)
     await config_store.delete(name)
 
-    # 10. Remove from in-memory registry (no-op if absent)
+    # 9. Remove from in-memory registry (no-op if absent)
     registry.unregister(name)

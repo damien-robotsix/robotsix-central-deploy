@@ -74,7 +74,6 @@ def _ensure_registry(monkeypatch, registry):
     from robotsix_central_deploy.lifecycle.deps import JobRegistry
     from robotsix_central_deploy.lifecycle.store import InMemoryStore
     from robotsix_central_deploy.registry.config_store import ComponentConfigStore
-    from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
     from robotsix_central_deploy.registry.deploy_history_store import (
         DeployHistoryStore,
     )
@@ -96,7 +95,6 @@ def _ensure_registry(monkeypatch, registry):
     key_manager = SecretKeyManager(Path("/tmp/test_fernet_key"))  # noqa: S108
     env_store = EnvStore(Path("/tmp/test_env_store.json"), key_manager)  # noqa: S108
     config_store = ComponentConfigStore(Path("/tmp/test_config_store.json"))  # noqa: S108
-    config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
     deploy_history_store = DeployHistoryStore(Path("/tmp/test_deploy_history.json"))  # noqa: S108
     job_registry = JobRegistry()
 
@@ -111,7 +109,6 @@ def _ensure_registry(monkeypatch, registry):
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.env_store = env_store
     server_mod.app.state.component_config_store = config_store
-    server_mod.app.state.config_yaml_store = config_yaml_store
     server_mod.app.state.deploy_history_store = deploy_history_store
     server_mod.app.state.job_registry = job_registry
 
@@ -426,118 +423,6 @@ class TrackingInMemoryBackend(NoopBackend):
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         return dict(self._volumes.get(volume_name, {}))
-
-
-class TestDeployDriftGuard:
-    """Deploy MUST auto-import a drifted config volume before writing, so the
-    live operator config is never silently replaced by the stored (possibly
-    stale) current config."""
-
-    async def test_deploy_does_not_overwrite_drifted_volume(
-        self, auth_headers: dict, registry
-    ):
-        """Simulate the 2026-07-16 incident: stored current = template defaults,
-        volume = real operator config.  Deploy must auto-import the live volume
-        rather than overwrite it with the stale stored current."""
-        from robotsix_central_deploy.lifecycle._config_utils import _canonical_hash
-
-        # -- tracking backend so we can inspect volume writes --
-        tracking = TrackingInMemoryBackend()
-        server_mod.app.state.backend = tracking
-        server_mod._backend = tracking
-
-        # -- component with config --
-        comp = ComponentConfig(
-            id="chat",
-            image="ghcr.io/org/chat:latest",
-            container_name="chat",
-            ports=[PortMapping(host=8080, container=8080)],
-            mounts=[VolumeMount(host="chat-config", container="/config")],
-            config_volume="chat-config",
-        )
-        config_store = server_mod.app.state.component_config_store
-        await config_store.put(comp)
-
-        # Register in the ComponentRegistry so deploy can find it.
-        registry.register(comp)
-
-        # Seed a ServiceRecord.
-        store = server_mod.app.state.store
-        await store.put(
-            ServiceRecord(
-                name="chat",
-                state=ServiceState.STOPPED,
-                image="ghcr.io/org/chat:latest",
-            )
-        )
-
-        # -- config YAML store setup --
-        cys = server_mod.app.state.config_yaml_store
-
-        # Template (schema + defaults)
-        template: dict[str, Any] = {
-            "type": "object",
-            "properties": {
-                "server_port": {"type": "integer", "default": 3000},
-                "url": {"type": "string", "default": "https://default.example.com"},
-                "api_key": {
-                    "type": "string",
-                    "format": "password",
-                    "writeOnly": True,
-                    "default": "",
-                },
-            },
-        }
-        await cys.save_template("chat", template)
-
-        # Stored current = stale template defaults (simulating the post-migration
-        # state where `current` was never updated to reflect the live volume).
-        stale_current: dict[str, Any] = {
-            "server_port": 3000,
-            "url": "https://default.example.com",
-            "api_key": "",
-        }
-        stale_hash = _canonical_hash(stale_current)
-        await cys.update_current_and_hash("chat", stale_current, stale_hash)
-
-        # Live volume = real operator config (the config that was hand-edited
-        # on the volume after the YAML→JSON migration).
-        real_config: dict[str, Any] = {
-            "server_port": 8080,
-            "url": "https://real.example.com",
-            "api_key": "secret-key",
-        }
-        tracking._volumes["chat-config"] = copy.deepcopy(real_config)
-
-        # -- deploy --
-        transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/services/chat/deploy", headers=auth_headers)
-            assert resp.status_code == 202
-
-        # Let the background task run.
-        await asyncio.sleep(0)
-
-        # -- assertions --
-        # 1. The volume must still hold the real operator config (not the stale
-        #    template defaults).
-        volume_after = tracking._volumes.get("chat-config", {})
-        assert volume_after["server_port"] == 8080, (
-            f"volume server_port was {volume_after.get('server_port')} — "
-            "stale stored defaults overwrote the live config!"
-        )
-        assert volume_after["url"] == "https://real.example.com"
-
-        # 2. The stored current must have been auto-imported to match the
-        #    live volume (so subsequent GET /config shows no drift).
-        imported = await cys.get_current("chat")
-        assert imported is not None
-        assert imported["server_port"] == 8080
-        assert imported["url"] == "https://real.example.com"
-
-        # 3. The stored volume_hash must now match the volume content.
-        stored_hash = await cys.get_volume_hash("chat")
-        assert stored_hash == _canonical_hash(real_config)
 
 
 # ---------------------------------------------------------------------------

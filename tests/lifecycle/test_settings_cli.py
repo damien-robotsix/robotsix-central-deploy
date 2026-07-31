@@ -49,7 +49,6 @@ def _make_lifecycle_config_from_env() -> LifecycleConfig:
         "ROBOTSIX_LIFECYCLE_DISK_WARN_PCT": "disk_warn_pct",
         "ROBOTSIX_LIFECYCLE_ENV_STORE_PATH": "env_store_path",
         "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH": "secret_key_path",
-        "ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH": "config_yaml_store_path",
         "ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE": "self_update_watchtower_image",
         "ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION": "self_update_docker_api_version",
         "ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL": "registry_check_ttl",

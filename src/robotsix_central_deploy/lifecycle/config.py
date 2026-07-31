@@ -195,12 +195,6 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    config_yaml_store_path: str = Field(
-        "data/component_config_yaml.json",
-        description="Path of the per-component config template/values store.",
-        json_schema_extra={"advanced": True},
-    )
-
     deploy_history_store_path: str = Field(
         "data/deploy_history.json",
         description="Path of the per-component deploy-history JSON store.",

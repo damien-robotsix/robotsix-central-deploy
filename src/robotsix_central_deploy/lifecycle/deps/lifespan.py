@@ -20,7 +20,6 @@ from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntr
 from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
 from ..store import FileStore, InMemoryStore, ServiceStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ...registry.env_store import EnvStore
@@ -230,7 +229,7 @@ async def _init_config(app: FastAPI) -> None:
     """Load config from environment and construct core stores.
 
     Attaches ``config``, ``store``, ``key_manager``, ``env_store``,
-    ``config_yaml_store``, and ``deploy_history_store`` to ``app.state``.
+    and ``deploy_history_store`` to ``app.state``.
     Sets the module-level ``_config`` and ``_store`` globals.
     """
     global _config, _store
@@ -240,7 +239,6 @@ async def _init_config(app: FastAPI) -> None:
     _store = _build_store(_config)
     _key_manager = SecretKeyManager(Path(_config.secret_key_path))
     _env_store = EnvStore(Path(_config.env_store_path), _key_manager)
-    _config_yaml_store = ConfigYamlStore(Path(_config.config_yaml_store_path))
     _deploy_history_store = DeployHistoryStore(
         _config.effective_deploy_history_store_path
     )
@@ -251,7 +249,6 @@ async def _init_config(app: FastAPI) -> None:
     app.state.store = _store
     app.state.key_manager = _key_manager
     app.state.env_store = _env_store
-    app.state.config_yaml_store = _config_yaml_store
     app.state.deploy_history_store = _deploy_history_store
     app.state.chat_agent_audit_store = _chat_agent_audit_store
     app.state.chat_agent_rate_limits = {}

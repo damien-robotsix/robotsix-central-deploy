@@ -12,12 +12,11 @@ from fastapi.params import Body
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
-from .._config_utils import _canonical_hash, _sanitize_log, _write_llmio_tier_config
+from .._config_utils import _sanitize_log, _write_llmio_tier_config
 from ..deps import (
     JobRegistry,
     _get_backend,
     _get_component_config_store,
-    _get_config_yaml_store,
     _get_deploy_history_store,
     _get_env_store,
     _get_job_registry,
@@ -50,7 +49,6 @@ from ..schemas import (
 )
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
@@ -166,7 +164,6 @@ async def deploy_service(
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
     job_registry: JobRegistry = Depends(_get_job_registry),
     _auth: None = Depends(verify_auth),
@@ -275,7 +272,6 @@ async def deploy_service(
             registry=registry,
             env_store=env_store,
             deploy_history_store=deploy_history_store,
-            config_yaml_store=config_yaml_store,
             job_registry=job_registry,
             settings_store=settings_store,
         )
@@ -300,7 +296,6 @@ async def _run_deploy_job(
     registry: ComponentRegistry,
     env_store: EnvStore,
     deploy_history_store: DeployHistoryStore,
-    config_yaml_store: ConfigYamlStore,
     job_registry: JobRegistry,
     settings_store: Any = None,
 ) -> None:
@@ -310,49 +305,6 @@ async def _run_deploy_job(
     failed so the polling endpoint surfaces the error.
     """
     try:
-        # Write merged config.json into the config volume before starting.
-        if config.config_volume:
-            # --- drift guard ---
-            # If the live volume has been edited out-of-band (drift),
-            # auto-import it as current before proceeding so the deploy
-            # never silently overwrites operator changes with stale stored
-            # defaults.
-            stored_hash = await config_yaml_store.get_volume_hash(name)
-            if stored_hash is not None:
-                try:
-                    live_dict = await backend.read_config_from_volume(
-                        config.config_volume
-                    )
-                except Exception:
-                    live_dict = {}
-                live_hash = _canonical_hash(live_dict)
-                if live_dict and live_hash != stored_hash:
-                    logger.warning(
-                        "deploy %s: config volume drifted — "
-                        "auto-importing live volume as current",
-                        _sanitize_log(name),
-                    )
-                    await config_yaml_store.update_current_and_hash(
-                        name, live_dict, live_hash
-                    )
-            # --- end drift guard ---
-
-            merged_cfg = await config_yaml_store.get_current(
-                name
-            ) or await config_yaml_store.get_template(name)
-            if merged_cfg:
-                try:
-                    await backend.write_config_to_volume(
-                        config.config_volume, merged_cfg
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "deploy %s: could not write config.json to volume %s: %s",
-                        _sanitize_log(name),
-                        _sanitize_log(config.config_volume),
-                        exc,
-                    )
-                    # non-fatal: container may still start if config was written earlier
 
         # Write the fleet-global llmio tier config mapping (all four levels)
         # into the component's config volume so robotsix-llmio's

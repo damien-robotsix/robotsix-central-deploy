@@ -17,7 +17,6 @@ from ..deps import (
     _get_backend,
     _get_registry,
     _get_component_config_store,
-    _get_config_yaml_store,
     _get_env_store,
     _get_job_registry,
     _get_config,
@@ -46,7 +45,7 @@ from ..schemas import (
 )
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
+
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
@@ -138,7 +137,6 @@ async def _rollback_onboard(
     name: str,
     config_id: str,
     store: ServiceStore,
-    config_yaml_store: ConfigYamlStore,
     component_config_store: ComponentConfigStore,
     registry: ComponentRegistry,
     backend: ExecutionBackend,
@@ -172,7 +170,6 @@ async def _rollback_onboard(
     if sibling_records:
         for sib_rec in sibling_records:
             await store.delete(sib_rec.name)
-    await config_yaml_store.delete(name)
     await component_config_store.delete(config_id)
     registry.unregister(config_id)
     await store.delete(name)
@@ -436,7 +433,6 @@ async def _run_onboard_deploy_job(
     record: ServiceRecord,
     store: ServiceStore,
     backend: ExecutionBackend,
-    config_yaml_store: ConfigYamlStore,
     component_config_store: ComponentConfigStore,
     registry: ComponentRegistry,
     env_store: EnvStore,
@@ -562,7 +558,6 @@ async def _run_onboard_deploy_job(
                 spec_name,
                 config.id,
                 store,
-                config_yaml_store,
                 component_config_store,
                 registry,
                 backend=backend,
@@ -619,7 +614,6 @@ async def _run_onboard_deploy_job(
             spec_name,
             config.id,
             store,
-            config_yaml_store,
             component_config_store,
             registry,
             backend=backend,
@@ -649,7 +643,6 @@ async def onboard_confirm(
     backend: ExecutionBackend = Depends(_get_backend),
     registry: ComponentRegistry = Depends(_get_registry),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     env_store: EnvStore = Depends(_get_env_store),
     job_registry: JobRegistry = Depends(_get_job_registry),
     deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
@@ -780,44 +773,6 @@ async def onboard_confirm(
             await env_store.upsert(spec.name, seeded_env, seeded_secrets)
             env_was_seeded = True
 
-    # If config schema present, save template + user values and write merged
-    # config.json to the real config volume so the container starts healthy.
-    if spec.config_schema is not None:
-        await config_yaml_store.save_template(spec.name, spec.config_schema)
-        # Base layer: the repo's config/config.json values ("deploy defaults"),
-        # per the robotsix-standards config-standard convention
-        # (robotsix-standards/docs/config-standard.md). Secret fields are
-        # stripped so example placeholders never inject a secret.
-        # Precedence: user form values > deploy defaults > schema default.
-        base_values = _strip_secret_values(
-            spec.config_schema, spec.config_example_values or {}
-        )
-        try:
-            merged = _merge_config(
-                spec.config_schema,
-                base_values,
-                req.config_values or {},
-                prefer_existing_for_unset=True,
-            )
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail={"error": str(exc)},
-            )
-        # Validate merged result against schema before writing
-        _validate_config_or_422(spec.config_schema, merged)
-        if spec.config_volume is not None:
-            try:
-                await backend.write_config_to_volume(spec.config_volume, merged)
-                await config_yaml_store.update_current_and_hash(
-                    spec.name, merged, _canonical_hash(merged)
-                )
-            except Exception:
-                await config_yaml_store.delete(spec.name)
-                raise
-        else:
-            await config_yaml_store.update_current(spec.name, merged)
-
     # Write the fleet-global llmio tier config mapping (all four levels)
     # into the component's config volume before the deploy starts, so
     # robotsix-llmio's TierConfig.for_level() can resolve any capability
@@ -857,7 +812,6 @@ async def onboard_confirm(
             record=record,
             store=store,
             backend=backend,
-            config_yaml_store=config_yaml_store,
             component_config_store=component_config_store,
             registry=registry,
             env_store=env_store,

@@ -16,7 +16,6 @@ from ..deps import (
     _get_chat_agent_audit_store,
     _get_component_config_store,
     _get_config,
-    _get_config_yaml_store,
     _get_env_store,
     _get_or_create_record,
     _get_registry,
@@ -689,38 +688,6 @@ async def _resolve_deploy_contract(
     await component_config_store.put(comp_cfg)
     # Register in the in-memory loader so the gateway can route to it.
     registry.register(comp_cfg)
-
-    # --- Write merged config.json to the config volume ---
-    if derived_spec.config_schema is not None:
-        config_yaml_store = await _get_config_yaml_store(request)
-        await config_yaml_store.save_template(body.name, derived_spec.config_schema)
-        # Use example values as base when present; otherwise empty.
-        base_values: dict[str, object] = {}
-        if derived_spec.config_example_values is not None:
-            base_values = dict(derived_spec.config_example_values)
-        try:
-            merged_config = _merge_config(derived_spec.config_schema, base_values, {})
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail={"error": str(exc)},
-            )
-        _validate_config_or_422(derived_spec.config_schema, merged_config)
-        if derived_spec.config_volume is not None:
-            try:
-                await backend.write_config_to_volume(
-                    derived_spec.config_volume, merged_config
-                )
-                await config_yaml_store.update_current_and_hash(
-                    body.name,
-                    merged_config,
-                    _canonical_hash(merged_config),
-                )
-            except Exception:
-                await config_yaml_store.delete(body.name)
-                raise
-        else:
-            await config_yaml_store.update_current(body.name, merged_config)
 
     # --- Seed EnvStore from the repo's env contract ---
     env_store = await _get_env_store(request)

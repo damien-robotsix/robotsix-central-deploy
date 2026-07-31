@@ -12,7 +12,6 @@ from ..config import LifecycleConfig
 from ..models import HealthStatus, ServiceRecord
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ...registry.env_store import EnvStore
@@ -65,10 +64,6 @@ async def _get_env_store(request: Request) -> EnvStore:
 
 async def _get_settings_store(request: Request) -> SystemSettingsStore:
     return request.app.state.settings_store  # type: ignore[no-any-return]
-
-
-async def _get_config_yaml_store(request: Request) -> ConfigYamlStore:
-    return request.app.state.config_yaml_store  # type: ignore[no-any-return]
 
 
 async def _get_deploy_history_store(request: Request) -> DeployHistoryStore:

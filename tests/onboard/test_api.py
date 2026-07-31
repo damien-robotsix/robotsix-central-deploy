@@ -28,7 +28,6 @@ from robotsix_central_deploy.onboard.models import (
 )
 from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
-from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
@@ -119,9 +118,6 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.registry = registry
     server_mod.app.state.registry_checker = mock_checker
     server_mod.app.state.component_config_store = config_store
-    server_mod.app.state.config_yaml_store = ConfigYamlStore(
-        tmp_path / "config_json.json"
-    )
     server_mod.app.state.deploy_history_store = DeployHistoryStore(
         tmp_path / "deploy_history.json"
     )
@@ -1571,12 +1567,6 @@ class TestOnboardConfirmWithConfig:
         # Poll until done
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
-
-        # Template saved in ConfigYamlStore
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        template = await store.get_template("cfg-svc")
-        assert template == spec.config_schema
-
         # Volume written via backend — uses the real config volume (now namespaced), not synthetic
         assert len(captured) == 1
         assert captured[0][0] == "cfg-svc-cfg-svc-data"
@@ -1587,38 +1577,6 @@ class TestOnboardConfirmWithConfig:
         in_memory_config = registry_obj.get("cfg-svc")
         assert in_memory_config is not None
         assert "cfg-svc-cfg-svc-data" in in_memory_config.named_volumes
-
-    async def test_confirm_deploy_failure_cleans_up_config_yaml_store(
-        self, client: AsyncClient, auth_headers: dict
-    ):
-        spec = _make_derived_spec("fail-cfg")
-        spec.config_schema = {
-            "type": "object",
-            "properties": {"host": {"type": "string"}},
-        }
-
-        with patch.object(
-            server_mod.app.state.backend,
-            "deploy",
-            side_effect=RuntimeError("simulated deploy failure"),
-        ):
-            resp = await client.post(
-                "/onboard/confirm",
-                json={"spec": spec.model_dump()},
-                headers=auth_headers,
-            )
-
-            assert resp.status_code == 202
-            job_id = resp.json()["job_id"]
-
-            # Poll until failed (still inside the with-block so patch is active)
-            job_status = await _poll_job_until_done(client, job_id, auth_headers)
-            assert job_status["phase"] == "failed"
-
-        # config_yaml_store should be cleaned up
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        assert await store.get_template("fail-cfg") is None
-
     async def test_confirm_without_config_schema_no_template_saved(
         self, client: AsyncClient, auth_headers: dict
     ):
@@ -1637,10 +1595,6 @@ class TestOnboardConfirmWithConfig:
         # Poll until done
         job_status = await _poll_job_until_done(client, job_id, auth_headers)
         assert job_status["phase"] == "done"
-
-        # No template saved
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        assert await store.get_template("no-cfg-svc") is None
 
     async def test_confirm_with_config_values_merges_and_writes_volume(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -1697,11 +1651,6 @@ class TestOnboardConfirmWithConfig:
             "port": 8080,
         }
 
-        # current stored in ConfigYamlStore reflects entered values
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        current = await store.get_current("cfg-svc")
-        assert current == {"host": "10.0.0.1", "password": "s3cret", "port": 8080}
-
     async def test_confirm_without_config_values_writes_template_only(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
@@ -1747,11 +1696,6 @@ class TestOnboardConfirmWithConfig:
         # Template written as-is (empty defaults)
         assert len(captured) == 1
         assert captured[0][1] == {"host": "", "password": ""}
-
-        # current still stored (equals template defaults since no user values)
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        current = await store.get_current("cfg-svc2")
-        assert current == {"host": "", "password": ""}
 
 
 # ---------------------------------------------------------------------------

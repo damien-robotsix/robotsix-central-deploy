@@ -2,8 +2,8 @@
 
 All file-backed registry stores use the same tmp-file-rename pattern
 for atomic writes, and the same existence-check for loads.  Extracting
-these avoids duplicated boilerplate across ``ConfigYamlStore``,
-``EnvStore``, and ``DeployHistoryStore``.
+these avoids duplicated boilerplate across ``EnvStore``
+and ``DeployHistoryStore``.
 """
 
 from __future__ import annotations

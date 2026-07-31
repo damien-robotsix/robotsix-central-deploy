@@ -330,64 +330,6 @@ class PruneVolumesResponse(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
-# Config endpoint models
-# ---------------------------------------------------------------------------
-
-
-class ConfigResponse(BaseModel):
-    config_schema: dict[str, Any] = Field(
-        serialization_alias="schema",
-        description="JSON Schema describing the config.json structure for the component",
-    )
-    current: dict[str, Any] = Field(
-        description="Current config values read from the volume; secrets masked"
-    )
-    drift: bool = Field(
-        default=False,
-        description="True when the volume content differs from the last stored hash",
-    )
-    config_assist_command: str | None = Field(
-        default=None,
-        description="One-shot container command for config auto-fill; None when unavailable",
-    )
-    config_assist_seeds: list[ConfigAssistSeed] = Field(
-        default=[],
-        description="ConfigAssistSeed entries registered for this component",
-    )
-    component_settings_url: str | None = Field(
-        default=None,
-        description=(
-            "URL to the component's own Settings/Config panel when the gateway "
-            "is configured; None otherwise.  Component-owned keys should be "
-            "edited there, not in the deploy config form."
-        ),
-    )
-
-
-class ConfigExportResponse(BaseModel):
-    """Response body for GET /services/{name}/config/export (migration-only).
-
-    Returns the full current config WITH unmasked secret values so
-    components can import their config exactly once during the
-    config-ownership migration.
-
-    Access is restricted to localhost + API-key auth.
-    """
-
-    component: str = Field(description="Component name")
-    values: dict[str, Any] = Field(
-        description="Full current config values with unmasked secrets"
-    )
-    note: str = Field(
-        default=(
-            "Migration-only endpoint. Secrets are included in plaintext — "
-            "treat this payload as sensitive."
-        ),
-        description="Usage note about the sensitivity of the payload",
-    )
-
-
 class ComponentSuggestItem(BaseModel):
     """Lightweight component info for the config-form URL suggest feature."""
 
@@ -494,31 +436,6 @@ class ClaudeAuthCredentialsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Chat agent write-surface models
 # ---------------------------------------------------------------------------
-
-
-class ChatAgentConfigUpdate(BaseModel):
-    """Request body for PUT /chat/config/{name}.
-
-    Secret keys are accepted with partial-update semantics: omitted or
-    sentinel (``"***"``) values keep the stored secret; only an explicitly
-    supplied non-empty value overwrites it.
-    """
-
-    values: dict[str, Any] = Field(
-        description="Key-value pairs to write; sentinel '***' values preserve existing secrets"
-    )
-
-
-class ChatAgentConfigRollbackResponse(BaseModel):
-    """Response body for PUT /chat/config/{name} and POST /chat/config/{name}/rollback."""
-
-    component: str = Field(description="Component name")
-    restored: dict[str, Any] = Field(
-        description="Secret-masked snapshot of the restored config"
-    )
-    detail: str = Field(
-        default="", description="Human-readable summary of the rollback result"
-    )
 
 
 class ChatAgentRestartResponse(BaseModel):
