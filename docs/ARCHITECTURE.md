@@ -76,24 +76,16 @@ Docker volume growth over time.
 **Public API surface**: `GET /services`, `GET /services/{name}`, `GET /services/{name}/health`,
 `GET /services/{name}/logs`, `POST /services/{name}/start`, `POST /services/{name}/stop`,
 `POST /services/{name}/restart`, `POST /services/{name}/deploy`, `POST /services/{name}/rollback`,
-`DELETE /services/{name}`, `GET /services/{name}/config` (secrets redacted to `"***"`),
-`GET /services/{name}/config/export` (migration-only — full config with unmasked secrets,
-localhost + API-key restricted),
-`PUT /services/{name}/config` (deprecated — returns 410 Gone),
-`POST /services/{name}/config/assist` (deprecated — returns 410 Gone),
-`POST /services/{name}/config/import` (deprecated — returns 410 Gone),
-`POST /services/{name}/config/refresh-schema` (deprecated — returns 410 Gone),
+`DELETE /services/{name}`,
 `GET /services/{name}/env`, `PUT /services/{name}/env`, `DELETE /services/{name}/env/{key}`.
 
 > **Config ownership:** the deploy plane manages **Docker-boundary** settings only
 > (image references, port mappings, volume mounts, boot-time env vars and secrets).
-> Runtime config (keys in each component's `config/config.json`) is **component-owned**
-> and should be edited through the component's own Settings panel.  The
-> `GET /services/{name}/config` endpoint is retained as read-only for inspection;
-> config-write endpoints (`PUT`, `POST`) are deprecated and return 410 Gone with
-> `Deprecation` / `Sunset` headers.  A migration-only `GET /services/{name}/config/export`
-> endpoint returns the full config (including plaintext secrets) for components to
-> import exactly once.  See the [config-ownership standard](
+> Per-component runtime configuration (keys in each component's `config/config.json`)
+> is **fully component-owned** and edited through each component's own Settings API.
+> All former `/services/{name}/config` endpoints have been removed; the config
+> export and deprecation carve-outs are no longer needed now that components have
+> completed their settings migrations.  See the [config-ownership standard](
 > https://damien-robotsix.github.io/robotsix-standards/config-ownership/
 > ) for the "Two invariants" (deploy-plane exclusivity + cross-UI uniformity).
 
@@ -321,7 +313,7 @@ components. The `container_name` and first port from the component's
 ### Why async vs sync stores
 
 All registry stores (`ComponentConfigStore`, `EnvStore`,
-`ConfigYamlStore`, `SystemSettingsStore`) are async with
+`SystemSettingsStore`) are async with
 `asyncio.Lock` serialisation. This is **not** because JSON
 file I/O benefits from async — `json.loads()` and `Path.read_text()`
 are synchronous. The async pattern exists to:
@@ -394,6 +386,4 @@ Two background `asyncio.Task` loops run in the same process:
    persisted to disk, and optionally filed as board tickets.
 
 Both are started during app startup and run for the lifetime of the
-process.
-up and run for the lifetime of the
 process.

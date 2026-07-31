@@ -18,7 +18,7 @@ models.py  (Pydantic schemas)
    │
    └── _store_utils.py → JsonFileStore   (atomic write + asyncio.Lock base)
           ├── env_store.py → EnvStore
-                    ├── deploy_history_store.py → DeployHistoryStore
+          ├── deploy_history_store.py → DeployHistoryStore
           └── chat_agent_audit_store.py → ChatAgentAuditStore
 ```
 
