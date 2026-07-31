@@ -70,6 +70,8 @@ Components can be **single-service** (no siblings) or **multi-service** (one pri
 
 When a component has siblings, lifecycle actions (start/stop/restart/deploy/rollback/delete) **fan out** to sibling services automatically on a best-effort basis. If a sibling action fails, the primary still succeeds but the failure is logged.
 
+> **Rule:** Sibling fan-out for lifecycle actions (start/stop/restart/deploy/update) must reuse the shared helpers in `lifecycle/routers/_sibling_utils.py` (`_fanout_siblings_best_effort`, `_fanout_siblings_deploy_best_effort`) — never duplicate the per-sibling loop or `model_copy` sibling-config build inline in a router.
+
 ## API Endpoints
 
 ### Health & System
