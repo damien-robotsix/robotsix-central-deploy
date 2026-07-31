@@ -250,6 +250,175 @@ async def test_refresh_preserves_operator_fields(
 
 
 @pytest.mark.asyncio
+async def test_refresh_preserves_operator_set_fields(
+    client_with_component: AsyncClient,
+) -> None:
+    """mem_limit / allow_chat_access / claude_mount survive a refresh.
+
+    Regression (2026-07-31): these three are settable by the operator through
+    PUT /services/{name}/env, but refresh rebuilt the config from the manifest's
+    labels alone and reset them to the label defaults. claude_mount flipping
+    back to false strips a component's claude-auth volume on its next deploy,
+    and allow_chat_access drops it from the chat roster.
+    """
+    ccs = server_mod.app.state.component_config_store
+    comp = ccs.get("test-comp")
+    assert comp is not None
+    comp.mem_limit = "8g"
+    comp.allow_chat_access = True
+    comp.claude_mount = True
+    await ccs.put(comp)
+
+    # The manifest carries none of the corresponding labels, so the parsed
+    # spec has all three at their defaults.
+    new_spec = _make_derived_spec(image="ghcr.io/org/svc:v2")
+    assert new_spec.claude_mount is False
+    assert new_spec.allow_chat_access is False
+
+    repo_files = RepoFiles(
+        compose_bytes=UPDATED_COMPOSE,
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=new_spec,
+        ),
+    ):
+        resp = await client_with_component.post(
+            "/services/test-comp/refresh-contract", headers=HEADERS
+        )
+
+    assert resp.status_code == 200
+    updated = ccs.get("test-comp")
+    assert updated is not None
+    assert updated.mem_limit == "8g"
+    assert updated.allow_chat_access is True
+    assert updated.claude_mount is True
+    # ...while genuinely contract-derived fields still refresh.
+    assert updated.image == "ghcr.io/org/svc:v2"
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_assigned_host_port(
+    client_with_component: AsyncClient,
+) -> None:
+    """An onboarding-assigned host port is not reset to the manifest's value.
+
+    Regression (2026-07-31): 'mail' ran on host port 10000 because onboarding
+    shifted it off the manifest's 8080 to dodge a collision. Refreshing the
+    contract reset it to 8080 — which another component already owned.
+    """
+    ccs = server_mod.app.state.component_config_store
+    comp = ccs.get("test-comp")
+    assert comp is not None
+    comp.ports = [PortMapping(host=10000, container=8080, protocol="tcp")]
+    await ccs.put(comp)
+
+    # A second component genuinely holds 8080, exactly as invest did.
+    other = ComponentConfig(
+        id="other-comp",
+        image="ghcr.io/org/other:v1",
+        container_name="other-comp",
+        ports=[PortMapping(host=8080, container=8080, protocol="tcp")],
+        git_url="https://github.com/org/other.git",
+    )
+    await ccs.put(other)
+
+    # The manifest still says 8080:8080.
+    new_spec = _make_derived_spec(
+        ports=[PortMapping(host=8080, container=8080, protocol="tcp")]
+    )
+    repo_files = RepoFiles(
+        compose_bytes=ORIGINAL_COMPOSE,
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=new_spec,
+        ),
+    ):
+        resp = await client_with_component.post(
+            "/services/test-comp/refresh-contract", headers=HEADERS
+        )
+
+    assert resp.status_code == 200
+    updated = ccs.get("test-comp")
+    assert updated is not None
+    assert [p.host for p in updated.ports] == [10000]
+    assert "ports" not in resp.json()["changed_fields"]
+    # The other component keeps 8080 — no collision was created.
+    other_after = ccs.get("other-comp")
+    assert other_after is not None
+    assert [p.host for p in other_after.ports] == [8080]
+
+
+@pytest.mark.asyncio
+async def test_refresh_assigns_free_port_to_new_container_port(
+    client_with_component: AsyncClient,
+) -> None:
+    """A newly exposed container port is shifted when its requested host is taken."""
+    ccs = server_mod.app.state.component_config_store
+    other = ComponentConfig(
+        id="other-comp",
+        image="ghcr.io/org/other:v1",
+        container_name="other-comp",
+        ports=[PortMapping(host=9090, container=9090, protocol="tcp")],
+        git_url="https://github.com/org/other.git",
+    )
+    await ccs.put(other)
+
+    # Manifest now exposes a second port, 9090 — already owned by other-comp.
+    new_spec = _make_derived_spec(
+        ports=[
+            PortMapping(host=8080, container=8080, protocol="tcp"),
+            PortMapping(host=9090, container=9090, protocol="tcp"),
+        ]
+    )
+    repo_files = RepoFiles(
+        compose_bytes=UPDATED_COMPOSE,
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=new_spec,
+        ),
+    ):
+        resp = await client_with_component.post(
+            "/services/test-comp/refresh-contract", headers=HEADERS
+        )
+
+    assert resp.status_code == 200
+    updated = ccs.get("test-comp")
+    assert updated is not None
+    by_container = {p.container: p.host for p in updated.ports}
+    # The pre-existing mapping is untouched...
+    assert by_container[8080] == 8080
+    # ...and the new one was moved off the port other-comp owns.
+    assert by_container[9090] != 9090
+
+
+@pytest.mark.asyncio
 async def test_refresh_requires_auth(
     client: AsyncClient,
 ) -> None:
