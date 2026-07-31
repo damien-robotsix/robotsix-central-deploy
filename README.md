@@ -76,12 +76,17 @@ follows the [config-ownership standard](
 
 ### Config-ownership migration
 
-Config-write endpoints (`PUT /services/{name}/config` and `PUT /chat/config/{name}`)
-are **deprecated** and return 410 Gone with `Deprecation` / `Sunset` headers.
-A migration-only `GET /services/{name}/config/export` endpoint (localhost +
-API-key restricted) returns the full config with unmasked secrets so components
-can import their config exactly once. Docker-boundary settings (image, ports,
-mounts, env/secrets) remain in the deploy plane and are **not** deprecated.
+The config-ownership migration (robotsix-standards) is **complete**: all five
+components now operate on their self-owned settings. Runtime component config
+(`config/config.json` keys) is fully component-owned and edited through each
+component's own Settings API.
+
+The former config endpoints (`PUT /services/{name}/config`,
+`PUT /chat/config/{name}`, `GET /services/{name}/config`,
+`GET /services/{name}/config/export`, `/import`, `/refresh-schema`, `/assist`,
+and config rollback) have been **removed** from the deploy plane. The deploy
+plane retains Docker-boundary settings only (image, ports, mounts,
+env/secrets), which are **not** deprecated.
 
 See the [config-ownership standard](
   https://damien-robotsix.github.io/robotsix-standards/config-ownership/

@@ -239,18 +239,21 @@ services:
       - mailbot-config:/home/mailbot/config
 ```
 
-### `robotsix.deploy.config-assist` (service-level, optional)
+### `robotsix.deploy.config-assist` (service-level, optional — **retired**)
 
-Shell command string that central-deploy runs to assist operators in
-producing configuration values (exposed via
-`POST /services/{name}/config/assist`). The command is executed in a
-one-shot container from the component's image. Empty or whitespace-only
-values are ignored.
+Shell command string that central-deploy previously ran to assist operators in
+producing configuration values (exposed via the removed
+`POST /services/{name}/config/assist` endpoint). Config ownership has moved
+fully to each component, and the `/config` assist surface has been **removed**
+from the deploy plane. The label is still parsed and carried through the
+component model for backward compatibility, but the assist endpoints are no
+longer served; component settings are managed through each component's own
+Settings API.
 
-### `robotsix.deploy.config-assist-seeds` (service-level, optional)
+### `robotsix.deploy.config-assist-seeds` (service-level, optional — **retired**)
 
-Comma-separated list of config keys to seed the assist flow, each entry
-either a bare key or `key:label`:
+Comma-separated list of config keys that previously seeded the assist flow,
+each entry either a bare key or `key:label`:
 
 ```yaml
 services:
@@ -260,8 +263,9 @@ services:
       robotsix.deploy.config-assist-seeds: "imap.host:IMAP host,imap.port"
 ```
 
-Both labels are additive and v1-compatible: composes that omit them behave
-exactly as before (no config assist offered).
+Both labels are inert as of the config-ownership decommission: the assist
+endpoints have been removed, though the labels are still parsed for
+backward compatibility.
 
 ---
 
