@@ -706,6 +706,207 @@ class TestGetWorkflowRunLogs:
         assert "lftp" in resp.text
 
 
+class TestGetJobLogs:
+    """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs``."""
+
+    async def test_unauthorized_returns_401(self, client: AsyncClient):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/jobs/42/logs",
+        )
+        assert resp.status_code == 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/jobs/42/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 503
+
+    async def test_gets_job_log(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, installation_id: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_job_log",
+            lambda token, owner, repo, job_id, tail_kb=100: (
+                "2026-07-31T10:00:00Z | Starting job\n"
+                "2026-07-31T10:01:00Z | Running mypy...\n"
+                "2026-07-31T10:02:00Z | mypy failed with 3 errors\n"
+            ),
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/jobs/42/logs",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert "mypy failed" in resp.text
+        assert "Starting job" in resp.text
+
+    async def test_tail_kb_passed_through(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        captured_kwargs: dict = {}
+
+        def _fake_fetch(token, owner, repo, job_id, **kwargs):
+            captured_kwargs.update(kwargs)
+            return "log text"
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, installation_id: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_job_log",
+            _fake_fetch,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/jobs/42/logs?tail_kb=50",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert captured_kwargs.get("tail_kb") == 50
+
+    async def test_job_not_found_returns_404(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        from fastapi import HTTPException
+
+        def _raise_404(token, owner, repo, job_id, **kwargs):
+            raise HTTPException(status_code=404, detail="Job 9999 not found")
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, installation_id: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_job_log",
+            _raise_404,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/jobs/9999/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_fetch_failure_returns_502(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        def _raise_runtime(token, owner, repo, job_id, **kwargs):
+            raise RuntimeError("connection reset")
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "get_installation_token_sync",
+            lambda app_id, private_key, installation_id: "fake-token",
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
+            "_fetch_job_log",
+            _raise_runtime,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/actions/jobs/42/logs",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 502
+
+    async def test_redirect_follow_mocked(
+        self,
+        monkeypatch,
+    ):
+        """Verify that _fetch_job_log follows the 302 redirect to the signed URL.
+
+        GitHub's job-logs endpoint returns 302 → Location → signed URL.
+        The second GET must NOT include the Authorization header.
+        """
+        from unittest.mock import MagicMock
+
+        from robotsix_central_deploy.lifecycle.routers.chat_github_actions import (
+            _fetch_job_log,
+        )
+
+        # Build fake responses
+        redirect_response = MagicMock()
+        redirect_response.status_code = 302
+        redirect_response.headers = {
+            "Location": "https://objects.githubusercontent.com/signed-url"
+        }
+
+        log_response = MagicMock()
+        log_response.status_code = 200
+        log_response.text = "line 1\nline 2\nline 3\n"
+
+        # The httpx.Client is used as a context manager; mock
+        # __enter__ to return itself, and mock get() to return the two
+        # responses in order.
+        fake_client = MagicMock()
+        fake_client.__enter__.return_value = fake_client
+        fake_client.get.side_effect = [redirect_response, log_response]
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github_actions.httpx.Client",
+            lambda **kwargs: fake_client,
+        )
+
+        result = _fetch_job_log(
+            "token-abc",
+            "acme",
+            "widget",
+            42,
+            tail_kb=0,
+        )
+        assert result == "line 1\nline 2\nline 3\n"
+
+        # Verify two GET calls were made
+        assert fake_client.get.call_count == 2
+
+        # First call: to the GitHub API (with Authorization header)
+        call_1_args, call_1_kwargs = fake_client.get.call_args_list[0]
+        assert "api.github.com/repos/acme/widget/actions/jobs/42/logs" in call_1_args[0]
+        assert (
+            call_1_kwargs.get("headers", {}).get("Authorization") == "Bearer token-abc"
+        )
+
+        # Second call: to the signed URL (NO Authorization header)
+        call_2_args, call_2_kwargs = fake_client.get.call_args_list[1]
+        assert call_2_args[0] == "https://objects.githubusercontent.com/signed-url"
+        # headers dict should not be passed in the second call
+        assert "headers" not in call_2_kwargs or call_2_kwargs.get("headers") is None
+
+
 class TestDispatchWorkflow:
     @pytest.fixture(autouse=True)
     def _clear_audit(self):

@@ -7,6 +7,8 @@ Exposes:
   list jobs for a run with step names, conclusions, and timestamps
 - ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs`` —
   workflow run logs (concatenated per-job text)
+- ``GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs`` —
+  single job log (plain text, follows GitHub's redirect server-side)
 - ``GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
   read default workflow permissions
 - ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
@@ -540,6 +542,76 @@ def _fetch_and_extract_run_logs(
     return "\n\n".join(log_texts)
 
 
+def _fetch_job_log(
+    token: str,
+    owner: str,
+    repo: str,
+    job_id: int,
+    *,
+    tail_kb: int = 100,
+) -> str:
+    """Fetch a single job's log from the GitHub API and return the plain text.
+
+    GitHub's job-logs endpoint returns a 302/303 redirect to a signed
+    plain-text URL.  This function follows the redirect, downloads the
+    text, and returns it (optionally tail-truncated).
+
+    The second GET (to the signed URL) must NOT carry the Authorization
+    header — GitHub rejects signed-URL requests that include it.
+    """
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/actions/jobs/{job_id}/logs"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "robotsix-central-deploy",
+    }
+
+    from fastapi import HTTPException
+
+    with httpx.Client(follow_redirects=False) as http_client:
+        # Step 1 — request the job logs endpoint (returns a 302/303 redirect)
+        redirect_resp = http_client.get(api_url, headers=headers)
+        if redirect_resp.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Job {job_id} not found in {owner}/{repo}",
+            )
+        if redirect_resp.status_code not in (302, 303):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"GitHub returned HTTP {redirect_resp.status_code} for job logs"
+                ),
+            )
+
+        redirect_url = redirect_resp.headers.get("Location", "")
+        if not redirect_url:
+            raise HTTPException(
+                status_code=502,
+                detail="GitHub did not return a redirect URL for job logs",
+            )
+
+        # Step 2 — download the log text (pre-signed URL, no auth needed)
+        log_resp = http_client.get(redirect_url, follow_redirects=True)
+        if log_resp.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=(f"Failed to download job log: HTTP {log_resp.status_code}"),
+            )
+
+    log_text = log_resp.text
+
+    if tail_kb > 0:
+        max_bytes = tail_kb * 1024
+        if len(log_text.encode("utf-8")) > max_bytes:
+            log_text = _tail_bytes(log_text, max_bytes)
+            log_text = f"[... truncated to last {tail_kb} KB ...]\n\n{log_text}"
+
+    return log_text
+
+
 @router.get(
     "/chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs",
     summary="Get workflow run logs (concatenated per-job text)",
@@ -660,3 +732,81 @@ async def get_workflow_run_log(
         config=config,
         _auth=_auth,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
+    summary="Get a single GitHub Actions job's log (plain text)",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Job (or repository) not found"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def get_job_logs(
+    owner: str,
+    repo: str,
+    job_id: int,
+    tail_kb: int = Query(
+        100,
+        description="Only return the last N KB of the log (0 for unlimited)",
+        ge=0,
+    ),
+    config: LifecycleConfig = Depends(_get_config),
+    _auth: None = Depends(verify_auth),
+) -> str:
+    """Get *owner*/*repo*'s job *job_id* log text.
+
+    GitHub returns job logs as a 302/303 redirect to a signed plain-text
+    URL.  This endpoint follows the redirect server-side and returns the
+    log body as plain text.
+
+    *tail_kb* caps the log to the last N kilobytes (default 100 KB;
+    set to 0 for unlimited).
+    """
+    from fastapi import HTTPException
+
+    if (
+        not config.github_app_id.get_secret_value()
+        or not config.github_app_private_key.get_secret_value()
+        or not config.installation_id.get_secret_value()
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="GitHub App not configured",
+        )
+
+    try:
+        token = await asyncio.to_thread(
+            get_installation_token_sync,
+            config.github_app_id.get_secret_value(),
+            config.github_app_private_key.get_secret_value(),
+            config.installation_id.get_secret_value(),
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+
+    try:
+        log_text = await asyncio.to_thread(
+            _fetch_job_log,
+            token,
+            owner,
+            repo,
+            job_id,
+            tail_kb=tail_kb,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to fetch job log: {exc}",
+        )
+
+    return log_text
