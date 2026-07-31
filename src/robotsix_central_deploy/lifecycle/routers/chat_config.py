@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -96,6 +96,7 @@ async def chat_get_config(
     "/chat/config/{name}",
     response_model=ChatAgentConfigRollbackResponse,
     summary="Update non-secret config keys for an allowlisted service",
+    deprecated=True,
     responses={
         403: {"description": "Service not allowlisted or secret key rejected"},
         404: {"description": "Service has no config schema"},
@@ -106,6 +107,7 @@ async def chat_update_config(
     name: str,
     body: ChatAgentConfigUpdate,
     request: Request,
+    response: Response,
     store: ServiceStore = Depends(_get_store),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
@@ -122,6 +124,12 @@ async def chat_update_config(
     """
     await _require_allowed_service(name, component_config_store)
     _check_rate_limit(request.app.state, name, "config_update")
+
+    # Deprecation: config ownership is moving to each component per the
+    # robotsix-standards config-ownership standard.  This endpoint will be
+    # removed once all five component migrations complete.
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "Sun, 01 Feb 2026 00:00:00 GMT"
 
     # ------------------------------------------------------------------
     # log_level is a system-wide setting that the chat agent can raise

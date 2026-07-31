@@ -365,6 +365,29 @@ class ConfigResponse(BaseModel):
     )
 
 
+class ConfigExportResponse(BaseModel):
+    """Response body for GET /services/{name}/config/export (migration-only).
+
+    Returns the full current config WITH unmasked secret values so
+    components can import their config exactly once during the
+    config-ownership migration.
+
+    Access is restricted to localhost + API-key auth.
+    """
+
+    component: str = Field(description="Component name")
+    values: dict[str, Any] = Field(
+        description="Full current config values with unmasked secrets"
+    )
+    note: str = Field(
+        default=(
+            "Migration-only endpoint. Secrets are included in plaintext — "
+            "treat this payload as sensitive."
+        ),
+        description="Usage note about the sensitivity of the payload",
+    )
+
+
 class ComponentSuggestItem(BaseModel):
     """Lightweight component info for the config-form URL suggest feature."""
 

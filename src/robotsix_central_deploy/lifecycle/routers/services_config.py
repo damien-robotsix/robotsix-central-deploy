@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -18,7 +19,7 @@ from ..deps import (
     _get_store,
 )
 from ..models import ErrorDetail
-from ..schemas import ConfigResponse
+from ..schemas import ConfigExportResponse, ConfigResponse
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
@@ -37,6 +38,30 @@ router = APIRouter(tags=["services"])
 # ---------------------------------------------------------------------------
 # Config ownership (deploy-plane vs component-owned) — robotsix-standards
 # config-ownership standard.
+#
+# Boundary split — two categories of persisted settings:
+#
+# 1. Docker-boundary (stays in central-deploy — NOT deprecated):
+#    * image references (ComponentConfig.image)
+#    * port mappings (ComponentConfig.ports)
+#    * volume mounts (ComponentConfig.mounts, named_volumes)
+#    * boot-time env vars and secrets (EnvStore)
+#    * container_name, health_check, siblings, claude_mount, etc.
+#    These are deployment-infrastructure concerns that cannot be handled
+#    inside a running container and are managed through the deploy UI,
+#    env tab, or lifecycle API.
+#
+# 2. Runtime config (moving to each component — config.json):
+#    * application settings stored in config.json per the
+#      robotsix-standards per-component settings standard.
+#    * The ONLY deploy-plane key in config.json is ``robotsix_config_file``
+#      (tells the deploy system where to mount/write the file).
+#    * All other config.json keys are component-owned and should be edited
+#      through the component's own Settings panel.
+#
+# The ``DEPLOY_PLANE_KEYS`` frozenset below marks the config.json keys
+# that remain managed by the deploy plane.  Everything else in config.json
+# is component-owned.
 # ---------------------------------------------------------------------------
 
 # Deploy-plane keys: infrastructure-level settings that the deploy system
@@ -194,79 +219,179 @@ async def get_service_config(
 
 
 # ---------------------------------------------------------------------------
-# Removed config-write endpoints — 404 guards
+# GET /services/{name}/config/export  (migration-only)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/services/{name}/config/export",
+    response_model=ConfigExportResponse,
+    summary="[Migration] Export full config including unmasked secrets",
+    responses={
+        403: {"description": "Not localhost"},
+        404: {"model": ErrorDetail, "description": "Service has no config schema"},
+    },
+)
+async def export_service_config(
+    name: str,
+    request: Request,
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    _auth: None = Depends(verify_auth),
+) -> ConfigExportResponse:
+    """Export the full current config INCLUDING unmasked secret values.
+
+    Restricted to localhost + API-key auth.  This is a **migration-only**
+    endpoint — components call it exactly once to import their config, then
+    the endpoint is decommissioned.
+
+    After migration, config ownership lives in the component per the
+    robotsix-standards per-component settings standard.  The deploy plane
+    retains only Docker-boundary settings (image, ports, mounts, env/secrets).
+    """
+    # Restrict to localhost — this endpoint returns plaintext secrets.
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Config export is restricted to localhost.",
+        )
+
+    template = await config_yaml_store.get_template(name)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No config schema for component '{name}'",
+        )
+    current_raw = await config_yaml_store.get_current(name)
+    if current_raw is None:
+        current_raw = _merge_config(template, {}, {})
+
+    logger.info(
+        "Config export for component '%s' from %s",
+        name.replace("\n", "\\n"),
+        client_host,
+    )
+
+    return ConfigExportResponse(
+        component=name,
+        values=current_raw,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Deprecated config-write endpoints — 410 Gone guards
 #
-# These routes were removed as part of the config-ownership migration
+# These routes are deprecated as part of the config-ownership migration
 # (robotsix-standards: the deploy plane must not write component-internal
-# config.json).  Explicit 404 handlers prevent the requests from falling
+# config.json).  Explicit 410 handlers prevent the requests from falling
 # through to the gateway catch-all (/{path:path}) which uses session-auth
-# and returns 303 instead of 404.
+# and returns 303 instead of 410.
+#
+# Use GET /services/{name}/config/export to retrieve config for migration.
 # ---------------------------------------------------------------------------
 
 
 @router.put(
     "/services/{name}/config",
-    status_code=status.HTTP_404_NOT_FOUND,
-    summary="[Removed] PUT config",
+    status_code=status.HTTP_410_GONE,
+    summary="[Deprecated] PUT config",
+    deprecated=True,
 )
 async def put_service_config(
     name: str,
     _auth: None = Depends(verify_auth),
-) -> dict[str, str]:
-    """This endpoint was removed. Config is now component-owned."""
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="PUT /services/{name}/config has been removed. "
-        "Config is owned by the component, not the deploy plane.",
+) -> JSONResponse:
+    """Deprecated: config is now component-owned, not deploy-plane."""
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={
+            "detail": (
+                "PUT /services/{name}/config is deprecated. "
+                "Config is owned by the component, not the deploy plane. "
+                "Use GET /services/{name}/config/export to retrieve config "
+                "for migration."
+            )
+        },
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
+        },
     )
 
 
 @router.post(
     "/services/{name}/config/import",
-    status_code=status.HTTP_404_NOT_FOUND,
-    summary="[Removed] POST config import",
+    status_code=status.HTTP_410_GONE,
+    summary="[Deprecated] POST config import",
+    deprecated=True,
 )
 async def config_import(
     name: str,
     _auth: None = Depends(verify_auth),
-) -> dict[str, str]:
-    """This endpoint was removed. Config is now component-owned."""
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="POST /services/{name}/config/import has been removed. "
-        "Config is owned by the component, not the deploy plane.",
+) -> JSONResponse:
+    """Deprecated: config is now component-owned, not deploy-plane."""
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={
+            "detail": (
+                "POST /services/{name}/config/import is deprecated. "
+                "Config is owned by the component, not the deploy plane."
+            )
+        },
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
+        },
     )
 
 
 @router.post(
     "/services/{name}/config/refresh-schema",
-    status_code=status.HTTP_404_NOT_FOUND,
-    summary="[Removed] POST config refresh-schema",
+    status_code=status.HTTP_410_GONE,
+    summary="[Deprecated] POST config refresh-schema",
+    deprecated=True,
 )
 async def config_refresh_schema(
     name: str,
     _auth: None = Depends(verify_auth),
-) -> dict[str, str]:
-    """This endpoint was removed. Config is now component-owned."""
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="POST /services/{name}/config/refresh-schema has been removed. "
-        "Config is owned by the component, not the deploy plane.",
+) -> JSONResponse:
+    """Deprecated: config is now component-owned, not deploy-plane."""
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={
+            "detail": (
+                "POST /services/{name}/config/refresh-schema is deprecated. "
+                "Config is owned by the component, not the deploy plane."
+            )
+        },
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
+        },
     )
 
 
 @router.post(
     "/services/{name}/config/assist",
-    status_code=status.HTTP_404_NOT_FOUND,
-    summary="[Removed] POST config assist",
+    status_code=status.HTTP_410_GONE,
+    summary="[Deprecated] POST config assist",
+    deprecated=True,
 )
 async def config_assist(
     name: str,
     _auth: None = Depends(verify_auth),
-) -> dict[str, str]:
-    """This endpoint was removed. Config is now component-owned."""
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="POST /services/{name}/config/assist has been removed. "
-        "Config is owned by the component, not the deploy plane.",
+) -> JSONResponse:
+    """Deprecated: config is now component-owned, not deploy-plane."""
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={
+            "detail": (
+                "POST /services/{name}/config/assist is deprecated. "
+                "Config is owned by the component, not the deploy plane."
+            )
+        },
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
+        },
     )

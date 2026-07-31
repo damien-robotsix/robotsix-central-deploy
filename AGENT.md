@@ -114,11 +114,18 @@ Two-phase process:
 
 | Method | Path | Description |
 | -------- | ------ | ------------- |
-| GET | `/services/{name}/config` | Config schema and current values |
-| PUT | `/services/{name}/config` | Merge and save config.yaml values |
+| GET | `/services/{name}/config` | Config schema and current values (secrets masked) |
+| GET | `/services/{name}/config/export` | **[Migration]** Full config with unmasked secrets (localhost + API-key only) |
 | GET | `/services/{name}/env` | Env and secrets (secrets masked) |
 | PUT | `/services/{name}/env` | Upsert env and secrets |
 | DELETE | `/services/{name}/env/{key}` | Remove a single env key or secret |
+
+> **Deprecated** (config ownership is moving to each component):
+> `PUT /services/{name}/config`, `POST /services/{name}/config/import`,
+> `POST /services/{name}/config/refresh-schema`, `POST /services/{name}/config/assist`
+> — all return **410 Gone** with `Deprecation` / `Sunset` headers.
+> Use `GET /services/{name}/config/export` to retrieve config for migration.
+> Docker-boundary settings (image, ports, mounts, env/secrets) are **not** deprecated.
 
 ### Git clone → parse → deploy → monitor → volume audit
 

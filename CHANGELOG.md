@@ -7,6 +7,14 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Fix hadolint warnings DL3066 (use numeric UID in USER) and DL3025 (use JSON notation for CMD arguments) in Dockerfile
+- Config-ownership migration — export endpoint and deprecations: add
+  ``GET /services/{name}/config/export`` (localhost + API-key restricted,
+  returns full config with unmasked secrets) so components can import
+  their config exactly once.  Deprecate config-write endpoints
+  (``PUT /services/{name}/config`` and ``PUT /chat/config/{name}``)
+  with ``Deprecation`` / ``Sunset`` headers.  Document the boundary
+  split between Docker-boundary settings (image, ports, mounts,
+  env/secrets — retained) and runtime config (config.json — component-owned).
 - GatewayAwareDocsMiddleware: intercept ``/docs`` and ``/openapi.json`` on
   component subdomains and proxy to the component container, preventing
   central-deploy's Lifecycle API docs (with mutating/destructive endpoints)
