@@ -8,6 +8,7 @@ import pytest
 from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle.backends._util import PruneImagesResult
 from robotsix_central_deploy.lifecycle.models import DockerDfStats
 from robotsix_central_deploy.registry.chat_agent_audit_store import ChatAgentAuditStore
 from robotsix_central_deploy.registry.models import ComponentConfig
@@ -44,7 +45,7 @@ async def test_chat_disk_reclaim_build_cache(
 
     mock = MagicMock()
     mock.prune_builds = AsyncMock(return_value=1024)
-    mock.prune_images = AsyncMock(return_value=0)
+    mock.prune_images = AsyncMock(return_value=PruneImagesResult())
     mock.disk_df = AsyncMock(return_value=DockerDfStats())
     server_mod.app.state.backend = mock
 
@@ -82,7 +83,9 @@ async def test_chat_disk_reclaim_dangling_images(
 
     mock = MagicMock()
     mock.prune_builds = AsyncMock(return_value=0)
-    mock.prune_images = AsyncMock(return_value=2048)
+    mock.prune_images = AsyncMock(
+        return_value=PruneImagesResult(space_reclaimed_bytes=2048, removed_count=1)
+    )
     mock.disk_df = AsyncMock(return_value=DockerDfStats())
     server_mod.app.state.backend = mock
 
@@ -116,7 +119,9 @@ async def test_chat_disk_reclaim_both(
 
     mock = MagicMock()
     mock.prune_builds = AsyncMock(return_value=1024)
-    mock.prune_images = AsyncMock(return_value=2048)
+    mock.prune_images = AsyncMock(
+        return_value=PruneImagesResult(space_reclaimed_bytes=2048, removed_count=1)
+    )
     mock.disk_df = AsyncMock(return_value=DockerDfStats())
     server_mod.app.state.backend = mock
 
@@ -129,6 +134,42 @@ async def test_chat_disk_reclaim_both(
     data = resp.json()
     assert data["space_reclaimed_bytes"] == 3072
     assert data["disk_snapshot"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Intermediate image tracking
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_disk_reclaim_reports_skipped_intermediate(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PruneImagesResult.skipped_intermediate flows to the response."""
+    _register_central_deploy()
+
+    mock = MagicMock()
+    mock.prune_builds = AsyncMock(return_value=0)
+    mock.prune_images = AsyncMock(
+        return_value=PruneImagesResult(
+            space_reclaimed_bytes=500,
+            removed_count=1,
+            skipped_intermediate=12,
+        )
+    )
+    mock.disk_df = AsyncMock(return_value=DockerDfStats())
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/disk/reclaim",
+        headers=auth_headers,
+        json={"dangling_images": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["images_skipped_intermediate"] == 12
+    assert "intermediate=12" in data["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +187,7 @@ async def test_chat_disk_reclaim_nothing(
 
     mock = MagicMock()
     mock.prune_builds = AsyncMock(return_value=0)
-    mock.prune_images = AsyncMock(return_value=0)
+    mock.prune_images = AsyncMock(return_value=PruneImagesResult())
     mock.disk_df = AsyncMock(return_value=DockerDfStats())
     server_mod.app.state.backend = mock
 
@@ -196,7 +237,7 @@ async def test_chat_disk_reclaim_rate_limited(
 
     mock = MagicMock()
     mock.prune_builds = AsyncMock(return_value=0)
-    mock.prune_images = AsyncMock(return_value=0)
+    mock.prune_images = AsyncMock(return_value=PruneImagesResult())
     mock.disk_df = AsyncMock(return_value=DockerDfStats())
     server_mod.app.state.backend = mock
 
@@ -237,7 +278,9 @@ async def test_chat_disk_reclaim_images_alias(
 
     mock = MagicMock()
     mock.prune_builds = AsyncMock(return_value=0)
-    mock.prune_images = AsyncMock(return_value=2048)
+    mock.prune_images = AsyncMock(
+        return_value=PruneImagesResult(space_reclaimed_bytes=2048, removed_count=2)
+    )
     mock.disk_df = AsyncMock(return_value=DockerDfStats())
     server_mod.app.state.backend = mock
 

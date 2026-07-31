@@ -88,5 +88,5 @@ async def reclaim_build_cache(
     """
     space_reclaimed = await backend.prune_builds()
     protected = await collect_protected_image_refs(store)
-    space_reclaimed += await backend.prune_images(protected)
+    space_reclaimed += (await backend.prune_images(protected)).space_reclaimed_bytes
     return ReclaimResponse(space_reclaimed_bytes=space_reclaimed)

@@ -896,6 +896,9 @@ class ChatAgentDiskReclaimRequest(BaseModel):
     Selects which safe reclaim targets to prune.  Only ``dangling_images``
     and ``build_cache`` are accepted — tagged images, in-use images, and
     named volumes are never pruned.
+
+    When *force* is ``True``, stopped containers are removed before the
+    image prune so that images they reference become eligible for removal.
     """
 
     model_config = {"populate_by_name": True}
@@ -908,6 +911,13 @@ class ChatAgentDiskReclaimRequest(BaseModel):
     build_cache: bool = Field(
         default=False,
         description="Prune reclaimable Docker build cache.",
+    )
+    force: bool = Field(
+        default=False,
+        description=(
+            "Remove stopped containers before pruning images so that "
+            "images referenced only by stopped containers can be reclaimed."
+        ),
     )
 
 
@@ -923,4 +933,34 @@ class ChatAgentDiskReclaimResponse(BaseModel):
     disk_snapshot: "DiskUsageResponse | None" = Field(
         default=None,
         description="Full disk-usage snapshot taken after the reclaim operation.",
+    )
+    # Image prune detail — surfaced so operators can diagnose zero-reclaim calls.
+    images_removed: int = Field(
+        default=0,
+        description="Number of dangling images successfully removed.",
+    )
+    images_skipped_protected: int = Field(
+        default=0,
+        description="Dangling images skipped because they are rollback targets.",
+    )
+    images_skipped_in_use: int = Field(
+        default=0,
+        description="Dangling images skipped because a container still references them.",
+    )
+    images_skipped_intermediate: int = Field(
+        default=0,
+        description="Dangling images skipped because they are intermediate parent "
+        "layers referenced by another (tagged) image — cannot be pruned.",
+    )
+    images_skipped_error: int = Field(
+        default=0,
+        description="Dangling images skipped because Docker returned an error.",
+    )
+    images_error_summary: str = Field(
+        default="",
+        description="First few distinct prune errors, if any.",
+    )
+    stopped_containers_removed: int = Field(
+        default=0,
+        description="When force=True: number of stopped containers removed.",
     )

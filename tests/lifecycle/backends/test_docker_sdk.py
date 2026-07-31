@@ -1385,19 +1385,29 @@ class TestDockerSdkBackendDiskDf:
                 },
             ],
         }
-        # Dangling images now sourced from images.list(dangling=True),
-        # NOT from the df() Images array — so the metric matches what
-        # prune_images() can actually remove.
-        client.images.list.return_value = [
-            _make_dangling_mock("sha256:d1", 400),
-            _make_dangling_mock("sha256:d2", 600),
+        # First images.list() call (no filter) — returns tagged images
+        # whose ParentId points to intermediate dangling layers.
+        tagged = [
+            _make_dangling_mock("sha256:tagged1", 200),
+            _make_dangling_mock("sha256:tagged2", 300),
         ]
+        tagged[0].attrs["ParentId"] = "sha256:d1"  # d1 is an intermediate parent
+        tagged[0].attrs["RepoTags"] = ["myapp:latest"]
+        tagged[1].attrs["RepoTags"] = ["myapp:v2"]
+        # Second images.list() call (dangling=True) — returns all dangling.
+        dangling = [
+            _make_dangling_mock("sha256:d1", 400),  # intermediate (parent of tagged1)
+            _make_dangling_mock("sha256:d2", 600),  # leaf (no child references)
+        ]
+        client.images.list.side_effect = [tagged, dangling]
 
         result = await b.disk_df()
 
         assert isinstance(result, DockerDfStats)
         assert result.images_size_bytes == 500  # LayersSize preferred
         assert result.dangling_images_bytes == 1000  # 400 + 600 from list
+        # Only d2 is reclaimable: d1 is an intermediate parent of tagged1.
+        assert result.dangling_images_reclaimable_bytes == 600
         assert result.build_cache_size_bytes == 500  # 200 + 300
         assert result.build_cache_reclaimable_bytes == 300  # only InUse=False
         assert len(result.volumes) == 2
@@ -1406,7 +1416,10 @@ class TestDockerSdkBackendDiskDf:
         assert result.volumes[0].in_use is True
         assert result.volumes[1].name == "vol-b"
         assert result.volumes[1].in_use is False
-        client.images.list.assert_called_once_with(filters={"dangling": True})
+        # Verify both calls were made.
+        assert client.images.list.call_count == 2
+        # Second call must be the dangling filter.
+        client.images.list.assert_any_call(filters={"dangling": True})
 
     async def test_disk_df_layers_size_zero_falls_back_to_sum(self, backend):
         """When LayersSize is 0, falls back to sum of image sizes."""
@@ -1417,6 +1430,7 @@ class TestDockerSdkBackendDiskDf:
             "LayersSize": 0,
             "Volumes": [],
         }
+        client.images.list.side_effect = [[], []]
         result = await b.disk_df()
         assert result.images_size_bytes == 400  # 150 + 250
 
@@ -1440,11 +1454,12 @@ class TestDockerSdkBackendDiskDf:
                 {"Name": "unknown-vol", "UsageData": {"Size": -1, "RefCount": 0}},
             ],
         }
+        client.images.list.side_effect = [[], []]
         result = await b.disk_df()
         assert len(result.volumes) == 0
 
     async def test_disk_df_dangling_list_failure_returns_zero(self, backend):
-        """When images.list fails, dangling_images_bytes is 0 (other stats OK)."""
+        """When images.list (dangling filter) fails, metrics are 0 (other stats OK)."""
         b, client, dm = backend
         client.api.df.return_value = {
             "Images": [],
@@ -1452,17 +1467,23 @@ class TestDockerSdkBackendDiskDf:
             "LayersSize": 500,
             "Volumes": [],
         }
-        client.images.list.side_effect = dm.errors.APIError("daemon down")
+        # First call (no filter) succeeds; second (dangling=True) fails.
+        client.images.list.side_effect = [
+            [],
+            dm.errors.APIError("daemon down"),
+        ]
         result = await b.disk_df()
         assert result.images_size_bytes == 500
         assert result.dangling_images_bytes == 0
+        assert result.dangling_images_reclaimable_bytes == 0
 
     async def test_disk_df_dangling_matches_prune_source(self, backend):
-        """dangling_images_bytes matches sum of sizes from images.list(dangling=True).
+        """dangling_images_bytes and reclaimable variant match images.list source.
 
-        This is the key consistency property: the metric and the prune
-        use the same Docker API source, so a post-reclaim snapshot
-        accurately reflects what remains.
+        ``dangling_images_bytes`` is the total of ALL dangling images (including
+        intermediate parents that ``images.list(dangling=True)`` returns).
+        ``dangling_images_reclaimable_bytes`` is the subset that are leaf
+        nodes — the ones ``prune_images()`` can actually remove.
         """
         b, client, dm = backend
         client.api.df.return_value = {
@@ -1477,20 +1498,54 @@ class TestDockerSdkBackendDiskDf:
             "LayersSize": 0,
             "Volumes": [],
         }
-        # Only truly dangling images (not intermediate parents) are returned.
-        client.images.list.return_value = [
-            _make_dangling_mock("sha256:real-dangling", 150),
+        # First call (no filter): tagged image whose ParentId is d1.
+        tagged = _make_dangling_mock("sha256:tagged", 100)
+        tagged.attrs["ParentId"] = "sha256:d1"
+        tagged.attrs["RepoTags"] = ["myapp:latest"]
+        # Second call (dangling=True): d1 is intermediate, d2 is leaf.
+        dangling = [
+            _make_dangling_mock("sha256:d1", 400),  # intermediate
+            _make_dangling_mock("sha256:d2", 150),  # leaf = reclaimable
         ]
+        client.images.list.side_effect = [[tagged], dangling]
 
         result = await b.disk_df()
-        # Not 5000 (the df sum), but 150 — what prune_images can remove.
-        assert result.dangling_images_bytes == 150
+        # Total dangling: 400 + 150 = 550 (all images.list(dangling=True))
+        assert result.dangling_images_bytes == 550
+        # Reclaimable: only d2 (150), d1 is an intermediate parent of tagged
+        assert result.dangling_images_reclaimable_bytes == 150
 
-        # And after pruning, the same list call would return empty (prune
-        # removed the only image), so a follow-up disk_df would show 0.
-        client.images.list.return_value = []
+        # After pruning, only the intermediate remains.
+        client.images.list.side_effect = [
+            [tagged],
+            [_make_dangling_mock("sha256:d1", 400)],
+        ]
         result2 = await b.disk_df()
-        assert result2.dangling_images_bytes == 0
+        assert result2.dangling_images_bytes == 400
+        assert result2.dangling_images_reclaimable_bytes == 0
+
+    async def test_disk_df_parent_list_failure_counts_all_as_reclaimable(self, backend):
+        """When the first images.list (parent-ID scan) fails, all dangling are
+        assumed reclaimable (no parent_ids known, so none are excluded)."""
+        b, client, dm = backend
+        client.api.df.return_value = {
+            "Images": [],
+            "BuildCache": [],
+            "LayersSize": 500,
+            "Volumes": [],
+        }
+        # First call (no filter) fails; second (dangling=True) succeeds.
+        client.images.list.side_effect = [
+            dm.errors.APIError("daemon down"),
+            [
+                _make_dangling_mock("sha256:d1", 400),
+                _make_dangling_mock("sha256:d2", 600),
+            ],
+        ]
+        result = await b.disk_df()
+        assert result.dangling_images_bytes == 1000
+        # Both d1 and d2 counted as reclaimable — no parent info available.
+        assert result.dangling_images_reclaimable_bytes == 1000
 
 
 # ---------------------------------------------------------------------------

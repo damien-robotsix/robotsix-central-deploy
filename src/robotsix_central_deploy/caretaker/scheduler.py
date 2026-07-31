@@ -174,7 +174,8 @@ class CaretakerScheduler:
                     )
 
                     protected = await collect_protected_image_refs(self._store)
-                    reclaimed = await self._backend.prune_images(protected)
+                    result = await self._backend.prune_images(protected)
+                    reclaimed = result.space_reclaimed_bytes
                     if reclaimed:
                         logger.info(
                             "caretaker: image auto-prune reclaimed %d bytes",

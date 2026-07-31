@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle._disk_utils import DiskInfo
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
+from robotsix_central_deploy.lifecycle.backends._util import PruneImagesResult
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
@@ -244,8 +245,10 @@ class TestDiskEndpoint:
         async def _fake_prune_builds(self) -> int:
             return 1_000
 
-        async def _fake_prune_images(self, protected_refs: set[str]) -> int:
-            return 2_000
+        async def _fake_prune_images(
+            self, protected_refs: set[str], *, force: bool = False
+        ) -> "PruneImagesResult":
+            return PruneImagesResult(space_reclaimed_bytes=2_000, removed_count=1)
 
         monkeypatch.setattr(NoopBackend, "prune_builds", _fake_prune_builds)
         monkeypatch.setattr(NoopBackend, "prune_images", _fake_prune_images)
@@ -269,9 +272,11 @@ class TestDiskEndpoint:
         )
         seen: list[set[str]] = []
 
-        async def _fake_prune_images(self, protected_refs: set[str]) -> int:
+        async def _fake_prune_images(
+            self, protected_refs: set[str], *, force: bool = False
+        ) -> "PruneImagesResult":
             seen.append(protected_refs)
-            return 0
+            return PruneImagesResult()
 
         monkeypatch.setattr(NoopBackend, "prune_images", _fake_prune_images)
         resp = await client.post("/disk/reclaim", headers=auth_headers)
