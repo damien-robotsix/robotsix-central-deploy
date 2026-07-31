@@ -7,6 +7,7 @@ All notable changes to robotsix-central-deploy.
 ## 0.0.0 (unreleased)
 
 - Merge endpoint: add ``commit_title`` body field and default ``merge_method`` to ``"squash"``; document merge as confirmation-gated in the github skill re-export docstring.
+- Remove orphaned `_deep_merge` helper from `_config_utils.py` and its `TestDeepMerge` test class; all production config merging now flows through `_merge_config` and its variants.
 - New endpoint ``GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs`` returns a single GitHub Actions job's plain-text log, following GitHub's 302/303 redirect server-side to the signed URL (without the ``Authorization`` header, which GitHub rejects on signed URLs). Defaults to returning the last 100 KB; configurable via ``tail_kb`` query parameter.
 - Fix hadolint warnings DL3066 (use numeric UID in USER) and DL3025 (use JSON notation for CMD arguments) in Dockerfile
 - Config-ownership migration — export endpoint and deprecations: add

@@ -8,7 +8,6 @@ import pytest
 from robotsix_central_deploy.lifecycle._config_utils import (
     _canonical_hash,
     _coerce_by_schema,
-    _deep_merge,
     _is_json_schema,
     _is_key_secret,
     _is_secret_prop,
@@ -21,67 +20,6 @@ from robotsix_central_deploy.lifecycle._config_utils import (
     _restore_secrets_from_current,
     _strip_secret_values,
 )
-
-
-# ---------------------------------------------------------------------------
-# _deep_merge
-# ---------------------------------------------------------------------------
-
-
-class TestDeepMerge:
-    def test_top_level_override(self):
-        base = {"a": 1, "b": 2}
-        override = {"b": 99}
-        result = _deep_merge(base, override)
-        assert result == {"a": 1, "b": 99}
-
-    def test_nested_dict_merge(self):
-        base = {"outer": {"inner_a": 1, "inner_b": 2}}
-        override = {"outer": {"inner_b": 99, "inner_c": 3}}
-        result = _deep_merge(base, override)
-        assert result == {"outer": {"inner_a": 1, "inner_b": 99, "inner_c": 3}}
-
-    def test_deeply_nested_merge(self):
-        base = {"a": {"b": {"c": 1, "d": 2}}}
-        override = {"a": {"b": {"d": 99}}}
-        result = _deep_merge(base, override)
-        assert result == {"a": {"b": {"c": 1, "d": 99}}}
-
-    def test_override_wins_over_nested(self):
-        base = {"a": {"b": {"c": 1}}}
-        override = {"a": "replaced"}
-        result = _deep_merge(base, override)
-        assert result == {"a": "replaced"}
-
-    def test_new_key_added(self):
-        base: dict[str, object] = {}
-        override = {"new_key": "value"}
-        result = _deep_merge(base, override)
-        assert result == {"new_key": "value"}
-
-    def test_empty_override(self):
-        base = {"a": 1, "b": {"c": 2}}
-        override: dict[str, object] = {}
-        result = _deep_merge(base, override)
-        assert result == {"a": 1, "b": {"c": 2}}
-
-    def test_empty_base(self):
-        base: dict[str, object] = {}
-        override = {"a": {"b": 2}}
-        result = _deep_merge(base, override)
-        assert result == {"a": {"b": 2}}
-
-    def test_does_not_mutate_base(self):
-        base = {"a": {"b": 1}}
-        override = {"a": {"c": 2}}
-        _deep_merge(base, override)
-        assert base == {"a": {"b": 1}}
-
-    def test_override_value_is_none(self):
-        base = {"a": 1}
-        override = {"a": None}
-        result = _deep_merge(base, override)
-        assert result == {"a": None}
 
 
 # ---------------------------------------------------------------------------
