@@ -17,6 +17,7 @@ All notable changes to robotsix-central-deploy.
   split between Docker-boundary settings (image, ports, mounts,
   env/secrets — retained) and runtime config (config.json — component-owned).
 - Add missing `gateway_docs_middleware` module to the Lifecycle Internals section in `docs/lifecycle/api.md`
+- Extract `_fanout_siblings_deploy_best_effort` helper into `_sibling_utils.py`, replacing three duplicated sibling deploy fan-out blocks in `chat_services.py`
 - GatewayAwareDocsMiddleware: intercept ``/docs`` and ``/openapi.json`` on
   component subdomains and proxy to the component container, preventing
   central-deploy's Lifecycle API docs (with mutating/destructive endpoints)

@@ -20,7 +20,6 @@ from ..deps import (
     _get_env_store,
     _get_or_create_record,
     _get_registry,
-    _get_sibling_pairs,
     _get_store,
     _require_config_standard,
 )
@@ -30,7 +29,10 @@ from ._chat_common import (
     _require_allowed_service,
     logger,
 )
-from ._sibling_utils import _fanout_siblings_best_effort
+from ._sibling_utils import (
+    _fanout_siblings_best_effort,
+    _fanout_siblings_deploy_best_effort,
+)
 from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..models import ActionType, ServiceRecord, ServiceState, can_transition
 from ..schemas import (
@@ -383,46 +385,14 @@ async def chat_update_service(
     await store.put(record)
 
     # Deploy siblings (best-effort) so the whole component group converges.
-    updated_siblings: list[str] = []
-    if config.siblings:
-        for sib_cfg, sib_record in await _get_sibling_pairs(name, config, store):
-            sib_name = f"{name}-{sib_cfg.service_key}"
-            try:
-                sib_merged_env = await env_store.get_merged_env(sib_name, sib_cfg.env)
-                sib_effective = config.model_copy(
-                    update={
-                        "id": sib_name,
-                        "image": sib_cfg.image,
-                        "container_name": sib_cfg.container_name,
-                        "ports": sib_cfg.ports,
-                        "mounts": sib_cfg.mounts,
-                        "env": sib_merged_env,
-                        "health_check": sib_cfg.health_check,
-                        "claude_mount": sib_cfg.claude_mount,
-                        "claude_mount_path": sib_cfg.claude_mount_path,
-                        "host_docker_sock": sib_cfg.host_docker_sock,
-                        "named_volumes": [m.host for m in sib_cfg.mounts],
-                        "command": sib_cfg.command,
-                        "entrypoint": sib_cfg.entrypoint,
-                        "tmpfs": sib_cfg.tmpfs,
-                        "mem_limit": sib_cfg.mem_limit,
-                        "user": sib_cfg.user,
-                    }
-                )
-                sib_outcome = await backend.deploy(
-                    sib_record, sib_effective, sib_cfg.image
-                )
-                sib_record.state = sib_outcome.state
-                sib_record.image = sib_cfg.image
-                sib_record.deployed_image_digest = sib_outcome.deployed_digest
-                sib_record.previous_image_digest = sib_outcome.previous_digest
-                await store.put(sib_record)
-                updated_siblings.append(sib_name)
-            except Exception:
-                logger.warning(
-                    "chat update: deploy sibling '%s' failed",
-                    _sanitize_log(sib_name),
-                )
+    updated_siblings = await _fanout_siblings_deploy_best_effort(
+        name,
+        config,
+        store,
+        backend,
+        "chat update",
+        env_store=env_store,
+    )
 
     await audit_store.append(
         ChatAgentAuditEntry(
@@ -574,46 +544,14 @@ async def chat_deploy_service(
     await store.put(record)
 
     # Deploy siblings (best-effort).
-    deployed_siblings: list[str] = []
-    if config.siblings:
-        for sib_cfg, sib_record in await _get_sibling_pairs(name, config, store):
-            sib_name = f"{name}-{sib_cfg.service_key}"
-            try:
-                sib_merged_env = await env_store.get_merged_env(sib_name, sib_cfg.env)
-                sib_effective = config.model_copy(
-                    update={
-                        "id": sib_name,
-                        "image": sib_cfg.image,
-                        "container_name": sib_cfg.container_name,
-                        "ports": sib_cfg.ports,
-                        "mounts": sib_cfg.mounts,
-                        "env": sib_merged_env,
-                        "health_check": sib_cfg.health_check,
-                        "claude_mount": sib_cfg.claude_mount,
-                        "claude_mount_path": sib_cfg.claude_mount_path,
-                        "host_docker_sock": sib_cfg.host_docker_sock,
-                        "named_volumes": [m.host for m in sib_cfg.mounts],
-                        "command": sib_cfg.command,
-                        "entrypoint": sib_cfg.entrypoint,
-                        "tmpfs": sib_cfg.tmpfs,
-                        "mem_limit": sib_cfg.mem_limit,
-                        "user": sib_cfg.user,
-                    }
-                )
-                sib_outcome = await backend.deploy(
-                    sib_record, sib_effective, sib_cfg.image
-                )
-                sib_record.state = sib_outcome.state
-                sib_record.image = sib_cfg.image
-                sib_record.deployed_image_digest = sib_outcome.deployed_digest
-                sib_record.previous_image_digest = sib_outcome.previous_digest
-                await store.put(sib_record)
-                deployed_siblings.append(sib_name)
-            except Exception:
-                logger.warning(
-                    "chat deploy: deploy sibling '%s' failed",
-                    _sanitize_log(sib_name),
-                )
+    deployed_siblings = await _fanout_siblings_deploy_best_effort(
+        name,
+        config,
+        store,
+        backend,
+        "chat deploy",
+        env_store=env_store,
+    )
 
     await audit_store.append(
         ChatAgentAuditEntry(
@@ -900,7 +838,7 @@ async def chat_deploy(
         await component_config_store.put(comp_cfg)
 
     # --- Deploy siblings (best-effort) ---
-    deployed_siblings: list[str] = []
+    # Pre-seed sibling records so _get_sibling_pairs can find them.
     if comp_cfg.siblings:
         for sib in comp_cfg.siblings:
             sib_name = f"{body.name}-{sib.service_key}"
@@ -911,38 +849,13 @@ async def chat_deploy(
                 component_id=body.name,
             )
             await store.put(sib_record)
-            try:
-                sib_cfg = ComponentConfig(
-                    id=sib_name,
-                    image=sib.image,
-                    container_name=sib.container_name,
-                    ports=sib.ports,
-                    mounts=sib.mounts,
-                    env=sib.env,
-                    health_check=sib.health_check,
-                    claude_mount=sib.claude_mount,
-                    claude_mount_path=sib.claude_mount_path,
-                    host_docker_sock=sib.host_docker_sock,
-                    named_volumes=[m.host for m in sib.mounts],
-                    command=sib.command,
-                    entrypoint=sib.entrypoint,
-                    tmpfs=sib.tmpfs,
-                    mem_limit=sib.mem_limit,
-                    user=sib.user,
-                )
-                sib_outcome = await backend.deploy(sib_record, sib_cfg, sib.image)
-                sib_record.state = sib_outcome.state
-                sib_record.image = sib.image
-                sib_record.deployed_image_digest = sib_outcome.deployed_digest
-                sib_record.previous_image_digest = sib_outcome.previous_digest
-                await store.put(sib_record)
-                deployed_siblings.append(sib_name)
-            except Exception as exc:
-                logger.warning(
-                    "chat deploy sibling '%s' failed: %s",
-                    _sanitize_log(sib_name),
-                    exc,
-                )
+    deployed_siblings = await _fanout_siblings_deploy_best_effort(
+        body.name,
+        comp_cfg,
+        store,
+        backend,
+        "chat deploy",
+    )
 
     await audit_store.append(
         ChatAgentAuditEntry(
