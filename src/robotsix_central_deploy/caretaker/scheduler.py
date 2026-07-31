@@ -139,14 +139,26 @@ class CaretakerScheduler:
         # Identify our own container so phase_update never tries to auto-deploy
         # (and thereby kill) the process running this pass — see phase_update.
         self_container_name = ""
+        # Distinguishes "this backend has no self container to protect" from
+        # "it has one but we could not name it". Only the latter is dangerous:
+        # phase_update fails closed on it rather than risk deploying over the
+        # management plane.
+        self_identity_known = True
         try:
             self_info = await self._backend.inspect_self()
             if self_info is not None:
                 self_container_name = self_info.container_name
+            else:
+                # The backend supports self-inspection but found nothing —
+                # a transient API error, or not running in a container.
+                self_identity_known = False
         except NotImplementedError:
+            # Backend cannot self-inspect at all (noop/non-containerised):
+            # there is no own container to accidentally deploy over.
             pass
         except Exception:
             logger.warning("caretaker: inspect_self failed", exc_info=True)
+            self_identity_known = False
 
         try:
             update_findings = await phase_update(
@@ -157,6 +169,7 @@ class CaretakerScheduler:
                 self._deploy_history_store,
                 self._env_store,
                 self_container_name,
+                self_identity_known,
             )
             findings.extend(update_findings)
             phases_run.append("update")

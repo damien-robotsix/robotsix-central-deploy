@@ -317,6 +317,47 @@ class TestPhaseUpdate:
         assert record.update_available is True
 
     @pytest.mark.asyncio
+    async def test_fails_closed_when_self_identity_unknown(self):
+        """No component is deployed when the caretaker cannot name itself.
+
+        Regression (2026-07-31 outage): ``inspect_self`` returned None because
+        a container vanished mid-scan, so ``self_container_name`` was empty and
+        the ``if self_container_name and ...`` self-skip fell through. The
+        caretaker then deployed central-deploy on top of its own container,
+        which SIGKILLed the management plane with nothing to recreate it.
+        With identity unknown, every record is potentially self — deploy none.
+        """
+        store = MagicMock()
+        record = _make_record(name="central-deploy")
+        record.container_name = "robotsix-central-deploy-central-deploy-1"
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock()
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config(id="central-deploy"))
+        dhs = MagicMock(spec=DeployHistoryStore)
+
+        findings = await phase_update(
+            registry,
+            store,
+            backend,
+            ccs,
+            dhs,
+            _make_env_store(),
+            self_container_name="",
+            self_identity_known=False,
+        )
+
+        backend.deploy.assert_not_called()
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.UPDATE_FAILED
+        assert "self-identity unknown" in findings[0].title.lower()
+        # The pass is deferred, not lost: the flag stays pending for next time.
+        assert record.update_available is True
+
+    @pytest.mark.asyncio
     async def test_still_deploys_others_when_self_name_set(self):
         """A non-self primary component is still auto-deployed normally."""
         store = MagicMock()

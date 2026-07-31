@@ -1165,7 +1165,14 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         def _scan() -> Any:
-            for summary in self._client.containers.list():
+            # ``sparse=True`` is required, not an optimisation: a non-sparse
+            # ``list()`` hydrates every summary with its own inspect call, so a
+            # container destroyed between the list and its hydration makes
+            # ``list()`` itself raise NotFound. On this host mill sandboxes are
+            # created and destroyed continuously, so that race fires often; the
+            # escaping NotFound made ``inspect_self`` return None and the
+            # caretaker's self-skip guard fail open (2026-07-31 outage).
+            for summary in self._client.containers.list(sparse=True):
                 if not summary.id:
                     continue
                 try:
@@ -1198,7 +1205,10 @@ class DockerSdkBackend(ExecutionBackend):
             if container is None:
                 container = await self._find_by_config_hostname(hostname)
         except docker.errors.APIError as exc:
-            logger.warning("inspect_self: docker daemon unreachable: %s", exc)
+            # Deliberately not "daemon unreachable": a NotFound raised by a
+            # container vanishing mid-scan reached here too, and the wrong
+            # wording sent the 2026-07-31 outage investigation off course.
+            logger.warning("inspect_self: self-inspection failed: %s", exc)
             return None
         if container is None:
             return None
