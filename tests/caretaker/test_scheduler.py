@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,6 +14,7 @@ from robotsix_central_deploy.caretaker.models import CaretakerReport
 # lifecycle → deps → caretaker.scheduler (deps.CaretakerScheduler at module-level).
 from robotsix_central_deploy.lifecycle.models import (
     ComponentInspect,
+    SelfInspect,
     ServiceRecord,
     ServiceState,
 )
@@ -49,6 +51,19 @@ def scheduler_fixtures(tmp_path):
         disk_path="/",
     )
     backend = MagicMock()
+    # A bare MagicMock returns a non-awaitable for inspect_self, which the
+    # scheduler now treats as "self-identity unknown" and fails closed on.
+    # Give it a real answer naming a container none of these tests own, so
+    # phase_update runs normally without ever matching a record as self.
+    backend.inspect_self = AsyncMock(
+        return_value=SelfInspect(
+            container_id="self-cid",
+            container_name="robotsix-central-deploy-central-deploy-1",
+            image_ref="ghcr.io/damien-robotsix/robotsix-central-deploy:main",
+            running_digest="sha256:self",
+            networks=[],
+        )
+    )
     registry = ComponentRegistry([])
     service_store = MagicMock()
     component_config_store = MagicMock(spec=ComponentConfigStore)
@@ -111,6 +126,47 @@ class TestScheduler:
         assert "health" in report.phases_run
         assert "volumes" in report.phases_run
         assert isinstance(report, CaretakerReport)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("inspect_self_mock", "expect_known"),
+        [
+            (AsyncMock(return_value=None), False),
+            (AsyncMock(side_effect=RuntimeError("socket proxy blew up")), False),
+            (AsyncMock(side_effect=NotImplementedError), True),
+        ],
+        ids=["returns-none", "raises", "unsupported-backend"],
+    )
+    async def test_self_identity_propagated_to_phase_update(
+        self, scheduler_fixtures, monkeypatch, inspect_self_mock, expect_known
+    ):
+        """A failed self-lookup must mark identity unknown for phase_update.
+
+        Regression (2026-07-31 outage): inspect_self returned None and the
+        scheduler silently passed an empty container name, which phase_update
+        treated as "no self to skip" and deployed central-deploy over itself.
+        NotImplementedError is different — the backend has no self container
+        at all, so auto-update stays enabled.
+        """
+        scheduler, store, backend, ccs, http = scheduler_fixtures
+        store.list_all = AsyncMock(return_value=[])
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.inspect_self = inspect_self_mock
+
+        captured: dict[str, object] = {}
+
+        async def _fake_phase_update(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return []
+
+        sched_mod = sys.modules["robotsix_central_deploy.caretaker.scheduler"]
+        monkeypatch.setattr(sched_mod, "phase_update", _fake_phase_update)
+
+        await scheduler.run_once()
+
+        # self_identity_known is the last positional argument.
+        assert captured["args"][-1] is expect_known
 
     @pytest.mark.asyncio
     async def test_run_once_routes_to_mill(self, scheduler_fixtures, monkeypatch):

@@ -37,6 +37,7 @@ async def phase_update(
     deploy_history_store: DeployHistoryStore,
     env_store: EnvStore,
     self_container_name: str = "",
+    self_identity_known: bool = True,
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -51,8 +52,40 @@ async def phase_update(
     never persisted and the replacement self-updates forever. Self-update is
     handled exclusively by ``POST /system/update`` (a detached watchtower
     container that survives the swap).
+
+    When ``self_identity_known`` is False the caller could not determine which
+    container it runs inside, so no record can be ruled out as self and the
+    whole phase is skipped — see the fail-closed note below.
     """
     findings: list[CaretakerFinding] = []
+
+    # Fail closed on unknown self-identity. The self-skip below can only
+    # exclude a record it can name; with no name every record is potentially
+    # this very container, and deploying it kills the management plane with no
+    # detached recreator to bring it back (2026-07-31 outage: a mid-scan
+    # NotFound made inspect_self return None, the guard fell through, and
+    # phase_update deployed central-deploy on top of itself). Skipping a pass
+    # only defers updates to the next one; guessing wrong takes the fleet down.
+    if not self_identity_known:
+        logger.warning(
+            "phase_update: self-identity unknown, skipping the update phase "
+            "(cannot rule out deploying our own container)"
+        )
+        return [
+            CaretakerFinding(
+                kind=FindingKind.UPDATE_FAILED,
+                title="Update phase skipped: self-identity unknown",
+                detail=(
+                    "The caretaker could not determine which container it runs "
+                    "inside, so it cannot guarantee an auto-deploy would not "
+                    "replace the management plane itself. No component was "
+                    "updated this pass; the next pass retries. Self-update "
+                    "remains available via POST /system/update."
+                ),
+                severity="warning",
+            )
+        ]
+
     records = await store.list_all()
 
     for record in records:

@@ -1834,6 +1834,74 @@ class TestDockerSdkBackendVolumeOpsDelegation:
 
 
 # ---------------------------------------------------------------------------
+# Self-inspection — the caretaker's self-skip guard depends on this
+# ---------------------------------------------------------------------------
+
+
+class TestInspectSelf:
+    """inspect_self must survive containers churning during its scan."""
+
+    @pytest.fixture
+    def backend(self):
+        dm = _make_docker_mock()
+        client = MagicMock()
+        dm.DockerClient.return_value = client
+        with patch.dict(sys.modules, {"docker": dm}):
+            b = DockerSdkBackend()
+            yield b, client, dm
+
+    async def test_lists_sparsely_to_avoid_hydration_race(self, backend):
+        """The fallback scan must not let ``list()`` hydrate each entry.
+
+        Regression (2026-07-31 outage): a non-sparse ``containers.list()``
+        inspects every summary it returns, so a container destroyed in that
+        window raised NotFound out of ``list()`` itself — past the per-entry
+        guard — and inspect_self returned None. That emptied the caretaker's
+        self-skip guard and it deployed central-deploy over its own container.
+        """
+        b, client, dm = backend
+        # Hostname lookup misses, as it does after every watchtower self-update.
+        client.containers.get.side_effect = dm.errors.NotFound("no such container")
+
+        with patch("socket.gethostname", return_value="stale-host-id"):
+            assert await b.inspect_self() is None
+
+        client.containers.list.assert_called_once_with(sparse=True)
+
+    async def test_skips_container_destroyed_mid_scan(self, backend):
+        """A container vanishing between list and get is skipped, not fatal."""
+        b, client, dm = backend
+        vanished = MagicMock()
+        vanished.id = "doomed"
+        survivor = MagicMock()
+        survivor.id = "alive"
+        client.containers.list.return_value = [vanished, survivor]
+
+        full = MagicMock()
+        full.attrs = {
+            "Id": "alive",
+            "Name": "/central-deploy",
+            "Config": {"Hostname": "stale-host-id", "Image": "img:main"},
+            "NetworkSettings": {"Networks": {"net-a": {}}},
+        }
+        full.image = None
+
+        def _get(cid):
+            if cid == "stale-host-id" or cid == "doomed":
+                raise dm.errors.NotFound("gone")
+            return full
+
+        client.containers.get.side_effect = _get
+
+        with patch("socket.gethostname", return_value="stale-host-id"):
+            info = await b.inspect_self()
+
+        assert info is not None
+        assert info.container_name == "central-deploy"
+        assert info.container_id == "alive"
+
+
+# ---------------------------------------------------------------------------
 # Contract conformance
 # ---------------------------------------------------------------------------
 
