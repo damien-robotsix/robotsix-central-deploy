@@ -220,7 +220,11 @@ same derivation used by the caretaker's mill client.
 - **At onboard time:** check "Allow chat agent access" in the onboard modal
   (default from the compose label `robotsix.deploy.chat-access`, which
   accepts `"true"`, `"1"`, or `"yes"`).
-- **Post-onboard:** open the component's **Env & Secrets** modal (the "Env & Secrets" button on the dashboard row), then toggle the "Allow chat agent access" checkbox under the Chat Access section and click Save. (Runtime component-config editing panels have been removed from the dashboard — each component manages its own settings.)
+- **Post-onboard:** open the component's **Env & Secrets** modal (the
+  "Env & Secrets" button on the dashboard row), then toggle the "Allow
+  chat agent access" checkbox under the Chat Access section and click
+  Save. (Runtime component-config editing panels have been removed from
+  the dashboard — each component manages its own settings.)
 
 The flag is stored on the component's `ComponentConfig` and persists across
 redeploys.
