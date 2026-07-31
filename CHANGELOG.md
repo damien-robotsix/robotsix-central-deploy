@@ -15,6 +15,7 @@ All notable changes to robotsix-central-deploy.
   with ``Deprecation`` / ``Sunset`` headers.  Document the boundary
   split between Docker-boundary settings (image, ports, mounts,
   env/secrets — retained) and runtime config (config.json — component-owned).
+- Add missing `gateway_docs_middleware` module to the Lifecycle Internals section in `docs/lifecycle/api.md`
 - GatewayAwareDocsMiddleware: intercept ``/docs`` and ``/openapi.json`` on
   component subdomains and proxy to the component container, preventing
   central-deploy's Lifecycle API docs (with mutating/destructive endpoints)
