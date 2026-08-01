@@ -5457,6 +5457,38 @@
         }
       }
     },
+    "/fleet/langfuse": {
+      "get": {
+        "tags": [
+          "fleet-langfuse"
+        ],
+        "summary": "List components with Langfuse credentials",
+        "description": "Return every registered component with its lifecycle status and,\nwhen configured, the Langfuse host and project API key pairs\nneeded to read that component's traces.\n\nOnly authenticated fleet-internal consumers may call this endpoint.",
+        "operationId": "fleet_langfuse_credentials_fleet_langfuse_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetLangfuseResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -8204,6 +8236,98 @@
         ],
         "title": "ErrorDetail",
         "description": "Structured error response body."
+      },
+      "FleetLangfuseComponent": {
+        "properties": {
+          "component_id": {
+            "type": "string",
+            "title": "Component Id",
+            "description": "Stable component slug (e.g. 'robotsix-chat')"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Container / service name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current lifecycle state"
+          },
+          "langfuse_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Host",
+            "description": "Langfuse instance base URL, or None"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/FleetLangfuseProject"
+            },
+            "type": "array",
+            "title": "Projects",
+            "description": "Langfuse projects with credentials (empty when not configured)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "component_id",
+          "name",
+          "status"
+        ],
+        "title": "FleetLangfuseComponent",
+        "description": "One component's Langfuse configuration, when available."
+      },
+      "FleetLangfuseProject": {
+        "properties": {
+          "alias": {
+            "type": "string",
+            "title": "Alias",
+            "description": "Langfuse project alias / slug"
+          },
+          "public_key": {
+            "type": "string",
+            "title": "Public Key",
+            "description": "Langfuse public key (read-only)"
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Secret Key",
+            "description": "Langfuse secret key (read-only)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alias",
+          "public_key",
+          "secret_key"
+        ],
+        "title": "FleetLangfuseProject",
+        "description": "Credentials for one Langfuse project belonging to a component."
+      },
+      "FleetLangfuseResponse": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/FleetLangfuseComponent"
+            },
+            "type": "array",
+            "title": "Components",
+            "description": "Every registered component; Langfuse fields are populated when configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "components"
+        ],
+        "title": "FleetLangfuseResponse",
+        "description": "Top-level response for GET /fleet/langfuse."
       },
       "HTTPValidationError": {
         "properties": {
