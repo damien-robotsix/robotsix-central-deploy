@@ -13,15 +13,25 @@ Exposes:
 - ``GET /chat/langfuse/{project}/observations`` — proxy to Langfuse ``GET /api/public/observations``
 - ``GET /chat/langfuse/{project}/observations/{observation_id}`` — single observation
 
-Project aliases and credentials are configured via
-``LifecycleConfig.langfuse_projects`` (dict of alias → {public_key,
-secret_key}).
+Project aliases come from two sources, merged at request time:
+
+1. **Operator-configured** — ``LifecycleConfig.langfuse_projects`` (static,
+   loaded from ``config/config.json``).  These take precedence over
+   auto-discovered credentials so the operator can pin or override keys.
+
+2. **Auto-discovered** — ``request.app.state.auto_langfuse_projects``
+   (dynamic, reconciled whenever a service's ``allow_chat_access`` or
+   ``chat_agent_mutatable`` toggle changes).  Built by scanning every
+   service with chat access enabled and extracting Langfuse project
+   credentials from its standardized config.
 """
 
 from __future__ import annotations
 
 import base64
+import logging
 import urllib.parse
+from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
@@ -34,7 +44,11 @@ from ..auth import verify_auth
 from ..config import LangfuseProjectCreds, LifecycleConfig
 from ..deps import _get_config
 
-logger = __import__("logging").getLogger(__name__)
+if TYPE_CHECKING:
+    from ...registry.config_store import ComponentConfigStore
+    from ...registry.config_yaml_store import ConfigYamlStore
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat-langfuse"])
 
@@ -43,22 +57,39 @@ router = APIRouter(tags=["chat-langfuse"])
 # ---------------------------------------------------------------------------
 
 
-def _build_project_creds(config: LifecycleConfig) -> dict[str, LangfuseProjectCreds]:
-    """Build the full project-alias → credentials map from config.
+def _build_project_creds(
+    config: LifecycleConfig,
+    auto_projects: dict[str, LangfuseProjectCreds] | None = None,
+) -> dict[str, LangfuseProjectCreds]:
+    """Build the full project-alias → credentials map.
 
-    Reads ``langfuse_projects`` (the data-driven dict form).
+    Merges two sources, with operator-configured entries taking precedence:
+
+    1. **Auto-discovered** — from services with ``allow_chat_access`` or
+       ``chat_agent_mutatable`` enabled (populated by reconciliation).
+    2. **Operator-configured** — ``LifecycleConfig.langfuse_projects``
+       (static, loaded from ``config/config.json``).  These override
+       auto-discovered entries so the operator can pin or rotate keys.
     """
-    return dict(config.langfuse_projects)
+    merged: dict[str, LangfuseProjectCreds] = {}
+    if auto_projects:
+        merged.update(auto_projects)
+    merged.update(config.langfuse_projects)
+    return merged
 
 
-def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, str]:
+def _resolve_project_keys(
+    config: LifecycleConfig,
+    project: str,
+    auto_projects: dict[str, LangfuseProjectCreds] | None = None,
+) -> tuple[str, str]:
     """Return ``(public_key, secret_key)`` for *project*.
 
     Raises:
         HTTPException(404): unknown project alias.
         HTTPException(503): known alias but keys are not configured.
     """
-    creds = _build_project_creds(config).get(project)
+    creds = _build_project_creds(config, auto_projects).get(project)
     if creds is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -70,6 +101,66 @@ def _resolve_project_keys(config: LifecycleConfig, project: str) -> tuple[str, s
             detail=f"Langfuse credentials for project '{project}' are not configured.",
         )
     return creds.public_key, creds.secret_key.get_secret_value()
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery: extract Langfuse project credentials from a component's
+# standardized config and reconcile the full auto-projects dict.
+# ---------------------------------------------------------------------------
+
+
+def _extract_langfuse_projects(
+    config_dict: dict[str, object],
+) -> dict[str, LangfuseProjectCreds]:
+    """Extract Langfuse project credentials from a component's config.
+
+    Looks for ``langfuse.projects.<alias>`` entries where each alias
+    contains ``public_key`` and ``secret_key`` fields — mirroring the
+    ``LifecycleConfig.langfuse_projects`` structure.
+
+    Returns an empty dict when the config has no Langfuse projects.
+    """
+    langfuse = config_dict.get("langfuse")
+    if not isinstance(langfuse, dict):
+        return {}
+    projects = langfuse.get("projects")
+    if not isinstance(projects, dict):
+        return {}
+    result: dict[str, LangfuseProjectCreds] = {}
+    for alias, cred_dict in projects.items():
+        if not isinstance(cred_dict, dict):
+            continue
+        public_key = cred_dict.get("public_key", "")
+        secret_key = cred_dict.get("secret_key", "")
+        if public_key and secret_key:
+            result[str(alias)] = LangfuseProjectCreds(
+                public_key=str(public_key),
+                secret_key=str(secret_key),
+            )
+    return result
+
+
+async def _reconcile_auto_langfuse_projects(
+    component_config_store: "ComponentConfigStore",
+    config_yaml_store: "ConfigYamlStore",
+) -> dict[str, LangfuseProjectCreds]:
+    """Scan every component with chat access enabled and extract Langfuse keys.
+
+    Components are processed in registration order.  When two components
+    declare the same project alias the first one wins (no overwrite).
+    """
+    result: dict[str, LangfuseProjectCreds] = {}
+    for cfg in component_config_store.all():
+        if not (cfg.allow_chat_access or cfg.chat_agent_mutatable):
+            continue
+        current = await config_yaml_store.get_current(cfg.id)
+        if current is None:
+            continue
+        projects = _extract_langfuse_projects(current)
+        for alias, creds in projects.items():
+            if alias not in result:
+                result[alias] = creds
+    return result
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -100,7 +191,10 @@ async def _proxy_to_langfuse(
 
     The ``limit`` query parameter is capped at 100 server-side.
     """
-    public_key, secret_key = _resolve_project_keys(config, project)
+    auto_projects: dict[str, LangfuseProjectCreds] = getattr(
+        request.app.state, "auto_langfuse_projects", {}
+    )
+    public_key, secret_key = _resolve_project_keys(config, project, auto_projects)
 
     if not config.langfuse_base_url:
         raise HTTPException(
@@ -195,14 +289,20 @@ async def _proxy_to_langfuse(
     responses={401: {"description": "Unauthorized"}},
 )
 async def list_projects(
+    request: Request,
     config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[str]:
     """Return the Langfuse project aliases whose key pairs are configured.
 
     Only projects with both a public key and a secret key set are listed.
+    Includes operator-configured projects from ``langfuse_projects`` and
+    auto-discovered projects from services with chat access enabled.
     """
-    projects = _build_project_creds(config)
+    auto_projects: dict[str, LangfuseProjectCreds] = getattr(
+        request.app.state, "auto_langfuse_projects", {}
+    )
+    projects = _build_project_creds(config, auto_projects)
     return [
         alias
         for alias, creds in projects.items()

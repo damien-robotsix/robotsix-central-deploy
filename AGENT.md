@@ -22,7 +22,7 @@ Service definitions belong in **declarative data**, never in engine code:
 | --- | --- |
 | Component configs (per-service Docker/image/port/volume specs) | `component_config_store` — persisted at `data/component_configs.json` and populated via the onboarding API (`POST /onboard/preflight` + `POST /onboard/confirm`) or the seed module at startup |
 | Virtual components (non-Docker chat-accessible services) | `LifecycleConfig.virtual_components` in `config/config.json` |
-| Langfuse project credentials | `LifecycleConfig.langfuse_projects` (dict of alias → `{public_key, secret_key}`) in `config/config.json` |
+| Langfuse project credentials | `LifecycleConfig.langfuse_projects` (dict of alias → `{public_key, secret_key}`) in `config/config.json` — operator-configured; overrides auto-discovered entries. Langfuse key pairs are also **auto-discovered** from any service's standardized config (`langfuse.projects.<alias>` → `{public_key, secret_key}`) when its `allow_chat_access`/`chat_agent_mutatable` toggle is enabled, reconciling them as chat-proxy project aliases (no operator key-pasting) |
 | Chat-agent mutation permissions | `ComponentConfig.chat_agent_mutatable` — set per-component via the `robotsix.deploy.chat-agent-mutatable` compose label at onboard time |
 | Gateway routes / TLS | Derived automatically from onboarded component ids + `gateway_base_domain` — no per-service routing rules exist |
 

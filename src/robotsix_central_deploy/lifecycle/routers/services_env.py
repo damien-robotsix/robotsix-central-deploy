@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -12,6 +12,7 @@ from ..deps import (
     _fetch_component_repo_files,
     _get_backend,
     _get_component_config_store,
+    _get_config_yaml_store,
     _get_env_store,
     _get_or_create_record,
     _get_registry,
@@ -22,13 +23,69 @@ from ..models import ErrorDetail
 from ..schemas import EnvResponse, EnvSyncResponse, EnvUpdate
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.settings_store import SystemSettingsStore
+from .chat_langfuse import _reconcile_auto_langfuse_projects
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["services"])
+
+
+# ---------------------------------------------------------------------------
+# Helper — reconcile Langfuse auto-projects after an allow_chat_access toggle
+# ---------------------------------------------------------------------------
+
+
+async def _reconcile_langfuse_after_toggle(
+    component_config_store: ComponentConfigStore,
+    config_yaml_store: ConfigYamlStore,
+    request: Request,
+) -> None:
+    """Re-run Langfuse auto-discovery and update app.state.
+
+    Called after every ``allow_chat_access`` or ``chat_agent_mutatable``
+    toggle so the chat-agent Langfuse proxy sees the latest project set.
+    Failures are logged but never raised — auto-projects degrade
+    gracefully to the last-known-good set.
+    """
+    try:
+        auto_langfuse = await _reconcile_auto_langfuse_projects(
+            component_config_store, config_yaml_store
+        )
+        request.app.state.auto_langfuse_projects = auto_langfuse
+
+        # Also refresh central-deploy's own config current values so
+        # GET /services/central-deploy/config stays in sync.
+        from ..config import LifecycleConfig
+
+        config: LifecycleConfig = request.app.state.config
+        current_projects: dict[str, dict[str, str]] = {}
+        for alias, creds in auto_langfuse.items():
+            current_projects[alias] = {
+                "public_key": creds.public_key,
+                "secret_key": creds.secret_key.get_secret_value(),
+            }
+        for alias, creds in config.langfuse_projects.items():
+            current_projects[alias] = {
+                "public_key": creds.public_key,
+                "secret_key": creds.secret_key.get_secret_value(),
+            }
+        await config_yaml_store.update_current(
+            "central-deploy", {"langfuse_projects": current_projects}
+        )
+
+        logger.debug(
+            "Reconciled Langfuse auto-projects: %d project(s)",
+            len(auto_langfuse),
+        )
+    except Exception:
+        logger.warning(
+            "Langfuse auto-discovery reconciliation failed",
+            exc_info=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +154,11 @@ async def get_service_env(
 async def put_service_env(
     name: str,
     body: EnvUpdate,
+    request: Request,
     store: ServiceStore = Depends(_get_store),
     env_store: EnvStore = Depends(_get_env_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     registry: ComponentRegistry = Depends(_get_registry),
     settings_store: SystemSettingsStore = Depends(_get_settings_store),
     backend: "ExecutionBackend" = Depends(_get_backend),
@@ -144,6 +203,11 @@ async def put_service_env(
             comp_cfg.allow_chat_access = body.allow_chat_access
             await component_config_store.put(comp_cfg)
             registry.register(comp_cfg)
+            # Reconcile Langfuse auto-projects — a toggle may add or
+            # remove project aliases discoverable from this service.
+            await _reconcile_langfuse_after_toggle(
+                component_config_store, config_yaml_store, request
+            )
     if body.claude_mount is not None:
         comp_cfg = component_config_store.get(name)
         if comp_cfg is not None:

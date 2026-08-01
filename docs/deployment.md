@@ -228,6 +228,25 @@ same derivation used by the caretaker's mill client.
 The flag is stored on the component's `ComponentConfig` and persists across
 redeploys.
 
+### Langfuse trace access
+
+Enabling chat access (`allow_chat_access` or `chat_agent_mutatable`) on a
+component also **auto-grants** the chat agent read access to that component's
+Langfuse traces through the existing `/chat/langfuse/...` proxy.  When the
+toggle is on, central-deploy scans the component's standardized config for
+Langfuse key pairs (`langfuse.projects.<alias>` → `{public_key, secret_key}`)
+and registers them as chat-proxy project aliases.  Toggling off deregisters
+them.  Reconciliation is idempotent — re-applying the toggle or restarting
+central-deploy converges to the same alias set.
+
+No operator key-pasting step is involved: secrets live in each component's
+standardized config (or the operator-configured
+`LifecycleConfig.langfuse_projects` in `config/config.json`), never transit
+through the chat agent, and remain masked in all chat-visible reads.  A
+component with chat access enabled but no Langfuse keys in its config
+simply grants no aliases (no error).  The reconciled alias set is visible via
+`GET /services/central-deploy/config` (`langfuse_projects` schema).
+
 ### Generic deploy (server-level allowlist)
 
 Not every deployable component needs an onboarding pipeline or persisted

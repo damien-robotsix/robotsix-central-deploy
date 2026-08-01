@@ -5176,7 +5176,7 @@
           "chat-langfuse"
         ],
         "summary": "List configured Langfuse project aliases",
-        "description": "Return the Langfuse project aliases whose key pairs are configured.\n\nOnly projects with both a public key and a secret key set are listed.",
+        "description": "Return the Langfuse project aliases whose key pairs are configured.\n\nOnly projects with both a public key and a secret key set are listed.\nIncludes operator-configured projects from ``langfuse_projects`` and\nauto-discovered projects from services with chat access enabled.",
         "operationId": "list_projects_chat_langfuse_projects_get",
         "responses": {
           "200": {
