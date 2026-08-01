@@ -29,6 +29,7 @@ async def async_read_json(path: Path) -> dict[str, Any]:
 async def async_write_json(path: Path, data: dict[str, Any]) -> None:
     """Atomically write *data* as indented JSON via a temporary file."""
     tmp = path.with_suffix(".tmp")
+    tmp.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
     tmp.rename(path)
 

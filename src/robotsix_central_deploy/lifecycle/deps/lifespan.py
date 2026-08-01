@@ -16,7 +16,7 @@ from robotsix_http import RetryClient
 from ..._http import wrap_retry_client
 
 from ..backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
-from ..config import LifecycleConfig, VirtualComponentEntry
+from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntry
 from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
 from ..store import FileStore, InMemoryStore, ServiceStore
 from ...registry.config_store import ComponentConfigStore
@@ -527,6 +527,84 @@ async def _seed_component_registry(
         )
 
 
+# ---------------------------------------------------------------------------
+# Central-deploy own config schema seeding
+# ---------------------------------------------------------------------------
+
+
+_CENTRAL_DEPLOY_CONFIG_SCHEMA: dict[str, object] = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "langfuse_projects": {
+            "type": "object",
+            "description": (
+                "Langfuse project alias → credentials mapping.  "
+                "Operator-configured entries override auto-discovered "
+                "entries from services with chat access enabled."
+            ),
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "public_key": {
+                        "type": "string",
+                        "description": "Langfuse public key for the project.",
+                    },
+                    "secret_key": {
+                        "type": "string",
+                        "format": "password",
+                        "writeOnly": True,
+                        "description": "Langfuse secret key for the project.",
+                    },
+                },
+                "required": ["public_key", "secret_key"],
+                "additionalProperties": False,
+            },
+        },
+    },
+}
+
+
+async def _seed_central_deploy_config_schema(
+    config_yaml_store: "ConfigYamlStore",
+    auto_langfuse: dict[str, "LangfuseProjectCreds"],
+    config: LifecycleConfig,
+) -> None:
+    """Seed central-deploy's own config schema and current values.
+
+    On first boot, writes the schema template to ``config_yaml_store``.
+    Every startup updates the current values so that ``GET
+    /services/central-deploy/config`` reflects the live set of
+    auto-discovered and operator-configured Langfuse project aliases.
+    """
+    # Seed template once (idempotent — doesn't overwrite operator edits).
+    existing_template = await config_yaml_store.get_template("central-deploy")
+    if existing_template is None:
+        await config_yaml_store.save_template(
+            "central-deploy", dict(_CENTRAL_DEPLOY_CONFIG_SCHEMA)
+        )
+        logger.info("Seeded central-deploy config schema (langfuse_projects)")
+
+    # Build current values: auto-discovered projects first, then
+    # operator-configured overrides (mirrors _build_project_creds).
+    current_projects: dict[str, dict[str, str]] = {}
+    for alias, creds in auto_langfuse.items():
+        current_projects[alias] = {
+            "public_key": creds.public_key,
+            "secret_key": creds.secret_key.get_secret_value(),
+        }
+    for alias, creds in config.langfuse_projects.items():
+        current_projects[alias] = {
+            "public_key": creds.public_key,
+            "secret_key": creds.secret_key.get_secret_value(),
+        }
+
+    await config_yaml_store.update_current(
+        "central-deploy", {"langfuse_projects": current_projects}
+    )
+
+
 async def _init_component_registry(app: FastAPI) -> None:
     """Load persisted component configs into the in-memory registry, seed
     sibling service records, and start the volume-audit and caretaker
@@ -555,6 +633,41 @@ async def _init_component_registry(app: FastAPI) -> None:
 
     await _seed_component_registry(
         _store, component_config_store, registry, _config.virtual_components
+    )
+
+    # -- Auto-discovered Langfuse project aliases ----------------------------
+    # Reconcile Langfuse credentials from services with allow_chat_access or
+    # chat_agent_mutatable enabled.  This runs once at startup; subsequent
+    # toggles trigger reconciliation at the toggle site.
+    from ..routers.chat_langfuse import _reconcile_auto_langfuse_projects
+
+    try:
+        auto_langfuse = await _reconcile_auto_langfuse_projects(
+            component_config_store, app.state.config_yaml_store
+        )
+    except Exception:
+        logger.warning(
+            "Startup Langfuse auto-discovery failed — "
+            "auto-projects will be empty until the next toggle",
+            exc_info=True,
+        )
+        auto_langfuse = {}
+    app.state.auto_langfuse_projects = auto_langfuse
+    if auto_langfuse:
+        logger.info(
+            "Auto-discovered %d Langfuse project(s) from chat-accessible services: %s",
+            len(auto_langfuse),
+            ", ".join(sorted(auto_langfuse)),
+        )
+    else:
+        logger.debug("No auto-discovered Langfuse projects on startup")
+
+    # -- Seed central-deploy's own config schema -----------------------------
+    # So GET /services/central-deploy/config returns the langfuse_projects
+    # field that was previously an unmanaged side store.  Auto-discovered
+    # and operator-configured projects are merged into the current values.
+    await _seed_central_deploy_config_schema(
+        app.state.config_yaml_store, auto_langfuse, _config
     )
 
     # -- Self-managed central-deploy service ---------------------------------
