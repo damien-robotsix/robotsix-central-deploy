@@ -414,6 +414,58 @@ class TestPhaseHealth:
         assert findings[0].repo_id == "test-repo"
 
     @pytest.mark.asyncio
+    async def test_finding_includes_container_logs(self):
+        """A health finding must carry enough detail to act on.
+
+        Regression (2026-07-31): the detail was only "State: …, Health: …".
+        That became the body of a mill ticket verbatim — 41 characters naming
+        no symptom — so refine could not build a spec from it and the ticket
+        blocked with nothing anyone could act on. The actual cause for
+        mail-ingester was in the first line of its logs the whole time.
+        """
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        record.image = "ghcr.io/org/svc:main"
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RESTARTING, health="")
+        )
+        backend.get_container_logs = AsyncMock(
+            return_value="usage: robotsix-auto-mail [-h] ...\nerror: no command given"
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+
+        findings = await phase_health(registry, store, backend, ccs)
+
+        assert len(findings) == 1
+        detail = findings[0].detail
+        assert "error: no command given" in detail
+        assert "ghcr.io/org/svc:main" in detail
+        assert "State: restarting" in detail
+        backend.get_container_logs.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_finding_survives_unreadable_logs(self):
+        """Log capture is best-effort — a finding is still emitted without it."""
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
+        )
+        backend.get_container_logs = AsyncMock(side_effect=RuntimeError("daemon gone"))
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+
+        findings = await phase_health(registry, store, backend, ccs)
+
+        assert len(findings) == 1
+        assert "No container logs available" in findings[0].detail
+
+    @pytest.mark.asyncio
     async def test_finding_unhealthy(self):
         store = MagicMock()
         record = _make_record(update_available=False)

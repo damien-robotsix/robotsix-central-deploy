@@ -18,6 +18,7 @@ from .models import CaretakerFinding, FindingKind
 if TYPE_CHECKING:
     from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
+    from ..lifecycle.models import ComponentInspect, ServiceRecord
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
     from ..registry.deploy_history_store import DeployHistoryStore
@@ -239,15 +240,59 @@ async def phase_health(
                 repo_id=repo_id,
                 kind=FindingKind.HEALTH,
                 title=f"Container {record.name} is unhealthy",
-                detail=(
-                    f"State: {inspect.state.value}, "
-                    f"Health: {inspect.health or 'no healthcheck'}"
-                ),
+                detail=await _health_finding_detail(backend, record, inspect),
                 severity="error",
             )
         )
 
     return findings
+
+
+# Lines of container log to attach to a health finding. Enough to carry a
+# traceback or a repeated startup error; short enough to stay readable in a
+# ticket body and well inside any downstream ingest limit.
+_HEALTH_LOG_TAIL_LINES = 40
+
+
+async def _health_finding_detail(
+    backend: ExecutionBackend,
+    record: "ServiceRecord",
+    inspect: "ComponentInspect",
+) -> str:
+    """Build the body of a HEALTH finding, including recent container logs.
+
+    The detail used to be just ``"State: …, Health: …"``. That is a true
+    statement and a useless ticket: it names no symptom, so the mill's refine
+    stage cannot turn it into a spec and the ticket blocks with nothing
+    anyone can act on (observed 2026-07-31 for ``mail-ingester``, whose real
+    cause — the container printing CLI usage and exiting because it had no
+    command — was sitting in the first line of its logs the whole time).
+
+    Log capture is best-effort: a finding without logs is still worth
+    emitting, so any failure degrades to a note rather than propagating.
+    """
+    header = (
+        f"State: {inspect.state.value}, Health: {inspect.health or 'no healthcheck'}"
+    )
+    if record.image:
+        header += f"\nImage: {record.image}"
+
+    try:
+        logs = await backend.get_container_logs(record, tail=_HEALTH_LOG_TAIL_LINES)
+    except Exception:
+        logger.warning(
+            "phase_health: could not read logs for %s", record.name, exc_info=True
+        )
+        logs = ""
+
+    if not logs.strip():
+        return f"{header}\n\nNo container logs available."
+
+    return (
+        f"{header}\n\n"
+        f"Last {_HEALTH_LOG_TAIL_LINES} log lines:\n\n"
+        f"```\n{logs.strip()}\n```"
+    )
 
 
 async def phase_volumes(
