@@ -30,6 +30,8 @@ modules:
       - .markdownlint-cli2.yaml
       - .github/**/*
       - .robotsix-mill/**/*
+      - doc_result.json
+      - memory_ledger.md
       - AGENT.md
       - CHANGELOG.md
       - CODE_OF_CONDUCT.md
