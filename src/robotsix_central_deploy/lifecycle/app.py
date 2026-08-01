@@ -58,6 +58,7 @@ from .routers.chat_github_repos import router as chat_github_repos_router
 from .routers.chat_github_security import router as chat_github_security_router
 from .routers.chat_preview import router as chat_preview_router
 from .routers.chat_langfuse import router as chat_langfuse_router
+from .routers.fleet_langfuse import router as fleet_langfuse_router
 from ..ui.router import router as ui_router
 
 # URL patterns exempt from CSRF checks — these are API routes authenticated
@@ -143,6 +144,7 @@ app.include_router(chat_github_repos_router)
 app.include_router(chat_github_security_router)
 app.include_router(chat_preview_router)
 app.include_router(chat_langfuse_router)
+app.include_router(fleet_langfuse_router)
 
 # Gateway router — MUST be registered last so its catch-all routes only
 # match after every specific API route has been tried.

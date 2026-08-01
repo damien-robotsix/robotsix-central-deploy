@@ -44,6 +44,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_langfuse
 
+::: robotsix_central_deploy.lifecycle.routers.fleet_langfuse
+
 ::: robotsix_central_deploy.lifecycle.routers.chat_self
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_services
