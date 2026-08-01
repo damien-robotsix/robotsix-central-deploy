@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
-from ..config import LifecycleConfig
 from ..deps import (
     _fetch_component_repo_files,
     _get_backend,
@@ -60,6 +59,8 @@ async def _reconcile_langfuse_after_toggle(
 
         # Also refresh central-deploy's own config current values so
         # GET /services/central-deploy/config stays in sync.
+        from ..config import LifecycleConfig
+
         config: LifecycleConfig = request.app.state.config
         current_projects: dict[str, dict[str, str]] = {}
         for alias, creds in auto_langfuse.items():
