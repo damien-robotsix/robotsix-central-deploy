@@ -63,6 +63,9 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
           UV_MALWARE_CHECK: '1'
 
+      - name: Check lockfile freshness
+        run: uv lock --check
+
       - name: Check changelog fragment
         if: github.event_name == 'pull_request'
         env:
