@@ -60,7 +60,7 @@ async def _reconcile_langfuse_after_toggle(
 
         # Also refresh central-deploy's own config current values so
         # GET /services/central-deploy/config stays in sync.
-        config: "LifecycleConfig" = request.app.state.config
+        config: LifecycleConfig = request.app.state.config
         current_projects: dict[str, dict[str, str]] = {}
         for alias, creds in auto_langfuse.items():
             current_projects[alias] = {
