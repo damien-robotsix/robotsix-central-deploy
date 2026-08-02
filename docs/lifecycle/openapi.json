@@ -8289,7 +8289,7 @@
           "alias": {
             "type": "string",
             "title": "Alias",
-            "description": "Langfuse project alias / slug"
+            "description": "Langfuse project name (the `projects` key)"
           },
           "public_key": {
             "type": "string",
@@ -8300,6 +8300,18 @@
             "type": "string",
             "title": "Secret Key",
             "description": "Langfuse secret key (read-only)"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id",
+            "description": "Langfuse project id, when the component records it"
           }
         },
         "type": "object",

@@ -65,17 +65,20 @@ class TestFleetLangfuseEndpoint:
     async def test_component_with_langfuse_config_returns_credentials(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Component with langfuse_projects + langfuse_base_url returns them."""
+        """Component with a canonical langfuse block returns host + projects."""
         config_yaml_store = server_mod.app.state.config_yaml_store
         await config_yaml_store.update_current(
             "traced-comp",
             {
-                "langfuse_base_url": "https://langfuse.example.com",
-                "langfuse_projects": {
-                    "my-project": {
-                        "public_key": "pk-abc",
-                        "secret_key": "sk-xyz",
-                    }
+                "langfuse": {
+                    "host": "https://langfuse.example.com",
+                    "projects": {
+                        "my-project": {
+                            "public_key": "pk-abc",
+                            "secret_key": "sk-xyz",
+                            "project_id": "cm-proj-1",
+                        }
+                    },
                 },
             },
         )
@@ -97,6 +100,7 @@ class TestFleetLangfuseEndpoint:
         assert comp["projects"][0]["alias"] == "my-project"
         assert comp["projects"][0]["public_key"] == "pk-abc"
         assert comp["projects"][0]["secret_key"] == "sk-xyz"
+        assert comp["projects"][0]["project_id"] == "cm-proj-1"
 
     async def test_filters_out_projects_with_empty_keys(
         self, client: AsyncClient, auth_headers: dict
@@ -106,12 +110,14 @@ class TestFleetLangfuseEndpoint:
         await config_yaml_store.update_current(
             "partial-comp",
             {
-                "langfuse_base_url": "https://langfuse.example.com",
-                "langfuse_projects": {
-                    "good": {"public_key": "pk-1", "secret_key": "sk-1"},
-                    "no-secret": {"public_key": "pk-2", "secret_key": ""},
-                    "no-public": {"public_key": "", "secret_key": "sk-3"},
-                    "both-empty": {"public_key": "", "secret_key": ""},
+                "langfuse": {
+                    "host": "https://langfuse.example.com",
+                    "projects": {
+                        "good": {"public_key": "pk-1", "secret_key": "sk-1"},
+                        "no-secret": {"public_key": "pk-2", "secret_key": ""},
+                        "no-public": {"public_key": "", "secret_key": "sk-3"},
+                        "both-empty": {"public_key": "", "secret_key": ""},
+                    },
                 },
             },
         )
@@ -136,14 +142,16 @@ class TestFleetLangfuseEndpoint:
     async def test_empty_langfuse_base_url_is_treated_as_none(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """An empty string langfuse_base_url is reported as None."""
+        """An empty string langfuse.host is reported as None."""
         config_yaml_store = server_mod.app.state.config_yaml_store
         await config_yaml_store.update_current(
             "empty-host-comp",
             {
-                "langfuse_base_url": "",
-                "langfuse_projects": {
-                    "p": {"public_key": "pk", "secret_key": "sk"},
+                "langfuse": {
+                    "host": "",
+                    "projects": {
+                        "p": {"public_key": "pk", "secret_key": "sk"},
+                    },
                 },
             },
         )

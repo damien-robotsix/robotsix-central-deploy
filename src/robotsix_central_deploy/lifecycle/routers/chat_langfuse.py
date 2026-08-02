@@ -40,6 +40,7 @@ from robotsix_http import ExternalHTTPError
 
 from ..._http import retry_client_context
 
+from .._langfuse_config import extract_langfuse_block
 from ..auth import verify_auth
 from ..config import LangfuseProjectCreds, LifecycleConfig
 from ..deps import _get_config
@@ -114,30 +115,20 @@ def _extract_langfuse_projects(
 ) -> dict[str, LangfuseProjectCreds]:
     """Extract Langfuse project credentials from a component's config.
 
-    Looks for ``langfuse.projects.<alias>`` entries where each alias
-    contains ``public_key`` and ``secret_key`` fields — mirroring the
-    ``LifecycleConfig.langfuse_projects`` structure.
+    Reads the canonical ``langfuse.projects.<alias>`` block via
+    :func:`~.._langfuse_config.extract_langfuse_block`, which is the single
+    definition of that shape.
 
     Returns an empty dict when the config has no Langfuse projects.
     """
-    langfuse = config_dict.get("langfuse")
-    if not isinstance(langfuse, dict):
-        return {}
-    projects = langfuse.get("projects")
-    if not isinstance(projects, dict):
-        return {}
-    result: dict[str, LangfuseProjectCreds] = {}
-    for alias, cred_dict in projects.items():
-        if not isinstance(cred_dict, dict):
-            continue
-        public_key = cred_dict.get("public_key", "")
-        secret_key = cred_dict.get("secret_key", "")
-        if public_key and secret_key:
-            result[str(alias)] = LangfuseProjectCreds(
-                public_key=str(public_key),
-                secret_key=str(secret_key),
-            )
-    return result
+    _host, entries = extract_langfuse_block(config_dict)
+    return {
+        entry.alias: LangfuseProjectCreds(
+            public_key=entry.public_key,
+            secret_key=entry.secret_key,
+        )
+        for entry in entries
+    }
 
 
 async def _reconcile_auto_langfuse_projects(
