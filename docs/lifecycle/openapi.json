@@ -5463,7 +5463,7 @@
           "fleet-langfuse"
         ],
         "summary": "List components with Langfuse credentials",
-        "description": "Return every registered component with its lifecycle status and,\nwhen configured, the Langfuse host and project API key pairs\nneeded to read that component's traces.\n\nOnly authenticated fleet-internal consumers may call this endpoint.",
+        "description": "Return every registered component with its lifecycle status and,\nwhen configured, the Langfuse host and project API key pairs\nneeded to read that component's traces.\n\nComponent-declared credentials are overlaid with operator-configured\nones (``LifecycleConfig.langfuse_projects``), which win on alias\ncollision \u2014 the same precedence the chat trace proxy applies.  Operator\naliases that no component declares are returned under a synthetic\n:data:`OPERATOR_COMPONENT_ID` entry so they are not silently dropped.\n\nOnly authenticated fleet-internal consumers may call this endpoint.",
         "operationId": "fleet_langfuse_credentials_fleet_langfuse_get",
         "responses": {
           "200": {
