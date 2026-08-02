@@ -441,6 +441,17 @@
       "title": "Langfuse Base Url",
       "type": "string"
     },
+    "openrouter_keys": {
+      "additionalProperties": {
+        "format": "password",
+        "type": "string",
+        "writeOnly": true
+      },
+      "advanced": true,
+      "description": "Langfuse project alias \u2192 OpenRouter API key.  Lets cost-monitor reconcile provider-billed spend against traced spend per LLM function.  Example: {\"my-project\": \"sk-or-...\"}.",
+      "title": "Openrouter Keys",
+      "type": "object"
+    },
     "caretaker_enabled": {
       "default": false,
       "description": "Enable the periodic caretaker pass (auto-update, health, and volume checks).",
@@ -558,3 +569,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+
