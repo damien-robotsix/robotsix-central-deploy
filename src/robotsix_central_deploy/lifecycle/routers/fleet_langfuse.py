@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends
 
 from .._langfuse_config import extract_langfuse_block
+from .._openrouter_config import extract_openrouter_keys
 from ..auth import verify_auth
 from ..config import LifecycleConfig
 from ..deps import _get_config, _get_config_yaml_store, _get_registry, _get_store
@@ -60,6 +61,13 @@ class FleetLangfuseProject(BaseModel):
     project_id: str | None = Field(
         default=None,
         description="Langfuse project id, when the component records it",
+    )
+    openrouter_key: str | None = Field(
+        default=None,
+        description=(
+            "OpenRouter API key for this LLM function, when configured. Lets a "
+            "consumer reconcile provider-billed spend against traced spend."
+        ),
     )
 
 
@@ -108,12 +116,14 @@ def _extract_langfuse_projects(
     both keys set).
     """
     host, entries = extract_langfuse_block(current)
+    openrouter_keys = extract_openrouter_keys(current)
     return host, [
         FleetLangfuseProject(
             alias=entry.alias,
             public_key=entry.public_key,
             secret_key=entry.secret_key,
             project_id=entry.project_id,
+            openrouter_key=openrouter_keys.get(entry.alias),
         )
         for entry in entries
     ]
@@ -139,6 +149,32 @@ def _operator_projects(config: LifecycleConfig) -> dict[str, FleetLangfuseProjec
     return out
 
 
+def _operator_openrouter_keys(config: LifecycleConfig) -> dict[str, str]:
+    """Return operator-configured OpenRouter keys by alias, empties dropped."""
+    return {
+        alias: secret
+        for alias, raw in config.openrouter_keys.items()
+        if (secret := raw.get_secret_value())
+    }
+
+
+def _with_openrouter(
+    projects: list[FleetLangfuseProject], operator_keys: dict[str, str]
+) -> list[FleetLangfuseProject]:
+    """Overlay operator-configured OpenRouter keys onto *projects* by alias.
+
+    Applied after the project credentials are resolved so an operator entry
+    can supply a key for a component that declares Langfuse projects but no
+    ``openrouter`` block — the common case until components migrate.
+    """
+    return [
+        p.model_copy(update={"openrouter_key": operator_keys[p.alias]})
+        if p.alias in operator_keys
+        else p
+        for p in projects
+    ]
+
+
 # ---------------------------------------------------------------------------
 # GET /fleet/langfuse
 # ---------------------------------------------------------------------------
@@ -160,10 +196,15 @@ async def fleet_langfuse_credentials(
     when configured, the Langfuse host and project API key pairs
     needed to read that component's traces.
 
+    Each project also carries its OpenRouter key when one is configured, so a
+    consumer can reconcile provider-billed spend against traced spend for the
+    same LLM function without a second lookup.
+
     Component-declared credentials are overlaid with operator-configured
-    ones (``LifecycleConfig.langfuse_projects``), which win on alias
-    collision — the same precedence the chat trace proxy applies.  Operator
-    aliases that no component declares are returned under a synthetic
+    ones (``LifecycleConfig.langfuse_projects`` /
+    ``LifecycleConfig.openrouter_keys``), which win on alias collision — the
+    same precedence the chat trace proxy applies.  Operator aliases that no
+    component declares are returned under a synthetic
     :data:`OPERATOR_COMPONENT_ID` entry so they are not silently dropped.
 
     Only authenticated fleet-internal consumers may call this endpoint.
@@ -172,6 +213,7 @@ async def fleet_langfuse_credentials(
     record_by_name: dict[str, ServiceState] = {r.name: r.state for r in records}
 
     operator_projects = _operator_projects(config)
+    operator_openrouter = _operator_openrouter_keys(config)
     claimed: set[str] = set()
     components: list[FleetLangfuseComponent] = []
 
@@ -189,6 +231,7 @@ async def fleet_langfuse_credentials(
         for p in projects:
             claimed.add(p.alias)
         projects = [operator_projects.get(p.alias, p) for p in projects]
+        projects = _with_openrouter(projects, operator_openrouter)
 
         components.append(
             FleetLangfuseComponent(
@@ -208,7 +251,7 @@ async def fleet_langfuse_credentials(
                 name=OPERATOR_COMPONENT_ID,
                 status=ServiceState.UNKNOWN.value,
                 langfuse_host=config.langfuse_base_url or None,
-                projects=unclaimed,
+                projects=_with_openrouter(unclaimed, operator_openrouter),
             )
         )
 

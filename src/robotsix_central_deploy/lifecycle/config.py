@@ -393,6 +393,19 @@ class LifecycleConfig(BaseModel):
         description="Langfuse instance base URL (no trailing slash).",
         json_schema_extra={"advanced": True},
     )
+    # OpenRouter provider keys, keyed by the SAME alias as `langfuse_projects`
+    # (the Langfuse project name).  Operator-owned bridge for components that
+    # have not yet declared a canonical `openrouter.keys` block; entries here
+    # override a component-declared key of the same alias.
+    openrouter_keys: dict[str, SecretStr] = Field(
+        default_factory=dict,
+        description=(
+            "Langfuse project alias → OpenRouter API key.  Lets cost-monitor "
+            "reconcile provider-billed spend against traced spend per LLM "
+            'function.  Example: {"my-project": "sk-or-..."}.'
+        ),
+        json_schema_extra={"advanced": True},
+    )
 
     # Caretaker
     caretaker_enabled: bool = Field(
