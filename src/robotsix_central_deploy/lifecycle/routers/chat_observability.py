@@ -149,8 +149,8 @@ async def chat_service_status(
                     await store.put(record)
         except Exception:
             logger.debug(
-                "chat status: registry check failed for '%s'",
-                name,
+                "chat status: registry check failed for %s",
+                repr(name),
                 exc_info=True,
             )
 
