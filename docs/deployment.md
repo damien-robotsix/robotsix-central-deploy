@@ -233,11 +233,34 @@ redeploys.
 Enabling chat access (`allow_chat_access` or `chat_agent_mutatable`) on a
 component also **auto-grants** the chat agent read access to that component's
 Langfuse traces through the existing `/chat/langfuse/...` proxy.  When the
-toggle is on, central-deploy scans the component's standardized config for
-Langfuse key pairs (`langfuse.projects.<alias>` → `{public_key, secret_key}`)
-and registers them as chat-proxy project aliases.  Toggling off deregisters
-them.  Reconciliation is idempotent — re-applying the toggle or restarting
-central-deploy converges to the same alias set.
+toggle is on, central-deploy scans the component's standardized config for the
+canonical Langfuse block and registers each project as a chat-proxy alias.
+Toggling off deregisters them.  Reconciliation is idempotent — re-applying the
+toggle or restarting central-deploy converges to the same alias set.
+
+Every component declares its own credentials in one block, keyed by the
+Langfuse **project name** (`<repo>` for a component's main LLM function,
+`<repo>-<function>` for each additional LLM-generating subsystem — see the
+component standard's one-project-per-function rule):
+
+```json
+"langfuse": {
+  "host": "https://langfuse.robotsix.net",
+  "projects": {
+    "robotsix-chat":        {"public_key": "pk-lf-…", "secret_key": "sk-lf-…", "project_id": "cm…"},
+    "robotsix-chat-cognee": {"public_key": "pk-lf-…", "secret_key": "sk-lf-…", "project_id": "cm…"}
+  }
+}
+```
+
+`lifecycle/_langfuse_config.py` is the single reader for this shape; both the
+chat trace proxy and the fleet credential registry (`GET /fleet/langfuse`,
+consumed by cost-monitor) go through it, so they cannot drift apart.  There is
+**no** fallback to deploy-plane `LANGFUSE_*` environment variables or to any
+pre-standard layout — per the config-ownership standard, first-party
+credentials live in the component's `config.json` and nowhere else.  A
+component that has not migrated reports no projects, which is the intended
+visible failure.
 
 No operator key-pasting step is involved: secrets live in each component's
 standardized config (or the operator-configured

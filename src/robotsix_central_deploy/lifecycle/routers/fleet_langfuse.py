@@ -13,6 +13,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends
 
+from .._langfuse_config import extract_langfuse_block
 from ..auth import verify_auth
 from ..deps import _get_config_yaml_store, _get_registry, _get_store
 from ..models import ServiceState
@@ -31,9 +32,13 @@ router = APIRouter(tags=["fleet-langfuse"])
 class FleetLangfuseProject(BaseModel):
     """Credentials for one Langfuse project belonging to a component."""
 
-    alias: str = Field(description="Langfuse project alias / slug")
+    alias: str = Field(description="Langfuse project name (the `projects` key)")
     public_key: str = Field(description="Langfuse public key (read-only)")
     secret_key: str = Field(description="Langfuse secret key (read-only)")
+    project_id: str | None = Field(
+        default=None,
+        description="Langfuse project id, when the component records it",
+    )
 
 
 class FleetLangfuseComponent(BaseModel):
@@ -71,32 +76,25 @@ def _extract_langfuse_projects(
 ) -> tuple[str | None, list[FleetLangfuseProject]]:
     """Extract Langfuse host and project credentials from a component config dict.
 
-    Reads ``langfuse_base_url`` (host) and ``langfuse_projects``
-    (dict of alias → {public_key, secret_key}) from *current*.
+    Reads the canonical ``langfuse`` block (``host`` plus a ``projects``
+    map of alias → {public_key, secret_key, project_id}) via
+    :func:`~.._langfuse_config.extract_langfuse_block`, the single
+    definition of that shape.
 
     Returns ``(host, projects)`` where *host* is a string or None and
     *projects* is a list of ``FleetLangfuseProject`` (only those with
     both keys set).
     """
-    host: str | None = None
-    raw_host = current.get("langfuse_base_url")
-    if isinstance(raw_host, str) and raw_host:
-        host = raw_host
-
-    projects: list[FleetLangfuseProject] = []
-    raw_projects = current.get("langfuse_projects")
-    if isinstance(raw_projects, dict):
-        for alias, creds in raw_projects.items():
-            if not isinstance(creds, dict):
-                continue
-            pk = creds.get("public_key", "")
-            sk = creds.get("secret_key", "")
-            if pk and sk:
-                projects.append(
-                    FleetLangfuseProject(alias=alias, public_key=pk, secret_key=sk)
-                )
-
-    return host, projects
+    host, entries = extract_langfuse_block(current)
+    return host, [
+        FleetLangfuseProject(
+            alias=entry.alias,
+            public_key=entry.public_key,
+            secret_key=entry.secret_key,
+            project_id=entry.project_id,
+        )
+        for entry in entries
+    ]
 
 
 # ---------------------------------------------------------------------------
