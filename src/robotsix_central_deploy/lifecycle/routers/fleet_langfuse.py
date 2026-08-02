@@ -4,6 +4,21 @@ Exposes per-component Langfuse project credentials read from each
 service's standardized config so fleet consumers (cost-monitor, …)
 can access trace data without duplicating key pairs.
 
+Credentials come from two sources, merged exactly as the chat-agent trace
+proxy merges them (see :mod:`.chat_langfuse`):
+
+1. **Component-declared** — the canonical ``langfuse.projects`` block in each
+   component's standardized config.  This is the destination shape; a
+   component that has migrated needs nothing else.
+2. **Operator-configured** — ``LifecycleConfig.langfuse_projects``, central
+   deploy's own config.  These take precedence, so the operator can pin or
+   rotate a key, and can serve credentials for components that have not yet
+   migrated their config to the canonical block.
+
+Before this, only the chat proxy honoured source 2 while this endpoint saw
+source 1 alone — so the same credential concept resolved differently
+depending on which consumer asked.
+
 Exposes:
 - ``GET /fleet/langfuse`` — enumerate components and their Langfuse credentials
 """
@@ -15,13 +30,20 @@ from fastapi import APIRouter, Depends
 
 from .._langfuse_config import extract_langfuse_block
 from ..auth import verify_auth
-from ..deps import _get_config_yaml_store, _get_registry, _get_store
+from ..config import LifecycleConfig
+from ..deps import _get_config, _get_config_yaml_store, _get_registry, _get_store
 from ..models import ServiceState
 from ..store import ServiceStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.loader import ComponentRegistry
 
 router = APIRouter(tags=["fleet-langfuse"])
+
+#: ``component_id`` reported for operator-configured credentials that no
+#: registered component declares.  They are real projects with no owning
+#: component config, so they are surfaced under a synthetic entry rather than
+#: attributed to a component that never declared them.
+OPERATOR_COMPONENT_ID = "operator-configured"
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +119,26 @@ def _extract_langfuse_projects(
     ]
 
 
+def _operator_projects(config: LifecycleConfig) -> dict[str, FleetLangfuseProject]:
+    """Return operator-configured projects keyed by alias.
+
+    Half-filled entries are skipped, matching
+    :func:`~.._langfuse_config.extract_langfuse_block`: a project missing
+    either key is unconfigured, not a broken credential to hand out.
+    """
+    out: dict[str, FleetLangfuseProject] = {}
+    for alias, creds in config.langfuse_projects.items():
+        secret = creds.secret_key.get_secret_value()
+        if not creds.public_key or not secret:
+            continue
+        out[alias] = FleetLangfuseProject(
+            alias=alias,
+            public_key=creds.public_key,
+            secret_key=secret,
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # GET /fleet/langfuse
 # ---------------------------------------------------------------------------
@@ -111,17 +153,26 @@ async def fleet_langfuse_credentials(
     store: ServiceStore = Depends(_get_store),
     registry: ComponentRegistry = Depends(_get_registry),
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> FleetLangfuseResponse:
     """Return every registered component with its lifecycle status and,
     when configured, the Langfuse host and project API key pairs
     needed to read that component's traces.
 
+    Component-declared credentials are overlaid with operator-configured
+    ones (``LifecycleConfig.langfuse_projects``), which win on alias
+    collision — the same precedence the chat trace proxy applies.  Operator
+    aliases that no component declares are returned under a synthetic
+    :data:`OPERATOR_COMPONENT_ID` entry so they are not silently dropped.
+
     Only authenticated fleet-internal consumers may call this endpoint.
     """
     records = await store.list_all()
     record_by_name: dict[str, ServiceState] = {r.name: r.state for r in records}
 
+    operator_projects = _operator_projects(config)
+    claimed: set[str] = set()
     components: list[FleetLangfuseComponent] = []
 
     for comp in registry.all():
@@ -134,13 +185,30 @@ async def fleet_langfuse_credentials(
         else:
             host, projects = None, []
 
+        # Operator config wins on alias collision (pinned / rotated keys).
+        for p in projects:
+            claimed.add(p.alias)
+        projects = [operator_projects.get(p.alias, p) for p in projects]
+
         components.append(
             FleetLangfuseComponent(
                 component_id=comp.id,
                 name=comp.container_name,
                 status=state.value,
-                langfuse_host=host,
+                langfuse_host=host or (config.langfuse_base_url or None),
                 projects=projects,
+            )
+        )
+
+    unclaimed = [p for alias, p in operator_projects.items() if alias not in claimed]
+    if unclaimed:
+        components.append(
+            FleetLangfuseComponent(
+                component_id=OPERATOR_COMPONENT_ID,
+                name=OPERATOR_COMPONENT_ID,
+                status=ServiceState.UNKNOWN.value,
+                langfuse_host=config.langfuse_base_url or None,
+                projects=unclaimed,
             )
         )
 

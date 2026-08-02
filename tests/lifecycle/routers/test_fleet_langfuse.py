@@ -214,3 +214,131 @@ class TestFleetLangfuseEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["components"] == []
+
+
+class TestFleetLangfuseOperatorConfigured:
+    """Operator-configured credentials (LifecycleConfig.langfuse_projects).
+
+    The chat trace proxy has always merged these over component-declared
+    ones; this endpoint did not, so the same credential resolved differently
+    depending on which consumer asked.
+    """
+
+    @staticmethod
+    def _set_operator_projects(**projects: tuple[str, str]) -> None:
+        from robotsix_central_deploy.lifecycle.config import LangfuseProjectCreds
+
+        server_mod.app.state.config.langfuse_projects = {
+            alias: LangfuseProjectCreds(public_key=pk, secret_key=sk)
+            for alias, (pk, sk) in projects.items()
+        }
+
+    async def test_unclaimed_operator_projects_are_surfaced(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Aliases no component declares appear under the synthetic entry.
+
+        This is the case that unblocks cost-monitor: components that have not
+        migrated to the canonical block declare nothing, so without this the
+        registry returns zero projects fleet-wide.
+        """
+        from robotsix_central_deploy.lifecycle.routers.fleet_langfuse import (
+            OPERATOR_COMPONENT_ID,
+        )
+
+        self._set_operator_projects(orphan=("pk-op", "sk-op"))
+        server_mod.app.state.config.langfuse_base_url = "https://lf.example.com"
+
+        resp = await client.get("/fleet/langfuse", headers=auth_headers)
+        assert resp.status_code == 200
+        comp = next(
+            c
+            for c in resp.json()["components"]
+            if c["component_id"] == OPERATOR_COMPONENT_ID
+        )
+        assert comp["langfuse_host"] == "https://lf.example.com"
+        assert comp["projects"] == [
+            {
+                "alias": "orphan",
+                "public_key": "pk-op",
+                "secret_key": "sk-op",
+                "project_id": None,
+            }
+        ]
+
+    async def test_operator_overrides_component_declared_alias(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """On alias collision the operator's key wins — same as the chat proxy."""
+        from robotsix_central_deploy.lifecycle.routers.fleet_langfuse import (
+            OPERATOR_COMPONENT_ID,
+        )
+
+        config_yaml_store = server_mod.app.state.config_yaml_store
+        await config_yaml_store.update_current(
+            "owned-comp",
+            {
+                "langfuse": {
+                    "host": "https://langfuse.example.com",
+                    "projects": {
+                        "shared": {"public_key": "pk-old", "secret_key": "sk-old"}
+                    },
+                },
+            },
+        )
+        registry = server_mod.app.state.registry
+        registry.register(
+            ComponentConfig(
+                id="owned-comp", image="owned:latest", container_name="owned-comp"
+            )
+        )
+        self._set_operator_projects(shared=("pk-new", "sk-new"))
+
+        resp = await client.get("/fleet/langfuse", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        comp = next(c for c in data["components"] if c["component_id"] == "owned-comp")
+        assert comp["projects"][0]["public_key"] == "pk-new"
+        assert comp["projects"][0]["secret_key"] == "sk-new"
+        # Claimed by the component — not duplicated under the synthetic entry.
+        assert not any(
+            c["component_id"] == OPERATOR_COMPONENT_ID for c in data["components"]
+        )
+
+    async def test_half_filled_operator_entry_is_skipped(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """A project missing either key is unconfigured, not a broken credential."""
+        from robotsix_central_deploy.lifecycle.routers.fleet_langfuse import (
+            OPERATOR_COMPONENT_ID,
+        )
+
+        self._set_operator_projects(
+            no_secret=("pk-1", ""), no_public=("", "sk-2"), good=("pk-3", "sk-3")
+        )
+
+        resp = await client.get("/fleet/langfuse", headers=auth_headers)
+        assert resp.status_code == 200
+        comp = next(
+            c
+            for c in resp.json()["components"]
+            if c["component_id"] == OPERATOR_COMPONENT_ID
+        )
+        assert [p["alias"] for p in comp["projects"]] == ["good"]
+
+    async def test_no_operator_projects_adds_no_synthetic_entry(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """With nothing operator-configured the response is unchanged."""
+        from robotsix_central_deploy.lifecycle.routers.fleet_langfuse import (
+            OPERATOR_COMPONENT_ID,
+        )
+
+        self._set_operator_projects()
+
+        resp = await client.get("/fleet/langfuse", headers=auth_headers)
+        assert resp.status_code == 200
+        assert not any(
+            c["component_id"] == OPERATOR_COMPONENT_ID
+            for c in resp.json()["components"]
+        )
