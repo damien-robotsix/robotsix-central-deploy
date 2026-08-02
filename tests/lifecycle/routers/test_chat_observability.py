@@ -354,6 +354,52 @@ async def test_volume_file_component_not_found(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
+async def test_status_registry_check(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    """Status endpoint exercises the registry-check branch when digests are present."""
+    _register_component("test-svc", mutatable=True)
+
+    record = ServiceRecord(
+        name="test-svc",
+        state=ServiceState.RUNNING,
+        image="test-svc:latest",
+    )
+    record.deployed_image_digest = "sha256:old"
+    record.latest_registry_digest = "sha256:old"
+    record.update_available = False
+    await server_mod.app.state.store.put(record)
+
+    # Backend returns live state with a running digest.
+    mock_backend = MagicMock()
+    mock_backend.status = AsyncMock()
+    mock_backend.status.return_value = MagicMock(
+        state=ServiceState.RUNNING,
+        image_revision="abc123",
+        health="healthy",
+        running_digest="sha256:old",
+    )
+    server_mod.app.state.backend = mock_backend
+
+    # Registry checker reports a newer digest available.
+    mock_checker = MagicMock()
+    mock_checker.get_latest_digest = AsyncMock(return_value="sha256:new")
+    monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
+
+    resp = await client.get(
+        "/chat/services/test-svc/status",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # The registry check should have set update_available = True.
+    assert data["update_available"] is True
+    assert data["latest_digest"] == "sha256:new"
+
+
 async def _async_iter(data: bytes):
     """Yield a single chunk for a mock stream_logs return value."""
     yield data

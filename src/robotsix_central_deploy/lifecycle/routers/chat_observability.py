@@ -59,7 +59,7 @@ async def chat_service_logs(
     Gated by the per-component chat-access checkbox.  Response is
     capped at ~256 KiB to avoid unbounded payloads.
     """
-    await _require_allowed_service(name, component_config_store)
+    await _require_allowed_service(name, component_config_store, action="access")
     record = await _get_or_create_record(name, store)
 
     chunks: list[bytes] = []
@@ -67,14 +67,15 @@ async def chat_service_logs(
     async for chunk in backend.stream_logs(
         record, tail=tail, since=since, follow=False
     ):
+        remaining = CHAT_OBSERVABILITY_MAX_BYTES - total
+        if remaining <= 0:
+            break
+        if len(chunk) > remaining:
+            chunk = chunk[:remaining]
         chunks.append(chunk)
         total += len(chunk)
-        if total >= CHAT_OBSERVABILITY_MAX_BYTES:
-            break
 
     content = b"".join(chunks)
-    if len(content) > CHAT_OBSERVABILITY_MAX_BYTES:
-        content = content[:CHAT_OBSERVABILITY_MAX_BYTES]
 
     return PlainTextResponse(
         content=content.decode("utf-8", errors="replace"),
@@ -109,7 +110,7 @@ async def chat_service_status(
     Includes live state from the Docker backend and registry update
     availability when the registry checker is active.
     """
-    await _require_allowed_service(name, component_config_store)
+    await _require_allowed_service(name, component_config_store, action="access")
     record = await _get_or_create_record(name, store)
 
     # Refresh live state from backend (best-effort).
@@ -178,7 +179,7 @@ async def chat_service_volumes(
     Gated by the per-component chat-access checkbox.  Returns an
     empty list when the service has no named volumes.
     """
-    await _require_allowed_service(name, component_config_store)
+    await _require_allowed_service(name, component_config_store, action="access")
     cfg = component_config_store.get(name)
     if cfg is None:
         raise HTTPException(
@@ -219,7 +220,7 @@ async def chat_volume_file(
     ~256 KiB (``CHAT_OBSERVABILITY_MAX_BYTES``).  Binary files
     return ``content=null`` and ``binary=True``.
     """
-    await _require_allowed_service(name, component_config_store)
+    await _require_allowed_service(name, component_config_store, action="access")
 
     # Verify the volume belongs to this component.
     cfg = component_config_store.get(name)
