@@ -10,11 +10,15 @@ import pytest
 
 import robotsix_central_deploy.lifecycle.deps as deps_mod
 from robotsix_central_deploy.lifecycle.config import VirtualComponentEntry
+from robotsix_central_deploy.lifecycle.deps.background import (
+    _refresh_claude_credentials,
+)
 from robotsix_central_deploy.lifecycle.models import ServiceRecord
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
+from robotsix_http import ExternalHTTPError
 
 
 class TestClaudeAuthRefreshState:
@@ -159,6 +163,196 @@ class TestClaudeAuthRefreshLoop:
         state = deps_mod.get_claude_auth_refresh_state()
         assert state["last_refresh"] is not None
         assert state["last_error"] is None
+        backend.write_claude_credentials.assert_awaited_once()
+
+
+class TestRefreshClaudeCredentials:
+    """Direct unit tests for ``_refresh_claude_credentials`` covering each
+    failure branch: ExternalHTTPError, generic connection error, invalid
+    JSON response, missing ``access_token``, and backend write failure."""
+
+    DEFAULT_OAUTH: dict[str, str] = {
+        "accessToken": "old-at",
+        "refreshToken": "old-rt",
+        "expiresAt": "1000000",
+        "scopes": "user:inference",
+    }
+
+    @staticmethod
+    def _mock_retry_ctx(mock_client):
+        """Async context manager that yields *mock_client*."""
+        from collections.abc import AsyncIterator
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _ctx(*, timeout: float = 30.0, **kwargs) -> AsyncIterator:  # type: ignore[misc]
+            yield mock_client
+
+        return _ctx
+
+    # -- helpers -----------------------------------------------------------
+
+    def _make_backend(self, *, write_side_effect=None):
+        """Return a MagicMock backend with a working write_claude_credentials."""
+        backend = MagicMock()
+        backend.write_claude_credentials = AsyncMock(side_effect=write_side_effect)
+        return backend
+
+    def _patch_and_call(self, mock_client, backend, oauth=None):
+        """Patch retry_client_context, call _refresh_claude_credentials, and
+        return the result tuple."""
+        deps_bg = "robotsix_central_deploy.lifecycle.deps.background"
+        with patch(
+            f"{deps_bg}.retry_client_context", self._mock_retry_ctx(mock_client)
+        ):
+            return asyncio.run(
+                _refresh_claude_credentials(backend, oauth or self.DEFAULT_OAUTH)
+            )
+
+    # -- failure branches --------------------------------------------------
+
+    def test_external_http_error_with_json_body(self):
+        """ExternalHTTPError whose response carries a JSON error object."""
+        fake_resp = MagicMock()
+        fake_resp.json.return_value = {
+            "error": {"message": "invalid_grant"},
+        }
+        fake_resp.text = '{"error":{"message":"invalid_grant"}}'
+        backend = self._make_backend()
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(
+            side_effect=ExternalHTTPError(
+                "bad request",
+                status_code=400,
+                response=fake_resp,
+            )
+        )
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is False
+        assert error is not None
+        assert "400" in error
+        assert "invalid_grant" in error
+        backend.write_claude_credentials.assert_not_called()
+
+    def test_generic_connection_error(self):
+        """A plain Exception with no ``.response`` attribute — treated as
+        'Token endpoint unreachable'."""
+        backend = self._make_backend()
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(
+            side_effect=ConnectionRefusedError("connection refused")
+        )
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is False
+        assert error is not None
+        assert "Token endpoint unreachable" in error
+        assert "connection refused" in error
+        backend.write_claude_credentials.assert_not_called()
+
+    def test_generic_exception_with_http_response(self):
+        """An Exception that *does* carry a ``.response`` (like httpx's
+        HTTPStatusError) — reported with status code, not 'unreachable'."""
+        fake_resp = MagicMock()
+        fake_resp.status_code = 400
+        fake_resp.text = "Bad Request"
+        exc = RuntimeError("boom")
+        exc.response = fake_resp
+
+        backend = self._make_backend()
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(side_effect=exc)
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is False
+        assert error is not None
+        assert "Refresh rejected" in error
+        assert "400" in error
+        backend.write_claude_credentials.assert_not_called()
+
+    def test_invalid_json_response(self):
+        """200 response whose ``.json()`` raises — 'Invalid JSON in refresh
+        response'."""
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.json.side_effect = ValueError("Expecting value: line 1")
+
+        backend = self._make_backend()
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=fake_resp)
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is False
+        assert error is not None
+        assert "Invalid JSON" in error
+        assert "Expecting value" in error
+        backend.write_claude_credentials.assert_not_called()
+
+    def test_missing_access_token(self):
+        """200 + valid JSON but no ``access_token`` key in the payload."""
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.json.return_value = {
+            "refresh_token": "new-rt",
+            "expires_in": 3600,
+        }
+
+        backend = self._make_backend()
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=fake_resp)
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is False
+        assert error is not None
+        assert "No access_token" in error
+        backend.write_claude_credentials.assert_not_called()
+
+    def test_backend_write_failure(self):
+        """Full success path until the write — then backend raises."""
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.json.return_value = {
+            "access_token": "new-at",
+            "refresh_token": "new-rt",
+            "expires_in": 3600,
+        }
+
+        backend = self._make_backend(write_side_effect=OSError("disk full"))
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=fake_resp)
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is False
+        assert error is not None
+        assert "Failed to write refreshed credentials" in error
+        assert "disk full" in error
+        backend.write_claude_credentials.assert_awaited_once()
+
+    def test_success_path(self):
+        """Full success: 200, valid JSON with access_token, write succeeds."""
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.json.return_value = {
+            "access_token": "new-at",
+            "refresh_token": "new-rt",
+            "expires_in": 3600,
+        }
+
+        backend = self._make_backend()
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=fake_resp)
+
+        success, error = self._patch_and_call(mock_client, backend)
+
+        assert success is True
+        assert error is None
         backend.write_claude_credentials.assert_awaited_once()
 
 
