@@ -84,6 +84,33 @@ class TestClaudeAuthRefreshLoop:
         with patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]):
             await deps_mod._claude_auth_refresh_loop(backend, 1)
 
+    async def test_refresh_loop_records_missing_refresh_token(self) -> None:
+        """The exact state that took the fleet down: a credential with an empty
+        refreshToken. The loop cannot renew it, but it must not skip in silence
+        — that left the panel reporting a stale error while the access token
+        quietly ran out and every component started 401ing."""
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(return_value={"status": "authenticated"})
+        backend.read_claude_credentials = AsyncMock(
+            return_value={
+                "claudeAiOauth": {
+                    "accessToken": "at",
+                    "refreshToken": "",
+                    "expiresAt": int(time.time() * 1000) + 3_600_000,
+                    "scopes": ["user:inference"],
+                }
+            }
+        )
+
+        with patch.object(asyncio, "sleep", side_effect=[None, asyncio.CancelledError]):
+            await deps_mod._claude_auth_refresh_loop(backend, 1)
+
+        state = deps_mod.get_claude_auth_refresh_state()
+        assert state["last_refresh"] is not None
+        assert "no refresh token" in state["last_error"]
+        # No grant is possible, so nothing may be written over the credential.
+        backend.write_claude_credentials.assert_not_called()
+
     async def test_refresh_loop_success_path(self) -> None:
         """Full success path: authenticated, expiring soon, refresh succeeds."""
         from contextlib import asynccontextmanager

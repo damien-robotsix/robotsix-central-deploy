@@ -2372,7 +2372,13 @@ function renderClaudeAuthStatus(data) {
   badge.innerHTML = `<span class="badge ${info.cls}">${info.text}</span>`;
 
   let detailText = data.detail || '';
-  if (data.refresh_status === 'ok') {
+  // A credential with no refresh token expires for good, so say that first —
+  // it outranks the refresh_status line, which can only ever report on grants
+  // this credential is incapable of making.
+  if (data.refresh_capable === false) {
+    detailText += (detailText ? ' — ' : '') +
+      '⚠ No refresh token: this credential cannot be renewed and needs a manual re-login before it expires';
+  } else if (data.refresh_status === 'ok') {
     detailText += (detailText ? ' — ' : '') + '✓ Auto-refresh active';
   } else if (data.refresh_status === 'failed') {
     detailText += (detailText ? ' — ' : '') + '⚠ Refresh failed';
@@ -2466,8 +2472,16 @@ async function completeClaudeLogin() {
     }
     const data = await resp.json();
     if (data.status === 'authenticated') {
-      toast.textContent = '✓ Login successful!';
-      toast.style.color = 'var(--green)';
+      if (data.warning) {
+        // Logged in, but the credential is already known to be un-renewable.
+        // Show it where the operator is looking right now rather than letting
+        // it surface hours later as component 401s.
+        toast.textContent = '✓ Login successful — ⚠ ' + data.warning;
+        toast.style.color = 'var(--orange, #d08770)';
+      } else {
+        toast.textContent = '✓ Login successful!';
+        toast.style.color = 'var(--green)';
+      }
       loginSection.classList.add('hidden');
       claudeLoginId = '';
       await fetchClaudeAuthStatus();

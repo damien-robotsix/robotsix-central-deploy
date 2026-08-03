@@ -52,7 +52,32 @@ OAUTH_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize"
 OAUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL, not a password
 OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # gitleaks:allow — public OAuth client id, not a secret
 OAUTH_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
-OAUTH_SCOPE = "user:inference"
+
+# Scope set requested at authorize time.
+#
+# Claude Code's own authorize builder picks between two sets:
+#
+#     let p = c ? c.scopes : (s ? [uF] : kPr);   // s = inferenceOnly
+#
+# where ``uF = "user:inference"`` and ``kPr`` is the deduped union
+# ``["org:create_api_key", "user:profile", "user:inference",
+#    "user:sessions:claude_code", "user:mcp_servers", "user:file_upload"]``
+# (verified against the bundled CLI, Claude Code 2.1.199).
+#
+# We previously requested the bare ``user:inference`` — the ``inferenceOnly``
+# path — and the token exchange came back with NO refresh token. That produced
+# an 8-hour credential that nothing could renew: the background refresh loop
+# skips any credential without a refresh token, so every component 401'd
+# roughly 8 hours after each login and the only recovery was another manual
+# panel login. See the ``refresh_token``-missing guard in the exchange below.
+#
+# ``org:create_api_key`` and ``user:file_upload`` are deliberately NOT
+# requested. This credential lives in a named volume mounted into every fleet
+# component, so it is only as safe as its narrowest useful scope — and the
+# ability to mint org API keys is a privilege escalation none of them need.
+# The four scopes below are the set Claude Code itself documents as
+# refresh-capable in its ``CLAUDE_CODE_OAUTH_SCOPES`` guidance.
+OAUTH_SCOPE = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
 
 LOGIN_SESSION_TTL_SECONDS = 600
 
@@ -262,6 +287,24 @@ async def complete_claude_login(
         )
 
     _login_sessions.pop(body.login_id, None)
+
+    # A credential with no refresh token is a time bomb: it works now and dies
+    # silently at `expiresAt` with nothing able to renew it (the background
+    # refresh loop has no grant to send). Surface that at login time — when the
+    # operator is present and can act — instead of letting every component 401
+    # hours later behind an opaque SDK error.
+    if not refresh_token:
+        expires_hours = float(expires_in or 0) / 3600
+        warning = (
+            "Login succeeded but the token exchange returned NO refresh token, "
+            f"so this credential cannot be renewed and will stop working in "
+            f"~{expires_hours:.1f} hours. Auto-refresh is disabled for it — "
+            "plan a manual re-login, and check that the requested scopes "
+            f"({OAUTH_SCOPE}) are still refresh-capable."
+        )
+        logger.warning("Claude auth login: %s", warning)
+        return ClaudeAuthCompleteResponse(status="authenticated", warning=warning)
+
     return ClaudeAuthCompleteResponse(status="authenticated")
 
 

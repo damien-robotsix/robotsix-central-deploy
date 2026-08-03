@@ -441,6 +441,14 @@ class ClaudeAuthStatusResponse(BaseModel):
         default="",
         description="Error message from the most recent failed refresh attempt",
     )
+    refresh_capable: bool = Field(
+        default=True,
+        description=(
+            "Whether the stored credential carries a refresh token. When false "
+            "the credential cannot be renewed and dies at its expiry, needing a "
+            "manual re-login"
+        ),
+    )
 
 
 class ClaudeAuthLoginResponse(BaseModel):
@@ -462,6 +470,14 @@ class ClaudeAuthCancelRequest(BaseModel):
 class ClaudeAuthCompleteResponse(BaseModel):
     status: str = Field(description="'authenticated' on success, 'error' on failure")
     error: str = Field(default="", description="Error message when status is 'error'")
+    warning: str = Field(
+        default="",
+        description=(
+            "Non-fatal problem with an otherwise successful login — currently "
+            "set when the exchange returned no refresh token, so the credential "
+            "cannot be auto-renewed"
+        ),
+    )
 
 
 class ClaudeAuthCredentialsRequest(BaseModel):

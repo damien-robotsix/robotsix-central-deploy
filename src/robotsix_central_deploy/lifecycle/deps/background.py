@@ -146,8 +146,25 @@ async def _refresh_claude_credentials(
             logger.warning("Claude auth refresh: %s", error_detail)
             return False, error_msg
         except Exception as exc:
-            error_msg = f"Token endpoint unreachable: {exc}"
-            logger.warning("Claude auth refresh: request failed: %s", exc)
+            # Not every transport surfaces a rejected request as
+            # ExternalHTTPError — httpx's own HTTPStatusError lands here too.
+            # Those carry a `response`, so reporting them as "unreachable" is
+            # actively misleading: the endpoint answered, it just said no. The
+            # live panel showed "Token endpoint unreachable: Client error '400
+            # Bad Request'", which reads like a network problem for what was a
+            # rejected grant.
+            response = getattr(exc, "response", None)
+            if response is None:
+                error_msg = f"Token endpoint unreachable: {exc}"
+            else:
+                status = getattr(response, "status_code", "unknown")
+                detail = str(getattr(response, "text", "") or exc)[:500]
+                try:
+                    detail = response.json().get("error", {}).get("message", detail)
+                except Exception:  # noqa: S110 — non-JSON body is fine
+                    pass
+                error_msg = f"Refresh rejected ({status}): {detail}"
+            logger.warning("Claude auth refresh: request failed: %s", error_msg)
             return False, error_msg
 
     # -- 2xx response ----------------------------------------------------
@@ -242,7 +259,29 @@ async def _claude_auth_refresh_loop(
             expires_at_ms = oauth.get("expiresAt")
 
             if not refresh_token or not expires_at_ms:
-                continue  # nothing to refresh without these
+                # Nothing to refresh without these — but say so rather than
+                # skipping in silence. A credential with no refresh token is
+                # exactly the state that took the fleet down: this loop looked
+                # healthy (no logs, no error, `last_error` left holding a stale
+                # message from some earlier attempt) right up until the access
+                # token expired and every component started 401ing. Record it
+                # as the standing failure it is so /claude-auth/status shows
+                # the real reason while there is still time to re-login.
+                missing = "refresh token" if not refresh_token else "expiry"
+                _claude_auth_refresh_state = {
+                    "last_refresh": time.monotonic(),
+                    "last_error": (
+                        f"Credential has no {missing}, so it cannot be renewed "
+                        "automatically and will stop working when the access "
+                        "token expires. Log in again from the Claude Auth panel."
+                    ),
+                }
+                logger.warning(
+                    "Claude auth refresh: credential has no %s — auto-refresh "
+                    "is disabled until a new login supplies one",
+                    missing,
+                )
+                continue
 
             now_ms = int(time.time() * 1000)
             if expires_at_ms - now_ms > CLAUDE_AUTH_REFRESH_BEFORE_SECONDS * 1000:

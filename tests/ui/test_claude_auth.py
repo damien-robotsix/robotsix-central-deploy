@@ -198,6 +198,93 @@ class TestClaudeAuthRouter:
         # The session is consumed on success.
         assert login_id not in claude_auth_mod._login_sessions
 
+    async def test_authorize_url_requests_a_refresh_capable_scope_set(
+        self, client: AsyncClient
+    ):
+        """The outage that motivated this: the bare ``user:inference`` scope is
+        Claude Code's ``inferenceOnly`` path, and its exchange returns no
+        refresh token — an 8-hour credential nothing can renew. Pin the fuller
+        set, and pin the exclusion of ``org:create_api_key`` (this credential is
+        mounted into every component; minting org API keys is not its job)."""
+        resp = await client.post(
+            "/claude-auth/login", headers={"X-API-Key": self.API_KEY}
+        )
+        query = parse_qs(urlparse(resp.json()["oauth_url"]).query)
+        scopes = query["scope"][0].split()
+
+        assert "user:inference" in scopes
+        assert "user:profile" in scopes
+        assert "user:sessions:claude_code" in scopes
+        assert "user:mcp_servers" in scopes
+        assert scopes != ["user:inference"]
+        assert "org:create_api_key" not in scopes
+
+    async def test_complete_claude_login_warns_when_no_refresh_token(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """A credential with no refresh token still works, so the login is not
+        an error — but it is a scheduled outage, and the operator only ever
+        sees this panel at login time. Say so now, not in 8 hours."""
+        start = await client.post(
+            "/claude-auth/login", headers={"X-API-Key": self.API_KEY}
+        )
+        login_id = start.json()["login_id"]
+
+        monkeypatch.setattr(
+            claude_auth_mod,
+            "_exchange_code",
+            AsyncMock(
+                return_value={
+                    "access_token": "at-123",
+                    "expires_in": 28800,
+                    "scope": "user:inference",
+                }
+            ),
+        )
+
+        resp = await client.post(
+            "/claude-auth/login/complete",
+            json={"login_id": login_id, "auth_code": "the-code"},
+            headers={"X-API-Key": self.API_KEY},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Still a success — the credential is usable right now.
+        assert data["status"] == "authenticated"
+        assert "refresh token" in data["warning"]
+        assert "8.0 hours" in data["warning"]
+
+    async def test_complete_claude_login_success_has_no_warning(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """The healthy path must stay quiet — a warning that fires every login
+        is a warning nobody reads."""
+        start = await client.post(
+            "/claude-auth/login", headers={"X-API-Key": self.API_KEY}
+        )
+        login_id = start.json()["login_id"]
+
+        monkeypatch.setattr(
+            claude_auth_mod,
+            "_exchange_code",
+            AsyncMock(
+                return_value={
+                    "access_token": "at-123",
+                    "refresh_token": "rt-456",
+                    "expires_in": 28800,
+                    "scope": claude_auth_mod.OAUTH_SCOPE,
+                }
+            ),
+        )
+
+        resp = await client.post(
+            "/claude-auth/login/complete",
+            json={"login_id": login_id, "auth_code": "the-code"},
+            headers={"X-API-Key": self.API_KEY},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["warning"] == ""
+
     async def test_complete_claude_login_empty_code(self, client: AsyncClient):
         start = await client.post(
             "/claude-auth/login", headers={"X-API-Key": self.API_KEY}

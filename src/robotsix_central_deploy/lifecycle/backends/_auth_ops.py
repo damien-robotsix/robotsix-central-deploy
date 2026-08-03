@@ -142,6 +142,10 @@ class AuthOps:
                 or creds.get("expires_at")
                 or creds.get("expiresAt")
             )
+            # Reported on every outcome below: a credential with no refresh
+            # token cannot be renewed, so it is a scheduled outage rather than
+            # a healthy login. Callers surface this instead of discovering it
+            # when components start 401ing.
             if expires_at:
                 try:
                     from datetime import datetime, timezone
@@ -160,21 +164,33 @@ class AuthOps:
                             return {
                                 "status": "authenticated",
                                 "detail": "Access token expired; refreshes on next use.",
+                                "refresh_capable": True,
                             }
                         return {
                             "status": "not-authenticated",
-                            "detail": "Credentials have expired.",
+                            "detail": (
+                                "Credentials have expired and carry no refresh "
+                                "token, so they could not be renewed "
+                                "automatically. A new login is required."
+                            ),
+                            "refresh_capable": False,
                         }
                     remaining = (expire_dt - now).total_seconds()
                     if remaining < 86400 and not has_refresh:  # less than 1 day
                         return {
                             "status": "expiring",
-                            "detail": f"Credentials expire in {remaining / 3600:.1f} hours.",
+                            "detail": (
+                                f"Credentials expire in {remaining / 3600:.1f} "
+                                "hours and carry no refresh token, so they "
+                                "cannot be renewed automatically. Log in again "
+                                "before then."
+                            ),
+                            "refresh_capable": False,
                         }
                 except (ValueError, TypeError, OSError, OverflowError):
                     pass  # unparsable expiry → treat as valid
 
-            return {"status": "authenticated"}
+            return {"status": "authenticated", "refresh_capable": has_refresh}
 
         return await loop.run_in_executor(None, _check)
 
