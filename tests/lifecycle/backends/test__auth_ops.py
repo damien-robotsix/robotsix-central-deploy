@@ -88,6 +88,45 @@ class TestCheckClaudeAuth:
         assert result["status"] == "not-authenticated"
         assert "expired" in result["detail"]
 
+    async def test_refresh_capable_reported_on_healthy_credential(self, auth_ops):
+        """A valid-but-unrenewable credential looks identical to a healthy one
+        on `status` alone. Callers need the distinction to warn before it dies,
+        not after."""
+        ops, client, dm = auth_ops
+        import time
+
+        future_ms = int((time.time() + 86400 * 7) * 1000)
+        creds = {
+            "claudeAiOauth": {
+                "accessToken": "tok",
+                "expiresAt": future_ms,
+                "refreshToken": "rt",
+            }
+        }
+        client.containers.run.return_value = json.dumps(creds).encode()
+        result = await ops.check_claude_auth("test-vol")
+        assert result["status"] == "authenticated"
+        assert result["refresh_capable"] is True
+
+        creds["claudeAiOauth"]["refreshToken"] = ""
+        client.containers.run.return_value = json.dumps(creds).encode()
+        result = await ops.check_claude_auth("test-vol")
+        assert result["status"] == "authenticated"
+        assert result["refresh_capable"] is False
+
+    async def test_expired_without_refresh_token_explains_why(self, auth_ops):
+        """The detail an operator reads during an outage should name the cause
+        (no refresh token) rather than only the symptom (expired)."""
+        ops, client, dm = auth_ops
+        import time
+
+        past_ms = int((time.time() - 3600) * 1000)
+        creds = {"claudeAiOauth": {"accessToken": "tok", "expiresAt": past_ms}}
+        client.containers.run.return_value = json.dumps(creds).encode()
+        result = await ops.check_claude_auth("test-vol")
+        assert result["refresh_capable"] is False
+        assert "no refresh token" in result["detail"]
+
     async def test_ms_epoch_expiry_expired_with_refresh(self, auth_ops):
         ops, client, dm = auth_ops
         import time
