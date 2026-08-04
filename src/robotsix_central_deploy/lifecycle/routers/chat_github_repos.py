@@ -25,7 +25,10 @@ from ..github_app import (
 )
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 
-from ._github_common import _call_github_endpoint
+from ._github_common import (
+    _call_github_endpoint,
+    _call_github_endpoint_with_pat_fallback,
+)
 
 router = APIRouter(tags=["chat-github"])
 
@@ -329,31 +332,22 @@ async def relax_merge_gate(
     installation token first, repo-creation PAT as fallback).  Returns the
     full branch protection object so the caller can verify the change.
     """
-    from ._github_common import (
-        _get_client_or_503_with_pat_fallback,
-        _reraise_github_errors,
-    )
-
     if body is None:
         body = RelaxMergeGateRequest()
 
-    client = await _get_client_or_503_with_pat_fallback(config, owner, repo)
-    try:
-        result: dict[str, Any] = await asyncio.to_thread(
-            _relax_merge_gate_sync, client, owner, repo, body
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
-
-    await audit_store.append(
-        ChatAgentAuditEntry(
+    return await _call_github_endpoint_with_pat_fallback(
+        config,
+        owner,
+        repo,
+        _relax_merge_gate_sync,
+        body,
+        audit_store=audit_store,
+        audit_entry=ChatAgentAuditEntry(
             component="github",
             action="relax_merge_gate",
             key=f"{owner}/{repo}",
             new_value={"branch": body.branch} if body.branch else {},
             detail=f"Relaxed merge gate on {owner}/{repo}"
             + (f" (branch: {body.branch})" if body.branch else ""),
-        )
+        ),
     )
-    return result

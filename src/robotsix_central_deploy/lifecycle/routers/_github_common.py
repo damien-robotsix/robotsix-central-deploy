@@ -133,3 +133,30 @@ async def _call_github_endpoint(
     if audit_store is not None and audit_entry is not None:
         await audit_store.append(audit_entry)
     return result  # type: ignore[no-any-return]  # asyncio.to_thread is untyped
+
+
+async def _call_github_endpoint_with_pat_fallback(
+    config: LifecycleConfig,
+    owner: str,
+    repo: str,
+    sync_fn: Any,
+    *args: Any,
+    audit_store: ChatAgentAuditStore | None = None,
+    audit_entry: ChatAgentAuditEntry | None = None,
+) -> _T:
+    """Call a sync GitHub function with App-token client + PAT fallback.
+
+    Acquires the GitHub App installation client for *owner*/*repo* (with
+    PAT fallback when the App is not configured), runs *sync_fn* in a
+    thread, maps common GitHub exceptions to HTTP status codes, and
+    optionally appends an audit entry on success.
+    """
+    client = await _get_client_or_503_with_pat_fallback(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(sync_fn, client, owner, repo, *args)
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
+    if audit_store is not None and audit_entry is not None:
+        await audit_store.append(audit_entry)
+    return result  # type: ignore[no-any-return]  # asyncio.to_thread is untyped
