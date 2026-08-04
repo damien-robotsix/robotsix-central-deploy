@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "devDependencies": {
+    "@robotsix/ui": "github:damien-robotsix/robotsix-ui#v0.1.7"
+  }
+}

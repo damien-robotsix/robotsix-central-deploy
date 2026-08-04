@@ -6,6 +6,13 @@ ARG BASE_DIGEST=sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facf
 # (satisfies hadolint DL3022).
 FROM ghcr.io/astral-sh/uv:0.11.29 AS uv
 
+# Node-deps stage — installs npm devDependencies to extract the compiled
+# robotsix-ui shared stylesheet (dist/style.css).
+FROM node:22-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46 AS node-deps
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+
 # Builder stage — uv and git resolve the frozen lockfile (including the
 # git-pinned first-party deps) and install the project. Build tooling stays
 # here; only installed packages are copied into the runtime image.
@@ -21,6 +28,7 @@ RUN apt-get update && apt-get upgrade -y \
 
 COPY pyproject.toml uv.lock _mill_build.py ./
 COPY src/ ./src/
+COPY --from=node-deps /app/node_modules/@robotsix/ui/dist/style.css ./src/robotsix_central_deploy/ui/static/robotsix-ui-base.css
 # src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md is a symlink to
 # ../../../docs/ui/DEPLOY_CONTRACT.md; the canonical file must exist in the
 # build stage or hatchling fails to resolve it when building the wheel.
