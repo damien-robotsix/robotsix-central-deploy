@@ -43,6 +43,73 @@ def _is_secret_prop(prop_schema: dict[str, Any]) -> bool:
     )
 
 
+# ---------------------------------------------------------------------------
+# Shared JSON Schema walker
+# ---------------------------------------------------------------------------
+
+
+class _SchemaWalker:
+    """Shared recursive JSON Schema walker.
+
+    Walks a schema's ``properties``, resolving ``$ref`` against the ROOT
+    schema (``*$defs`` only exists there — resolving against the current
+    sub-schema silently fails for objects nested two or more ``$ref``
+    levels deep).  Handles the object-recursion and array-of-objects
+    recursion skeleton and dispatches every other leaf type
+    (secret / scalar / non-object array) to *visitor*.
+
+    The visitor methods each receive ``(key, resolved, value_dicts,
+    walk)`` where *resolved* is the ``$ref``-resolved property schema,
+    ``value_dicts`` is the tuple of value dicts for the current schema
+    level and ``walk`` is ``_SchemaWalker.walk`` for recursing into object
+    / array-of-objects items.  The ``array`` method receives an extra
+    *resolved_items* argument (the ``$ref``-resolved ``items`` schema) so
+    ``$ref`` resolution never leaks into visitor code.
+
+    A visitor method returns the value to store under *key* (including
+    ``None``), or the ``SKIP`` sentinel to omit the key from the result
+    entirely (used by ``_strip_secret_values`` to drop secret leaves).
+    """
+
+    #: sentinel returned by a visitor to omit a key from the result.
+    SKIP = object()
+
+    def __init__(self, schema: dict[str, Any], visitor: Any) -> None:
+        self._schema = schema
+        self._visitor = visitor
+
+    def walk(
+        self, i_schema: dict[str, Any], *value_dicts: dict[str, Any]
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, prop in i_schema.get("properties", {}).items():
+            resolved = _resolve_ref(prop, self._schema)
+            if _is_secret_prop(resolved):
+                value = self._visitor.secret(key, resolved, value_dicts, self.walk)
+            elif resolved.get("type") == "object":
+                sub_dicts: list[dict[str, Any]] = []
+                for d in value_dicts:
+                    if isinstance(d, dict):
+                        child = d.get(key)
+                        sub_dicts.append(child if isinstance(child, dict) else {})
+                value = self.walk(resolved, *sub_dicts)
+            elif resolved.get("type") == "array":
+                items_schema = resolved.get("items", {})
+                resolved_items = (
+                    _resolve_ref(items_schema, self._schema)
+                    if isinstance(items_schema, dict)
+                    else None
+                )
+                value = self._visitor.array(
+                    key, resolved, resolved_items, value_dicts, self.walk
+                )
+            else:
+                value = self._visitor.scalar(key, resolved, value_dicts, self.walk)
+            if value is not _SchemaWalker.SKIP:
+                result[key] = value
+        return result
+
+
 def _strip_secret_values(
     schema: dict[str, Any] | None, values: dict[str, Any]
 ) -> dict[str, Any]:
@@ -60,51 +127,49 @@ def _strip_secret_values(
     if not schema or not _is_json_schema(schema) or not isinstance(values, dict):
         return values if isinstance(values, dict) else {}
 
-    def _recursive(
-        i_schema: dict[str, Any], i_values: dict[str, Any]
-    ) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        props = i_schema.get("properties", {})
-        for key, val in i_values.items():
-            prop = props.get(key)
-            # $refs must resolve against the ROOT schema — $defs only exists
-            # there, so resolving against the current sub-schema silently
-            # fails for objects nested two or more $ref levels deep.
-            resolved = _resolve_ref(prop, schema) if isinstance(prop, dict) else None
-            if resolved is not None and _is_secret_prop(resolved):
-                continue  # drop secret leaves — the operator supplies them
-            if (
-                resolved is not None
-                and resolved.get("type") == "object"
-                and isinstance(val, dict)
-            ):
-                result[key] = _recursive(resolved, val)
-            elif (
-                resolved is not None
-                and resolved.get("type") == "array"
-                and isinstance(val, list)
-            ):
-                items_schema = resolved.get("items", {})
-                resolved_items: dict[str, Any] | None = None
-                if isinstance(items_schema, dict):
-                    resolved_items = _resolve_ref(items_schema, schema)
-                if (
-                    isinstance(resolved_items, dict)
-                    and resolved_items.get("type") == "object"
-                ):
-                    result[key] = [
-                        _recursive(resolved_items, item)
-                        if isinstance(item, dict)
-                        else item
-                        for item in val
-                    ]
-                else:
-                    result[key] = val
-            else:
-                result[key] = val
-        return result
+    class _Visitor:
+        def secret(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            return _SchemaWalker.SKIP  # drop secret leaves — operator supplies them
 
-    return _recursive(schema, values)
+        def scalar(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_values,) = value_dicts
+            return i_values[key] if key in i_values else _SchemaWalker.SKIP
+
+        def array(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            resolved_items: dict[str, Any] | None,
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_values,) = value_dicts
+            val = i_values.get(key)
+            if not isinstance(val, list):
+                return val
+            if (
+                isinstance(resolved_items, dict)
+                and resolved_items.get("type") == "object"
+            ):
+                return [
+                    walk(resolved_items, item) if isinstance(item, dict) else item
+                    for item in val
+                ]
+            return val
+
+    return _SchemaWalker(schema, _Visitor()).walk(schema, values)
 
 
 def _resolve_ref(prop: dict[str, Any], root_schema: dict[str, Any]) -> dict[str, Any]:
@@ -206,46 +271,52 @@ def _mask_secrets_json_schema(
     schema: dict[str, Any], current: dict[str, Any]
 ) -> dict[str, Any]:
 
-    def _recursive(
-        i_schema: dict[str, Any], i_current: dict[str, Any]
-    ) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, prop in i_schema.get("properties", {}).items():
-            # Resolve against the ROOT schema — $defs only exists there.
-            resolved = _resolve_ref(prop, schema)
+    class _Visitor:
+        def secret(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_current,) = value_dicts
             cval = i_current.get(key)
-            if _is_secret_prop(resolved):
-                if isinstance(cval, str) and cval and cval != "***":
-                    result[key] = "***"
-                else:
-                    result[key] = ""
-            elif resolved.get("type") == "object":
-                result[key] = (
-                    _recursive(resolved, cval) if isinstance(cval, dict) else {}
-                )
-            elif resolved.get("type") == "array":
-                items_schema = resolved.get("items", {})
-                resolved_items: dict[str, Any] | None = None
-                if isinstance(items_schema, dict):
-                    resolved_items = _resolve_ref(items_schema, schema)
-                if (
-                    isinstance(cval, list)
-                    and isinstance(resolved_items, dict)
-                    and resolved_items.get("type") == "object"
-                ):
-                    result[key] = [
-                        _recursive(resolved_items, item)
-                        if isinstance(item, dict)
-                        else item
-                        for item in cval
-                    ]
-                else:
-                    result[key] = cval if key in i_current else []
-            else:
-                result[key] = cval if key in i_current else ""
-        return result
+            if isinstance(cval, str) and cval and cval != "***":
+                return "***"
+            return ""
 
-    return _recursive(schema, current)
+        def scalar(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_current,) = value_dicts
+            return i_current[key] if key in i_current else ""
+
+        def array(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            resolved_items: dict[str, Any] | None,
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_current,) = value_dicts
+            cval = i_current.get(key)
+            if (
+                isinstance(cval, list)
+                and isinstance(resolved_items, dict)
+                and resolved_items.get("type") == "object"
+            ):
+                return [
+                    walk(resolved_items, item) if isinstance(item, dict) else item
+                    for item in cval
+                ]
+            return cval if key in i_current else []
+
+    return _SchemaWalker(schema, _Visitor()).walk(schema, current)
 
 
 def _merge_config(
@@ -287,101 +358,93 @@ def _merge_config_json_schema(
     prefer_existing_for_unset: bool = False,
 ) -> dict[str, Any]:
 
-    def _recursive(
-        i_schema: dict[str, Any],
-        i_existing: dict[str, Any],
-        i_submitted: dict[str, Any],
-    ) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, prop in i_schema.get("properties", {}).items():
-            # Resolve against the ROOT schema — $defs only exists there.
-            # Resolving against the current sub-schema silently fails for
-            # objects nested two or more $ref levels deep (e.g.
-            # memory.llm), so the submitted sub-dict replaced the existing
-            # one wholesale, dropping unsubmitted nested keys and secrets.
-            resolved = _resolve_ref(prop, schema)
-            if _is_secret_prop(resolved):
-                # Secrets always keep existing when unset — an omitted,
-                # blank, or sentinel ("***") value means "keep existing".
-                # Only an explicitly supplied non-empty, non-sentinel value
-                # overwrites the stored secret.
-                sub_val = i_submitted.get(key)
-                if sub_val and sub_val != "***":
-                    result[key] = str(sub_val)
-                elif key in i_existing:
-                    result[key] = i_existing[key]
-                else:
-                    result[key] = ""
-            elif resolved.get("type") == "object":
-                sub_existing = (
-                    i_existing[key] if isinstance(i_existing.get(key), dict) else {}
+    class _Visitor:
+        def secret(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_existing, i_submitted) = value_dicts
+            # Secrets always keep existing when unset — an omitted, blank,
+            # or sentinel ("***") value means "keep existing".  Only an
+            # explicitly supplied non-empty, non-sentinel value overwrites
+            # the stored secret.
+            sub_val = i_submitted.get(key)
+            if sub_val and sub_val != "***":
+                return str(sub_val)
+            if key in i_existing:
+                return i_existing[key]
+            return ""
+
+        def array(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            resolved_items: dict[str, Any] | None,
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_existing, i_submitted) = value_dicts
+            if (
+                isinstance(resolved_items, dict)
+                and resolved_items.get("type") == "object"
+                and isinstance(i_submitted.get(key), list)
+            ):
+                # Merge array-of-objects: iterate submitted items, merge
+                # each against the corresponding existing item.
+                submitted_list = i_submitted[key]
+                existing_list: list[dict[str, Any]] = (
+                    i_existing[key] if isinstance(i_existing.get(key), list) else []
                 )
-                sub_submitted = (
-                    i_submitted[key] if isinstance(i_submitted.get(key), dict) else {}
-                )
-                result[key] = _recursive(resolved, sub_existing, sub_submitted)
-            elif resolved.get("type") == "array":
-                items_schema = resolved.get("items", {})
-                resolved_items: dict[str, Any] | None = None
-                if isinstance(items_schema, dict):
-                    resolved_items = _resolve_ref(items_schema, schema)
-                if (
-                    isinstance(resolved_items, dict)
-                    and resolved_items.get("type") == "object"
-                    and isinstance(i_submitted.get(key), list)
-                ):
-                    # Merge array-of-objects: iterate submitted items,
-                    # merge each against the corresponding existing item.
-                    submitted_list = i_submitted[key]
-                    existing_list: list[dict[str, Any]] = (
-                        i_existing[key] if isinstance(i_existing.get(key), list) else []
-                    )
-                    merged_items: list[dict[str, Any]] = []
-                    for i, sitem in enumerate(submitted_list):
-                        if isinstance(sitem, dict):
-                            eitem = (
-                                existing_list[i]
-                                if i < len(existing_list)
-                                and isinstance(existing_list[i], dict)
-                                else {}
-                            )
-                            merged_items.append(
-                                _recursive(resolved_items, eitem, sitem)
-                            )
-                        else:
-                            merged_items.append(sitem)
-                    result[key] = merged_items
-                elif key in i_submitted:
-                    result[key] = i_submitted[key]
-                elif prefer_existing_for_unset and key in i_existing:
-                    result[key] = i_existing[key]
-                else:
-                    result[key] = i_existing.get(key, [])
-            elif key in i_submitted and i_submitted[key] is None:
+                merged_items: list[dict[str, Any]] = []
+                for i, sitem in enumerate(submitted_list):
+                    if isinstance(sitem, dict):
+                        eitem = (
+                            existing_list[i]
+                            if i < len(existing_list)
+                            and isinstance(existing_list[i], dict)
+                            else {}
+                        )
+                        merged_items.append(walk(resolved_items, eitem, sitem))
+                    else:
+                        merged_items.append(sitem)
+                return merged_items
+            if key in i_submitted:
+                return i_submitted[key]
+            if prefer_existing_for_unset and key in i_existing:
+                return i_existing[key]
+            return i_existing.get(key, [])
+
+        def scalar(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_existing, i_submitted) = value_dicts
+            sub_val = i_submitted.get(key)
+            if key in i_submitted and sub_val is None:
                 # The form submits null for a field left empty (e.g. a
-                # cleared number input on a nullable field). Treat it like
+                # cleared number input on a nullable field).  Treat it like
                 # an absent key instead of feeding None to type coercion,
                 # which would 422 the whole save.
                 if prefer_existing_for_unset and key in i_existing:
-                    result[key] = i_existing[key]
-                elif "default" in resolved:
-                    result[key] = resolved["default"]
-                else:
-                    result[key] = None
-            elif key in i_submitted:
-                try:
-                    result[key] = _coerce_by_schema(resolved, i_submitted[key])
-                except ValueError:
-                    raise
-            elif prefer_existing_for_unset and key in i_existing:
-                result[key] = i_existing[key]
-            elif "default" in resolved:
-                result[key] = resolved["default"]
-            else:
-                result[key] = ""
-        return result
+                    return i_existing[key]
+                if "default" in resolved:
+                    return resolved["default"]
+                return None
+            if key in i_submitted:
+                return _coerce_by_schema(resolved, sub_val)
+            if prefer_existing_for_unset and key in i_existing:
+                return i_existing[key]
+            if "default" in resolved:
+                return resolved["default"]
+            return ""
 
-    return _recursive(schema, existing, submitted)
+    return _SchemaWalker(schema, _Visitor()).walk(schema, existing, submitted)
 
 
 def _merge_config_flat(
@@ -504,47 +567,68 @@ def _restore_secrets_from_current(
     Walks the JSON Schema properties recursively (including arrays of
     objects) and for every ``writeOnly``/``password`` field copies the
     value from *current* into *restored*.  Non-secret keys already
-    present in *restored* are left unchanged.  Returns *restored*
-    (mutated in place).
+    present in *restored* are left unchanged.  Returns a new dict; the
+    original *restored* is not modified.
     """
     if not _is_json_schema(schema):
         return restored
 
-    def _walk(
-        i_schema: dict[str, Any],
-        i_restored: dict[str, Any],
-        i_current: dict[str, Any],
-    ) -> dict[str, Any]:
-        for key, prop in i_schema.get("properties", {}).items():
-            resolved = _resolve_ref(prop, schema)
-            if _is_secret_prop(resolved):
-                if key in i_current:
-                    i_restored[key] = i_current[key]
-            elif resolved.get("type") == "object":
-                if isinstance(i_restored.get(key), dict) and isinstance(
-                    i_current.get(key), dict
-                ):
-                    _walk(resolved, i_restored[key], i_current[key])
-            elif resolved.get("type") == "array":
-                items_schema = resolved.get("items", {})
-                resolved_items: dict[str, Any] | None = None
-                if isinstance(items_schema, dict):
-                    resolved_items = _resolve_ref(items_schema, schema)
-                if (
-                    isinstance(resolved_items, dict)
-                    and resolved_items.get("type") == "object"
-                ):
-                    r_list = i_restored.get(key)
-                    c_list = i_current.get(key)
-                    if isinstance(r_list, list) and isinstance(c_list, list):
-                        for i in range(min(len(r_list), len(c_list))):
-                            if isinstance(r_list[i], dict) and isinstance(
-                                c_list[i], dict
-                            ):
-                                _walk(resolved_items, r_list[i], c_list[i])
-        return i_restored
+    class _Visitor:
+        def secret(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_restored, i_current) = value_dicts
+            if key in i_current:
+                return i_current[key]
+            if key in i_restored:
+                return i_restored[key]
+            return _SchemaWalker.SKIP
 
-    return _walk(schema, restored, current)
+        def array(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            resolved_items: dict[str, Any] | None,
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_restored, i_current) = value_dicts
+            r_list = i_restored.get(key)
+            c_list = i_current.get(key)
+            if (
+                isinstance(resolved_items, dict)
+                and resolved_items.get("type") == "object"
+                and isinstance(r_list, list)
+                and isinstance(c_list, list)
+            ):
+                merged_items: list[Any] = []
+                for i in range(min(len(r_list), len(c_list))):
+                    if isinstance(r_list[i], dict) and isinstance(c_list[i], dict):
+                        merged_items.append(walk(resolved_items, r_list[i], c_list[i]))
+                    else:
+                        merged_items.append(r_list[i])
+                return merged_items
+            if key in i_restored:
+                return i_restored[key]
+            return _SchemaWalker.SKIP
+
+        def scalar(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_restored, i_current) = value_dicts
+            if key in i_restored:
+                return i_restored[key]
+            return _SchemaWalker.SKIP
+
+    return _SchemaWalker(schema, _Visitor()).walk(schema, restored, current)
 
 
 # ---------------------------------------------------------------------------

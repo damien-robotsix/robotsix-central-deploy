@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Refactored the recursive JSON Schema walkers in `_config_utils.py` (`_strip_secret_values`, `_mask_secrets_json_schema`, `_merge_config_json_schema`, `_restore_secrets_from_current`) onto a shared `_SchemaWalker` dispatcher that centralizes `$ref` resolution and object/array-of-objects recursion. Behavior is unchanged (97 config-utils tests + 1264 lifecycle tests pass); each closure now reduces to a compact visitor implementation.
 - **Langfuse auto-discovery:** When a managed service's `allow_chat_access` or `chat_agent_mutatable` toggle is enabled, central-deploy now automatically reads the service's standardized config for Langfuse project credentials and registers them as chat-proxy project aliases — no operator key-pasting step. Toggling off deregisters them. Re-applying the toggle or restarting converges to the same alias set (idempotent). Services without Langfuse keys are handled gracefully (no error).
   - The chat-Langfuse proxy project-alias config is now part of the standardized configuration system (`GET /services/central-deploy/config` returns a `langfuse_projects` schema with auto-discovered and operator-configured projects).
   - New helper `_reconcile_auto_langfuse_projects()` in `chat_langfuse.py` scans all chat-accessible components; hook points at startup, env toggle, mutation toggle, and onboard confirm.
