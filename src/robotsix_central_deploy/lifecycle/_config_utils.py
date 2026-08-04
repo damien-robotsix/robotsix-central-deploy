@@ -82,7 +82,10 @@ class _SchemaWalker:
         self, i_schema: dict[str, Any], *value_dicts: dict[str, Any]
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
-        for key, prop in i_schema.get("properties", {}).items():
+        props = i_schema.get("properties", {})
+        visited: set[str] = set()
+        for key, prop in props.items():
+            visited.add(key)
             resolved = _resolve_ref(prop, self._schema)
             if _is_secret_prop(resolved):
                 value = self._visitor.secret(key, resolved, value_dicts, self.walk)
@@ -107,6 +110,18 @@ class _SchemaWalker:
                 value = self._visitor.scalar(key, resolved, value_dicts, self.walk)
             if value is not _SchemaWalker.SKIP:
                 result[key] = value
+        # Dispatch keys present in value dicts but absent from the schema
+        # (preserves unrecognized keys for _strip_secret_values; a no-op
+        # for visitors that don't implement ``unknown``).
+        unknown = getattr(self._visitor, "unknown", None)
+        if unknown is not None and value_dicts:
+            first = value_dicts[0]
+            if isinstance(first, dict):
+                for key in first:
+                    if key not in visited:
+                        value = unknown(key, value_dicts)
+                        if value is not _SchemaWalker.SKIP:
+                            result[key] = value
         return result
 
 
@@ -168,6 +183,15 @@ def _strip_secret_values(
                     for item in val
                 ]
             return val
+
+        def unknown(
+            self,
+            key: str,
+            value_dicts: tuple[dict[str, Any], ...],
+        ) -> Any:
+            # Preserve any key in values that is not recognised by the schema.
+            (i_values,) = value_dicts
+            return i_values[key]
 
     return _SchemaWalker(schema, _Visitor()).walk(schema, values)
 
@@ -605,12 +629,17 @@ def _restore_secrets_from_current(
                 and isinstance(r_list, list)
                 and isinstance(c_list, list)
             ):
+                n = min(len(r_list), len(c_list))
                 merged_items: list[Any] = []
-                for i in range(min(len(r_list), len(c_list))):
+                for i in range(n):
                     if isinstance(r_list[i], dict) and isinstance(c_list[i], dict):
                         merged_items.append(walk(resolved_items, r_list[i], c_list[i]))
                     else:
                         merged_items.append(r_list[i])
+                # Preserve extra items from restored that extend beyond
+                # current (the original in-place mutation left the tail
+                # of r_list untouched).
+                merged_items.extend(r_list[n:])
                 return merged_items
             if key in i_restored:
                 return i_restored[key]
