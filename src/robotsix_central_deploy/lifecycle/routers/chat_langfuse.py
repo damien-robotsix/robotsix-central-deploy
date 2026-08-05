@@ -39,10 +39,6 @@ from robotsix_http import ExternalHTTPError
 
 from ..._http import retry_client_context
 
-from .._langfuse_config import (
-    _reconcile_auto_langfuse_projects,
-    reconcile_langfuse_after_toggle,
-)
 from ..auth import verify_auth
 from ..config import LangfuseProjectCreds, LifecycleConfig
 from ..deps import _get_config
