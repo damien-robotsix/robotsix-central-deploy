@@ -430,6 +430,121 @@ class TestLangfuseProxyCogneeProject:
         assert resp.status_code == 503
 
 
+class TestLangfuseAutoDiscovery:
+    """Auto-discovered projects from components with chat access enabled.
+
+    When a component declares ``langfuse.projects`` in its standardized
+    config AND has ``allow_chat_access`` or ``chat_agent_mutatable``
+    enabled, reconciliation extracts the project aliases and makes them
+    available through the chat proxy's project list.
+    """
+
+    async def test_auto_discovered_projects_appear_in_project_list(
+        self, client, auth_headers
+    ):
+        """Project aliases from a chat-accessible component are listed."""
+        config_yaml_store = server_mod.app.state.config_yaml_store
+        await config_yaml_store.update_current(
+            "auto-comp",
+            {
+                "langfuse": {
+                    "host": "https://langfuse.example.com",
+                    "projects": {
+                        "auto-proj-a": {
+                            "public_key": "pk-auto-a",
+                            "secret_key": "sk-auto-a",
+                        },
+                        "auto-proj-b": {
+                            "public_key": "pk-auto-b",
+                            "secret_key": "sk-auto-b",
+                        },
+                    },
+                },
+            },
+        )
+        from robotsix_central_deploy.registry.models import ComponentConfig
+
+        cfg = ComponentConfig(
+            id="auto-comp",
+            image="auto:latest",
+            container_name="auto-comp",
+            allow_chat_access=True,
+        )
+        server_mod.app.state.component_config_store.register(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Trigger reconciliation
+        from robotsix_central_deploy.lifecycle._langfuse_config import (
+            _reconcile_auto_langfuse_projects,
+        )
+
+        auto_projects = await _reconcile_auto_langfuse_projects(
+            server_mod.app.state.component_config_store,
+            config_yaml_store,
+        )
+        server_mod.app.state.auto_langfuse_projects = auto_projects
+
+        resp = await client.get("/chat/langfuse/projects", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "auto-proj-a" in data
+        assert "auto-proj-b" in data
+
+    async def test_auto_discovered_and_operator_projects_are_merged(
+        self, client, auth_headers
+    ):
+        """Operator-configured projects are merged with auto-discovered ones."""
+        config_yaml_store = server_mod.app.state.config_yaml_store
+        await config_yaml_store.update_current(
+            "merge-comp",
+            {
+                "langfuse": {
+                    "host": "https://langfuse.example.com",
+                    "projects": {
+                        "from-component": {
+                            "public_key": "pk-cmp",
+                            "secret_key": "sk-cmp",
+                        },
+                    },
+                },
+            },
+        )
+        from robotsix_central_deploy.registry.models import ComponentConfig
+
+        cfg = ComponentConfig(
+            id="merge-comp",
+            image="merge:latest",
+            container_name="merge-comp",
+            allow_chat_access=True,
+        )
+        server_mod.app.state.component_config_store.register(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        # Operator project
+        from robotsix_central_deploy.lifecycle.config import LangfuseProjectCreds
+
+        server_mod.app.state.config.langfuse_projects["from-operator"] = (
+            LangfuseProjectCreds(public_key="pk-op", secret_key="sk-op")
+        )
+
+        # Trigger reconciliation
+        from robotsix_central_deploy.lifecycle._langfuse_config import (
+            _reconcile_auto_langfuse_projects,
+        )
+
+        auto_projects = await _reconcile_auto_langfuse_projects(
+            server_mod.app.state.component_config_store,
+            config_yaml_store,
+        )
+        server_mod.app.state.auto_langfuse_projects = auto_projects
+
+        resp = await client.get("/chat/langfuse/projects", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "from-component" in data
+        assert "from-operator" in data
+
+
 class TestLangfuseProxyErrorHandling:
     async def test_connect_error_returns_502(
         self,

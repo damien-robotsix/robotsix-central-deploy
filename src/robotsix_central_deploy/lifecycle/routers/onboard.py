@@ -734,41 +734,16 @@ async def onboard_confirm(
 
     # Reconcile Langfuse auto-projects when the onboarded component has
     # chat access enabled — its config may contain Langfuse key pairs.
-    from .chat_langfuse import _reconcile_auto_langfuse_projects
+    from .._langfuse_config import reconcile_langfuse_after_toggle
 
     if config.allow_chat_access or config.chat_agent_mutatable:
-        try:
-            auto_langfuse = await _reconcile_auto_langfuse_projects(
-                component_config_store, config_yaml_store
-            )
-            request.app.state.auto_langfuse_projects = auto_langfuse
-
-            # Refresh central-deploy's config current values.
-            lifecycle_cfg = request.app.state.config
-            current_projects: dict[str, dict[str, str]] = {}
-            for alias, creds in auto_langfuse.items():
-                current_projects[alias] = {
-                    "public_key": creds.public_key,
-                    "secret_key": creds.secret_key.get_secret_value(),
-                }
-            for alias, creds in lifecycle_cfg.langfuse_projects.items():
-                current_projects[alias] = {
-                    "public_key": creds.public_key,
-                    "secret_key": creds.secret_key.get_secret_value(),
-                }
-            await config_yaml_store.update_current(
-                "central-deploy", {"langfuse_projects": current_projects}
-            )
-            logger.info(
-                "Onboarded '%s' with chat access — reconciled Langfuse auto-projects",
-                config.id,
-            )
-        except Exception:
-            logger.warning(
-                "Langfuse auto-discovery reconciliation failed during onboard of '%s'",
-                config.id,
-                exc_info=True,
-            )
+        await reconcile_langfuse_after_toggle(
+            component_config_store, config_yaml_store, request
+        )
+        logger.info(
+            "Onboarded '%s' with chat access — reconciled Langfuse auto-projects",
+            config.id,
+        )
 
     # Seed EnvStore from the repo's env contract — first onboard only
     env_was_seeded = False

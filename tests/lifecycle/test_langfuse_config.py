@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from robotsix_central_deploy.lifecycle._langfuse_config import (
+    _extract_langfuse_project_creds,
     extract_langfuse_block,
 )
 
@@ -196,3 +197,43 @@ class TestNoBackwardCompatibility:
         )
         assert host == "https://lf"
         assert projects == []
+
+
+class TestExtractLangfuseProjectCreds:
+    """Tests for ``_extract_langfuse_project_creds``, the helper that wraps
+    ``extract_langfuse_block`` and returns ``LangfuseProjectCreds`` dicts
+    for the auto-discovery reconciliation path."""
+
+    def test_returns_langfuse_project_creds_dict(self):
+        creds = _extract_langfuse_project_creds(
+            {
+                "langfuse": {
+                    "host": "https://lf.example.com",
+                    "projects": {
+                        "proj-a": {"public_key": "pk-a", "secret_key": "sk-a"},
+                        "proj-b": {"public_key": "pk-b", "secret_key": "sk-b"},
+                    },
+                },
+            }
+        )
+        assert set(creds.keys()) == {"proj-a", "proj-b"}
+        assert creds["proj-a"].public_key == "pk-a"
+        assert creds["proj-a"].secret_key.get_secret_value() == "sk-a"
+
+    def test_empty_when_no_langfuse_block(self):
+        assert _extract_langfuse_project_creds({}) == {}
+
+    def test_host_is_discarded(self):
+        """The creds dict does not carry host — only alias→creds."""
+        creds = _extract_langfuse_project_creds(
+            {
+                "langfuse": {
+                    "host": "https://different.example.com",
+                    "projects": {
+                        "p": {"public_key": "pk", "secret_key": "sk"},
+                    },
+                },
+            }
+        )
+        assert "p" in creds
+        assert creds["p"].public_key == "pk"

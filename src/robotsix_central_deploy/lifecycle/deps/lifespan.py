@@ -639,7 +639,7 @@ async def _init_component_registry(app: FastAPI) -> None:
     # Reconcile Langfuse credentials from services with allow_chat_access or
     # chat_agent_mutatable enabled.  This runs once at startup; subsequent
     # toggles trigger reconciliation at the toggle site.
-    from ..routers.chat_langfuse import _reconcile_auto_langfuse_projects
+    from .._langfuse_config import _reconcile_auto_langfuse_projects
 
     try:
         auto_langfuse = await _reconcile_auto_langfuse_projects(
