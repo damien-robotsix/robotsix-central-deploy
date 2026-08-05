@@ -451,11 +451,11 @@ class TestStubReturnValues:
         result = await backend.measure_volume_bytes("vol")
         assert result == 0
 
-    async def test_remove_container_is_noop(self, backend):
-        """remove_container does nothing (pass)."""
+    async def test_remove_container_raises_not_implemented(self, backend):
+        """remove_container is unsupported and raises NotImplementedError."""
         service = ServiceRecord(name="x", image="i:1")
-        # Must not raise
-        await backend.remove_container(service)
+        with pytest.raises(NotImplementedError):
+            await backend.remove_container(service)
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +486,7 @@ class TestContractConformance:
         [
             "deploy",
             "rollback",
+            "remove_container",
             "write_config_to_volume",
             "write_llmio_tier_config_to_volume",
             "read_config_from_volume",
@@ -513,6 +514,8 @@ class TestContractConformance:
                 await method(MagicMock(), MagicMock(), "img:ref")
             elif method_name == "rollback":
                 await method(MagicMock(), MagicMock())
+            elif method_name == "remove_container":
+                await method(MagicMock())
             elif method_name in (
                 "write_config_to_volume",
                 "write_llmio_tier_config_to_volume",
