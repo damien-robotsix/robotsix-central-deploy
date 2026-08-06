@@ -48,27 +48,6 @@ class LangfuseProjectCreds(BaseModel):
     )
 
 
-class OvhSftpConfig(BaseModel):
-    """OVH website SFTP credentials, seeded into the encrypted env store on first boot."""
-
-    host: str = Field(
-        "",
-        description="OVH SFTP hostname.",
-    )
-    port: int = Field(
-        22,
-        description="OVH SFTP port.",
-    )
-    user: str = Field(
-        "",
-        description="OVH SFTP username.",
-    )
-    password: SecretStr = Field(
-        SecretStr(""),
-        description="OVH SFTP password.",
-    )
-
-
 class LifecycleConfig(BaseModel):
     """Configuration for the lifecycle server."""
 
@@ -503,18 +482,6 @@ class LifecycleConfig(BaseModel):
             "component roster alongside onboarded Docker services."
         ),
         json_schema_extra={"advanced": True},
-    )
-
-    # OVH SFTP credentials (seeded into encrypted env store on first boot)
-    ovh_sftp: OvhSftpConfig = Field(
-        default_factory=OvhSftpConfig,
-        description=(
-            "OVH website SFTP credentials. If all four fields are set AND "
-            "the ovh-website-credentials entry does not already exist in "
-            "the encrypted store, the values are seeded at startup with "
-            "scope tag 'website:ovh'."
-        ),
-        json_schema_extra={"ui_hidden": True},
     )
 
     @property

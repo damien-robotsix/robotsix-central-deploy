@@ -1,7 +1,6 @@
 """Unit tests for lifespan helpers.
 
 - ``_parse_self_contract_settings`` — YAML contract → SystemSettings extraction.
-- ``_seed_ovh_website_credentials`` — OVH SFTP credential seeding into EnvStore.
 """
 
 from __future__ import annotations
@@ -11,15 +10,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from pydantic import SecretStr
 
-from robotsix_central_deploy.lifecycle.config import LifecycleConfig, OvhSftpConfig
+from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.deps.lifespan import (
     _parse_self_contract_settings,
-    _seed_ovh_website_credentials,
 )
-from robotsix_central_deploy.registry.env_store import EnvStore
-from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
 # ---------------------------------------------------------------------------
 # _parse_self_contract_settings
@@ -405,130 +400,4 @@ class TestParseSelfContractSettings:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# _seed_ovh_website_credentials
-# ---------------------------------------------------------------------------
-
-
-class TestSeedOvhWebsiteCredentials:
-    """Unit tests for ``_seed_ovh_website_credentials``."""
-
-    def _make_env_store(self, tmp_path: Path) -> EnvStore:
-        km = SecretKeyManager(tmp_path / "secrets.key")
-        return EnvStore(tmp_path / "env.json", km)
-
-    def _make_config(
-        self,
-        host: str = "sftp.example.com",
-        port: int = 22,
-        user: str = "ovh-user",
-        password: str = "s3cret",  # noqa: S107
-    ) -> LifecycleConfig:
-        return LifecycleConfig(  # type: ignore[call-arg]
-            ovh_sftp=OvhSftpConfig(
-                host=host,
-                port=port,
-                user=user,
-                password=SecretStr(password),
-            )
-        )
-
-    @pytest.mark.asyncio
-    async def test_not_fully_configured_early_return(self, tmp_path: Path) -> None:
-        """When any field is empty, nothing is seeded."""
-        cfg = self._make_config(host="")
-        store = self._make_env_store(tmp_path)
-        await _seed_ovh_website_credentials(store, cfg)
-        existing = await store.get("ovh-website-credentials")
-        assert existing.env == {}
-        assert existing.secret_tokens == {}
-
-    @pytest.mark.asyncio
-    async def test_seeds_credentials_on_first_boot(self, tmp_path: Path) -> None:
-        """First call with full config seeds env + secret tokens."""
-        cfg = self._make_config()
-        store = self._make_env_store(tmp_path)
-        await _seed_ovh_website_credentials(store, cfg)
-        existing = await store.get("ovh-website-credentials")
-        assert existing.env == {
-            "OVH_SFTP_HOST": "sftp.example.com",
-            "OVH_SFTP_PORT": "22",
-            "OVH_SFTP_USER": "ovh-user",
-        }
-        assert "OVH_SFTP_PASSWORD" in existing.secret_tokens
-        assert existing.env_scopes == {
-            "OVH_SFTP_HOST": "website:ovh",
-            "OVH_SFTP_PORT": "website:ovh",
-            "OVH_SFTP_USER": "website:ovh",
-        }
-        assert existing.secret_scopes == {"OVH_SFTP_PASSWORD": "website:ovh"}
-
-    @pytest.mark.asyncio
-    async def test_idempotent_does_not_overwrite(self, tmp_path: Path) -> None:
-        """Second call with different values does not overwrite."""
-        cfg1 = self._make_config(password="first-pw")
-        store = self._make_env_store(tmp_path)
-        await _seed_ovh_website_credentials(store, cfg1)
-        first = await store.get("ovh-website-credentials")
-
-        # Second call with different password
-        cfg2 = self._make_config(password="second-pw")
-        await _seed_ovh_website_credentials(store, cfg2)
-        second = await store.get("ovh-website-credentials")
-
-        # Values unchanged from first seeding.
-        assert second.env == first.env
-        assert second.secret_tokens == first.secret_tokens
-
-    @pytest.mark.asyncio
-    async def test_already_seeded_with_env_entries_is_skipped(
-        self, tmp_path: Path
-    ) -> None:
-        """When the entry already has env entries, seeding is skipped."""
-        cfg = self._make_config()
-        store = self._make_env_store(tmp_path)
-
-        # Pre-seed with different values
-        await store.upsert(
-            "ovh-website-credentials",
-            env={"OVH_SFTP_HOST": "pre-existing.example.com", "OVH_SFTP_PORT": "2222"},
-            secrets={"OVH_SFTP_PASSWORD": "pre-existing-pw"},
-            env_scopes={
-                "OVH_SFTP_HOST": "website:ovh",
-                "OVH_SFTP_PORT": "website:ovh",
-            },
-            secret_scopes={"OVH_SFTP_PASSWORD": "website:ovh"},
-        )
-
-        await _seed_ovh_website_credentials(store, cfg)
-        existing = await store.get("ovh-website-credentials")
-        assert existing.env["OVH_SFTP_HOST"] == "pre-existing.example.com"
-
-    @pytest.mark.asyncio
-    async def test_port_stringified_correctly(self, tmp_path: Path) -> None:
-        """Port is stored as its string representation."""
-        cfg = self._make_config(port=2222)
-        store = self._make_env_store(tmp_path)
-        await _seed_ovh_website_credentials(store, cfg)
-        existing = await store.get("ovh-website-credentials")
-        assert existing.env["OVH_SFTP_PORT"] == "2222"
-
-    @pytest.mark.asyncio
-    async def test_partial_config_missing_user(self, tmp_path: Path) -> None:
-        """User empty triggers early return."""
-        cfg = self._make_config(user="")
-        store = self._make_env_store(tmp_path)
-        await _seed_ovh_website_credentials(store, cfg)
-        existing = await store.get("ovh-website-credentials")
-        assert existing.env == {}
-        assert existing.secret_tokens == {}
-
-    @pytest.mark.asyncio
-    async def test_partial_config_missing_password(self, tmp_path: Path) -> None:
-        """Password empty triggers early return."""
-        cfg = self._make_config(password="")
-        store = self._make_env_store(tmp_path)
-        await _seed_ovh_website_credentials(store, cfg)
-        existing = await store.get("ovh-website-credentials")
-        assert existing.env == {}
-        assert existing.secret_tokens == {}
+        assert result is None
