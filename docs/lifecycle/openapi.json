@@ -7401,6 +7401,12 @@
             "title": "Error",
             "description": "Error message when status is 'error'",
             "default": ""
+          },
+          "warning": {
+            "type": "string",
+            "title": "Warning",
+            "description": "Non-fatal problem with an otherwise successful login \u2014 currently set when the exchange returned no refresh token, so the credential cannot be auto-renewed",
+            "default": ""
           }
         },
         "type": "object",
@@ -7487,6 +7493,12 @@
             "title": "Last Refresh Error",
             "description": "Error message from the most recent failed refresh attempt",
             "default": ""
+          },
+          "refresh_capable": {
+            "type": "boolean",
+            "title": "Refresh Capable",
+            "description": "Whether the stored credential carries a refresh token. When false the credential cannot be renewed and dies at its expiry, needing a manual re-login",
+            "default": true
           }
         },
         "type": "object",
