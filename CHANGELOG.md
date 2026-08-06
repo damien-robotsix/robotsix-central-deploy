@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Remove unused `_safe_redirect_target` function from `ui/router.py` (all redirect sanitization already uses `_safe_next` from `lifecycle/auth.py`).
 - Chat observability endpoints (Section 5 of chat-access-standard):
   `GET /chat/services/{name}/logs`, `GET /chat/services/{name}/status`,
   `GET /chat/services/{name}/volumes`, `GET /chat/services/{name}/volumes/{vol}/files`.
