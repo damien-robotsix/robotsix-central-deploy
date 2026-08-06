@@ -161,11 +161,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: TruffleHog secret scan
+        # Lob is excluded because its detector matches any `test_`-prefixed
+        # token (Lob's own test keys use that prefix) and then "verifies" it,
+        # so ordinary pytest function names are reported as verified secrets.
+        # It failed main on the *function name*
+        # `test_start_container_none_returns_failed`. This repo does not use
+        # Lob, so dropping the detector loses no real coverage — whereas
+        # leaving it left the scan permanently red, which is strictly worse
+        # for secret detection than a scan people trust.
         run: |
           docker run --rm \
             -v "$PWD:/repo" \
             trufflesecurity/trufflehog:3.95.9 \
-            git file:///repo --only-verified --fail
+            git file:///repo --only-verified --fail \
+            --exclude-detectors=lob
 
   trivy:
     runs-on: ubuntu-latest

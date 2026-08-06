@@ -3385,6 +3385,292 @@
         }
       }
     },
+    "/chat/services/{name}/logs": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Recent container logs for an allowlisted service",
+        "description": "Return recent container logs (bounded tail, no follow).\n\nGated by the per-component chat-access checkbox.  Response is\ncapped at ~256 KiB to avoid unbounded payloads.",
+        "operationId": "chat_service_logs_chat_services__name__logs_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "tail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Tail"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO 8601 or Unix timestamp",
+              "title": "Since"
+            },
+            "description": "ISO 8601 or Unix timestamp"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted or not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/status": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Lifecycle status for an allowlisted service",
+        "description": "Return machine-readable lifecycle status for an allowlisted service.\n\nReturns structured JSON (``ServiceStatus``) \u2014 no HTML redirect.\nIncludes live state from the Docker backend and registry update\navailability when the registry checker is active.",
+        "operationId": "chat_service_status_chat_services__name__status_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted or not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/volumes": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "List volumes for an allowlisted service",
+        "description": "Return the named volumes owned by an allowlisted service.\n\nGated by the per-component chat-access checkbox.  Returns an\nempty list when the service has no named volumes.",
+        "operationId": "chat_service_volumes_chat_services__name__volumes_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Chat Service Volumes Chat Services  Name  Volumes Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted or not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/volumes/{vol}/files": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Read a file from an allowlisted service's volume",
+        "description": "Return the text content of a file within a service's named volume.\n\nRead-only \u2014 no writes, no deletes.  Path traversal (``..``) and\nabsolute-path escapes are rejected.  Responses are capped at\n~256 KiB (``CHAT_OBSERVABILITY_MAX_BYTES``).  Binary files\nreturn ``content=null`` and ``binary=True``.",
+        "operationId": "chat_volume_file_chat_services__name__volumes__vol__files_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "vol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vol"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "File path relative to the volume root",
+              "default": "",
+              "title": "Path"
+            },
+            "description": "File path relative to the volume root"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolumeFileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path (traversal or NUL)"
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service or volume not found"
+          },
+          "501": {
+            "description": "Volume browsing not supported"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/actions/runs": {
       "get": {
         "tags": [
@@ -7115,6 +7401,12 @@
             "title": "Error",
             "description": "Error message when status is 'error'",
             "default": ""
+          },
+          "warning": {
+            "type": "string",
+            "title": "Warning",
+            "description": "Non-fatal problem with an otherwise successful login \u2014 currently set when the exchange returned no refresh token, so the credential cannot be auto-renewed",
+            "default": ""
           }
         },
         "type": "object",
@@ -7201,6 +7493,12 @@
             "title": "Last Refresh Error",
             "description": "Error message from the most recent failed refresh attempt",
             "default": ""
+          },
+          "refresh_capable": {
+            "type": "boolean",
+            "title": "Refresh Capable",
+            "description": "Whether the stored credential carries a refresh token. When false the credential cannot be renewed and dies at its expiry, needing a manual re-login",
+            "default": true
           }
         },
         "type": "object",
