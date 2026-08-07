@@ -15,26 +15,6 @@ from ..lifecycle.auth import verify_session, _safe_next
 from ..lifecycle.session import SessionStore
 
 
-def _safe_redirect_target(raw: str) -> str:
-    """Return a safe redirect target (open-redirect guard).
-
-    Parses the raw URL, rejects any target with a scheme or netloc
-    (authority), and reconstructs the safe URL from parsed components
-    so that CodeQL taint tracking recognises the sanitizer.
-    """
-    if not raw:
-        return "/ui"
-    parsed = urllib.parse.urlparse(raw)
-    if parsed.scheme or parsed.netloc:
-        return "/ui"
-    path = parsed.path or "/ui"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
-    if parsed.fragment:
-        path = f"{path}#{parsed.fragment}"
-    return path
-
-
 router = APIRouter()
 
 _STATIC_DIR = Path(__file__).parent / "static"

@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
+import pytest
 from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.config import LangfuseProjectCreds
+from robotsix_central_deploy.lifecycle.routers.chat_langfuse import (
+    _reconcile_auto_langfuse_projects,
+)
+from robotsix_central_deploy.registry.models import ComponentConfig
 
 
 @asynccontextmanager
@@ -485,3 +490,293 @@ class TestLangfuseProxyErrorHandling:
             headers=auth_headers,
         )
         assert resp.status_code == 504
+
+
+# ---------------------------------------------------------------------------
+# _reconcile_auto_langfuse_projects unit tests
+# ---------------------------------------------------------------------------
+
+
+def _make_config(
+    component_id: str,
+    *,
+    allow_chat_access: bool = False,
+    chat_agent_mutatable: bool = False,
+) -> ComponentConfig:
+    """Build a minimal ComponentConfig for reconciliation tests."""
+    return ComponentConfig(
+        id=component_id,
+        image=f"ghcr.io/example/{component_id}:main",
+        container_name=component_id,
+        allow_chat_access=allow_chat_access,
+        chat_agent_mutatable=chat_agent_mutatable,
+    )
+
+
+def _langfuse_config(
+    *aliases: str,
+    host: str = "https://langfuse.example",
+) -> dict:
+    """Build a component config dict with a ``langfuse`` block.
+
+    Each alias gets ``pk-{alias}`` / ``sk-{alias}`` keys.
+    """
+    return {
+        "langfuse": {
+            "host": host,
+            "projects": {
+                alias: {"public_key": f"pk-{alias}", "secret_key": f"sk-{alias}"}
+                for alias in aliases
+            },
+        }
+    }
+
+
+class TestReconcileAutoLangfuseProjects:
+    """Unit tests for ``_reconcile_auto_langfuse_projects``."""
+
+    @pytest.mark.asyncio
+    async def test_toggle_on_allow_chat_access_lists_aliases(self):
+        """A component with allow_chat_access=True has its projects listed."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("chat", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            return_value=_langfuse_config("robotsix-chat")
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {"robotsix-chat"}
+        assert result["robotsix-chat"].public_key == "pk-robotsix-chat"
+
+    @pytest.mark.asyncio
+    async def test_toggle_on_chat_agent_mutatable_lists_aliases(self):
+        """A component with chat_agent_mutatable=True has its projects listed."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("mill", chat_agent_mutatable=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            return_value=_langfuse_config("robotsix-mill")
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {"robotsix-mill"}
+
+    @pytest.mark.asyncio
+    async def test_toggle_off_component_is_skipped(self):
+        """A component with neither toggle enabled is entirely skipped."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("hidden"),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            return_value=_langfuse_config("hidden-project")
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_no_config_returns_none_is_skipped(self):
+        """A component whose get_current returns None is skipped gracefully."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("unconfigured", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(return_value=None)
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_no_langfuse_block_yields_nothing(self):
+        """A component with a config dict but no langfuse block adds no entries."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("no-lf", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(return_value={"server_port": 8080})
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_multiple_projects_per_component(self):
+        """A single component declaring several Langfuse projects exposes all of them."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("chat", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            return_value=_langfuse_config("robotsix-chat", "robotsix-chat-cognee")
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {"robotsix-chat", "robotsix-chat-cognee"}
+
+    @pytest.mark.asyncio
+    async def test_first_alias_wins_on_collision(self):
+        """When two components declare the same alias, the first one wins."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("chat", allow_chat_access=True),
+            _make_config("mill", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            side_effect=[
+                _langfuse_config("shared-alias"),  # chat declares "shared-alias"
+                _langfuse_config("shared-alias"),  # mill also declares it
+            ]
+        )
+        # Give chat and mill different keys for the same alias so we can
+        # verify which one stuck.
+        chat_config = _langfuse_config("shared-alias")
+        chat_config["langfuse"]["projects"]["shared-alias"]["public_key"] = (
+            "pk-from-chat"
+        )
+        mill_config = _langfuse_config("shared-alias")
+        mill_config["langfuse"]["projects"]["shared-alias"]["public_key"] = (
+            "pk-from-mill"
+        )
+        yaml_store.get_current = AsyncMock(side_effect=[chat_config, mill_config])
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {"shared-alias"}
+        assert result["shared-alias"].public_key == "pk-from-chat"
+
+    @pytest.mark.asyncio
+    async def test_multiple_components_unique_aliases(self):
+        """Several components each with distinct aliases all contribute."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("chat", allow_chat_access=True),
+            _make_config("mill", chat_agent_mutatable=True),
+            _make_config("cognee", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            side_effect=[
+                _langfuse_config("robotsix-chat"),
+                _langfuse_config("robotsix-mill"),
+                _langfuse_config("robotsix-cognee"),
+            ]
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {
+            "robotsix-chat",
+            "robotsix-mill",
+            "robotsix-cognee",
+        }
+
+    @pytest.mark.asyncio
+    async def test_mixed_toggles_only_enabled_contribute(self):
+        """Only components with at least one toggle enabled are scanned."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("enabled", allow_chat_access=True),
+            _make_config("disabled"),
+            _make_config("also-disabled"),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            side_effect=[
+                _langfuse_config("proj-enabled"),
+                _langfuse_config("proj-disabled"),
+                _langfuse_config("proj-also-disabled"),
+            ]
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {"proj-enabled"}
+
+    @pytest.mark.asyncio
+    async def test_idempotent_same_input_same_output(self):
+        """Repeated calls with the same stores produce the same result."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("chat", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            return_value=_langfuse_config("robotsix-chat")
+        )
+
+        result1 = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result2 = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert result1 == result2
+        assert set(result1.keys()) == {"robotsix-chat"}
+
+    @pytest.mark.asyncio
+    async def test_empty_component_list_returns_empty(self):
+        """When no components are registered the result is empty."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = []
+        yaml_store = MagicMock()
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_half_filled_projects_are_dropped(self):
+        """Projects missing either public_key or secret_key are silently dropped."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("chat", allow_chat_access=True),
+        ]
+        config = {
+            "langfuse": {
+                "host": "https://lf",
+                "projects": {
+                    "good": {"public_key": "pk", "secret_key": "sk"},
+                    "no-secret": {"public_key": "pk", "secret_key": ""},
+                },
+            }
+        }
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(return_value=config)
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        assert set(result.keys()) == {"good"}
+
+    @pytest.mark.asyncio
+    async def test_components_processed_in_registration_order(self):
+        """Components are iterated in the order .all() returns them."""
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("first", allow_chat_access=True),
+            _make_config("second", allow_chat_access=True),
+        ]
+        yaml_store = MagicMock()
+        yaml_store.get_current = AsyncMock(
+            side_effect=[
+                _langfuse_config("alpha"),
+                _langfuse_config("beta"),
+            ]
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+
+        # Both are unique so both appear; ordering is dict-insertion order.
+        assert list(result.keys()) == ["alpha", "beta"]

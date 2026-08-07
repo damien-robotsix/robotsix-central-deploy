@@ -6,6 +6,7 @@ All notable changes to robotsix-central-deploy.
 
 ## 0.0.0 (unreleased)
 
+- Rewrote config-panel help text for Langfuse and OpenRouter fields to use operator-facing language instead of developer jargon ("project alias", "LLM function", "cost-monitor reconcile"). Added `ui_hidden` support to the dashboard.js config-form renderer so fully internally-managed sections can be hidden from the operator UI.
 - Chat observability endpoints (Section 5 of chat-access-standard):
   `GET /chat/services/{name}/logs`, `GET /chat/services/{name}/status`,
   `GET /chat/services/{name}/volumes`, `GET /chat/services/{name}/volumes/{vol}/files`.
