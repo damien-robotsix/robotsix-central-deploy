@@ -10,6 +10,12 @@ FROM ghcr.io/astral-sh/uv:0.11.29 AS uv
 # robotsix-ui shared stylesheet (dist/style.css).
 FROM node:22-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46 AS node-deps
 WORKDIR /app
+
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json ./
 RUN npm install
 
