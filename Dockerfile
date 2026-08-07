@@ -17,7 +17,12 @@ RUN apt-get update && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
-RUN npm install
+RUN --mount=type=secret,id=github_token,required=false \
+    if [ -f /run/secrets/github_token ]; then \
+      GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
+      git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    npm install
 
 # Builder stage — uv and git resolve the frozen lockfile (including the
 # git-pinned first-party deps) and install the project. Build tooling stays
