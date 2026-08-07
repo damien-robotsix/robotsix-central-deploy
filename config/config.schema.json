@@ -1,3 +1,7 @@
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 24 packages in 26.00s
 {
   "$defs": {
     "ExecutionBackendType": {
@@ -430,14 +434,14 @@
         "$ref": "#/$defs/LangfuseProjectCreds"
       },
       "advanced": true,
-      "description": "Langfuse project alias \u2192 credentials mapping.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}.",
+      "description": "Per-project Langfuse credentials.  Maps a project name to its Langfuse public and secret keys.  Operator-configured entries override auto-discovered credentials from onboarded services.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}.",
       "title": "Langfuse Projects",
       "type": "object"
     },
     "langfuse_base_url": {
       "advanced": true,
       "default": "",
-      "description": "Langfuse instance base URL (no trailing slash).",
+      "description": "Langfuse server URL (e.g. https://langfuse.example.com).",
       "title": "Langfuse Base Url",
       "type": "string"
     },
@@ -448,7 +452,7 @@
         "writeOnly": true
       },
       "advanced": true,
-      "description": "Langfuse project alias \u2192 OpenRouter API key.  Lets cost-monitor reconcile provider-billed spend against traced spend per LLM function.  Example: {\"my-project\": \"sk-or-...\"}.",
+      "description": "OpenRouter API keys for AI model access, keyed by project name.  Example: {\"my-project\": \"sk-or-...\"}.",
       "title": "Openrouter Keys",
       "type": "object"
     },
@@ -569,3 +573,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+

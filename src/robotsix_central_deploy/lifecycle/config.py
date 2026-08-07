@@ -383,26 +383,27 @@ class LifecycleConfig(BaseModel):
     langfuse_projects: dict[str, LangfuseProjectCreds] = Field(
         default_factory=dict,
         description=(
-            "Langfuse project alias → credentials mapping.  Example: "
-            '{"my-project": {"public_key": "pk-...", "secret_key": "sk-..."}}.'
+            "Per-project Langfuse credentials.  Maps a project name to its "
+            "Langfuse public and secret keys.  Operator-configured entries "
+            "override auto-discovered credentials from onboarded services.  "
+            'Example: {"my-project": {"public_key": "pk-...", "secret_key": "sk-..."}}.'
         ),
         json_schema_extra={"advanced": True},
     )
     langfuse_base_url: str = Field(
         "",
-        description="Langfuse instance base URL (no trailing slash).",
+        description="Langfuse server URL (e.g. https://langfuse.example.com).",
         json_schema_extra={"advanced": True},
     )
-    # OpenRouter provider keys, keyed by the SAME alias as `langfuse_projects`
-    # (the Langfuse project name).  Operator-owned bridge for components that
-    # have not yet declared a canonical `openrouter.keys` block; entries here
-    # override a component-declared key of the same alias.
+    # OpenRouter provider keys, keyed by project name (same as
+    # `langfuse_projects`).  Operator-owned bridge for components that have not
+    # yet declared their own OpenRouter keys; entries here override a
+    # component-declared key for the same project.
     openrouter_keys: dict[str, SecretStr] = Field(
         default_factory=dict,
         description=(
-            "Langfuse project alias → OpenRouter API key.  Lets cost-monitor "
-            "reconcile provider-billed spend against traced spend per LLM "
-            'function.  Example: {"my-project": "sk-or-..."}.'
+            "OpenRouter API keys for AI model access, keyed by project name.  "
+            'Example: {"my-project": "sk-or-..."}.'
         ),
         json_schema_extra={"advanced": True},
     )

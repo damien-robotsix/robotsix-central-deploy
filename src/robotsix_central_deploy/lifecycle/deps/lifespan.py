@@ -540,9 +540,9 @@ _CENTRAL_DEPLOY_CONFIG_SCHEMA: dict[str, object] = {
         "langfuse_projects": {
             "type": "object",
             "description": (
-                "Langfuse project alias → credentials mapping.  "
-                "Operator-configured entries override auto-discovered "
-                "entries from services with chat access enabled."
+                "Per-project Langfuse credentials.  Maps a project name to its "
+                "Langfuse public and secret keys.  Operator-configured entries "
+                "override auto-discovered credentials from onboarded services."
             ),
             "additionalProperties": {
                 "type": "object",

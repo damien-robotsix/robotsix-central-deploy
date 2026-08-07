@@ -1121,7 +1121,7 @@ function _resolveRef(propSchema, defs) {
   // the pydantic Field) rather than the *type definition*.  When the field
   // uses a $ref or a nullable union, these annotations sit on the wrapper
   // schema — not on the $defs entry — so we must propagate them down.
-  var FIELD_EXTRAS = ['advanced', 'description', 'default', 'title', 'x-deploy-plane'];
+  var FIELD_EXTRAS = ['advanced', 'description', 'default', 'title', 'ui_hidden', 'x-deploy-plane'];
 
   function _propagateExtras(source, target) {
     var clone = Object.assign({}, target);
@@ -1211,6 +1211,7 @@ function _renderConfigNode(schema, current, prefix, container) {
         const isRequired = required.includes(key);
         const defaultVal = resolvedSchema.default ?? currentVal ?? '';
         const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
+        if (resolvedSchema.ui_hidden) continue;
         generalSection.appendChild(buildConfigRow(
           fullKey, key, resolvedSchema, currentVal, isSecret, isRequired, defaultVal
         ));
@@ -1232,6 +1233,8 @@ function _renderConfigNode(schema, current, prefix, container) {
     const defaultVal = resolvedSchema.default ?? currentVal ?? '';
     const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
 
+    if (resolvedSchema.ui_hidden) continue;
+
     if (resolvedSchema.type === 'object') {
       const section = document.createElement('div');
       section.className = 'env-section';
@@ -1248,6 +1251,8 @@ function _renderConfigNode(schema, current, prefix, container) {
       const currentSub = (currentVal !== null && typeof currentVal === 'object'
                           && !Array.isArray(currentVal)) ? currentVal : {};
       _renderConfigNode(resolvedSchema, currentSub, fullKey, section);
+      // Hide section if all its fields are ui_hidden (zero operator-configurable fields).
+      if (section.querySelectorAll('.env-row').length === 0) continue;
       container.appendChild(section);
     } else {
       container.appendChild(buildConfigRow(
