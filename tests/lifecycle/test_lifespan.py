@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
@@ -397,7 +396,4 @@ class TestParseSelfContractSettings:
         path.write_text(yaml.dump(doc), encoding="utf-8")
         result = _parse_self_contract_settings(self._make_config(path))
         # "bad" is first, not a dict → returns None
-        assert result is None
-
-
         assert result is None
