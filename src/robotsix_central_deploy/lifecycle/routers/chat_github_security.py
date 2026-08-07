@@ -10,7 +10,6 @@ Exposes:
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,8 +22,7 @@ from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAud
 
 from ._github_common import (
     _call_github_endpoint,
-    _get_client_or_503_with_pat_fallback,
-    _reraise_github_errors,
+    _call_github_endpoint_with_pat_fallback,
 )
 
 router = APIRouter(tags=["chat-github"])
@@ -178,22 +176,18 @@ async def set_security_features(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one security feature must be provided",
         )
-    client = await _get_client_or_503_with_pat_fallback(config, owner, repo)
-    try:
-        result = await asyncio.to_thread(
-            _set_security_features_sync, client, owner, repo, body
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
-
-    await audit_store.append(
-        ChatAgentAuditEntry(
+    return await _call_github_endpoint_with_pat_fallback(
+        config,
+        owner,
+        repo,
+        _set_security_features_sync,
+        body,
+        audit_store=audit_store,
+        audit_entry=ChatAgentAuditEntry(
             component="github",
             action="set_security_features",
             key=f"{owner}/{repo}",
             new_value=body.model_dump(exclude_none=True),
-            detail=f"Updated security features on {result['full_name']}",
-        )
+            detail=f"Updated security features on {owner}/{repo}",
+        ),
     )
-    return result
