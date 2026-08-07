@@ -17,14 +17,7 @@ RUN apt-get update && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
-RUN --mount=type=secret,id=github_token,required=false \
-    if [ -f /run/secrets/github_token ]; then \
-      GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
-      git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "ssh://git@github.com/" && \
-      git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
-    else \
-      git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"; \
-    fi && \
+RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" && \
     npm install
 
 # Builder stage — uv and git resolve the frozen lockfile (including the
