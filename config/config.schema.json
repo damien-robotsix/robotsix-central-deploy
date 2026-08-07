@@ -430,14 +430,14 @@
         "$ref": "#/$defs/LangfuseProjectCreds"
       },
       "advanced": true,
-      "description": "Langfuse project alias \u2192 credentials mapping.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}.",
+      "description": "Per-project Langfuse credentials.  Maps a project name to its Langfuse public and secret keys.  Operator-configured entries override auto-discovered credentials from onboarded services.  Example: {\"my-project\": {\"public_key\": \"pk-...\", \"secret_key\": \"sk-...\"}}.",
       "title": "Langfuse Projects",
       "type": "object"
     },
     "langfuse_base_url": {
       "advanced": true,
       "default": "",
-      "description": "Langfuse instance base URL (no trailing slash).",
+      "description": "Langfuse server URL (e.g. https://langfuse.example.com).",
       "title": "Langfuse Base Url",
       "type": "string"
     },
@@ -448,7 +448,7 @@
         "writeOnly": true
       },
       "advanced": true,
-      "description": "Langfuse project alias \u2192 OpenRouter API key.  Lets cost-monitor reconcile provider-billed spend against traced spend per LLM function.  Example: {\"my-project\": \"sk-or-...\"}.",
+      "description": "OpenRouter API keys for AI model access, keyed by project name.  Example: {\"my-project\": \"sk-or-...\"}.",
       "title": "Openrouter Keys",
       "type": "object"
     },
@@ -563,7 +563,8 @@
     },
     "ovh_sftp": {
       "$ref": "#/$defs/OvhSftpConfig",
-      "description": "OVH website SFTP credentials. If all four fields are set AND the ovh-website-credentials entry does not already exist in the encrypted store, the values are seeded at startup with scope tag 'website:ovh'."
+      "description": "OVH website SFTP credentials. If all four fields are set AND the ovh-website-credentials entry does not already exist in the encrypted store, the values are seeded at startup with scope tag 'website:ovh'.",
+      "ui_hidden": true
     }
   },
   "title": "LifecycleConfig",
