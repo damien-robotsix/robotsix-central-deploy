@@ -536,6 +536,7 @@ class LifecycleConfig(BaseModel):
             "the encrypted store, the values are seeded at startup with "
             "scope tag 'website:ovh'."
         ),
+        json_schema_extra={"ui_hidden": True},
     )
 
     @property
