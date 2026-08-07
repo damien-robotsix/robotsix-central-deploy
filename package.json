@@ -1,6 +1,6 @@
 {
   "private": true,
   "devDependencies": {
-    "@robotsix/ui": "github:damien-robotsix/robotsix-ui#v0.1.7"
+    "@robotsix/ui": "git+https://github.com/damien-robotsix/robotsix-ui.git#v0.1.7"
   }
 }
