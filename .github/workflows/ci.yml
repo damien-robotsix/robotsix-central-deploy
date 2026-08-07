@@ -304,6 +304,36 @@ jobs:
               violations=$((violations + 1))
             fi
           done
+          # ServiceState strings (exclude models.py where the enum lives,
+          # and _util.py where Docker status strings are legitimately mapped
+          # to ServiceState values).  "failed" and "unknown" are omitted:
+          # they are too generic and appear in unrelated contexts throughout
+          # the codebase.
+          for pattern in '"stopped"' '"starting"' '"running"' '"stopping"' '"restarting"'; do
+            matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
+              --exclude='models.py' --exclude='_util.py' || true)
+            if [ -n "$matches" ]; then
+              echo "::error file={},line={}::Raw ServiceState string $pattern found outside enum definition"
+              echo "$matches"
+              violations=$((violations + 1))
+            fi
+          done
+          # Dashboard UI ServiceState seam: verify strings used with
+          # svc.state in dashboard.js are valid ServiceState values.
+          dashboard_state_strings=$(grep "svc\.state" src/robotsix_central_deploy/ui/static/dashboard.js \
+            | grep -oE "(=== |\|\| )'[^']*'" \
+            | grep -o "'[^']*'" | tr -d "'" | sort -u || true)
+          if [ -n "$dashboard_state_strings" ]; then
+            for s in $dashboard_state_strings; do
+              case "$s" in
+                stopped|starting|running|stopping|restarting|failed|unknown) ;;
+                *)
+                  echo "::error file=dashboard.js,line=1::Dashboard uses non-ServiceState string '$s' with svc.state"
+                  violations=$((violations + 1))
+                  ;;
+              esac
+            done
+          fi
           if [ "$violations" -gt 0 ]; then
             echo "::error::Found $violations violation(s) of enum-only string policy"
             exit 1
