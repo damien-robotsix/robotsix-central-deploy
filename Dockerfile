@@ -62,7 +62,15 @@ USER 1000
 
 EXPOSE 8100
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# timeout is 10s, not 3s: the probe spawns a fresh CPython interpreter, which
+# costs ~0.55s at rest but stretches with CPU contention. Under ordinary fleet
+# load (mill running sandboxed test suites, load average ~24) it has exceeded
+# 3s for six consecutive probes and marked a control plane unhealthy that was
+# answering /health in 0.03s from inside the same container. An unhealthy
+# control plane invites a caretaker restart, and restarting this container is
+# how the half-networked 502 keeps happening — so a false negative here is far
+# more expensive than the slower detection a longer timeout costs.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health').status==200 else 1)"]
 
 CMD ["robotsix-lifecycle"]
