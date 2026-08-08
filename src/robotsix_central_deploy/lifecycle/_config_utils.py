@@ -805,7 +805,7 @@ def config_schema_violation(
     depend on an HTTP request context, so background paths (startup
     reconciliation, caretaker) can use it too.
     """
-    import jsonschema  # noqa: PLC0415
+    import jsonschema
 
     try:
         jsonschema.validate(instance=values, schema=schema)
