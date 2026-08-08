@@ -316,9 +316,7 @@ async def _run_deploy_job(
             # it first — both the drift guard and the seed decision below
             # depend on knowing whether it exists.
             try:
-                live_dict = await backend.read_config_from_volume(
-                    config.config_volume
-                )
+                live_dict = await backend.read_config_from_volume(config.config_volume)
             except Exception:
                 live_dict = {}
 
