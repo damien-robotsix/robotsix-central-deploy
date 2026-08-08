@@ -653,3 +653,63 @@ async def _write_llmio_tier_config(
             _sanitize_log(component_config.config_volume),
             exc,
         )
+
+
+# ---------------------------------------------------------------------------
+# Guarded config-volume write
+# ---------------------------------------------------------------------------
+
+
+class ConfigWriteRejected(Exception):
+    """A config document did not satisfy the component's own stored schema."""
+
+
+def config_schema_violation(
+    schema: dict[str, Any], values: dict[str, Any]
+) -> str | None:
+    """Return a human-readable violation of *schema* by *values*, or None.
+
+    Unlike ``_validate_config_or_422`` this raises nothing and does not
+    depend on an HTTP request context, so background paths (startup
+    reconciliation, caretaker) can use it too.
+    """
+    import jsonschema  # noqa: PLC0415
+
+    try:
+        jsonschema.validate(instance=values, schema=schema)
+    except jsonschema.ValidationError as exc:
+        path = ".".join(str(p) for p in exc.absolute_path)
+        loc = f" at '{path}'" if path else ""
+        return f"{exc.message}{loc}"
+    return None
+
+
+async def write_config_to_volume_checked(
+    backend: Any,
+    config_yaml_store: Any,
+    component_id: str,
+    volume: str,
+    config: dict[str, Any],
+) -> None:
+    """Write *config* to *volume* only if it satisfies the component's schema.
+
+    The deploy plane does not own component configs, and a component whose
+    config file does not load simply crash-loops — the write succeeds and the
+    breakage surfaces later, somewhere else. Checking the merged document
+    against the stored schema turns that into a refusal at the write.
+
+    A component with no stored schema is written unchecked: there is nothing
+    to check against, and refusing would break onboarding.
+
+    Raises:
+        ConfigWriteRejected: the document violates the stored schema. Nothing
+            is written.
+    """
+    schema = await config_yaml_store.get_template(component_id)
+    if schema is not None:
+        violation = config_schema_violation(schema, config)
+        if violation is not None:
+            raise ConfigWriteRejected(
+                f"refusing to write config for '{component_id}': {violation}"
+            )
+    await backend.write_config_to_volume(volume, config)
