@@ -23,6 +23,29 @@ async def _mock_retry_client(mock_client):
     yield mock_client
 
 
+class _VolumeBackend:
+    """Backend that serves component config from an in-memory volume.
+
+    Langfuse discovery reads each component's own config file rather than a
+    deploy-plane copy, so these tests seed the volume the component reads.
+    """
+
+    def __init__(self) -> None:
+        self.volumes: dict[str, dict] = {}
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        return dict(self.volumes.get(volume_name, {}))
+
+
+def _seed_component_config(component_id: str, config: dict) -> None:
+    """Put *config* on the volume that *component_id* would read."""
+    backend = getattr(server_mod.app.state, "backend", None)
+    if not isinstance(backend, _VolumeBackend):
+        backend = _VolumeBackend()
+        server_mod.app.state.backend = backend
+    backend.volumes[f"{component_id}-config"] = config
+
+
 class TestLangfuseProxyAuth:
     async def test_unauthorized_returns_401(self, client: AsyncClient):
         resp = await client.get(
@@ -443,8 +466,7 @@ class TestLangfuseAutoDiscovery:
         self, client, auth_headers
     ):
         """Project aliases from a chat-accessible component are listed."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "auto-comp",
             {
                 "langfuse": {
@@ -469,6 +491,7 @@ class TestLangfuseAutoDiscovery:
             image="auto:latest",
             container_name="auto-comp",
             allow_chat_access=True,
+            config_volume="auto-comp-config",
         )
         server_mod.app.state.component_config_store.register(cfg)
         server_mod.app.state.registry.register(cfg)
@@ -480,7 +503,7 @@ class TestLangfuseAutoDiscovery:
 
         auto_projects = await _reconcile_auto_langfuse_projects(
             server_mod.app.state.component_config_store,
-            config_yaml_store,
+            server_mod.app.state.backend,
         )
         server_mod.app.state.auto_langfuse_projects = auto_projects
 
@@ -494,8 +517,7 @@ class TestLangfuseAutoDiscovery:
         self, client, auth_headers
     ):
         """Operator-configured projects are merged with auto-discovered ones."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "merge-comp",
             {
                 "langfuse": {
@@ -516,6 +538,7 @@ class TestLangfuseAutoDiscovery:
             image="merge:latest",
             container_name="merge-comp",
             allow_chat_access=True,
+            config_volume="merge-comp-config",
         )
         server_mod.app.state.component_config_store.register(cfg)
         server_mod.app.state.registry.register(cfg)
@@ -534,7 +557,7 @@ class TestLangfuseAutoDiscovery:
 
         auto_projects = await _reconcile_auto_langfuse_projects(
             server_mod.app.state.component_config_store,
-            config_yaml_store,
+            server_mod.app.state.backend,
         )
         server_mod.app.state.auto_langfuse_projects = auto_projects
 
@@ -623,6 +646,7 @@ def _make_config(
         id=component_id,
         image=f"ghcr.io/example/{component_id}:main",
         container_name=component_id,
+        config_volume=f"{component_id}-config",
         allow_chat_access=allow_chat_access,
         chat_agent_mutatable=chat_agent_mutatable,
     )
@@ -657,12 +681,12 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("chat", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             return_value=_langfuse_config("robotsix-chat")
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {"robotsix-chat"}
         assert result["robotsix-chat"].public_key == "pk-robotsix-chat"
@@ -674,12 +698,12 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("mill", chat_agent_mutatable=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             return_value=_langfuse_config("robotsix-mill")
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {"robotsix-mill"}
 
@@ -690,12 +714,12 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("hidden"),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             return_value=_langfuse_config("hidden-project")
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert result == {}
 
@@ -706,10 +730,10 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("unconfigured", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(return_value=None)
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(return_value=None)
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert result == {}
 
@@ -720,10 +744,10 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("no-lf", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(return_value={"server_port": 8080})
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(return_value={"server_port": 8080})
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert result == {}
 
@@ -734,12 +758,12 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("chat", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             return_value=_langfuse_config("robotsix-chat", "robotsix-chat-cognee")
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {"robotsix-chat", "robotsix-chat-cognee"}
 
@@ -751,8 +775,8 @@ class TestReconcileAutoLangfuseProjects:
             _make_config("chat", allow_chat_access=True),
             _make_config("mill", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             side_effect=[
                 _langfuse_config("shared-alias"),  # chat declares "shared-alias"
                 _langfuse_config("shared-alias"),  # mill also declares it
@@ -768,9 +792,11 @@ class TestReconcileAutoLangfuseProjects:
         mill_config["langfuse"]["projects"]["shared-alias"]["public_key"] = (
             "pk-from-mill"
         )
-        yaml_store.get_current = AsyncMock(side_effect=[chat_config, mill_config])
+        backend.read_config_from_volume = AsyncMock(
+            side_effect=[chat_config, mill_config]
+        )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {"shared-alias"}
         assert result["shared-alias"].public_key == "pk-from-chat"
@@ -784,8 +810,8 @@ class TestReconcileAutoLangfuseProjects:
             _make_config("mill", chat_agent_mutatable=True),
             _make_config("cognee", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             side_effect=[
                 _langfuse_config("robotsix-chat"),
                 _langfuse_config("robotsix-mill"),
@@ -793,7 +819,7 @@ class TestReconcileAutoLangfuseProjects:
             ]
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {
             "robotsix-chat",
@@ -810,8 +836,8 @@ class TestReconcileAutoLangfuseProjects:
             _make_config("disabled"),
             _make_config("also-disabled"),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             side_effect=[
                 _langfuse_config("proj-enabled"),
                 _langfuse_config("proj-disabled"),
@@ -819,7 +845,7 @@ class TestReconcileAutoLangfuseProjects:
             ]
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {"proj-enabled"}
 
@@ -830,13 +856,13 @@ class TestReconcileAutoLangfuseProjects:
         comp_store.all.return_value = [
             _make_config("chat", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             return_value=_langfuse_config("robotsix-chat")
         )
 
-        result1 = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
-        result2 = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result1 = await _reconcile_auto_langfuse_projects(comp_store, backend)
+        result2 = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert result1 == result2
         assert set(result1.keys()) == {"robotsix-chat"}
@@ -846,9 +872,9 @@ class TestReconcileAutoLangfuseProjects:
         """When no components are registered the result is empty."""
         comp_store = MagicMock()
         comp_store.all.return_value = []
-        yaml_store = MagicMock()
+        backend = MagicMock()
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert result == {}
 
@@ -868,10 +894,10 @@ class TestReconcileAutoLangfuseProjects:
                 },
             }
         }
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(return_value=config)
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(return_value=config)
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         assert set(result.keys()) == {"good"}
 
@@ -883,15 +909,71 @@ class TestReconcileAutoLangfuseProjects:
             _make_config("first", allow_chat_access=True),
             _make_config("second", allow_chat_access=True),
         ]
-        yaml_store = MagicMock()
-        yaml_store.get_current = AsyncMock(
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
             side_effect=[
                 _langfuse_config("alpha"),
                 _langfuse_config("beta"),
             ]
         )
 
-        result = await _reconcile_auto_langfuse_projects(comp_store, yaml_store)
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
 
         # Both are unique so both appear; ordering is dict-insertion order.
         assert list(result.keys()) == ["alpha", "beta"]
+
+
+class TestDiscoveryReadsTheComponentNotAMirror:
+    """Discovery must read the component's own config file.
+
+    On 2026-08-07 chat's Langfuse credentials were repaired in its config
+    volume and fleet-wide discovery still reported them missing, because it
+    read central-deploy's stored copy — which held a stale pre-migration
+    block. Nothing errored; the credentials simply appeared absent to
+    everything downstream and cost-monitor stopped seeing chat.
+    """
+
+    @pytest.mark.asyncio
+    async def test_reads_the_components_config_volume(self):
+        comp_store = MagicMock()
+        comp_store.all.return_value = [_make_config("chat", allow_chat_access=True)]
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
+            return_value=_langfuse_config("robotsix-chat")
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
+
+        backend.read_config_from_volume.assert_awaited_once_with("chat-config")
+        assert set(result) == {"robotsix-chat"}
+
+    @pytest.mark.asyncio
+    async def test_component_without_a_volume_is_skipped(self):
+        """Nothing to read means no projects, not an error."""
+        cfg = _make_config("virtual", allow_chat_access=True)
+        cfg.config_volume = None
+        comp_store = MagicMock()
+        comp_store.all.return_value = [cfg]
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock()
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
+
+        assert result == {}
+        backend.read_config_from_volume.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_one_unreadable_volume_does_not_hide_the_rest(self):
+        comp_store = MagicMock()
+        comp_store.all.return_value = [
+            _make_config("broken", allow_chat_access=True),
+            _make_config("mill", allow_chat_access=True),
+        ]
+        backend = MagicMock()
+        backend.read_config_from_volume = AsyncMock(
+            side_effect=[OSError("volume gone"), _langfuse_config("robotsix-mill")]
+        )
+
+        result = await _reconcile_auto_langfuse_projects(comp_store, backend)
+
+        assert set(result) == {"robotsix-mill"}

@@ -42,11 +42,14 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
+    from .backends.base import ExecutionBackend
     from fastapi import Request
 
     from ..registry.config_store import ComponentConfigStore
     from ..registry.config_yaml_store import ConfigYamlStore
     from .config import LangfuseProjectCreds
+
+from ._config_utils import read_component_config
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +140,7 @@ def _extract_langfuse_project_creds(
 
 async def _reconcile_auto_langfuse_projects(
     component_config_store: "ComponentConfigStore",
-    config_yaml_store: "ConfigYamlStore",
+    backend: "ExecutionBackend",
 ) -> dict[str, "LangfuseProjectCreds"]:
     """Scan every component with chat access enabled and extract Langfuse keys.
 
@@ -148,8 +151,8 @@ async def _reconcile_auto_langfuse_projects(
     for cfg in component_config_store.all():
         if not (cfg.allow_chat_access or cfg.chat_agent_mutatable):
             continue
-        current = await config_yaml_store.get_current(cfg.id)
-        if current is None:
+        current = await read_component_config(backend, cfg)
+        if not current:
             continue
         projects = _extract_langfuse_project_creds(current)
         for alias, creds in projects.items():
@@ -176,7 +179,7 @@ async def reconcile_langfuse_after_toggle(
     """
     try:
         auto_langfuse = await _reconcile_auto_langfuse_projects(
-            component_config_store, config_yaml_store
+            component_config_store, request.app.state.backend
         )
         request.app.state.auto_langfuse_projects = auto_langfuse
 

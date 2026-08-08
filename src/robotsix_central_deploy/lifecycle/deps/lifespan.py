@@ -643,7 +643,7 @@ async def _init_component_registry(app: FastAPI) -> None:
 
     try:
         auto_langfuse = await _reconcile_auto_langfuse_projects(
-            component_config_store, app.state.config_yaml_store
+            component_config_store, app.state.backend
         )
     except Exception:
         logger.warning(
