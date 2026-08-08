@@ -1,0 +1,1 @@
+Wired the shared auto-release workflow on a weekly schedule (plus `workflow_dispatch`), as required by robotsix-standards `changelog-driven-releases.md` §4. It compiles `changelog.d/` into `CHANGELOG.md`, bumps the version, and pushes the `v*` tag that `release.yml` already consumes to publish the image. This repo had never cut a release tag.
