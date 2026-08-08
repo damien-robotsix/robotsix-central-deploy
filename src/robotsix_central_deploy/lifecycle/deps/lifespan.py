@@ -571,12 +571,14 @@ async def _seed_central_deploy_config_schema(
     auto_langfuse: dict[str, "LangfuseProjectCreds"],
     config: LifecycleConfig,
 ) -> None:
-    """Seed central-deploy's own config schema and current values.
+    """Seed central-deploy's own config schema.
 
-    On first boot, writes the schema template to ``config_yaml_store``.
-    Every startup updates the current values so that ``GET
-    /services/central-deploy/config`` reflects the live set of
-    auto-discovered and operator-configured Langfuse project aliases.
+    Only the schema is stored. The values behind it are derived from this
+    process's own settings plus what auto-discovery found, so
+    ``GET /services/central-deploy/config`` computes them on request via
+    :func:`build_central_deploy_langfuse_config` rather than reading a
+    persisted copy — which also keeps the secret values out of the store
+    file on disk.
     """
     # Seed template once (idempotent — doesn't overwrite operator edits).
     existing_template = await config_yaml_store.get_template("central-deploy")
@@ -585,24 +587,6 @@ async def _seed_central_deploy_config_schema(
             "central-deploy", dict(_CENTRAL_DEPLOY_CONFIG_SCHEMA)
         )
         logger.info("Seeded central-deploy config schema (langfuse_projects)")
-
-    # Build current values: auto-discovered projects first, then
-    # operator-configured overrides (mirrors _build_project_creds).
-    current_projects: dict[str, dict[str, str]] = {}
-    for alias, creds in auto_langfuse.items():
-        current_projects[alias] = {
-            "public_key": creds.public_key,
-            "secret_key": creds.secret_key.get_secret_value(),
-        }
-    for alias, creds in config.langfuse_projects.items():
-        current_projects[alias] = {
-            "public_key": creds.public_key,
-            "secret_key": creds.secret_key.get_secret_value(),
-        }
-
-    await config_yaml_store.update_current(
-        "central-deploy", {"langfuse_projects": current_projects}
-    )
 
 
 async def _init_component_registry(app: FastAPI) -> None:

@@ -23,6 +23,7 @@ from ..schemas import ConfigExportResponse, ConfigResponse
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
+from .._langfuse_config import build_central_deploy_langfuse_config
 from .._config_utils import (  # noqa: E402
     _canonical_hash,
     _mask_secrets,
@@ -146,6 +147,27 @@ def _resolve_ref(prop_schema: dict[str, Any], defs: dict[str, Any]) -> dict[str,
 # ---------------------------------------------------------------------------
 
 
+async def _current_config_values(
+    name: str,
+    config_yaml_store: ConfigYamlStore,
+    request: Request,
+) -> dict[str, Any] | None:
+    """Return the component's current config values for display/export.
+
+    central-deploy is not a managed component: it has no config volume, and
+    its only "component config" is a Langfuse view derived from its own
+    settings plus what auto-discovery found. That view is computed here
+    rather than read from a stored copy — see
+    :func:`build_central_deploy_langfuse_config`.
+    """
+    if name == "central-deploy":
+        return build_central_deploy_langfuse_config(
+            request.app.state.config,
+            getattr(request.app.state, "auto_langfuse_projects", {}) or {},
+        )
+    return await config_yaml_store.get_current(name)
+
+
 @router.get(
     "/services/{name}/config",
     response_model=ConfigResponse,
@@ -179,7 +201,7 @@ async def get_service_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No config schema for component '{name}'",
         )
-    current_raw = await config_yaml_store.get_current(name)
+    current_raw = await _current_config_values(name, config_yaml_store, request)
     if current_raw is None:
         current_raw = _merge_config(template, {}, {})
     current_masked = _mask_secrets(template, current_raw)
@@ -262,7 +284,7 @@ async def export_service_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No config schema for component '{name}'",
         )
-    current_raw = await config_yaml_store.get_current(name)
+    current_raw = await _current_config_values(name, config_yaml_store, request)
     if current_raw is None:
         current_raw = _merge_config(template, {}, {})
 

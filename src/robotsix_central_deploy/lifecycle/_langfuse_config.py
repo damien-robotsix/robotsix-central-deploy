@@ -37,16 +37,16 @@ reports no projects, which is the intended, visible failure.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
+    from .config import LifecycleConfig
     from .backends.base import ExecutionBackend
     from fastapi import Request
 
     from ..registry.config_store import ComponentConfigStore
-    from ..registry.config_yaml_store import ConfigYamlStore
     from .config import LangfuseProjectCreds
 
 from ._config_utils import read_component_config
@@ -138,6 +138,39 @@ def _extract_langfuse_project_creds(
     }
 
 
+def build_central_deploy_langfuse_config(
+    config: "LifecycleConfig",
+    auto_langfuse: dict[str, "LangfuseProjectCreds"],
+) -> dict[str, Any]:
+    """Return central-deploy's own config view, computed rather than stored.
+
+    central-deploy has no component config volume — it is the control plane,
+    and its settings live in its own config file. The only "component config"
+    it ever had was this Langfuse view, which is derived: the auto-discovered
+    projects with the operator-configured ones layered on top, exactly as
+    :func:`_build_project_creds` merges them for the proxy.
+
+    It used to be persisted into ``ConfigYamlStore`` on every startup and
+    every toggle so ``GET /services/central-deploy/config`` could read it
+    back. That stored a copy of data the process already holds — and wrote
+    the secret values into a file on disk to do it. Computing it on request
+    keeps the same response with no copy and no persisted secrets.
+    """
+    projects: dict[str, dict[str, str]] = {}
+    for alias, creds in auto_langfuse.items():
+        projects[alias] = {
+            "public_key": creds.public_key,
+            "secret_key": creds.secret_key.get_secret_value(),
+        }
+    # Operator-configured wins on alias collision (pinned / rotated keys).
+    for alias, creds in config.langfuse_projects.items():
+        projects[alias] = {
+            "public_key": creds.public_key,
+            "secret_key": creds.secret_key.get_secret_value(),
+        }
+    return {"langfuse_projects": projects}
+
+
 async def _reconcile_auto_langfuse_projects(
     component_config_store: "ComponentConfigStore",
     backend: "ExecutionBackend",
@@ -163,7 +196,6 @@ async def _reconcile_auto_langfuse_projects(
 
 async def reconcile_langfuse_after_toggle(
     component_config_store: "ComponentConfigStore",
-    config_yaml_store: "ConfigYamlStore",
     request: "Request",
 ) -> None:
     """Re-run Langfuse auto-discovery and update ``app.state``.
@@ -182,26 +214,6 @@ async def reconcile_langfuse_after_toggle(
             component_config_store, request.app.state.backend
         )
         request.app.state.auto_langfuse_projects = auto_langfuse
-
-        # Also refresh central-deploy's own config current values so
-        # GET /services/central-deploy/config stays in sync.
-        from .config import LifecycleConfig
-
-        config: LifecycleConfig = request.app.state.config
-        current_projects: dict[str, dict[str, str]] = {}
-        for alias, creds in auto_langfuse.items():
-            current_projects[alias] = {
-                "public_key": creds.public_key,
-                "secret_key": creds.secret_key.get_secret_value(),
-            }
-        for alias, creds in config.langfuse_projects.items():
-            current_projects[alias] = {
-                "public_key": creds.public_key,
-                "secret_key": creds.secret_key.get_secret_value(),
-            }
-        await config_yaml_store.update_current(
-            "central-deploy", {"langfuse_projects": current_projects}
-        )
 
         logger.debug(
             "Reconciled Langfuse auto-projects: %d project(s)",
