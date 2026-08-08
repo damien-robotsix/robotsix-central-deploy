@@ -19,7 +19,7 @@ from ..deps import (
 )
 from ..store import ServiceStore
 from .._config_utils import (
-    _canonical_hash,
+    read_component_config,
     _is_key_secret,
     _mask_secrets,
     _merge_config,
@@ -62,6 +62,7 @@ async def chat_get_config(
     name: str,
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Return the current config for an allowlisted service.
@@ -76,8 +77,8 @@ async def chat_get_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No config schema for component '{name}'",
         )
-    current_raw = await config_yaml_store.get_current(name)
-    if current_raw is None:
+    current_raw = await read_component_config(backend, component_config_store.get(name))
+    if not current_raw:
         current_raw = _merge_config(template, {}, {})
     masked = _mask_secrets(template, current_raw)
     return ChatAgentConfigRollbackResponse(
@@ -172,8 +173,8 @@ async def chat_update_config(
         )
 
     # Snapshot current config for rollback before mutating.
-    existing = await config_yaml_store.get_current(name)
-    if existing is not None:
+    existing = await read_component_config(backend, component_config_store.get(name))
+    if existing:
         # Strip secret values from the rollback snapshot so history
         # never persists secrets.  Rollback will restore secrets from
         # the live config when it runs.
@@ -207,10 +208,6 @@ async def chat_update_config(
     comp_cfg = component_config_store.get(name)
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, merged)
-        new_hash = _canonical_hash(merged)
-        await config_yaml_store.update_current_and_hash(name, merged, new_hash)
-    else:
-        await config_yaml_store.update_current(name, merged)
 
     # Audit-log each changed key (secret values redacted recursively).
     for key, new_val in body.values.items():
@@ -300,7 +297,7 @@ async def chat_rollback_config(
 
     # Restore current secret values into the snapshot — rollback must not
     # clobber secrets the snapshot doesn't know about.
-    current = await config_yaml_store.get_current(name)
+    current = await read_component_config(backend, component_config_store.get(name))
     if current:
         previous = _restore_secrets_from_current(template, previous, current)
 
@@ -308,10 +305,6 @@ async def chat_rollback_config(
     comp_cfg = component_config_store.get(name)
     if comp_cfg and comp_cfg.config_volume:
         await backend.write_config_to_volume(comp_cfg.config_volume, previous)
-        new_hash = _canonical_hash(previous)
-        await config_yaml_store.update_current_and_hash(name, previous, new_hash)
-    else:
-        await config_yaml_store.update_current(name, previous)
 
     await audit_store.append(
         ChatAgentAuditEntry(

@@ -116,9 +116,28 @@ def store() -> InMemoryStore:
     return InMemoryStore()
 
 
+class _VolumeNoopBackend(NoopBackend):
+    """NoopBackend that retains config-volume contents.
+
+    The config endpoints read and write the component's own config file
+    rather than a deploy-plane copy, so the tests need a backend that
+    actually stores one.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.volumes: dict[str, dict] = {}
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        return dict(self.volumes.get(volume_name, {}))
+
+    async def write_config_to_volume(self, volume_name: str, data: dict) -> None:
+        self.volumes[volume_name] = dict(data)
+
+
 @pytest.fixture
 def backend() -> NoopBackend:
-    return NoopBackend()
+    return _VolumeNoopBackend()
 
 
 @pytest.fixture
@@ -218,6 +237,7 @@ async def test_chat_config_update_happy_path(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """PUT /chat/config/chat with valid non-secret keys succeeds."""
     # Seed the config template
@@ -249,6 +269,7 @@ async def test_chat_config_update_partial_keeps_unsubmitted_keys(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """A partial update must not reset unsubmitted keys to template defaults.
 
@@ -259,15 +280,12 @@ async def test_chat_config_update_partial_keeps_unsubmitted_keys(
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
     # Seed a current config with non-default values, including secrets.
-    await config_yaml_store.update_current(
-        "chat",
-        {
-            "debug": True,
-            "log_level": "info",
-            "api_token": "real-secret",
-            "nested": {"host": "prod.example.com", "secret_key": "nested-secret"},
-        },
-    )
+    backend.volumes["test-config-vol"] = {
+        "debug": True,
+        "log_level": "info",
+        "api_token": "real-secret",
+        "nested": {"host": "prod.example.com", "secret_key": "nested-secret"},
+    }
 
     resp = await client.put(
         "/chat/config/chat",
@@ -276,7 +294,7 @@ async def test_chat_config_update_partial_keeps_unsubmitted_keys(
     )
     assert resp.status_code == 200, resp.text
 
-    current = await config_yaml_store.get_current("chat")
+    current = backend.volumes.get("test-config-vol")
     assert current is not None
     assert current["debug"] is False
     # Unsubmitted keys keep their existing values instead of template defaults.
@@ -291,6 +309,7 @@ async def test_chat_config_update_accepts_and_updates_secret_keys(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """PUT /chat/config with a secret key updates it."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
@@ -307,7 +326,7 @@ async def test_chat_config_update_accepts_and_updates_secret_keys(
     assert body["restored"]["api_token"] == "***"
     assert body["restored"]["debug"] is True
     # Verify the secret was actually stored
-    stored = await config_yaml_store.get_current("chat")
+    stored = backend.volumes.get("test-config-vol")
     assert stored["api_token"] == "new-secret-value"
 
 
@@ -317,6 +336,7 @@ async def test_chat_config_update_nested_secret_keys_are_accepted(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """Nested secret keys are accepted and updated."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
@@ -335,7 +355,7 @@ async def test_chat_config_update_nested_secret_keys_are_accepted(
     assert body["restored"]["nested"]["secret_key"] == "***"
     assert body["restored"]["nested"]["host"] == "newhost"
     # Verify the secret was actually stored
-    stored = await config_yaml_store.get_current("chat")
+    stored = backend.volumes.get("test-config-vol")
     assert stored["nested"]["secret_key"] == "new-nested-secret"
 
 
@@ -345,6 +365,7 @@ async def test_chat_config_update_not_allowlisted(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """PUT /chat/config/other-svc returns 403 for non-allowlisted service."""
     await config_yaml_store.save_template("other-svc", _CONFIG_TEMPLATE)
@@ -381,6 +402,7 @@ async def test_chat_config_write_follows_restart_access(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """Services the chat agent can restart are also config-writable.
 
@@ -506,6 +528,7 @@ async def test_chat_config_rollback_happy_path(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """POST /chat/config/chat/rollback restores previous snapshot."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
@@ -537,6 +560,7 @@ async def test_chat_config_rollback_no_previous(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """POST /chat/config/rollback with no stored snapshot returns 404."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
@@ -709,6 +733,7 @@ async def test_chat_audit_log(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """GET /chat/audit-log returns recent audit entries."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
@@ -742,6 +767,7 @@ async def test_chat_audit_log_filtered(
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """GET /chat/audit-log?component=cognee filters by component."""
     await config_yaml_store.save_template("cognee", _CONFIG_TEMPLATE)
@@ -775,6 +801,7 @@ async def test_chat_endpoints_require_auth(
     client: AsyncClient,
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
+    backend: NoopBackend,
 ):
     """All chat write endpoints return 401 without auth."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)

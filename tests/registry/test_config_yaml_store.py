@@ -75,40 +75,26 @@ async def test_config_yaml_store_round_trip(tmp_path: Path):
     got_template = await store.get_template("test-svc")
     assert got_template == template
 
-    # Current is None initially
-    assert await store.get_current("test-svc") is None
-
-    # Update current
-    current = {"host": "0.0.0.0", "port": 3000, "password": "secret123"}
-    await store.update_current("test-svc", current)
-
-    got_current = await store.get_current("test-svc")
-    assert got_current == current
-
-    # Template still intact
-    assert await store.get_template("test-svc") == template
-
     # Delete
     await store.delete("test-svc")
     assert await store.get_template("test-svc") is None
-    assert await store.get_current("test-svc") is None
 
 
 @pytest.mark.asyncio
-async def test_config_yaml_store_save_template_preserves_current(tmp_path: Path):
+async def test_config_yaml_store_save_template_preserves_previous(tmp_path: Path):
+    """Re-seeding the schema must not discard the rollback snapshot."""
     store_path = tmp_path / "component_config_yaml.json"
     store = ConfigYamlStore(store_path)
 
     template = {"key": "val"}
     await store.save_template("svc", template)
-    await store.update_current("svc", {"key": "overridden"})
+    await store.save_previous("svc", {"key": "rollback-target"})
 
-    # Overwrite template — current must survive
     new_template = {"key": "new_default", "extra": "yes"}
     await store.save_template("svc", new_template)
 
     assert await store.get_template("svc") == new_template
-    assert await store.get_current("svc") == {"key": "overridden"}
+    assert await store.get_previous("svc") == {"key": "rollback-target"}
 
 
 # ---------------------------------------------------------------------------
@@ -357,10 +343,14 @@ class TestPruneUnset:
 
 
 @pytest.mark.asyncio
-async def test_update_current_and_hash_round_trip(tmp_path):
-    """get_volume_hash returns the value passed to update_current_and_hash."""
+async def test_store_exposes_no_value_api(tmp_path):
+    """The deploy plane keeps no copy of component config values, so the
+    accessors that held one must not come back."""
     store = ConfigYamlStore(tmp_path / "config_yaml.json")
-    await store.save_template("comp-a", {"host": "localhost"})
-    await store.update_current_and_hash("comp-a", {"host": "prod"}, "abc123hash")
-    h = await store.get_volume_hash("comp-a")
-    assert h == "abc123hash"
+    for gone in (
+        "get_current",
+        "update_current",
+        "update_current_and_hash",
+        "get_volume_hash",
+    ):
+        assert not hasattr(store, gone), f"{gone} should have been removed"

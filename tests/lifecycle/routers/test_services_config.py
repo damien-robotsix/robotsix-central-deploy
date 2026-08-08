@@ -39,6 +39,42 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
         await s.put(rec)
 
 
+class _VolumeBackend:
+    """Backend serving component config from an in-memory volume.
+
+    The config endpoints read each component's own config file rather than a
+    deploy-plane copy, so tests seed the volume the component would read.
+    """
+
+    def __init__(self) -> None:
+        self.volumes: dict[str, dict] = {}
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        return dict(self.volumes.get(volume_name, {}))
+
+    async def write_config_to_volume(self, volume_name: str, data: dict) -> None:
+        self.volumes[volume_name] = dict(data)
+
+
+async def _seed_values(name: str, values: dict) -> None:
+    """Put *values* on the config volume that *name* reads."""
+    from robotsix_central_deploy.registry.models import ComponentConfig
+
+    backend = getattr(server_mod.app.state, "backend", None)
+    if not isinstance(backend, _VolumeBackend):
+        backend = _VolumeBackend()
+        server_mod.app.state.backend = backend
+    volume = f"{name}-config"
+    backend.volumes[volume] = values
+
+    ccs = server_mod.app.state.component_config_store
+    existing = ccs.get(name)
+    if existing is None:
+        existing = ComponentConfig(id=name, image=f"{name}:latest", container_name=name)
+    existing.config_volume = volume
+    await ccs.put(existing)
+
+
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
@@ -61,7 +97,7 @@ class TestGetServiceConfig:
             },
         }
         await store.save_template("chat", schema)
-        await store.update_current("chat", {"host": "0.0.0.0", "password": "realpass"})
+        await _seed_values("chat", {"host": "0.0.0.0", "password": "realpass"})
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
         assert resp.status_code == 200
@@ -145,7 +181,7 @@ class TestGetServiceConfig:
             },
         }
         await store.save_template("chat", schema)
-        await store.update_current(
+        await _seed_values(
             "chat", {"server": {"host": "0.0.0.0", "password": "s3cret"}}
         )
 
@@ -171,7 +207,7 @@ class TestGetServiceConfig:
             },
         }
         await store.save_template("chat", schema)
-        await store.update_current("chat", {"api_key": "real-key"})
+        await _seed_values("chat", {"api_key": "real-key"})
 
         resp = await client.get("/services/chat/config", headers=auth_headers)
         assert resp.status_code == 200
@@ -418,7 +454,7 @@ class TestExportServiceConfig:
             },
         }
         await store.save_template("chat", schema)
-        await store.update_current("chat", {"host": "0.0.0.0", "api_key": "sk-abc123"})
+        await _seed_values("chat", {"host": "0.0.0.0", "api_key": "sk-abc123"})
 
         resp = await client.get("/services/chat/config/export", headers=auth_headers)
         assert resp.status_code == 200
