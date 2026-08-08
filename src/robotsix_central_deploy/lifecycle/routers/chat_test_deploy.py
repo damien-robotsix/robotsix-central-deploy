@@ -28,6 +28,7 @@ from ..deps import (
 )
 from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..models import ServiceRecord, ServiceState
+from .._config_utils import inject_deploy_api_key
 from ..schemas import ChatAgentTestDeployRequest, ChatAgentTestDeployResponse
 from ..store import ServiceStore
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
@@ -196,6 +197,12 @@ async def chat_test_deploy(
     # --- Merge env overrides ---
     env_store = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(body.stub_name, comp_cfg.env)
+    # Inject the deploy API key when chat access is enabled.
+    merged_env = inject_deploy_api_key(
+        merged_env,
+        allow_chat_access=comp_cfg.allow_chat_access,
+        api_key=request.app.state.config.api_key.get_secret_value(),
+    )
     comp_cfg = comp_cfg.model_copy(update={"env": merged_env})
 
     # --- Get or create the service record ---

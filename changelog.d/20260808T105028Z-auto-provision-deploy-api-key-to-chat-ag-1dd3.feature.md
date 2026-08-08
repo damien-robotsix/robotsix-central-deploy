@@ -1,0 +1,1 @@
+Components with `allow_chat_access` enabled now receive the deploy API key automatically as the `DEPLOY_API_KEY` env var at deploy/recreate time — no manual Env & Secrets paste needed. Injection follows the standardized convention so every fleet component consumes the credential the same way.

@@ -228,6 +228,25 @@ same derivation used by the caretaker's mill client.
 The flag is stored on the component's `ComponentConfig` and persists across
 redeploys.
 
+### Deploy API key provision
+
+Enabling chat access (`allow_chat_access`) on a component also **auto-provisions
+the deploy API key** into that component's container at deploy/recreate time —
+no manual Env & Secrets paste needed.  The key is delivered through the single
+standardized credential path as the `DEPLOY_API_KEY` environment variable, and
+lands where `component_request("deploy", ...)` already reads it
+(`central_deploy.component_credentials.deploy`), so the component can call back
+to the deploy API immediately.  This is component-agnostic: any component with
+the toggle enabled receives the credential, and a newly onboarded component
+gets working deploy access purely by enabling the toggle.
+
+Injection is driven purely by the toggle state, re-evaluated on every deploy /
+recreate / rollback (including caretaker auto-updates and sibling fan-out).
+Disabling the toggle and recreating removes the key.  The key is treated as a
+secret: it is masked in all read surfaces (Env & Secrets read, config read),
+never returned in plaintext.  The standardized convention itself is documented
+in the robotsix-standards deploy section.
+
 ### Langfuse trace access
 
 Enabling chat access (`allow_chat_access` or `chat_agent_mutatable`) on a
