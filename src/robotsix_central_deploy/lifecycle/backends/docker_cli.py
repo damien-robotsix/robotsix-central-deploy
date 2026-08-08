@@ -101,7 +101,9 @@ class DockerBackend(ExecutionBackend):
         return ServiceState.STOPPED
 
     async def remove_container(self, service: ServiceRecord) -> None:
-        pass
+        raise NotImplementedError(
+            "remove_container not supported for DockerBackend — use DockerSdkBackend"
+        )
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
         if not service.image:
