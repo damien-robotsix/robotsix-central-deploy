@@ -27,6 +27,8 @@ from robotsix_central_deploy.registry import ConfigAssistSeed  # noqa: TCH001
 
 
 class PortShift(BaseModel):
+    """A host-port remapping applied during onboarding to avoid a collision."""
+
     container_port: int = Field(
         description="Container-side port from the service's docker-compose.yml"
     )
@@ -46,6 +48,8 @@ class PortShift(BaseModel):
 
 
 class OnboardPreflightRequest(BaseModel):
+    """Request body for POST /onboard/preflight."""
+
     git_url: str = Field(description="Git clone URL of the repository to onboard")
     name: str = Field(description="Component name; must match ^[a-z0-9][a-z0-9-]*$")
     target_disk: str = Field(
@@ -59,6 +63,8 @@ class OnboardPreflightRequest(BaseModel):
 
 
 class OnboardPreflightResponse(BaseModel):
+    """Derived spec and port shifts returned by POST /onboard/preflight."""
+
     spec: DerivedSpec = Field(
         description="Derived deployment specification for the component"
     )
@@ -69,6 +75,8 @@ class OnboardPreflightResponse(BaseModel):
 
 
 class OnboardConfirmRequest(BaseModel):
+    """Request body for POST /onboard/confirm — the user-approved spec."""
+
     spec: DerivedSpec = Field(
         description="Final DerivedSpec with user-supplied environment values"
     )
@@ -181,6 +189,8 @@ class DeployJobStatusResponse(BaseModel):
 
 
 class EnvResponse(BaseModel):
+    """Env, secrets (masked), and runtime toggles from GET /services/{name}/env."""
+
     env: dict[str, str] = Field(
         description="Plain-text environment variables (key → value)"
     )
@@ -223,6 +233,8 @@ class EnvSyncResponse(BaseModel):
 
 
 class EnvUpdate(BaseModel):
+    """Request body for PUT /services/{name}/env; None fields are left unchanged."""
+
     env: dict[str, str] = Field(
         default={},
         description="Plain-text environment variables to set (key → value)",
@@ -259,18 +271,22 @@ class EnvUpdate(BaseModel):
 
 
 class VolumeEntry(BaseModel):
-    name: str = Field(description="Volume name as reported by Docker")
-    type: VolumeEntryType = Field(
-        description="Volume category: named-volume, bind-mount, or tmpfs"
-    )
-    size_bytes: int = Field(description="Disk usage of the volume in bytes")
+    """One filesystem entry (file or directory) in a volume listing."""
+
+    name: str = Field(description="Entry name relative to the listed directory")
+    type: VolumeEntryType = Field(description="Entry type: file or dir")
+    size_bytes: int = Field(description="Entry size in bytes")
 
 
 class VolumeListResponse(BaseModel):
+    """Directory listing returned by GET /volumes/{name}/ls."""
+
     entries: list[VolumeEntry] = Field(description="Volume entries for the component")
 
 
 class VolumeFileResponse(BaseModel):
+    """File content (or binary/truncation flags) from a volume file read."""
+
     size_bytes: int = Field(description="Total file size in bytes")
     content: str | None = Field(
         default=None,
@@ -299,6 +315,8 @@ class OrphanVolume(BaseModel):
 
 
 class OrphanVolumesResponse(BaseModel):
+    """Orphan-volume candidates returned by GET /volumes/orphans."""
+
     volumes: list[OrphanVolume] = Field(
         default=[], description="List of orphan Docker volume candidates"
     )
@@ -308,6 +326,8 @@ class OrphanVolumesResponse(BaseModel):
 
 
 class PruneVolumesRequest(BaseModel):
+    """Request body for POST /volumes/prune — which orphans to remove."""
+
     names: list[str] | None = Field(
         default=None,
         description="Volume names to prune; None means prune every orphan candidate",
@@ -315,6 +335,8 @@ class PruneVolumesRequest(BaseModel):
 
 
 class PruneVolumesResponse(BaseModel):
+    """Per-volume outcome of a POST /volumes/prune run."""
+
     removed: list[str] = Field(
         default=[], description="Volumes confirmed gone after the prune"
     )
@@ -336,6 +358,8 @@ class PruneVolumesResponse(BaseModel):
 
 
 class ConfigResponse(BaseModel):
+    """Config schema, current values, and assist metadata from GET /services/{name}/config."""
+
     config_schema: dict[str, Any] = Field(
         serialization_alias="schema",
         description="JSON Schema describing the config.json structure for the component",
@@ -400,6 +424,8 @@ class ComponentSuggestItem(BaseModel):
 
 
 class ComponentSuggestResponse(BaseModel):
+    """Component suggestions returned by GET /components/suggest."""
+
     components: list[ComponentSuggestItem] = Field(
         description="Matching component suggestions"
     )
@@ -429,6 +455,8 @@ class ContractRefreshResponse(BaseModel):
 
 
 class ClaudeAuthStatusResponse(BaseModel):
+    """Credential state returned by GET /claude-auth/status."""
+
     status: str = Field(
         description="Auth status: 'authenticated', 'not-authenticated', 'expiring', or 'error'"
     )
@@ -452,11 +480,15 @@ class ClaudeAuthStatusResponse(BaseModel):
 
 
 class ClaudeAuthLoginResponse(BaseModel):
+    """Login session and OAuth URL from POST /claude-auth/login."""
+
     login_id: str = Field(description="Opaque login session identifier")
     oauth_url: str = Field(description="OAuth URL the user must visit to authorize")
 
 
 class ClaudeAuthCompleteRequest(BaseModel):
+    """Request body for POST /claude-auth/login/complete."""
+
     login_id: str = Field(
         description="Login session identifier from the initiate-login response"
     )
@@ -464,10 +496,14 @@ class ClaudeAuthCompleteRequest(BaseModel):
 
 
 class ClaudeAuthCancelRequest(BaseModel):
+    """Request body for POST /claude-auth/login/cancel."""
+
     login_id: str = Field(description="Login session identifier to cancel")
 
 
 class ClaudeAuthCompleteResponse(BaseModel):
+    """Outcome of the OAuth code exchange from POST /claude-auth/login/complete."""
+
     status: str = Field(description="'authenticated' on success, 'error' on failure")
     error: str = Field(default="", description="Error message when status is 'error'")
     warning: str = Field(
@@ -481,12 +517,16 @@ class ClaudeAuthCompleteResponse(BaseModel):
 
 
 class ClaudeAuthCredentialsRequest(BaseModel):
+    """Request body for POST /claude-auth/credentials (raw JSON import)."""
+
     credentials_json: str = Field(
         description="Raw credentials JSON blob from the OAuth provider"
     )
 
 
 class ClaudeAuthCredentialsResponse(BaseModel):
+    """Outcome of a raw-credentials import via POST /claude-auth/credentials."""
+
     status: str = Field(description="'authenticated' on success, 'error' on failure")
     error: str = Field(default="", description="Error message when status is 'error'")
 

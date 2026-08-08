@@ -7367,7 +7367,8 @@
         "required": [
           "login_id"
         ],
-        "title": "ClaudeAuthCancelRequest"
+        "title": "ClaudeAuthCancelRequest",
+        "description": "Request body for POST /claude-auth/login/cancel."
       },
       "ClaudeAuthCompleteRequest": {
         "properties": {
@@ -7387,7 +7388,8 @@
           "login_id",
           "auth_code"
         ],
-        "title": "ClaudeAuthCompleteRequest"
+        "title": "ClaudeAuthCompleteRequest",
+        "description": "Request body for POST /claude-auth/login/complete."
       },
       "ClaudeAuthCompleteResponse": {
         "properties": {
@@ -7413,7 +7415,8 @@
         "required": [
           "status"
         ],
-        "title": "ClaudeAuthCompleteResponse"
+        "title": "ClaudeAuthCompleteResponse",
+        "description": "Outcome of the OAuth code exchange from POST /claude-auth/login/complete."
       },
       "ClaudeAuthCredentialsRequest": {
         "properties": {
@@ -7427,7 +7430,8 @@
         "required": [
           "credentials_json"
         ],
-        "title": "ClaudeAuthCredentialsRequest"
+        "title": "ClaudeAuthCredentialsRequest",
+        "description": "Request body for POST /claude-auth/credentials (raw JSON import)."
       },
       "ClaudeAuthCredentialsResponse": {
         "properties": {
@@ -7447,7 +7451,8 @@
         "required": [
           "status"
         ],
-        "title": "ClaudeAuthCredentialsResponse"
+        "title": "ClaudeAuthCredentialsResponse",
+        "description": "Outcome of a raw-credentials import via POST /claude-auth/credentials."
       },
       "ClaudeAuthLoginResponse": {
         "properties": {
@@ -7467,7 +7472,8 @@
           "login_id",
           "oauth_url"
         ],
-        "title": "ClaudeAuthLoginResponse"
+        "title": "ClaudeAuthLoginResponse",
+        "description": "Login session and OAuth URL from POST /claude-auth/login."
       },
       "ClaudeAuthStatusResponse": {
         "properties": {
@@ -7505,7 +7511,8 @@
         "required": [
           "status"
         ],
-        "title": "ClaudeAuthStatusResponse"
+        "title": "ClaudeAuthStatusResponse",
+        "description": "Credential state returned by GET /claude-auth/status."
       },
       "ComponentSuggestItem": {
         "properties": {
@@ -7555,7 +7562,8 @@
         "required": [
           "components"
         ],
-        "title": "ComponentSuggestResponse"
+        "title": "ComponentSuggestResponse",
+        "description": "Component suggestions returned by GET /components/suggest."
       },
       "ConfigAssistSeed": {
         "properties": {
@@ -7670,7 +7678,8 @@
           "schema",
           "current"
         ],
-        "title": "ConfigResponse"
+        "title": "ConfigResponse",
+        "description": "Config schema, current values, and assist metadata from GET /services/{name}/config."
       },
       "ContainerHealthSummary": {
         "properties": {
@@ -8427,7 +8436,8 @@
           "env",
           "secrets"
         ],
-        "title": "EnvResponse"
+        "title": "EnvResponse",
+        "description": "Env, secrets (masked), and runtime toggles from GET /services/{name}/env."
       },
       "EnvSyncResponse": {
         "properties": {
@@ -8541,7 +8551,8 @@
           }
         },
         "type": "object",
-        "title": "EnvUpdate"
+        "title": "EnvUpdate",
+        "description": "Request body for PUT /services/{name}/env; None fields are left unchanged."
       },
       "ErrorDetail": {
         "properties": {
@@ -8850,7 +8861,8 @@
         "required": [
           "spec"
         ],
-        "title": "OnboardConfirmRequest"
+        "title": "OnboardConfirmRequest",
+        "description": "Request body for POST /onboard/confirm \u2014 the user-approved spec."
       },
       "OnboardJobPhase": {
         "type": "string",
@@ -8984,7 +8996,8 @@
           "git_url",
           "name"
         ],
-        "title": "OnboardPreflightRequest"
+        "title": "OnboardPreflightRequest",
+        "description": "Request body for POST /onboard/preflight."
       },
       "OnboardPreflightResponse": {
         "properties": {
@@ -9006,7 +9019,8 @@
         "required": [
           "spec"
         ],
-        "title": "OnboardPreflightResponse"
+        "title": "OnboardPreflightResponse",
+        "description": "Derived spec and port shifts returned by POST /onboard/preflight."
       },
       "OrphanVolume": {
         "properties": {
@@ -9048,7 +9062,8 @@
           }
         },
         "type": "object",
-        "title": "OrphanVolumesResponse"
+        "title": "OrphanVolumesResponse",
+        "description": "Orphan-volume candidates returned by GET /volumes/orphans."
       },
       "PerDiskUsage": {
         "properties": {
@@ -9160,7 +9175,8 @@
           "collision_component_id",
           "collision_repo_id"
         ],
-        "title": "PortShift"
+        "title": "PortShift",
+        "description": "A host-port remapping applied during onboarding to avoid a collision."
       },
       "PruneVolumesRequest": {
         "properties": {
@@ -9181,7 +9197,8 @@
           }
         },
         "type": "object",
-        "title": "PruneVolumesRequest"
+        "title": "PruneVolumesRequest",
+        "description": "Request body for POST /volumes/prune \u2014 which orphans to remove."
       },
       "PruneVolumesResponse": {
         "properties": {
@@ -9220,7 +9237,8 @@
           }
         },
         "type": "object",
-        "title": "PruneVolumesResponse"
+        "title": "PruneVolumesResponse",
+        "description": "Per-volume outcome of a POST /volumes/prune run."
       },
       "ReclaimResponse": {
         "properties": {
@@ -9913,16 +9931,16 @@
           "name": {
             "type": "string",
             "title": "Name",
-            "description": "Volume name as reported by Docker"
+            "description": "Entry name relative to the listed directory"
           },
           "type": {
             "$ref": "#/components/schemas/VolumeEntryType",
-            "description": "Volume category: named-volume, bind-mount, or tmpfs"
+            "description": "Entry type: file or dir"
           },
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes",
-            "description": "Disk usage of the volume in bytes"
+            "description": "Entry size in bytes"
           }
         },
         "type": "object",
@@ -9931,7 +9949,8 @@
           "type",
           "size_bytes"
         ],
-        "title": "VolumeEntry"
+        "title": "VolumeEntry",
+        "description": "One filesystem entry (file or directory) in a volume listing."
       },
       "VolumeEntryType": {
         "type": "string",
@@ -9978,7 +9997,8 @@
           "binary",
           "truncated"
         ],
-        "title": "VolumeFileResponse"
+        "title": "VolumeFileResponse",
+        "description": "File content (or binary/truncation flags) from a volume file read."
       },
       "VolumeGrowthRecord": {
         "properties": {
@@ -10071,7 +10091,8 @@
         "required": [
           "entries"
         ],
-        "title": "VolumeListResponse"
+        "title": "VolumeListResponse",
+        "description": "Directory listing returned by GET /volumes/{name}/ls."
       },
       "VolumeMount": {
         "properties": {
