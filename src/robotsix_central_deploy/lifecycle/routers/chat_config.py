@@ -14,17 +14,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
-from ...registry.settings_store import VALID_LOG_LEVELS
 from .._config_utils import (
-    _is_key_secret,
     _mask_secrets,
     _merge_config,
-    _restore_secrets_from_current,
-    _sanitize_log,
-    _strip_secret_values,
     read_component_config,
 )
 from ..auth import verify_auth

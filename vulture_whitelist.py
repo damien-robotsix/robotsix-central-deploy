@@ -99,4 +99,4 @@ _.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:28)
 # Hashing / serialisation utilities — called by config-drift detection
 # (runtime path) and its test suite.
 # ===========================================================================
-_canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:27)
+_ = _canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:27)

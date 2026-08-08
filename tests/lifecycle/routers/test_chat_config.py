@@ -6,7 +6,6 @@ POST /chat/config/{name}/rollback.
 
 from __future__ import annotations
 
-
 from httpx import AsyncClient
 
 # Import the server module itself so we can access/wire app.state globals.
