@@ -1,0 +1,1 @@
+Bump python-packages group: fastapi (0.139.2→0.141.1), uvicorn[standard] (0.51.0→0.52.1), websockets (16.1.1→17.0.1), coverage (7.15.2→7.15.4), ruff (0.15.22→0.16.2), types-docker (7.1.0.20260712→7.2.0.20260806), hypothesis (6.156.7→6.165.2)
