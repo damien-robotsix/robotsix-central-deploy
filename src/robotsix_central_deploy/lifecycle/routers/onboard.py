@@ -23,7 +23,6 @@ from ..deps import (
     _get_config,
     _get_deploy_history_store,
     _namespace_spec_volumes,
-    _require_config_standard,
     _validate_config_or_422,
     _build_component_config_from_spec,
     JobRegistry,
@@ -61,16 +60,6 @@ router = APIRouter(tags=["onboard"])
 # ---------------------------------------------------------------------------
 # Private helpers extracted from long route handlers
 # ---------------------------------------------------------------------------
-
-
-def _parse_github_owner_repo(git_url: str) -> tuple[str, str] | None:
-    """Extract (owner, repo) from a GitHub HTTPS git URL, or ``None``."""
-    import re
-
-    m = re.match(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", git_url)
-    if m:
-        return m.group(1), m.group(2)
-    return None
 
 
 async def _deploy_onboard_siblings(
@@ -200,12 +189,6 @@ async def onboard_preflight(
     """
     import re
 
-    from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
-    from robotsix_central_deploy.onboard.parser import (
-        ParseError,
-        parse_compose,
-    )
-
     # Validate name slug
     if not re.fullmatch(r"^[a-z0-9][a-z0-9-]*$", req.name):
         raise HTTPException(
@@ -232,64 +215,14 @@ async def onboard_preflight(
             detail={"error": f"component '{req.name}' already exists"},
         )
 
-    # Fetch repo files (git clone is blocking → run in executor)
+    # Resolve repo files + parse compose + validate config standard
+    # (shared backbone extracted from _resolve_deploy_contract)
     loop = asyncio.get_running_loop()
+    from ..deps._compose_resolver import _resolve_compose_backbone  # noqa: PLC0415
 
-    # Try to get a GitHub App installation token so the clone works
-    # for private repos.  Public repos and non-GitHub URLs are fine
-    # without a token — fall back silently.
-    github_token: str | None = None
-    parsed = _parse_github_owner_repo(req.git_url)
-    if (
-        parsed is not None
-        and lifecycle_config.github_app_id.get_secret_value()
-        and lifecycle_config.github_app_private_key.get_secret_value()
-        and lifecycle_config.installation_id.get_secret_value()
-    ):
-        owner, repo = parsed
-        try:
-            from robotsix_central_deploy.lifecycle.github_app import (
-                get_installation_token_sync,
-            )
-
-            github_token = await loop.run_in_executor(
-                None,
-                get_installation_token_sync,
-                lifecycle_config.github_app_id.get_secret_value(),
-                lifecycle_config.github_app_private_key.get_secret_value(),
-                lifecycle_config.installation_id.get_secret_value(),
-            )
-        except Exception:
-            # owner/repo come from a regex match on a user-supplied URL;
-            # sanitise to prevent log-injection (newline forgery).
-            safe_owner = owner.replace("\n", "_").replace("\r", "_")
-            safe_repo = repo.replace("\n", "_").replace("\r", "_")
-            logger.warning(
-                "Cannot get GitHub App installation token for %s/%s; "
-                "cloning unauthenticated (public repos only)",
-                safe_owner,
-                safe_repo,
-            )
-
-    try:
-        repo_files = await loop.run_in_executor(
-            None,
-            fetch_repo_files,
-            req.git_url,
-            30,
-            github_token,
-        )
-    except FetchError as e:
-        raise HTTPException(status_code=422, detail={"error": str(e)})
-
-    # Parse compose
-    try:
-        derived_spec = parse_compose(repo_files.compose_bytes, req.name, req.git_url)
-    except ParseError as e:
-        raise HTTPException(
-            status_code=422,
-            detail={"error": "compose validation failed", "violations": e.violations},
-        )
+    repo_files, derived_spec = await _resolve_compose_backbone(
+        req.git_url, req.name, lifecycle_config, loop
+    )
 
     # Resolve target_disk: explicit request value > config default > empty
     resolved_target_disk = req.target_disk or lifecycle_config.target_disk
@@ -306,18 +239,6 @@ async def onboard_preflight(
                 detail={"error": f"Invalid target_disk: {exc}"},
             )
     derived_spec.target_disk = resolved_target_disk
-
-    # Parse config/config.schema.json if present
-    if repo_files.config_schema_json is not None:
-        try:
-            derived_spec.config_schema = json.loads(repo_files.config_schema_json)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail={"error": f"config/config.schema.json is not valid JSON: {exc}"},
-            )
-    else:
-        derived_spec.config_schema = None
 
     # Resolve the repo default config per the robotsix-standards config-standard
     # convention (robotsix-standards/docs/config-standard.md). The primary
@@ -349,9 +270,6 @@ async def onboard_preflight(
         )
     else:
         derived_spec.config_example_values = None
-
-    # Hard precondition: config standard must be satisfied
-    _require_config_standard(derived_spec)
 
     # Volume-collision preflight: check that would-be namespaced volume names
     # do not collide with any existing component's named_volumes.
