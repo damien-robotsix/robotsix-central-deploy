@@ -167,6 +167,52 @@ class TestLangfuseProxyTraces:
         ).decode()
         assert decoded == "pk-chat:sk-chat"
 
+    async def test_upstream_content_encoding_is_not_forwarded(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+    ):
+        """A gzip label on an identity body breaks every decoding client.
+
+        We forward accept-encoding upstream, so Langfuse replies gzipped,
+        but httpx decompresses transparently — ``upstream.content`` is
+        plain bytes. Passing content-encoding through made the chat agent's
+        httpx client fail with a zlib "incorrect header check" on every
+        /traces call while curl (which does not ask for gzip) saw a 200.
+        """
+        cfg = server_mod.app.state.config
+        cfg.langfuse_projects["robotsix-chat"] = LangfuseProjectCreds(
+            public_key="pk-chat", secret_key="sk-chat"
+        )
+        cfg.langfuse_base_url = "https://langfuse.example"
+
+        async def _fake_get(url, headers=None, **kwargs):
+            resp = MagicMock(spec=httpx.Response)
+            resp.status_code = 200
+            resp.content = b'{"data":[]}'  # already decompressed by httpx
+            resp.headers = {
+                "content-type": "application/json",
+                "content-encoding": "gzip",
+                "content-length": "37",
+            }
+            return resp
+
+        fake_client = MagicMock()
+        fake_client.get = _fake_get
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_langfuse.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(fake_client),
+        )
+
+        resp = await client.get(
+            "/chat/langfuse/robotsix-chat/traces",
+            headers={**auth_headers, "Accept-Encoding": "gzip, deflate"},
+        )
+        assert resp.status_code == 200
+        assert "content-encoding" not in {k.lower() for k in resp.headers}
+        assert resp.json() == {"data": []}
+
     async def test_limit_capped_at_100(
         self,
         client: AsyncClient,
