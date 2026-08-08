@@ -8,8 +8,8 @@ import pytest
 
 from robotsix_central_deploy.lifecycle.models import DeployHistoryEntry
 from robotsix_central_deploy.registry.deploy_history_store import (
-    DeployHistoryStore,
     MAX_HISTORY_ENTRIES,
+    DeployHistoryStore,
 )
 
 

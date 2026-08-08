@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
@@ -20,6 +20,15 @@ from ._util import (
 from ._volume_ops import VolumeOps
 from .base import ExecutionBackend
 from ..._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
+
+try:
+    from robotsix_github_auth import mint_installation_token
+
+    _HAS_GITHUB_AUTH = True
+except ImportError:  # pragma: no cover
+    mint_installation_token = None
+    _HAS_GITHUB_AUTH = False
+
 from ...gateway.proxy import PROXY_NETWORK
 from ..models import (
     ComponentInspect,
@@ -32,6 +41,16 @@ from ..models import (
     ServiceState,
     VolumeStat,
 )
+from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
+from ._util import (
+    PruneImagesResult,
+    docker_status_to_service_state,
+    inflight_image_refs,
+    register_inflight_image_refs,
+    release_inflight_image_refs,
+)
+from ._volume_ops import VolumeOps
+from .base import ExecutionBackend
 
 if TYPE_CHECKING:
     from ...registry.models import ComponentConfig
@@ -145,7 +164,7 @@ class DockerSdkBackend(ExecutionBackend):
                     "org.opencontainers.image.revision",
                     "",
                 )
-            except Exception:  # Gracefully degrade; label stays empty
+            except Exception:  # Gracefully degrade; label stays empty  # noqa: BLE001
                 pass
 
             # health check result
@@ -154,7 +173,7 @@ class DockerSdkBackend(ExecutionBackend):
                 health_obj = container.attrs["State"].get("Health")
                 if health_obj:
                     health = health_obj.get("Status", "")
-            except Exception:  # Gracefully degrade; health stays empty
+            except Exception:  # Gracefully degrade; health stays empty  # noqa: BLE001
                 pass
 
             # running_digest from the image's RepoDigests
@@ -176,7 +195,7 @@ class DockerSdkBackend(ExecutionBackend):
                             if "@sha256:" in rd:
                                 running_digest = rd.split("@", 1)[1]
                                 break
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass  # Gracefully degrade; digest stays ""
 
             return ComponentInspect(
@@ -249,7 +268,7 @@ class DockerSdkBackend(ExecutionBackend):
             await loop.run_in_executor(None, lambda: container.remove(force=True))
         except docker.errors.NotFound:  # Container already removed
             pass
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("remove_container %s: %s", name, exc)
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
@@ -278,7 +297,7 @@ class DockerSdkBackend(ExecutionBackend):
 
     # -- deploy / rollback --------------------------------------------------
 
-    def _create_container(self, config: "ComponentConfig", image_ref: str) -> Any:
+    def _create_container(self, config: ComponentConfig, image_ref: str) -> Any:
         """Create a Docker container from a ComponentConfig spec (synchronous)."""
 
         # Containers that mount the host Docker socket must keep their
@@ -358,8 +377,8 @@ class DockerSdkBackend(ExecutionBackend):
                 raise RuntimeError(f"Container {name} disappeared during health wait")
 
             def _poll() -> str:
-                container.reload()
-                h = container.attrs["State"].get("Health")
+                container.reload()  # noqa: B023
+                h = container.attrs["State"].get("Health")  # noqa: B023
                 return (
                     h["Status"] if h else HealthStatus.HEALTHY
                 )  # no healthcheck → treat as healthy
@@ -382,7 +401,7 @@ class DockerSdkBackend(ExecutionBackend):
                         detail_parts.append(f"last check: exit code {exit_code}")
                         if output:
                             detail_parts.append(f"output: {output[:500]}")
-                except Exception:
+                except Exception:  # noqa: BLE001
                     # Best-effort operation — failure is non-critical here.
                     pass
                 detail = (
@@ -402,7 +421,7 @@ class DockerSdkBackend(ExecutionBackend):
         """Stop and force-remove a container (synchronous, best-effort stop)."""
         try:
             container.stop(timeout=30)
-        except Exception:  # Best-effort stop; proceed to force-remove
+        except Exception:  # Best-effort stop; proceed to force-remove  # noqa: BLE001
             pass
         container.remove(force=True)
 
@@ -430,7 +449,9 @@ class DockerSdkBackend(ExecutionBackend):
         prior_digest = ""
         try:
             prior_digest = await loop.run_in_executor(None, lambda: existing.image.id)
-        except Exception:  # Gracefully degrade; prior_digest stays empty
+        except (
+            Exception  # noqa: BLE001
+        ):  # Gracefully degrade; prior_digest stays empty
             pass
 
         try:
@@ -441,7 +462,7 @@ class DockerSdkBackend(ExecutionBackend):
             ) from exc
         return prior_digest
 
-    async def _prepare_volumes(self, config: "ComponentConfig") -> list[str]:
+    async def _prepare_volumes(self, config: ComponentConfig) -> list[str]:
         """Pre-create named volumes and validate claude credentials.
 
         Returns deploy warnings collected during credential validation.
@@ -556,7 +577,7 @@ class DockerSdkBackend(ExecutionBackend):
                     deploy_warnings.extend(cred_warnings)
                     for w in cred_warnings:
                         logger.warning(w)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "claude-auth credential check failed (non-fatal): %s", exc
                 )
@@ -564,7 +585,7 @@ class DockerSdkBackend(ExecutionBackend):
         return deploy_warnings
 
     async def _try_restore(
-        self, name: str, config: "ComponentConfig", prior_digest: str
+        self, name: str, config: ComponentConfig, prior_digest: str
     ) -> None:
         """Best-effort restore of a container from *prior_digest* after a failed deploy."""
         if not prior_digest:
@@ -582,7 +603,7 @@ class DockerSdkBackend(ExecutionBackend):
             )
             await loop.run_in_executor(None, restore.start)
             logger.info("Restored %s from prior digest %s", name, prior_digest)
-        except Exception as restore_exc:
+        except Exception as restore_exc:  # noqa: BLE001
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
     async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
@@ -609,7 +630,7 @@ class DockerSdkBackend(ExecutionBackend):
         }
 
     async def deploy(
-        self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
+        self, service: ServiceRecord, config: ComponentConfig, image_ref: str
     ) -> DeployOutcome:
         """Pull *image_ref*, recreate the container from *config*, return outcome."""
         import docker
@@ -694,7 +715,7 @@ class DockerSdkBackend(ExecutionBackend):
         )
 
     async def rollback(
-        self, service: ServiceRecord, config: "ComponentConfig"
+        self, service: ServiceRecord, config: ComponentConfig
     ) -> RollbackOutcome:
         """Recreate container from ``service.previous_image_digest``."""
         import docker
@@ -731,7 +752,7 @@ class DockerSdkBackend(ExecutionBackend):
                         rollback_warnings.extend(cred_warnings)
                         for w in cred_warnings:
                             logger.warning(w)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "claude-auth credential check failed during rollback (non-fatal): %s",
                         exc,
@@ -795,6 +816,56 @@ class DockerSdkBackend(ExecutionBackend):
         """Remove the Docker named volume *volume_name* (best-effort)."""
         await self._volume.remove_volume(volume_name)
 
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        """Run a one-shot container from *image*, mount config volume at *volume_mount_path*."""
+        import requests.exceptions
+
+        loop = asyncio.get_running_loop()
+
+        def _run() -> str:
+            container = self._client.containers.create(
+                image,
+                command=shlex.split(command_str),
+                volumes={volume_name: {"bind": volume_mount_path, "mode": "rw"}},
+                environment=env_dict,
+            )
+            try:
+                container.start()
+                result = container.wait(timeout=timeout_seconds)
+                logs: str = container.logs(stdout=True, stderr=True).decode(
+                    errors="replace"
+                )
+                exit_code = result.get("StatusCode", 0)
+                if exit_code != 0:
+                    raise RuntimeError(
+                        f"config-assist exited with code {exit_code}:\n{logs}"
+                    )
+                return logs
+            except requests.exceptions.ReadTimeout:
+                try:
+                    container.kill()
+                except (
+                    Exception  # noqa: BLE001
+                ):  # Best-effort kill; container may already be gone
+                    pass
+                raise TimeoutError(f"config-assist timed out after {timeout_seconds}s")
+            finally:
+                try:
+                    container.remove(force=True)
+                except Exception:  # noqa: BLE001
+                    # Best-effort operation — failure is non-critical here.
+                    pass
+
+        return await loop.run_in_executor(None, _run)
+
     async def stream_logs(
         self,
         service: ServiceRecord,
@@ -852,7 +923,7 @@ class DockerSdkBackend(ExecutionBackend):
                 try:
                     log_iter.close()
                 except (
-                    Exception
+                    Exception  # noqa: BLE001
                 ):  # Best-effort close; iterator may already be exhausted
                     pass
 
@@ -866,7 +937,7 @@ class DockerSdkBackend(ExecutionBackend):
         Returns an empty string if the container is not found or an error
         occurs.
         """
-        import docker  # noqa: PLC0415
+        import docker
 
         loop = asyncio.get_running_loop()
         name = self._container_name(service)
@@ -893,7 +964,7 @@ class DockerSdkBackend(ExecutionBackend):
 
     async def disk_df(self) -> DockerDfStats:
         """Return Docker disk usage statistics."""
-        import docker  # noqa: PLC0415
+        import docker
 
         loop = asyncio.get_running_loop()
         try:
@@ -990,7 +1061,7 @@ class DockerSdkBackend(ExecutionBackend):
         When *force* is ``True``, stopped containers are removed first so
         that images they hold references to can be pruned.
         """
-        import docker  # noqa: PLC0415
+        import docker
 
         loop = asyncio.get_running_loop()
 
@@ -1044,6 +1115,9 @@ class DockerSdkBackend(ExecutionBackend):
                     continue
                 size = int(img.attrs.get("Size", 0))
                 try:
+                    assert (  # noqa: S101
+                        img.id is not None
+                    )  # Docker images always have an id
                     self._client.images.remove(img.id)
                     result.space_reclaimed_bytes += size
                     result.removed_count += 1
@@ -1103,7 +1177,7 @@ class DockerSdkBackend(ExecutionBackend):
 
         return await loop.run_in_executor(None, _scan)
 
-    async def inspect_self(self) -> Optional[SelfInspect]:
+    async def inspect_self(self) -> SelfInspect | None:
         """Resolve the server's own container via the container-id hostname.
 
         Inside a container the default hostname is the short container id;
@@ -1155,7 +1229,7 @@ class DockerSdkBackend(ExecutionBackend):
             networks=networks,
         )
 
-    async def heal_self_network_alias(self, network_name: str) -> Optional[str]:
+    async def heal_self_network_alias(self, network_name: str) -> str | None:
         """Repair the server's own service alias on *network_name*.
 
         The watchtower self-update recreate re-attaches networks via raw
@@ -1278,7 +1352,7 @@ class DockerSdkBackend(ExecutionBackend):
                 # Multi-endpoint create keeps the watchtower container itself
                 # off the /networks/*/connect API path.
                 networking = api.create_networking_config(
-                    {net: api.create_endpoint_config() for net in target.networks}
+                    {net: api.create_endpoint_config() for net in target.networks}  # type: ignore[arg-type]
                 )
             created = api.create_container(
                 image=watchtower_image,

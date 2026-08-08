@@ -8,6 +8,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from .._config_utils import (
+    _mask_secrets,
+    _merge_config,
+    read_component_config,
+)
+from .._langfuse_config import build_central_deploy_langfuse_config
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import (
@@ -21,14 +29,6 @@ from ..deps import (
 from ..models import ErrorDetail
 from ..schemas import ConfigExportResponse, ConfigResponse
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
-from .._config_utils import read_component_config
-from .._langfuse_config import build_central_deploy_langfuse_config
-from .._config_utils import (  # noqa: E402
-    _mask_secrets,
-    _merge_config,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -180,10 +180,10 @@ async def _current_config_values(
 async def get_service_config(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ConfigResponse:
     """Return the config.json schema and current masked values for a service.
@@ -232,7 +232,7 @@ async def get_service_config(
         base_domain = config.gateway_base_domain
         if base_domain:
             component_settings_url = f"https://{name}.{base_domain}/ui"
-    except Exception:
+    except Exception:  # noqa: BLE001
         component_settings_url = None
 
     return ConfigResponse(
@@ -262,9 +262,9 @@ async def get_service_config(
 async def export_service_config(
     name: str,
     request: Request,
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ConfigExportResponse:
     """Export the full current config INCLUDING unmasked secret values.

@@ -6,12 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 from httpx import AsyncClient
 
-from robotsix_central_deploy.registry.config_store import ComponentConfigStore
-from robotsix_central_deploy.registry.models import ComponentConfig
-
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.deps.volume import VOLUME_CAT_MAX_BYTES
-
+from robotsix_central_deploy.registry.config_store import ComponentConfigStore
+from robotsix_central_deploy.registry.models import ComponentConfig
 
 # ---------------------------------------------------------------------------
 # Helpers

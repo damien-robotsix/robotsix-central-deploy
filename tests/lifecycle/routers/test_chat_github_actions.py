@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -33,8 +33,8 @@ class _FakeRun:
         self.run_number = 5
         self.event = "push"
         self.html_url = f"https://github.com/acme/widget/actions/runs/{run_id}"
-        self.created_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=timezone.utc)
-        self.updated_at = datetime(2026, 7, 7, 12, 5, 0, tzinfo=timezone.utc)
+        self.created_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=UTC)
+        self.updated_at = datetime(2026, 7, 7, 12, 5, 0, tzinfo=UTC)
 
 
 class _FakePaginatedList:
@@ -389,8 +389,8 @@ class TestListWorkflowRunJobs:
                 self.status = status
                 self.conclusion = conclusion
                 self.number = number
-                self.started_at = datetime(2026, 7, 7, 12, 0, 10, tzinfo=timezone.utc)
-                self.completed_at = datetime(2026, 7, 7, 12, 0, 30, tzinfo=timezone.utc)
+                self.started_at = datetime(2026, 7, 7, 12, 0, 10, tzinfo=UTC)
+                self.completed_at = datetime(2026, 7, 7, 12, 0, 30, tzinfo=UTC)
 
         class _FakeJob:
             def __init__(self, job_id, name, status, conclusion, steps):
@@ -398,8 +398,8 @@ class TestListWorkflowRunJobs:
                 self.name = name
                 self.status = status
                 self.conclusion = conclusion
-                self.started_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=timezone.utc)
-                self.completed_at = datetime(2026, 7, 7, 12, 1, 0, tzinfo=timezone.utc)
+                self.started_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=UTC)
+                self.completed_at = datetime(2026, 7, 7, 12, 1, 0, tzinfo=UTC)
                 self.html_url = f"https://github.com/acme/widget/runs/1/jobs/{job_id}"
                 self.steps = steps
 

@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from .backends import ExecutionBackend
     from ..registry.models import ComponentConfig
+    from .backends import ExecutionBackend
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ def _strip_secret_values(
             walk: Any,
         ) -> Any:
             (i_values,) = value_dicts
-            return i_values[key] if key in i_values else _SchemaWalker.SKIP
+            return i_values.get(key, _SchemaWalker.SKIP)
 
         def array(
             self,
@@ -378,7 +378,7 @@ def _mask_secrets_json_schema(
             walk: Any,
         ) -> Any:
             (i_current,) = value_dicts
-            return i_current[key] if key in i_current else ""
+            return i_current.get(key, "")
 
         def array(
             self,
@@ -591,6 +591,137 @@ def _merge_config_flat(
 
 
 # ---------------------------------------------------------------------------
+# Secret-key path helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_key_secret(schema: dict[str, Any], dotted_path: str) -> bool:
+    """Return True when *dotted_path* resolves to a secret field in *schema*.
+
+    Walks the JSON Schema properties and resolves ``$ref`` references
+    against the root *schema*.  Returns ``False`` for legacy flat-dict
+    templates (no ``"properties"`` key).
+    """
+    if not _is_json_schema(schema):
+        return False
+    parts = dotted_path.split(".")
+    current_schema = schema
+    for part in parts:
+        props = current_schema.get("properties", {})
+        prop = props.get(part)
+        if prop is None:
+            # The path segment may index into an array (e.g. accounts.0.password).
+            # Try interpreting the part as an integer index and resolve
+            # the parent's items schema instead.
+            try:
+                int(part)
+            except ValueError:
+                return False
+            # Walk back: find the array property.  For simplicity we
+            # resolve the next non-index segment against the current
+            # schema's items, but dotted paths do not carry enough
+            # structural info to map indexes precisely — we treat any
+            # integer segment as "descend into array items" and
+            # continue with the next segment.
+            continue
+        resolved = _resolve_ref(prop, schema)
+        if _is_secret_prop(resolved):
+            return True
+        if resolved.get("type") == "object":
+            current_schema = resolved
+        elif resolved.get("type") == "array":
+            items = resolved.get("items", {})
+            if isinstance(items, dict):
+                items = _resolve_ref(items, schema)
+            if isinstance(items, dict):
+                current_schema = items
+            else:
+                return False
+        else:
+            return False
+    return False
+
+
+def _restore_secrets_from_current(
+    schema: dict[str, Any],
+    restored: dict[str, Any],
+    current: dict[str, Any],
+) -> dict[str, Any]:
+    """Copy secret leaf values from *current* into *restored*.
+
+    Walks the JSON Schema properties recursively (including arrays of
+    objects) and for every ``writeOnly``/``password`` field copies the
+    value from *current* into *restored*.  Non-secret keys already
+    present in *restored* are left unchanged.  Returns a new dict; the
+    original *restored* is not modified.
+    """
+    if not _is_json_schema(schema):
+        return restored
+
+    class _Visitor:
+        def secret(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_restored, i_current) = value_dicts
+            if key in i_current:
+                return i_current[key]
+            if key in i_restored:
+                return i_restored[key]
+            return _SchemaWalker.SKIP
+
+        def array(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            resolved_items: dict[str, Any] | None,
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_restored, i_current) = value_dicts
+            r_list = i_restored.get(key)
+            c_list = i_current.get(key)
+            if (
+                isinstance(resolved_items, dict)
+                and resolved_items.get("type") == "object"
+                and isinstance(r_list, list)
+                and isinstance(c_list, list)
+            ):
+                n = min(len(r_list), len(c_list))
+                merged_items: list[Any] = []
+                for i in range(n):
+                    if isinstance(r_list[i], dict) and isinstance(c_list[i], dict):
+                        merged_items.append(walk(resolved_items, r_list[i], c_list[i]))
+                    else:
+                        merged_items.append(r_list[i])
+                # Preserve extra items from restored that extend beyond
+                # current (the original in-place mutation left the tail
+                # of r_list untouched).
+                merged_items.extend(r_list[n:])
+                return merged_items
+            if key in i_restored:
+                return i_restored[key]
+            return _SchemaWalker.SKIP
+
+        def scalar(
+            self,
+            key: str,
+            resolved: dict[str, Any],
+            value_dicts: tuple[dict[str, Any], ...],
+            walk: Any,
+        ) -> Any:
+            (i_restored, _i_current) = value_dicts
+            if key in i_restored:
+                return i_restored[key]
+            return _SchemaWalker.SKIP
+
+    return _SchemaWalker(schema, _Visitor()).walk(schema, restored, current)
+
+
+# ---------------------------------------------------------------------------
 # llmio tier config writer (shared by services_config, services_deploy)
 # ---------------------------------------------------------------------------
 
@@ -625,7 +756,7 @@ async def _write_llmio_tier_config(
             await backend.write_llmio_tier_config_to_volume(
                 component_config.config_volume, settings.llmio_tier_config
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "%s %s: could not write llmio tier config to volume %s: %s",
             log_context,

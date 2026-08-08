@@ -23,12 +23,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ..auth import verify_auth
 from ..config import LifecycleConfig
 from ..deps import _get_chat_agent_audit_store, _get_config
 from ..github_app import GitHubRepoCreateNotConfiguredError
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-
 from ._github_common import (
     _call_github_endpoint,
     _get_client_or_503,
@@ -176,7 +175,7 @@ def _merge_via_raw_requester(
     if body.commit_title:
         input_params["commit_title"] = body.commit_title
 
-    headers, data = client.requester.requestJsonAndCheck(
+    _headers, data = client.requester.requestJsonAndCheck(
         "PUT",
         f"/repos/{owner}/{repo}/pulls/{pull_number}/merge",
         input=input_params if input_params else None,
@@ -253,9 +252,9 @@ async def merge_pull(
     owner: str,
     repo: str,
     pull_number: int,
-    body: MergePullRequest = MergePullRequest(merge_method=None, sha=None),
-    config: LifecycleConfig = Depends(_get_config),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    body: MergePullRequest = MergePullRequest(merge_method=None, sha=None),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Merge *owner*/*repo*'s pull request *pull_number*.
@@ -437,7 +436,7 @@ async def list_reviews(
     repo: str,
     pull_number: int,
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s pull request *pull_number*'s reviews,
@@ -466,7 +465,7 @@ async def list_review_comments(
     repo: str,
     pull_number: int,
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s pull request *pull_number*'s inline review
@@ -503,8 +502,8 @@ async def create_review(
     repo: str,
     pull_number: int,
     body: CreateReviewRequest,
-    config: LifecycleConfig = Depends(_get_config),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Submit a review on *owner*/*repo*'s pull request *pull_number*.
@@ -596,8 +595,8 @@ async def dismiss_review(
     pull_number: int,
     review_id: int,
     body: DismissReviewRequest,
-    config: LifecycleConfig = Depends(_get_config),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Dismiss *review_id* on *owner*/*repo*'s pull request *pull_number*.
@@ -679,7 +678,7 @@ async def list_pulls(
     repo: str,
     state: str = "open",
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s pull requests, most-recently-updated first.
@@ -705,7 +704,7 @@ async def get_pull(
     owner: str,
     repo: str,
     number: int,
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s pull request *number* (status, mergeable, URL)."""

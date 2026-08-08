@@ -6,10 +6,8 @@ import json
 import logging
 from pathlib import Path
 
-
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.models import ComponentConfig, ConfigAssistSeed
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -49,15 +49,15 @@ class DerivedSpec(BaseModel):
     host_docker_sock: bool = Field(
         description="Whether to bind-mount the host Docker socket into the container (from robotsix.deploy.host-docker-sock label)"
     )
-    health_check: Optional[HealthCheck] = Field(
+    health_check: HealthCheck | None = Field(
         default=None,
         description="Container health check configuration from docker-compose (test, interval, timeout, retries, start_period)",
     )
-    command: Optional[list[str]] = Field(
+    command: list[str] | None = Field(
         default=None,
         description="Container command override from docker-compose (overrides the image's CMD)",
     )
-    entrypoint: Optional[list[str]] = Field(
+    entrypoint: list[str] | None = Field(
         default=None,
         description="Container entrypoint override from docker-compose (overrides the image's ENTRYPOINT)",
     )
@@ -85,11 +85,11 @@ class DerivedSpec(BaseModel):
         default=None,
         description="Example config values from config.json or config.example.json — the deploy-default base layered under schema defaults and overridden by user input during onboard confirm; null when absent",
     )
-    config_volume: Optional[str] = Field(
+    config_volume: str | None = Field(
         default=None,
         description="Named volume that holds config.json at runtime (resolved from robotsix.deploy.config-target label)",
     )
-    config_assist_command: Optional[str] = Field(
+    config_assist_command: str | None = Field(
         default=None,
         description="Shell command that generates or validates config values (from robotsix.deploy.config-assist label)",
     )
@@ -97,7 +97,7 @@ class DerivedSpec(BaseModel):
         default=[],
         description="Seed field key-label pairs for the config-assist form (from robotsix.deploy.config-assist-seeds label)",
     )
-    llmio_tier_level: Optional[str] = Field(
+    llmio_tier_level: str | None = Field(
         default=None,
         description='LLM I/O tier level ("level1" through "level4") from robotsix.deploy.llmio-tier-level label; null when unset',
     )
@@ -109,7 +109,7 @@ class DerivedSpec(BaseModel):
         default=False,
         description="Whether the chat agent is permitted to mutate this component's configuration at runtime (from robotsix.deploy.chat-agent-mutatable label)",
     )
-    user: Optional[str] = Field(
+    user: str | None = Field(
         default=None,
         description='Container user override from docker-compose (e.g. "1000:1000" for uid:gid, or "root")',
     )

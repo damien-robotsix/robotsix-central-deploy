@@ -15,6 +15,7 @@ import httpx
 
 from . import background as _background
 from . import lifespan as _lifespan
+from ._compose_resolver import _resolve_compose_backbone
 from .background import _claude_auth_refresh_loop, get_claude_auth_refresh_state
 from .dependencies import (
     _compute_overall_health,
@@ -35,7 +36,6 @@ from .dependencies import (
 )
 from .jobs import DeployJob, Job, JobRegistry, OnboardJob
 from .lifespan import _seed_component_registry, lifespan
-from ._compose_resolver import _resolve_compose_backbone
 from .seed import (
     _build_component_config_from_spec,
     _derive_account_id,
@@ -56,7 +56,6 @@ from .volume import (
     _compute_orphan_volumes,
     _validate_volume_path,
 )
-
 
 # -- Proxy _claude_auth_refresh_state so rebinding in __init__ ----------
 #    also rebinds background._claude_auth_refresh_state.  Tests (and
@@ -106,12 +105,23 @@ _current.__class__ = _DepsModule
 # -----------------------------------------------------------------------
 
 __all__ = [
-    "httpx",
+    # volume
+    "VOLUME_CAT_MAX_BYTES",
+    # jobs
+    "DeployJob",
+    "Job",
+    "JobRegistry",
+    "OnboardJob",
+    "_assert_volume_browsable",
+    # seed
+    "_build_component_config_from_spec",
     # background
     "_claude_auth_refresh_loop",
-    "get_claude_auth_refresh_state",
+    "_compute_orphan_volumes",
     # dependencies
     "_compute_overall_health",
+    "_derive_account_id",
+    "_fetch_component_repo_files",
     "_get_backend",
     "_get_chat_agent_audit_store",
     "_get_component_config_store",
@@ -126,33 +136,21 @@ __all__ = [
     "_get_settings_store",
     "_get_sibling_pairs",
     "_get_store",
-    # jobs
-    "DeployJob",
-    "Job",
-    "JobRegistry",
-    "OnboardJob",
-    # lifespan
-    "_seed_component_registry",
-    "lifespan",
-    # _compose_resolver
-    "_resolve_compose_backbone",
-    # seed
-    "_build_component_config_from_spec",
-    "_derive_account_id",
-    "_fetch_component_repo_files",
     "_namespace_spec_volumes",
     "_prune_unset",
     "_relocate_account_seed_values",
     "_require_config_standard",
+    # _compose_resolver
+    "_resolve_compose_backbone",
     "_resolve_placeholders",
+    # lifespan
+    "_seed_component_registry",
     "_seed_for_detect",
     "_seed_list_item",
-    "_require_config_standard",
     "_validate_account_ids",
     "_validate_config_or_422",
-    # volume
-    "VOLUME_CAT_MAX_BYTES",
-    "_assert_volume_browsable",
-    "_compute_orphan_volumes",
     "_validate_volume_path",
+    "get_claude_auth_refresh_state",
+    "httpx",
+    "lifespan",
 ]

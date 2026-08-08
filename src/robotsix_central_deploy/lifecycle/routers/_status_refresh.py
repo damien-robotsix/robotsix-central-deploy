@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import logging
 
+from ...registry_check import RegistryChecker
 from ..backends import ExecutionBackend
 from ..models import ComponentInspect, ServiceRecord
 from ..store import ServiceStore
-from ...registry_check import RegistryChecker
 
 logger = logging.getLogger(__name__)
 

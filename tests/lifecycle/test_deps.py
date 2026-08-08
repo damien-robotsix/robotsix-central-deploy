@@ -7,6 +7,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from robotsix_http import ExternalHTTPError
 
 import robotsix_central_deploy.lifecycle.deps as deps_mod
 from robotsix_central_deploy.lifecycle.config import VirtualComponentEntry
@@ -18,7 +19,6 @@ from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
-from robotsix_http import ExternalHTTPError
 
 
 class TestClaudeAuthRefreshState:
@@ -60,7 +60,7 @@ class TestClaudeAuthRefreshLoop:
         }
 
     # sleep side-effect: succeed once, then cancel.
-    _sleep_once_then_cancel = [None, asyncio.CancelledError]
+    _sleep_once_then_cancel = [None, asyncio.CancelledError]  # noqa: RUF012
 
     async def test_refresh_loop_not_implemented_returns_early(self) -> None:
         """When the backend raises NotImplementedError, the loop exits."""
@@ -117,8 +117,8 @@ class TestClaudeAuthRefreshLoop:
 
     async def test_refresh_loop_success_path(self) -> None:
         """Full success path: authenticated, expiring soon, refresh succeeds."""
-        from contextlib import asynccontextmanager
         from collections.abc import AsyncIterator
+        from contextlib import asynccontextmanager
 
         backend = MagicMock()
         backend.check_claude_auth = AsyncMock(return_value={"status": "authenticated"})
@@ -171,7 +171,7 @@ class TestRefreshClaudeCredentials:
     failure branch: ExternalHTTPError, generic connection error, invalid
     JSON response, missing ``access_token``, and backend write failure."""
 
-    DEFAULT_OAUTH: dict[str, str] = {
+    DEFAULT_OAUTH: dict[str, str] = {  # noqa: RUF012
         "accessToken": "old-at",
         "refreshToken": "old-rt",
         "expiresAt": "1000000",

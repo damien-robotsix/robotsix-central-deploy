@@ -18,7 +18,6 @@ from robotsix_central_deploy.lifecycle._config_utils import (
     _strip_secret_values,
 )
 
-
 # ---------------------------------------------------------------------------
 # _is_json_schema
 # ---------------------------------------------------------------------------

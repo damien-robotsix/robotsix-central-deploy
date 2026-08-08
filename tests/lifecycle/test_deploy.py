@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+# Import the server module so we can set its globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import DockerSdkBackend, NoopBackend
 from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.models import (
@@ -25,10 +27,6 @@ from robotsix_central_deploy.registry.models import (
     PortMapping,
     VolumeMount,
 )
-
-# Import the server module so we can set its globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helper: a minimal component config for testing
@@ -93,11 +91,11 @@ def _ensure_registry(monkeypatch, registry):
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
 
-    key_manager = SecretKeyManager(Path("/tmp/test_fernet_key"))  # noqa: S108
-    env_store = EnvStore(Path("/tmp/test_env_store.json"), key_manager)  # noqa: S108
-    config_store = ComponentConfigStore(Path("/tmp/test_config_store.json"))  # noqa: S108
-    config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))  # noqa: S108
-    deploy_history_store = DeployHistoryStore(Path("/tmp/test_deploy_history.json"))  # noqa: S108
+    key_manager = SecretKeyManager(Path("/tmp/test_fernet_key"))
+    env_store = EnvStore(Path("/tmp/test_env_store.json"), key_manager)
+    config_store = ComponentConfigStore(Path("/tmp/test_config_store.json"))
+    config_yaml_store = ConfigYamlStore(Path("/tmp/test_config_yaml.json"))
+    deploy_history_store = DeployHistoryStore(Path("/tmp/test_deploy_history.json"))
     job_registry = JobRegistry()
 
     server_mod._config = cfg

@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC
 from typing import Any
 
 from ..models import CLAUDE_AUTH_VOLUME
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AuthOps", "CLAUDE_AUTH_VOLUME"]
+__all__ = ["CLAUDE_AUTH_VOLUME", "AuthOps"]
 
 
 class AuthOps:
@@ -86,10 +87,12 @@ class AuthOps:
             self._client.volumes.get(CLAUDE_AUTH_VOLUME)
         except docker.errors.NotFound:
             return [
-                f"Claude auth volume '{CLAUDE_AUTH_VOLUME}' does not exist. "
-                f"Your component requests a Claude mount but no credentials "
-                f"are available. Use the dashboard 'Claude auth' panel to "
-                f"provision credentials, then redeploy."
+                (
+                    f"Claude auth volume '{CLAUDE_AUTH_VOLUME}' does not exist. "
+                    f"Your component requests a Claude mount but no credentials "
+                    f"are available. Use the dashboard 'Claude auth' panel to "
+                    f"provision credentials, then redeploy."
+                )
             ]
 
         # Check if .credentials.json exists and is a regular file.
@@ -148,17 +151,13 @@ class AuthOps:
             # when components start 401ing.
             if expires_at:
                 try:
-                    from datetime import datetime, timezone
+                    from datetime import datetime
 
                     if isinstance(expires_at, (int, float)):
-                        expire_dt = datetime.fromtimestamp(
-                            expires_at / 1000.0, tz=timezone.utc
-                        )
+                        expire_dt = datetime.fromtimestamp(expires_at / 1000.0, tz=UTC)
                     else:
-                        expire_dt = datetime.fromisoformat(
-                            str(expires_at).replace("Z", "+00:00")
-                        )
-                    now = datetime.now(timezone.utc)
+                        expire_dt = datetime.fromisoformat(str(expires_at))
+                    now = datetime.now(UTC)
                     if expire_dt < now:
                         if has_refresh:
                             return {
@@ -198,9 +197,10 @@ class AuthOps:
         self, volume_name: str, credentials_json: str
     ) -> dict[str, Any]:
         """Write *credentials_json* into *volume_name* as ``.credentials.json``."""
-        import docker
-        import json as _json
         import base64
+        import json as _json
+
+        import docker
 
         # Validate that it's at least parseable JSON.
         try:
@@ -258,7 +258,7 @@ class AuthOps:
 
             result: Any = json.loads(content)
             if not isinstance(result, dict):
-                raise ValueError("Credentials file is not a JSON object.")
+                raise ValueError("Credentials file is not a JSON object.")  # noqa: TRY004
             return result
 
         return await loop.run_in_executor(None, _read)

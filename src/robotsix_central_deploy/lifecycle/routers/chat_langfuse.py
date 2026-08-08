@@ -38,7 +38,6 @@ from fastapi.responses import Response
 from robotsix_http import ExternalHTTPError
 
 from ..._http import retry_client_context
-
 from ..auth import verify_auth
 from ..config import LangfuseProjectCreds, LifecycleConfig
 from ..deps import _get_config
@@ -243,7 +242,7 @@ async def _proxy_to_langfuse(
 )
 async def list_projects(
     request: Request,
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> list[str]:
     """Return the Langfuse project aliases whose key pairs are configured.
@@ -279,7 +278,7 @@ async def list_projects(
 async def list_traces(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/traces`` to Langfuse.
@@ -308,7 +307,7 @@ async def get_trace(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
     trace_id: str = Path(..., description="Langfuse trace ID"),
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/traces/{trace_id}`` to Langfuse."""
@@ -331,7 +330,7 @@ async def get_trace(
 async def list_observations(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/observations`` to Langfuse.
@@ -360,7 +359,7 @@ async def get_observation(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
     observation_id: str = Path(..., description="Langfuse observation ID"),
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/observations/{observation_id}`` to Langfuse."""

@@ -7,19 +7,19 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request, status
 
+from ...registry import ComponentConfig, ServiceConfig
+from ...registry.chat_agent_audit_store import ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.deploy_history_store import DeployHistoryStore
+from ...registry.env_store import EnvStore
+from ...registry.loader import ComponentRegistry
+from ...registry.settings_store import SystemSettingsStore
+from ...registry_check import RegistryChecker
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
 from ..models import HealthStatus, ServiceRecord
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
-from ...registry.deploy_history_store import DeployHistoryStore
-from ...registry.chat_agent_audit_store import ChatAgentAuditStore
-from ...registry.env_store import EnvStore
-from ...registry.loader import ComponentRegistry
-from ...registry.settings_store import SystemSettingsStore
-from ...registry import ComponentConfig, ServiceConfig
-from ...registry_check import RegistryChecker
 from .jobs import JobRegistry
 
 if TYPE_CHECKING:
@@ -118,7 +118,7 @@ async def _get_sibling_pairs(
 
 def _compute_overall_health(
     primary_health: str,
-    siblings: list["ContainerHealthSummary"],
+    siblings: list[ContainerHealthSummary],
 ) -> str:
     """Rollup health across primary + healthchecked siblings.
 

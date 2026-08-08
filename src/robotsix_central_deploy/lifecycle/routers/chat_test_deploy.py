@@ -15,8 +15,13 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
+from ...registry.loader import ComponentRegistry
+from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..deps import (
     _get_backend,
     _get_chat_agent_audit_store,
@@ -26,15 +31,9 @@ from ..deps import (
     _get_registry,
     _get_store,
 )
-from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..models import ServiceRecord, ServiceState
 from ..schemas import ChatAgentTestDeployRequest, ChatAgentTestDeployResponse
 from ..store import ServiceStore
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.loader import ComponentRegistry
-from .._config_utils import _sanitize_log
-
 from ._chat_common import _check_rate_limit, logger
 from .chat_services import _resolve_deploy_contract
 
@@ -139,11 +138,11 @@ _RESPONSE_SNIPPET_MAX: int = 500
 async def chat_test_deploy(
     body: ChatAgentTestDeployRequest,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentTestDeployResponse:
     """Test-deploy a component and validate by probing *website*.
@@ -174,7 +173,7 @@ async def chat_test_deploy(
                 ),
             )
         # Build a synthetic deploy request to reuse the contract resolver.
-        from ..schemas import ChatAgentDeployRequest  # noqa: PLC0415
+        from ..schemas import ChatAgentDeployRequest
 
         synth = ChatAgentDeployRequest(name=body.stub_name, repo=body.repo)
         comp_cfg = await _resolve_deploy_contract(
@@ -218,7 +217,7 @@ async def chat_test_deploy(
     deploy_image = comp_cfg.image
     try:
         outcome = await backend.deploy(record, comp_cfg, deploy_image)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("test-deploy %s: deploy failed", _sanitize_log(body.stub_name))
         await audit_store.append(
             ChatAgentAuditEntry(
@@ -264,14 +263,14 @@ async def chat_test_deploy(
         probe_error = f"Probe timed out after 10s: {probe_url}"
     except httpx.ConnectError as exc:
         probe_error = f"Probe connection failed: {exc}"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         probe_error = f"Probe error: {exc}"
 
     # --- Capture container logs ---
     container_logs: str = ""
     try:
         container_logs = await backend.get_container_logs(record, tail=200)
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning(
             "test-deploy %s: failed to capture container logs",
             _sanitize_log(body.stub_name),
@@ -314,7 +313,7 @@ async def chat_test_deploy(
                 record.state = ServiceState.STOPPED
                 await store.put(record)
                 rollback_detail = " Container stopped (no previous digest to restore)."
-        except Exception as rb_exc:
+        except Exception as rb_exc:  # noqa: BLE001
             logger.exception(
                 "test-deploy %s: rollback failed",
                 _sanitize_log(body.stub_name),

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from robotsix_central_deploy.caretaker.volume_audit.growth import (
     SIDECAR_SUFFIXES,
@@ -6,7 +6,7 @@ from robotsix_central_deploy.caretaker.volume_audit.growth import (
 )
 from robotsix_central_deploy.caretaker.volume_audit.models import VolumeSizeSnapshot
 
-NOW = datetime(2025, 1, 1, tzinfo=timezone.utc)
+NOW = datetime(2025, 1, 1, tzinfo=UTC)
 
 
 def _snap(vol: str, comp: str, size: int) -> VolumeSizeSnapshot:

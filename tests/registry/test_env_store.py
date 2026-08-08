@@ -10,7 +10,6 @@ from cryptography.fernet import InvalidToken
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
-
 # ---------------------------------------------------------------------------
 # SecretKeyManager
 # ---------------------------------------------------------------------------

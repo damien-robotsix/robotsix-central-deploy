@@ -8,9 +8,13 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
+from ...registry.config_store import ComponentConfigStore
+from ...registry.loader import ComponentRegistry
+from ...registry.models import ComponentConfig
+from ...registry_check import RegistryChecker
+from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
-from .._config_utils import _sanitize_log
 from ..deps import (
     _compute_overall_health,
     _get_backend,
@@ -36,12 +40,7 @@ from ..schemas import (
     ComponentSuggestResponse,
 )
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig
-from ...registry_check import RegistryChecker
 from ._status_refresh import refresh_record_status
-
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ async def _gather_sibling_health(
         ):
             try:
                 sib_inspect = await backend.status(sib_record)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "failed to inspect sibling '%s'; skipping",
                     _sanitize_log(sib_record.name),
@@ -119,8 +118,8 @@ async def _gather_sibling_health(
     summary="List managed services",
 )
 async def list_services(
-    store: ServiceStore = Depends(_get_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ServiceListResponse:
     """Return all managed services with their current state and optional config metadata."""
@@ -143,7 +142,7 @@ async def list_services(
     summary="List registered components for config-form URL suggestions",
 )
 async def list_component_suggestions(
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ComponentSuggestResponse:
     """Return every registered component's id, container_name, and first
@@ -177,10 +176,10 @@ async def list_component_suggestions(
 async def get_service_status(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    registry: ComponentRegistry = Depends(_get_registry),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     """Return full status for a service: live state, health, image digests,
@@ -221,8 +220,8 @@ async def get_service_status(
 )
 async def get_service_health(
     name: str,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ServiceHealthResponse:
     """Return the current health status string for a service.
@@ -258,8 +257,8 @@ async def get_service_logs(
     follow: bool = Query(
         False, description="If true, stream new log lines as they arrive"
     ),
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> StreamingResponse:
     """Stream container log output as a plain-text response.

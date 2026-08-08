@@ -110,7 +110,7 @@ class EnvStore(JsonFileStore):
                 if key in entry.get(field, {}):
                     del entry[field][key]
                     found = True
-            if found:
+            if found:  # noqa: SIM102
                 # Remove the component entry entirely if all dicts are empty
                 if all(
                     not entry.get(f)

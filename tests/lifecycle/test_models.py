@@ -3,10 +3,10 @@
 import pytest
 
 from robotsix_central_deploy.lifecycle.models import (
+    TRANSITIONS,
     ServiceRecord,
     ServiceState,
     can_transition,
-    TRANSITIONS,
 )
 
 

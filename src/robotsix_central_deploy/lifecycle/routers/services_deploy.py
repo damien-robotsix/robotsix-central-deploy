@@ -5,16 +5,30 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.params import Body
 
+from ...registry import ComponentConfig, ServiceConfig
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.deploy_history_store import DeployHistoryStore
+from ...registry.env_store import EnvStore
+from ...registry.loader import ComponentRegistry
+from .._config_utils import _sanitize_log, _write_llmio_tier_config
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
 from .._config_utils import (
     _sanitize_log,
     _write_llmio_tier_config,
+)
+from ..deploy_lock import (
+    get_deploy_lock_info,
+    release_deploy_lock,
+    set_deploy_lock_job_id,
+    try_acquire_deploy_lock,
 )
 from ..deps import (
     JobRegistry,
@@ -28,12 +42,6 @@ from ..deps import (
     _get_registry,
     _get_sibling_pairs,
     _get_store,
-)
-from ..deploy_lock import (
-    get_deploy_lock_info,
-    release_deploy_lock,
-    set_deploy_lock_job_id,
-    try_acquire_deploy_lock,
 )
 from ..models import (
     DeployHistoryEntry,
@@ -52,12 +60,6 @@ from ..schemas import (
     DeployJobStatusResponse,
 )
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
-from ...registry.deploy_history_store import DeployHistoryStore
-from ...registry.env_store import EnvStore
-from ...registry.loader import ComponentRegistry
-from ...registry import ComponentConfig, ServiceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +133,7 @@ async def _fanout_sibling_action(
         effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
             await action(sib_config, sib_record, sib_name, effective_sib)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "%s sibling '%s' failed",
                 action_label,
@@ -164,14 +166,14 @@ async def _fanout_sibling_action(
 async def deploy_service(
     name: str,
     request: Request,
-    body: DeployRequest | None = Body(default=None),  # type: ignore[assignment]
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
-    job_registry: JobRegistry = Depends(_get_job_registry),
+    body: DeployRequest | None = Body(default=None),  # type: ignore[assignment]  # noqa: B008
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
+    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> DeployAcceptedResponse:
     """Queue a deploy for a service and return immediately with a job id.
@@ -229,7 +231,7 @@ async def deploy_service(
 
     # Apply per-deploy target_disk override.
     if body.target_disk:
-        from robotsix_central_deploy.lifecycle._disk_utils import (  # noqa: PLC0415
+        from robotsix_central_deploy.lifecycle._disk_utils import (
             resolve_target_disk,
         )
 
@@ -322,7 +324,7 @@ async def _run_deploy_job(
             # depend on knowing whether it exists.
             try:
                 live_dict = await backend.read_config_from_volume(config.config_volume)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 live_dict = {}
 
             # Seed only. The component owns its config; the deploy plane must
@@ -351,7 +353,7 @@ async def _run_deploy_job(
                             _sanitize_log(name),
                             _sanitize_log(config.config_volume),
                         )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "deploy %s: could not seed config.json into volume %s: %s",
                             _sanitize_log(name),
@@ -514,7 +516,7 @@ async def _run_deploy_job(
 async def deploy_job_status(
     job_id: str,
     _: None = Depends(verify_auth),
-    job_registry: JobRegistry = Depends(_get_job_registry),
+    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
 ) -> DeployJobStatusResponse:
     """Return the current phase of a background deploy job."""
     job = job_registry.get(job_id)
@@ -554,11 +556,11 @@ async def deploy_job_status(
 async def rollback_service(
     name: str,
     request: Request,
-    body: RollbackRequest | None = Body(default=None),  # type: ignore[assignment]
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
+    body: RollbackRequest | None = Body(default=None),  # type: ignore[assignment]  # noqa: B008
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> RollbackResponse:
     """Roll back a service to a previously recorded image digest.
@@ -775,8 +777,8 @@ async def rollback_service(
 )
 async def get_service_history(
     name: str,
-    store: ServiceStore = Depends(_get_store),
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> DeployHistoryResponse:
     """Return the deploy history for a service, most-recent-first.

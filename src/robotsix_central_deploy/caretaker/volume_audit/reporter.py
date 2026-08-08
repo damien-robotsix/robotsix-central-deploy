@@ -80,7 +80,7 @@ async def report_finding(
                 result.get("id", "?"),
                 finding.volume_name,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Failed to file board ticket for finding on %s: %s",
                 finding.volume_name,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional, AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 from fastapi import HTTPException, WebSocket
@@ -153,7 +153,7 @@ async def ws_proxy(
     client_ws: WebSocket,
     target_ws_url: str,
     *,
-    additional_headers: Optional[dict[str, str]] = None,
+    additional_headers: dict[str, str] | None = None,
 ) -> None:
     """Bidirectional relay between *client_ws* and a backend WebSocket at *target_ws_url*.
 

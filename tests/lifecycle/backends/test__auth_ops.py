@@ -47,28 +47,28 @@ class TestCheckClaudeAuth:
         assert "No credentials" in result["detail"]
 
     async def test_missing_content_returns_not_authenticated(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b"MISSING"
         result = await ops.check_claude_auth("test-vol")
         assert result["status"] == "not-authenticated"
         assert "No credentials" in result["detail"]
 
     async def test_non_json_content_returns_error(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b"not valid json at all"
         result = await ops.check_claude_auth("test-vol")
         assert result["status"] == "error"
         assert "not valid JSON" in result["detail"]
 
     async def test_valid_credentials_no_expiry_returns_authenticated(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         creds = {"claudeAiOauth": {"accessToken": "tok"}}
         client.containers.run.return_value = json.dumps(creds).encode()
         result = await ops.check_claude_auth("test-vol")
         assert result["status"] == "authenticated"
 
     async def test_ms_epoch_expiry_far_future_returns_authenticated(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         future_ms = int((time.time() + 7 * 86400) * 1000)
@@ -78,7 +78,7 @@ class TestCheckClaudeAuth:
         assert result["status"] == "authenticated"
 
     async def test_ms_epoch_expiry_expired_no_refresh(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         past_ms = int((time.time() - 3600) * 1000)
@@ -92,7 +92,7 @@ class TestCheckClaudeAuth:
         """A valid-but-unrenewable credential looks identical to a healthy one
         on `status` alone. Callers need the distinction to warn before it dies,
         not after."""
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         future_ms = int((time.time() + 86400 * 7) * 1000)
@@ -117,7 +117,7 @@ class TestCheckClaudeAuth:
     async def test_expired_without_refresh_token_explains_why(self, auth_ops):
         """The detail an operator reads during an outage should name the cause
         (no refresh token) rather than only the symptom (expired)."""
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         past_ms = int((time.time() - 3600) * 1000)
@@ -128,7 +128,7 @@ class TestCheckClaudeAuth:
         assert "no refresh token" in result["detail"]
 
     async def test_ms_epoch_expiry_expired_with_refresh(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         past_ms = int((time.time() - 3600) * 1000)
@@ -145,7 +145,7 @@ class TestCheckClaudeAuth:
         assert "refreshes" in result["detail"]
 
     async def test_ms_epoch_expiry_soon_without_refresh(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         # 1 hour from now (< 24h → expiring)
@@ -159,7 +159,7 @@ class TestCheckClaudeAuth:
     async def test_ms_epoch_expiry_soon_with_refresh_stays_authenticated(
         self, auth_ops
     ):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         soon_ms = int((time.time() + 3600) * 1000)
@@ -175,14 +175,14 @@ class TestCheckClaudeAuth:
         assert result["status"] == "authenticated"
 
     async def test_iso_expiry_format_far_future(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         creds = {"expires_at": "2099-01-01T00:00:00Z"}
         client.containers.run.return_value = json.dumps(creds).encode()
         result = await ops.check_claude_auth("test-vol")
         assert result["status"] == "authenticated"
 
     async def test_top_level_expires_at_expired(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         creds = {"expires_at": "2020-01-01T00:00:00Z"}
         client.containers.run.return_value = json.dumps(creds).encode()
         result = await ops.check_claude_auth("test-vol")
@@ -190,7 +190,7 @@ class TestCheckClaudeAuth:
         assert "expired" in result["detail"]
 
     async def test_top_level_expires_at_camel_case(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         import time
 
         future_ms = int((time.time() + 7 * 86400) * 1000)
@@ -200,7 +200,7 @@ class TestCheckClaudeAuth:
         assert result["status"] == "authenticated"
 
     async def test_empty_content_returns_not_authenticated(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b""
         result = await ops.check_claude_auth("test-vol")
         assert result["status"] == "not-authenticated"
@@ -229,13 +229,13 @@ class TestWriteClaudeCredentials:
             yield ops, client_mock, docker_mock
 
     async def test_invalid_json_returns_error(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, _client, _dm = auth_ops
         result = await ops.write_claude_credentials("test-vol", "not json")
         assert result["status"] == "error"
         assert "Invalid JSON" in result["error"]
 
     async def test_volume_exists_writes_credentials_no_create(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         result = await ops.write_claude_credentials("test-vol", '{"key":"val"}')
         assert result["status"] == "authenticated"
         client.volumes.create.assert_not_called()
@@ -251,7 +251,7 @@ class TestWriteClaudeCredentials:
         assert client.containers.run.call_count >= 1
 
     async def test_writes_base64_encoded_content(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         creds = '{"claudeAiOauth":{"accessToken":"my-token"}}'
         result = await ops.write_claude_credentials("test-vol", creds)
         assert result["status"] == "authenticated"
@@ -295,25 +295,25 @@ class TestReadClaudeCredentials:
             await ops.read_claude_credentials("test-vol")
 
     async def test_missing_content_raises_value_error(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b"MISSING"
         with pytest.raises(ValueError, match="No credentials"):
             await ops.read_claude_credentials("test-vol")
 
     async def test_non_dict_json_raises_value_error(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b'["list", "not", "dict"]'
         with pytest.raises(ValueError, match="not a JSON object"):
             await ops.read_claude_credentials("test-vol")
 
     async def test_invalid_json_raises_value_error(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b"not json"
         with pytest.raises(ValueError, match="not valid JSON"):
             await ops.read_claude_credentials("test-vol")
 
     async def test_valid_credentials_returns_parsed_dict(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         creds = {"claudeAiOauth": {"accessToken": "tok123"}}
         client.containers.run.return_value = json.dumps(creds).encode()
         result = await ops.read_claude_credentials("test-vol")
@@ -321,7 +321,7 @@ class TestReadClaudeCredentials:
         assert isinstance(result, dict)
 
     async def test_empty_content_raises_value_error(self, auth_ops):
-        ops, client, dm = auth_ops
+        ops, client, _dm = auth_ops
         client.containers.run.return_value = b""
         with pytest.raises(ValueError, match="No credentials"):
             await ops.read_claude_credentials("test-vol")

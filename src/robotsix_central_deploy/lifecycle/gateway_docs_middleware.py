@@ -10,7 +10,7 @@ mutating/destructive endpoints under component vhosts).
 from __future__ import annotations
 
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import (
@@ -21,10 +22,8 @@ from robotsix_central_deploy.lifecycle.models import (
 from robotsix_central_deploy.lifecycle.rate_limiter import RateLimitStore
 from robotsix_central_deploy.lifecycle.session import SessionStore
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
-import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
-
 
 # ---------------------------------------------------------------------------
 # Helpers

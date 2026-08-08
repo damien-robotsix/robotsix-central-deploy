@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ..auth import verify_auth
 from ..deps import _get_chat_agent_audit_store
 from ..schemas import ChatAgentAuditEntryResponse, ChatAgentAuditLogResponse
-from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 
 router = APIRouter(tags=["chat"])
 
@@ -29,7 +29,7 @@ router = APIRouter(tags=["chat"])
 )
 async def chat_audit_log(
     request: Request,
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     limit: int = 50,
     component: str | None = None,
     _auth: None = Depends(verify_auth),

@@ -31,8 +31,8 @@ async def _inspect_self_or_none(backend: ExecutionBackend) -> SelfInspect | None
 @router.get("/update", response_model=SelfUpdateStatus)
 async def get_self_update_status(
     _auth: None = Depends(verify_auth),
-    backend: ExecutionBackend = Depends(_get_backend),
-    checker: RegistryChecker = Depends(_get_registry_checker),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    checker: RegistryChecker = Depends(_get_registry_checker),  # noqa: B008
 ) -> SelfUpdateStatus:
     """Compare the running server image digest against the registry.
 
@@ -60,8 +60,8 @@ async def get_self_update_status(
 @router.post("/update", response_model=SelfUpdateTriggered, status_code=202)
 async def trigger_self_update(
     _auth: None = Depends(verify_auth),
-    backend: ExecutionBackend = Depends(_get_backend),
-    config: LifecycleConfig = Depends(_get_config),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
 ) -> SelfUpdateTriggered:
     """Launch the one-shot updater; the server restarts shortly after.
 

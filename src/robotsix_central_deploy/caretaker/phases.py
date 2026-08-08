@@ -185,7 +185,7 @@ async def phase_update(
                 record.name,
                 outcome.deployed_digest,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error("phase_update: deploy failed for %s: %s", record.name, exc)
             findings.append(
                 CaretakerFinding(
@@ -256,8 +256,8 @@ _HEALTH_LOG_TAIL_LINES = 40
 
 async def _health_finding_detail(
     backend: ExecutionBackend,
-    record: "ServiceRecord",
-    inspect: "ComponentInspect",
+    record: ServiceRecord,
+    inspect: ComponentInspect,
 ) -> str:
     """Build the body of a HEALTH finding, including recent container logs.
 
@@ -311,7 +311,7 @@ async def phase_volumes(
     # 1. Growth scan (reuse VolumeAuditScheduler.run_once)
     try:
         await volume_audit_scheduler.run_once()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("phase_volumes: run_once failed: %s", exc)
         # Continue with empty findings — the audit scan itself already
         # persisted its own findings to disk.
@@ -363,7 +363,7 @@ async def phase_volumes(
                         severity="warning",
                     )
                 )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("phase_volumes: orphan detection failed: %s", exc)
 
     # 3. Disk usage
@@ -387,7 +387,7 @@ async def phase_volumes(
                     severity="error" if pct_free < 5 else "warning",
                 )
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("phase_volumes: disk check failed: %s", exc)
 
     return findings

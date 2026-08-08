@@ -9,6 +9,7 @@ import pytest
 from robotsix_http import ExternalHTTPError, RetryClient
 
 from robotsix_central_deploy.caretaker.models import CaretakerReport
+from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
 
 # Import lifecycle.models first to break the circular import through
 # lifecycle → deps → caretaker.scheduler (deps.CaretakerScheduler at module-level).
@@ -18,7 +19,6 @@ from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
 )
-from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
@@ -115,7 +115,7 @@ def scheduler_fixtures(tmp_path):
 class TestScheduler:
     @pytest.mark.asyncio
     async def test_run_once_calls_all_phases(self, scheduler_fixtures):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
 
         # No records → health/update produce nothing, volumes runs
         store.list_all = AsyncMock(return_value=[])
@@ -148,7 +148,7 @@ class TestScheduler:
         NotImplementedError is different — the backend has no self container
         at all, so auto-update stays enabled.
         """
-        scheduler, store, backend, ccs, http = scheduler_fixtures
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
         store.list_all = AsyncMock(return_value=[])
         backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
         backend.inspect_self = inspect_self_mock
@@ -313,7 +313,7 @@ class TestScheduler:
         # Find the call with repo_id="specific-repo"
         found = False
         for call in http.post.call_args_list:
-            args, kwargs = call
+            _args, kwargs = call
             json_body = kwargs.get("json", {})
             if json_body.get("repo_id") == "specific-repo":
                 found = True
@@ -352,7 +352,7 @@ class TestScheduler:
         report = await scheduler.run_once()
         assert report.mill_reported >= 1
         assert report.mill_reachable is True
-        args, kwargs = http.post.call_args_list[0]
+        args, _kwargs = http.post.call_args_list[0]
         assert args[0].startswith("http://my-mill:9999")
 
     @pytest.mark.asyncio
@@ -468,7 +468,7 @@ class TestScheduler:
 
     @pytest.mark.asyncio
     async def test_get_status(self, scheduler_fixtures):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
+        scheduler, _store, _backend, _ccs, _http = scheduler_fixtures
         status = await scheduler.get_status()
         assert "enabled" in status
         assert "last_run_at" in status

@@ -19,7 +19,6 @@ from robotsix_central_deploy.lifecycle.deps.dependencies import (
 )
 from robotsix_central_deploy.lifecycle.models import HealthStatus
 
-
 # ---------------------------------------------------------------------------
 # Helper to build a minimal mock Request
 # ---------------------------------------------------------------------------

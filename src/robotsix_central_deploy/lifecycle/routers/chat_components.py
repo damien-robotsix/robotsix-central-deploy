@@ -13,12 +13,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ..._http import retry_client_context
-
+from ...registry.config_store import ComponentConfigStore
+from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..deps import _get_component_config_store
-from .._config_utils import _sanitize_log
-from ...registry.config_store import ComponentConfigStore
-
 from ._chat_common import (
     _inject_auth,
     logger,
@@ -108,7 +106,7 @@ async def deploy_chat_skill() -> str:
 )
 async def list_chat_components(
     request: Request,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """Return a roster of components the chat agent can interact with.
@@ -180,7 +178,7 @@ async def list_chat_components(
                     _sanitize_log(base_url),
                     resp.status_code,
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "chat components: skill probe failed for %s (%s): %s",
                 _sanitize_log(comp_cfg.id),
