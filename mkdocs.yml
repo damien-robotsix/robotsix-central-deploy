@@ -65,6 +65,7 @@ nav:
   - Deployment: deployment.md
   - Architecture: ARCHITECTURE.md
   - Configuration: lifecycle/configuration.md
+  - Langfuse Migration: lifecycle/langfuse-migration.md
   - API Reference: lifecycle/api.md
   - Modules:
       - Gateway: gateway/overview.md
