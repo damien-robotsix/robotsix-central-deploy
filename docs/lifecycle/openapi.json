@@ -6563,12 +6563,6 @@
             "title": "Name",
             "description": "Component name"
           },
-          "action": {
-            "type": "string",
-            "title": "Action",
-            "description": "Always 'deploy'",
-            "default": "deploy"
-          },
           "deployed_digest": {
             "type": "string",
             "title": "Deployed Digest",
@@ -6584,13 +6578,19 @@
           "current_state": {
             "type": "string",
             "title": "Current State",
-            "description": "Container state after deploy"
+            "description": "Container state after the operation"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
             "description": "Human-readable summary",
             "default": ""
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'deploy'",
+            "default": "deploy"
           },
           "deployed_siblings": {
             "items": {
@@ -6774,7 +6774,7 @@
             },
             "type": "object",
             "title": "Secrets",
-            "description": "Secret environment variables to set (key \u2192 value). Values are encrypted at rest and never returned in responses.",
+            "description": "Secret environment variables to set (key \u2192 value)",
             "default": {}
           },
           "env_scopes": {
@@ -6783,7 +6783,7 @@
             },
             "type": "object",
             "title": "Env Scopes",
-            "description": "Visibility scope tags for env keys",
+            "description": "Visibility scope overrides for env keys",
             "default": {}
           },
           "secret_scopes": {
@@ -6792,7 +6792,7 @@
             },
             "type": "object",
             "title": "Secret Scopes",
-            "description": "Visibility scope tags for secret keys",
+            "description": "Visibility scope overrides for secret keys",
             "default": {}
           }
         },
@@ -7148,12 +7148,6 @@
             "title": "Name",
             "description": "Component name"
           },
-          "action": {
-            "type": "string",
-            "title": "Action",
-            "description": "Always 'deploy'",
-            "default": "deploy"
-          },
           "deployed_digest": {
             "type": "string",
             "title": "Deployed Digest",
@@ -7169,19 +7163,19 @@
           "current_state": {
             "type": "string",
             "title": "Current State",
-            "description": "Container state after deploy"
-          },
-          "health": {
-            "type": "string",
-            "title": "Health",
-            "description": "Health status string (empty when not yet checked)",
-            "default": ""
+            "description": "Container state after the operation"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
             "description": "Human-readable summary",
             "default": ""
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'deploy'",
+            "default": "deploy"
           },
           "deployed_siblings": {
             "items": {
@@ -7190,6 +7184,12 @@
             "type": "array",
             "title": "Deployed Siblings",
             "description": "Sibling service names that were deployed alongside the primary"
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "description": "Health status string (empty when not yet checked)",
+            "default": ""
           }
         },
         "type": "object",
@@ -7308,12 +7308,6 @@
             "title": "Name",
             "description": "Component name"
           },
-          "action": {
-            "type": "string",
-            "title": "Action",
-            "description": "Always 'update'",
-            "default": "update"
-          },
           "deployed_digest": {
             "type": "string",
             "title": "Deployed Digest",
@@ -7329,13 +7323,19 @@
           "current_state": {
             "type": "string",
             "title": "Current State",
-            "description": "Container state after update"
+            "description": "Container state after the operation"
           },
           "detail": {
             "type": "string",
             "title": "Detail",
             "description": "Human-readable summary",
             "default": ""
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Always 'update'",
+            "default": "update"
           },
           "updated_siblings": {
             "items": {
@@ -7910,16 +7910,7 @@
           "job_id": {
             "type": "string",
             "title": "Job Id",
-            "description": "Unique identifier of the deploy job"
-          },
-          "component": {
-            "type": "string",
-            "title": "Component",
-            "description": "Component ID"
-          },
-          "phase": {
-            "$ref": "#/components/schemas/DeployJobPhase",
-            "description": "Current phase of the deploy workflow"
+            "description": "Unique identifier of the job"
           },
           "error": {
             "anyOf": [
@@ -7980,6 +7971,15 @@
             ],
             "title": "State",
             "description": "Deployment state string; None if not yet deployed"
+          },
+          "component": {
+            "type": "string",
+            "title": "Component",
+            "description": "Component ID"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/DeployJobPhase",
+            "description": "Current phase of the deploy workflow"
           },
           "warnings": {
             "items": {
@@ -8882,16 +8882,7 @@
           "job_id": {
             "type": "string",
             "title": "Job Id",
-            "description": "Unique identifier of the onboard job"
-          },
-          "component": {
-            "type": "string",
-            "title": "Component",
-            "description": "Component ID returned by the mill after registration"
-          },
-          "phase": {
-            "$ref": "#/components/schemas/OnboardJobPhase",
-            "description": "Current phase of the onboarding workflow"
+            "description": "Unique identifier of the job"
           },
           "error": {
             "anyOf": [
@@ -8952,6 +8943,15 @@
             ],
             "title": "State",
             "description": "Deployment state string; None if not yet deployed"
+          },
+          "component": {
+            "type": "string",
+            "title": "Component",
+            "description": "Component ID returned by the mill after registration"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/OnboardJobPhase",
+            "description": "Current phase of the onboarding workflow"
           },
           "warnings": {
             "items": {

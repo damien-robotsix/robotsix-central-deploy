@@ -109,16 +109,10 @@ class OnboardConfirmAcceptedResponse(BaseModel):
     name: str = Field(description="Component name")
 
 
-class OnboardJobStatusResponse(BaseModel):
-    """Returned by GET /onboard/jobs/{job_id}."""
+class _JobStatusFields(BaseModel):
+    """Status fields shared by the async onboard/deploy job responses."""
 
-    job_id: str = Field(description="Unique identifier of the onboard job")
-    component: str = Field(
-        description="Component ID returned by the mill after registration"
-    )
-    phase: OnboardJobPhase = Field(
-        description="Current phase of the onboarding workflow"
-    )
+    job_id: str = Field(description="Unique identifier of the job")
     error: str | None = Field(
         default=None,
         description="Error message when phase is 'failed'; None otherwise",
@@ -135,6 +129,17 @@ class OnboardJobStatusResponse(BaseModel):
     state: str | None = Field(
         default=None,
         description="Deployment state string; None if not yet deployed",
+    )
+
+
+class OnboardJobStatusResponse(_JobStatusFields):
+    """Returned by GET /onboard/jobs/{job_id}."""
+
+    component: str = Field(
+        description="Component ID returned by the mill after registration"
+    )
+    phase: OnboardJobPhase = Field(
+        description="Current phase of the onboarding workflow"
     )
     warnings: list[str] = Field(
         default=[],
@@ -154,29 +159,11 @@ class DeployAcceptedResponse(BaseModel):
     name: str = Field(description="Component name")
 
 
-class DeployJobStatusResponse(BaseModel):
+class DeployJobStatusResponse(_JobStatusFields):
     """Returned by GET /services/deploy-jobs/{job_id}."""
 
-    job_id: str = Field(description="Unique identifier of the deploy job")
     component: str = Field(description="Component ID")
     phase: DeployJobPhase = Field(description="Current phase of the deploy workflow")
-    error: str | None = Field(
-        default=None,
-        description="Error message when phase is 'failed'; None otherwise",
-    )
-    logs: str | None = Field(
-        default=None,
-        description="Container logs captured when a deploy fails; None otherwise",
-    )
-    name: str | None = Field(default=None, description="Component name")
-    image: str | None = Field(
-        default=None,
-        description="Selected OCI image reference; None before image resolution",
-    )
-    state: str | None = Field(
-        default=None,
-        description="Deployment state string; None if not yet deployed",
-    )
     warnings: list[str] = Field(
         default=[],
         description="Warnings encountered during deploy (e.g. pre-pull failures)",
@@ -232,8 +219,8 @@ class EnvSyncResponse(BaseModel):
     )
 
 
-class EnvUpdate(BaseModel):
-    """Request body for PUT /services/{name}/env; None fields are left unchanged."""
+class _EnvSecretsFields(BaseModel):
+    """Env/secret dict fields shared by the env-update request bodies."""
 
     env: dict[str, str] = Field(
         default={},
@@ -251,6 +238,11 @@ class EnvUpdate(BaseModel):
         default={},
         description="Visibility scope overrides for secret keys",
     )
+
+
+class EnvUpdate(_EnvSecretsFields):
+    """Request body for PUT /services/{name}/env; None fields are left unchanged."""
+
     mem_limit: str | None = Field(
         default=None,
         description="Docker memory limit; None leaves the current value unchanged",
@@ -573,11 +565,10 @@ class ChatAgentRestartResponse(BaseModel):
     detail: str = Field(default="", description="Human-readable summary")
 
 
-class ChatAgentUpdateResponse(BaseModel):
-    """Response body for POST /chat/services/{name}/update."""
+class _DeployResultBase(BaseModel):
+    """Result fields shared by the chat-agent update/deploy responses."""
 
     name: str = Field(description="Component name")
-    action: str = Field(default="update", description="Always 'update'")
     deployed_digest: str = Field(
         default="",
         description="Digest of the newly deployed image; empty when unchanged",
@@ -585,8 +576,14 @@ class ChatAgentUpdateResponse(BaseModel):
     previous_digest: str = Field(
         default="", description="Digest of the previously deployed image"
     )
-    current_state: str = Field(description="Container state after update")
+    current_state: str = Field(description="Container state after the operation")
     detail: str = Field(default="", description="Human-readable summary")
+
+
+class ChatAgentUpdateResponse(_DeployResultBase):
+    """Response body for POST /chat/services/{name}/update."""
+
+    action: str = Field(default="update", description="Always 'update'")
     updated_siblings: list[str] = Field(
         default=[],
         description="Names of sibling components that were also redeployed",
@@ -626,51 +623,26 @@ class ChatAgentDeployRequest(BaseModel):
     )
 
 
-class ChatAgentDeployResponse(BaseModel):
+class ChatAgentDeployResponse(_DeployResultBase):
     """Response body for POST /chat/deploy."""
 
-    name: str = Field(description="Component name")
     action: str = Field(default="deploy", description="Always 'deploy'")
-    deployed_digest: str = Field(
-        default="",
-        description="Digest of the newly deployed image; empty when unchanged",
-    )
-    previous_digest: str = Field(
-        default="", description="Digest of the previously deployed image"
-    )
-    current_state: str = Field(description="Container state after deploy")
-    detail: str = Field(default="", description="Human-readable summary")
     deployed_siblings: list[str] = Field(
         default_factory=list,
         description="Sibling service names that were deployed alongside the primary",
     )
 
 
-class ChatAgentServiceDeployResponse(BaseModel):
+class ChatAgentServiceDeployResponse(ChatAgentDeployResponse):
     """Response body for POST /chat/services/{name}/deploy.
 
     Returns the result of a first-boot deploy of an already-registered
     component: image digests, resulting state, and optional health status.
     """
 
-    name: str = Field(description="Component name")
-    action: str = Field(default="deploy", description="Always 'deploy'")
-    deployed_digest: str = Field(
-        default="",
-        description="Digest of the newly deployed image; empty when unchanged",
-    )
-    previous_digest: str = Field(
-        default="", description="Digest of the previously deployed image"
-    )
-    current_state: str = Field(description="Container state after deploy")
     health: str = Field(
         default="",
         description="Health status string (empty when not yet checked)",
-    )
-    detail: str = Field(default="", description="Human-readable summary")
-    deployed_siblings: list[str] = Field(
-        default_factory=list,
-        description="Sibling service names that were deployed alongside the primary",
     )
 
 
@@ -795,29 +767,12 @@ class ChatAgentPreviewTeardownResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ChatAgentEnvUpdate(BaseModel):
+class ChatAgentEnvUpdate(_EnvSecretsFields):
     """Request body for PUT /chat/env/{name}.
 
     Secret values are accepted in the ``secrets`` dict and are encrypted
     at rest — they are never logged or echoed in responses.
     """
-
-    env: dict[str, str] = Field(
-        default={},
-        description="Plain-text environment variables to set (key → value)",
-    )
-    secrets: dict[str, str] = Field(
-        default={},
-        description="Secret environment variables to set (key → value). Values are encrypted at rest and never returned in responses.",
-    )
-    env_scopes: dict[str, str] = Field(
-        default={},
-        description="Visibility scope tags for env keys",
-    )
-    secret_scopes: dict[str, str] = Field(
-        default={},
-        description="Visibility scope tags for secret keys",
-    )
 
 
 class ChatAgentEnvResponse(BaseModel):
