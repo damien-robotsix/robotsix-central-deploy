@@ -218,6 +218,7 @@ config only:
 ## Troubleshooting
 
 **A component's projects don't appear in `/fleet/langfuse`:**
+
 - Ensure the component has `allow_chat_access` or
   `chat_agent_mutatable` enabled (the auto-discovery scanner only
   examines components with one of these toggles on).
@@ -226,11 +227,13 @@ config only:
   project.
 
 **The chat-agent proxy returns "Unknown Langfuse project alias":**
+
 - The proxy only serves projects that have been auto-discovered or
   operator-configured.  Verify the project alias appears in
   `GET /chat/langfuse/projects`.
 
 **After cleanup, a consumer can't access Langfuse:**
+
 - Verify that the component whose project is needed still has
   `allow_chat_access` or `chat_agent_mutatable` enabled.  The
   auto-discovery scanner skips components without these toggles.
