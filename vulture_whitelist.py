@@ -79,4 +79,3 @@ _.__class__  # unused attribute (src/robotsix_central_deploy/lifecycle/deps/__in
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/gateway_docs_middleware.py:46)
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/rate_limiter.py:178)
 _.token_type  # PyGithub Auth.Token override (src/robotsix_central_deploy/lifecycle/github_app.py:70)
-
