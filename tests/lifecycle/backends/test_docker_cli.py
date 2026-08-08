@@ -489,7 +489,6 @@ class TestContractConformance:
             "write_config_to_volume",
             "write_llmio_tier_config_to_volume",
             "read_config_from_volume",
-            "run_config_assist",
             "list_volume_dir",
             "read_volume_file",
             "remove_volume",
@@ -521,8 +520,6 @@ class TestContractConformance:
                 await method("vol", {})
             elif method_name == "read_config_from_volume":
                 await method("vol")
-            elif method_name == "run_config_assist":
-                await method("img", "cmd", "vol", "/mnt", {}, 60)
             elif method_name == "list_volume_dir":
                 await method("vol", "")
             elif method_name == "read_volume_file":

@@ -18,7 +18,6 @@ class SecretKeyManager:
     """Load a Fernet key file; generate and persist a new one if absent."""
 
     def __init__(self, key_path: Path) -> None:
-        self._key_path = key_path
         if key_path.exists():
             key = key_path.read_bytes()
         else:
