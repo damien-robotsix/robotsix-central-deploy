@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from .._config_utils import _sanitize_log
+from .._config_utils import _sanitize_log, inject_deploy_api_key
 from ..backends import ExecutionBackend
 from ..deps import _get_sibling_pairs
 from ..store import ServiceStore
@@ -55,6 +55,8 @@ async def _fanout_siblings_deploy_best_effort(
     backend: ExecutionBackend,
     log_prefix: str,
     env_store: EnvStore | None = None,
+    allow_chat_access: bool = False,
+    api_key: str = "",
 ) -> list[str]:
     """Fan out deploy to every sibling of *name* (best-effort per sibling).
 
@@ -74,6 +76,12 @@ async def _fanout_siblings_deploy_best_effort(
                 sib_env = await env_store.get_merged_env(sib_name, sib_cfg.env)
             else:
                 sib_env = sib_cfg.env
+            # Siblings inherit the parent's deploy API key when chat access is enabled.
+            sib_env = inject_deploy_api_key(
+                sib_env,
+                allow_chat_access=allow_chat_access,
+                api_key=api_key,
+            )
             sib_effective = config.model_copy(
                 update={
                     "id": sib_name,
