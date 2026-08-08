@@ -1090,3 +1090,122 @@ class TestRestoreSecretsFromCurrent:
         result = _restore_secrets_from_current(schema, restored, current)
         assert result["token"] == "real-token"
         assert result["host"] == "new.example.com"
+
+
+# ---------------------------------------------------------------------------
+# Map-typed objects (additionalProperties)
+# ---------------------------------------------------------------------------
+
+
+class TestMapTypedFields:
+    """Objects whose entry keys are data, not schema.
+
+    ``{"type": "object", "additionalProperties": {…}}`` with no
+    ``properties`` describes a map — ``langfuse.projects.<alias>`` is the
+    canonical example. The walker used to find no declared properties and
+    return ``{}``, so a masked read showed an empty map and, worse, a merge
+    replaced the stored map with one. These tests pin the entries surviving
+    each visitor.
+    """
+
+    @staticmethod
+    def _schema() -> dict:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "langfuse_projects": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "public_key": {"type": "string"},
+                            "secret_key": {
+                                "type": "string",
+                                "format": "password",
+                                "writeOnly": True,
+                            },
+                        },
+                        "required": ["public_key", "secret_key"],
+                    },
+                }
+            },
+        }
+
+    @staticmethod
+    def _values() -> dict:
+        return {
+            "langfuse_projects": {
+                "robotsix-mill": {"public_key": "pk-mill", "secret_key": "sk-mill"},
+                "robotsix-chat": {"public_key": "pk-chat", "secret_key": "sk-chat"},
+            }
+        }
+
+    def test_mask_keeps_entries_and_hides_secrets(self):
+        masked = _mask_secrets(self._schema(), self._values())
+        projects = masked["langfuse_projects"]
+        assert set(projects) == {"robotsix-mill", "robotsix-chat"}
+        assert projects["robotsix-mill"]["public_key"] == "pk-mill"
+        assert projects["robotsix-mill"]["secret_key"] == "***"
+
+    def test_strip_drops_secrets_but_keeps_entries(self):
+        stripped = _strip_secret_values(self._schema(), self._values())
+        projects = stripped["langfuse_projects"]
+        assert set(projects) == {"robotsix-mill", "robotsix-chat"}
+        assert projects["robotsix-mill"] == {"public_key": "pk-mill"}
+
+    def test_empty_submit_does_not_wipe_the_map(self):
+        """The data-loss case: a PUT that omits the map entirely."""
+        merged = _merge_config(
+            self._schema(), self._values(), {}, prefer_existing_for_unset=True
+        )
+        assert merged["langfuse_projects"] == self._values()["langfuse_projects"]
+
+    def test_partial_update_leaves_other_entries_alone(self):
+        merged = _merge_config(
+            self._schema(),
+            self._values(),
+            {"langfuse_projects": {"robotsix-mill": {"public_key": "pk-new"}}},
+            prefer_existing_for_unset=True,
+        )
+        projects = merged["langfuse_projects"]
+        assert projects["robotsix-mill"]["public_key"] == "pk-new"
+        assert projects["robotsix-mill"]["secret_key"] == "sk-mill"
+        assert projects["robotsix-chat"]["secret_key"] == "sk-chat"
+
+    def test_new_entry_is_created(self):
+        merged = _merge_config(
+            self._schema(),
+            self._values(),
+            {
+                "langfuse_projects": {
+                    "robotsix-mail": {"public_key": "pk-mail", "secret_key": "sk-mail"}
+                }
+            },
+            prefer_existing_for_unset=True,
+        )
+        assert merged["langfuse_projects"]["robotsix-mail"]["secret_key"] == "sk-mail"
+        assert len(merged["langfuse_projects"]) == 3
+
+    def test_echoed_mask_does_not_overwrite_the_secret(self):
+        """A client GETs the masked map and PUTs it straight back."""
+        schema = self._schema()
+        values = self._values()
+        merged = _merge_config(
+            schema,
+            values,
+            _mask_secrets(schema, values),
+            prefer_existing_for_unset=True,
+        )
+        assert merged["langfuse_projects"]["robotsix-mill"]["secret_key"] == "sk-mill"
+
+    def test_permissive_additional_properties_is_left_alone(self):
+        """``additionalProperties: true`` / ``{}`` carries no type to
+        dispatch on, so those keys keep their previous handling."""
+        schema = {
+            "type": "object",
+            "properties": {"extras": {"type": "object", "additionalProperties": True}},
+        }
+        masked = _mask_secrets(schema, {"extras": {"anything": "here"}})
+        assert masked["extras"] == {}
