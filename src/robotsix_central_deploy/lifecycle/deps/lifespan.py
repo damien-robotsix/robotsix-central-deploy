@@ -257,9 +257,6 @@ async def _init_config(app: FastAPI) -> None:
     app.state.chat_agent_audit_store = _chat_agent_audit_store
     app.state.chat_agent_rate_limits = {}
 
-    # Seed OVH website credentials from config (one-time, idempotent).
-    await _seed_ovh_website_credentials(_env_store, _config)
-
 
 async def _init_settings(app: FastAPI) -> None:
     """Read self-contract settings, persist to store, overlay onto config,
@@ -419,45 +416,6 @@ async def _init_background_tasks(app: FastAPI) -> None:
         type(_backend).__name__,
         "on" if _config.auth_required else "off",
     )
-
-
-async def _seed_ovh_website_credentials(
-    env_store: EnvStore, config: LifecycleConfig
-) -> None:
-    """Seed OVH website SFTP credentials into the encrypted store on first boot.
-
-    Reads ``ovh_sftp.host``, ``ovh_sftp.port``, ``ovh_sftp.user``, and
-    ``ovh_sftp.password`` from the loaded ``LifecycleConfig``.  If any of
-    the four are set AND the ``ovh-website-credentials`` entry does not
-    already exist in the store, the values are encrypted and stored with
-    scope tag ``website:ovh``.  Already-stored credentials are never
-    overwritten.
-    """
-    ovh = config.ovh_sftp
-    host = ovh.host.strip()
-    port = str(ovh.port)
-    user = ovh.user.strip()
-    password = ovh.password.get_secret_value()
-
-    if not (host and port and user and password):
-        return  # not fully configured — nothing to seed
-
-    existing = await env_store.get("ovh-website-credentials")
-    if existing.env or existing.secret_tokens:
-        return  # already seeded — don't overwrite
-
-    await env_store.upsert(
-        "ovh-website-credentials",
-        env={"OVH_SFTP_HOST": host, "OVH_SFTP_PORT": port, "OVH_SFTP_USER": user},
-        secrets={"OVH_SFTP_PASSWORD": password},
-        env_scopes={
-            "OVH_SFTP_HOST": "website:ovh",
-            "OVH_SFTP_PORT": "website:ovh",
-            "OVH_SFTP_USER": "website:ovh",
-        },
-        secret_scopes={"OVH_SFTP_PASSWORD": "website:ovh"},
-    )
-    logger.info("Seeded OVH website SFTP credentials (scope 'website:ovh')")
 
 
 async def _seed_component_registry(
