@@ -655,9 +655,7 @@ async def onboard_confirm(
     from .._langfuse_config import reconcile_langfuse_after_toggle
 
     if config.allow_chat_access or config.chat_agent_mutatable:
-        await reconcile_langfuse_after_toggle(
-            component_config_store, config_yaml_store, request
-        )
+        await reconcile_langfuse_after_toggle(component_config_store, request)
         logger.info(
             "Onboarded '%s' with chat access — reconciled Langfuse auto-projects",
             config.id,
