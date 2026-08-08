@@ -146,6 +146,25 @@ for _method in ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]:
 
 @gateway_router.websocket("/{path:path}")
 async def gateway_ws(websocket: WebSocket, path: str) -> None:
+    """Proxy a WebSocket connection to the target component's container.
+
+    Unlike :func:`gateway_http` there is no path-prefix fallback: a
+    WebSocket handshake cannot be redirected, so only **subdomain**
+    routing (``<name>.<gateway_base_domain>``) is supported.
+
+    Flow, with the close code for each failure:
+
+    1. **Session auth** — when ``auth_required`` is set, the
+       ``session_token`` cookie must validate against the session
+       store; otherwise close **4008** (policy violation).
+    2. **Component resolution** — the subdomain must name a component;
+       close **4004** when no name can be extracted from ``Host`` or
+       the component is unknown (404), **4011** for any other resolve
+       error.
+    3. **Proxying** — build ``ws://<container>:<port>/<path>`` (query
+       string forwarded verbatim), strip hop-by-hop headers, accept the
+       client socket, and hand both ends to :func:`ws_proxy`.
+    """
     # --- Session auth ---
     app_cfg = websocket.app.state.config
     if app_cfg.auth_required:
