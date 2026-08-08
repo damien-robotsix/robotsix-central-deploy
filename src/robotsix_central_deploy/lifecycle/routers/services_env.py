@@ -149,12 +149,8 @@ async def put_service_env(
             registry.register(comp_cfg)
             # Reconcile Langfuse auto-projects — a toggle may add or
             # remove project aliases discoverable from this service.
-            await reconcile_langfuse_after_toggle(
-                component_config_store, request
-            )
-            await reconcile_fleet_auth_hosts(
-                component_config_store, request
-            )
+            await reconcile_langfuse_after_toggle(component_config_store, request)
+            await reconcile_fleet_auth_hosts(component_config_store, request)
     if body.claude_mount is not None:
         comp_cfg = component_config_store.get(name)
         if comp_cfg is not None:

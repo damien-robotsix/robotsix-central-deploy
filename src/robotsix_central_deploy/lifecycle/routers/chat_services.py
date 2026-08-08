@@ -951,9 +951,7 @@ async def chat_enable_mutation(
 
     # Reconcile Langfuse auto-projects — enabling mutation may add
     # project aliases discoverable from this service's config.
-    await reconcile_langfuse_after_toggle(
-        component_config_store, request
-    )
+    await reconcile_langfuse_after_toggle(component_config_store, request)
     await reconcile_fleet_auth_hosts(component_config_store, request)
 
     return ChatAgentMutationEnableResponse(
@@ -1031,9 +1029,7 @@ async def chat_disable_mutation(
 
     # Reconcile Langfuse auto-projects — disabling mutation may remove
     # project aliases that were only discoverable from this service.
-    await reconcile_langfuse_after_toggle(
-        component_config_store, request
-    )
+    await reconcile_langfuse_after_toggle(component_config_store, request)
     await reconcile_fleet_auth_hosts(component_config_store, request)
 
     return ChatAgentMutationDisableResponse(
