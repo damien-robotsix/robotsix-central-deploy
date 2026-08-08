@@ -39,3 +39,4 @@ _gen_openapi_tmp.py
 .local/
 .deps/
 node_modules/
+package-lock.json

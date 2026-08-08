@@ -1,16 +1,20 @@
+  /* Map legacy central-deploy custom-property names onto the shared
+     robotsix-ui design tokens so existing component styles keep working
+     without re-declaring any --rsu-* token directly. */
   :root {
     color-scheme: dark;
-    --green:      #4ade80;                    /* was #2e7d32 */
-    --green-bg:   rgba(74,222,128,0.15);      /* was #e8f5e9 */
-    --red:        #f87171;                    /* was #c62828 */
-    --red-bg:     rgba(248,113,113,0.15);     /* was #ffebee */
-    --grey:       #94a3b8;                    /* was #616161 */
-    --grey-bg:    rgba(148,163,184,0.15);     /* was #f5f5f5 */
-    --amber:      #fb923c;                    /* was #e65100 */
-    --amber-bg:   rgba(251,146,60,0.15);      /* was #fff8e1 */
-    --blue:       #60a5fa;                    /* was #0d47a1 */
+    --green:      var(--rsu-color-success, #4ade80);
+    --green-bg:   var(--rsu-color-success-bg, rgba(74,222,128,0.15));
+    --red:        var(--rsu-color-error, #f87171);
+    --red-bg:     var(--rsu-color-error-bg, rgba(248,113,113,0.15));
+    --grey:       var(--rsu-color-text-muted, #94a3b8);
+    --grey-bg:    rgba(107,114,128,0.15);
+    --amber:      var(--rsu-color-warning, #fb923c);
+    --amber-bg:   var(--rsu-color-warning-bg, rgba(251,146,60,0.15));
+    --blue:       var(--rsu-color-primary, #60a5fa);
+    --muted:      var(--rsu-color-text-muted, #94a3b8);
+    --text-muted: var(--rsu-color-text-muted, #888);
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
   header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
   h1 { font-size: 1.4rem; color: var(--blue); }

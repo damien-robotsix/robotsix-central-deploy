@@ -36,6 +36,7 @@ modules:
       - CONTRIBUTING.md
       - Dockerfile
       - LICENSE
+      - package.json
       - README.md
       - SECURITY.md
       - _gen_openapi.py
