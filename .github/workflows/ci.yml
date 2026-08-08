@@ -468,6 +468,40 @@ jobs:
               print("  uv run python -c \"from robotsix_central_deploy.lifecycle.config import LifecycleConfig; import robotsix_config; print(robotsix_config.config_schema_json(LifecycleConfig))\" > config/config.schema.json")
               sys.exit(1)
           EOF
+      - name: Check config/config.example.json drift
+        run: |
+          uv run python - <<'EOF'
+          import json, pathlib, sys
+          from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+
+          example = json.loads(pathlib.Path("config/config.example.json").read_text())
+          example_keys = set(example.keys())
+
+          # Build a default instance and dump its top-level keys.
+          # We use model_dump(mode="json") so SecretStr fields come out
+          # as cleartext (all empty strings).  The example file may carry
+          # richer example values (e.g. llmio_tier_config with 4 levels),
+          # so we only compare *key presence*.
+          defaults = LifecycleConfig().model_dump(mode="json")
+          config_keys = set(defaults.keys())
+
+          missing = config_keys - example_keys
+          extra = example_keys - config_keys
+
+          violations = 0
+          if missing:
+              print(f"::error::Fields missing from config/config.example.json: {', '.join(sorted(missing))}")
+              print("Add them with their default values from LifecycleConfig.")
+              violations += 1
+          if extra:
+              # Extra keys are not necessarily an error — the example may
+              # include deprecated fields or example-only entries.  Warn
+              # but don't fail.
+              print(f"::warning::Unexpected keys in config/config.example.json (not in LifecycleConfig): {', '.join(sorted(extra))}")
+          if violations:
+              sys.exit(1)
+          print("config/config.example.json top-level keys match LifecycleConfig.")
+          EOF
 
   openapi-drift:
     runs-on: ubuntu-latest
