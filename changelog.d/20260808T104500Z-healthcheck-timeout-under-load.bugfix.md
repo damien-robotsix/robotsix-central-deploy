@@ -1,0 +1,1 @@
+Raised the container healthcheck timeout from 3s to 10s. The probe spawns a fresh CPython interpreter (~0.55s at rest), which stretches under CPU contention — ordinary fleet load pushed it past 3s for six consecutive probes and marked the control plane unhealthy while it was answering `/health` in 0.03s.
