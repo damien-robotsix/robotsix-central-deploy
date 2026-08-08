@@ -28,6 +28,7 @@ from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 from ...registry.secret_key import SecretKeyManager
 from ...registry_check import RegistryChecker
+from ...gateway.proxy import PROXY_NETWORK
 from ...caretaker.scheduler import CaretakerScheduler
 from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
 from .background import _claude_auth_refresh_loop, _registry_check_loop
@@ -362,6 +363,20 @@ async def _init_background_tasks(app: FastAPI) -> None:
     assert _config is not None
     assert _store is not None
     assert _backend is not None
+
+    # -- Self network-alias heal -----------------------------------------
+    # A watchtower self-update recreate re-attaches networks without the
+    # compose service alias, leaving the server unreachable by name for
+    # components (chat lost the deploy API for four days, 2026-08-03).
+    # Repair the proxy-network attachment before serving.
+    try:
+        healed = await _backend.heal_self_network_alias(PROXY_NETWORK)
+        if healed:
+            logger.warning(
+                "startup: repaired own %r alias on %r", healed, PROXY_NETWORK
+            )
+    except Exception:
+        logger.exception("startup: self network-alias heal failed")
 
     # -- Registry checker ------------------------------------------------
     raw_http_client = httpx.AsyncClient(timeout=10.0)
