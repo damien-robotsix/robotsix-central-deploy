@@ -1,1 +1,0 @@
-Remove dead OnboardConfirmResponse schema — defined but never referenced

@@ -1,1 +1,0 @@
-Make standard config file a hard deployability contract; remove has_config_yaml and all alternative config paths

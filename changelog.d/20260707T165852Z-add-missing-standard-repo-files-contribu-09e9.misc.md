@@ -1,1 +1,0 @@
-Add missing standard repo files: CONTRIBUTING.md, SECURITY.md, .gitattributes

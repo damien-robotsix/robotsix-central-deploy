@@ -1,1 +1,0 @@
-Refactor 180-line `lifespan` function in lifecycle/deps.py into smaller helpers

@@ -1,1 +1,0 @@
-robotsix-central-deploy: Enable state_sync periodic workflow

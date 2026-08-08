@@ -1,1 +1,0 @@
-ci_fix: out-of-scope CI failure — DL3008 in Dockerfile — merge the two-line `# hadolint ignore=DL3008` comment blocks into single lines so the ignore directive sits directly above each RUN instruction

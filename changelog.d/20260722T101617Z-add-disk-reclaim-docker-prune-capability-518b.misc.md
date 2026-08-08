@@ -1,1 +1,0 @@
-Add disk-reclaim (docker prune) capability to central-deploy so the agent can act on disk pressure

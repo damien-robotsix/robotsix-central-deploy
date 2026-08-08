@@ -1,1 +1,0 @@
-Fix: config secrets vanish on write (declare secret fields as SecretStr so mask+merge activates)

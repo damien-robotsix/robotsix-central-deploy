@@ -1,1 +1,0 @@
-Langfuse discovery now reads each component's own config file rather than central-deploy's stored copy. `GET /fleet/langfuse` and the chat-agent auto-grant reconciler both use the new `read_component_config` helper, which reads the component's config volume through the execution backend.

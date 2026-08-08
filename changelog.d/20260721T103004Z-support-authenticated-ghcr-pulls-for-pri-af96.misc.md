@@ -1,1 +1,0 @@
-Support authenticated GHCR pulls for private images (registry credentials on images/create)

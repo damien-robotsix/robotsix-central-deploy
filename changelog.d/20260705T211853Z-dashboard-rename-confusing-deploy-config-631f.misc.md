@@ -1,1 +1,0 @@
-Dashboard: rename confusing Deploy/Config button, add raw-JSON editor to Configure modal

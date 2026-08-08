@@ -1,1 +1,0 @@
-Remove the robotsix.deploy.stateful label from the deploy contract

@@ -1,6 +1,6 @@
 [project]
 name = "robotsix-central-deploy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Central deployment & lifecycle server for the robotsix suite"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -157,40 +157,6 @@ per_rule_ignores = { "DEP001" = ["hatchling"], "DEP002" = ["pytest", "pytest-asy
 skip = "*.lock,*.css,*.map,*.min.*,.git/,node_modules/,uv.lock,LICENSE,site/,vendor/"
 ignore-words-list = "hist,ist,te,nd,vas"
 check-filenames = true
-
-[tool.towncrier]
-package = "robotsix_central_deploy"
-package_dir = "src"
-filename = "CHANGELOG.md"
-directory = "changelog.d"
-start_string = "<!-- towncrier release notes start -->\n"
-underlines = ["", "", ""]
-title_format = "## {version} ({project_date})"
-
-[[tool.towncrier.type]]
-directory = "feature"
-name = "Features"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "bugfix"
-name = "Bug Fixes"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "removal"
-name = "Removals / Breaking Changes"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "doc"
-name = "Documentation"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "misc"
-name = "Miscellaneous"
-showcontent = false
 
 [tool.vulture]
 paths = ["src/robotsix_central_deploy", "vulture_whitelist.py"]

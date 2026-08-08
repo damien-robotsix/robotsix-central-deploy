@@ -1,1 +1,0 @@
-Deploy UI: hide settings flagged `advanced` behind a "Show advanced settings" toggle

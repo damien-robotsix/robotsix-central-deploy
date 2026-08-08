@@ -1,1 +1,0 @@
-When the "Allow chat agent access" toggle is enabled for a component, its UI hostname is automatically added to the chat agent's `fleet_auth.auth_hosts` allowlist; disabling the toggle removes it. Manual entries are preserved.

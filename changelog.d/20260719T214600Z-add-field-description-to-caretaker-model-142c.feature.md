@@ -1,1 +1,0 @@
-Added `Field(description=...)` to all 38 fields across 6 caretaker and volume-audit Pydantic models (`CaretakerFinding`, `CaretakerReport`, `VolumeSizeSnapshot`, `VolumeGrowthRecord`, `AuditFinding`, `VolumeAuditResponse`), populating the generated OpenAPI JSON Schema with field-level descriptions.

@@ -1,1 +1,0 @@
-Add class-level docstrings to the 21 undocumented Pydantic models in `lifecycle/schemas.py` (rendered by mkdocstrings and as OpenAPI schema descriptions), and correct the stale `VolumeEntry` field descriptions (it is a file/dir listing entry, not a Docker volume).

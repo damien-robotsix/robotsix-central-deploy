@@ -1,1 +1,0 @@
-Add OpenAPI spec linting / contract-drift check to CI pipeline

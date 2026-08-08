@@ -1,1 +1,0 @@
-Extracted shared compose-resolution backbone (`_resolve_compose_backbone`) from the duplicated token-fetch + fetch-repo-files + parse-compose + schema-parse + config-standard-validation sequence in `onboard_preflight` and `_resolve_deploy_contract`, eliminating drift risk between the two long route handlers.
