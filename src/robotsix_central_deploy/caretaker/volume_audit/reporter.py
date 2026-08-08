@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from .models import AuditFinding
 
 if TYPE_CHECKING:
-    from robotsix_board_agent.client import BoardClient
+    from .board import BoardClient
 
 logger = logging.getLogger(__name__)
 

@@ -10,10 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from robotsix_board_agent.client import BoardClient
-
     from ...lifecycle.backends import ExecutionBackend
     from ...lifecycle.config import LifecycleConfig
+    from .board import BoardClient
 
 from ...registry.config_store import ComponentConfigStore
 from .growth import compute_growth_records
@@ -161,15 +160,13 @@ class VolumeAuditScheduler:
             and cfg.board_repo_id
         ):
             try:
-                from robotsix_board_agent.client import BoardClient
-                from robotsix_board_agent.config import BoardAgentSettings
+                from .board import BoardClient
 
-                settings = BoardAgentSettings(
-                    board_api_url=cfg.board_api_url,
-                    board_api_token=cfg.board_api_token.get_secret_value(),
-                    board_repo_id=cfg.board_repo_id,
+                return BoardClient(
+                    base_url=cfg.board_api_url,
+                    token=cfg.board_api_token.get_secret_value(),
+                    repo_id=cfg.board_repo_id,
                 )
-                return BoardClient(settings)
             except Exception as exc:
                 logger.error("Failed to create board client: %s", exc)
                 return None
