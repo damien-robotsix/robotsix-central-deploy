@@ -1,0 +1,1 @@
+Add Langfuse credential migration runbook (`docs/lifecycle/langfuse-migration.md`) — step-by-step instructions for moving Langfuse project credentials from legacy storage (deploy-plane env vars, hand-aggregated lists) into each component's own standardized config.
