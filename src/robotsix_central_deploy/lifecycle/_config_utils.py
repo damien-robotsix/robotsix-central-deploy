@@ -259,6 +259,34 @@ def _coerce_by_schema(prop_schema: dict[str, Any], sval: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+async def read_component_config(backend: Any, cfg: Any) -> dict[str, Any]:
+    """Return a component's own config, read from its config volume.
+
+    The deploy plane keeps no copy of component config values (robotsix-
+    standards ``config-ownership.md``), so anything needing one reads the
+    component's file directly. A stored copy goes stale silently, and its
+    staleness is indistinguishable from a real value.
+
+    Returns an empty dict for a component with no config volume, or when the
+    volume cannot be read — a component whose config is unavailable has no
+    config, which is what every caller already handles.
+    """
+    volume = getattr(cfg, "config_volume", None)
+    if not volume:
+        return {}
+    try:
+        loaded = await backend.read_config_from_volume(volume)
+    except Exception:
+        logger.debug(
+            "could not read config volume %s for %s",
+            volume,
+            getattr(cfg, "id", "?"),
+            exc_info=True,
+        )
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def _canonical_hash(d: dict[str, Any]) -> str:
     """SHA-256 of a canonically serialised YAML dict.
 

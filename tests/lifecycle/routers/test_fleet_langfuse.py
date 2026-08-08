@@ -14,6 +14,29 @@ class TestFleetLangfuseAuth:
         assert resp.status_code == 401
 
 
+class _VolumeBackend:
+    """Backend that serves component config from an in-memory volume.
+
+    Langfuse discovery reads each component's own config file rather than a
+    deploy-plane copy, so these tests seed the volume the component reads.
+    """
+
+    def __init__(self) -> None:
+        self.volumes: dict[str, dict] = {}
+
+    async def read_config_from_volume(self, volume_name: str) -> dict:
+        return dict(self.volumes.get(volume_name, {}))
+
+
+def _seed_component_config(component_id: str, config: dict) -> None:
+    """Put *config* on the volume that *component_id* would read."""
+    backend = getattr(server_mod.app.state, "backend", None)
+    if not isinstance(backend, _VolumeBackend):
+        backend = _VolumeBackend()
+        server_mod.app.state.backend = backend
+    backend.volumes[f"{component_id}-config"] = config
+
+
 class TestFleetLangfuseEndpoint:
     async def test_returns_all_registered_components(
         self, client: AsyncClient, auth_headers: dict
@@ -25,6 +48,7 @@ class TestFleetLangfuseEndpoint:
                 id="test-comp",
                 image="test:latest",
                 container_name="test-comp",
+                config_volume="test-comp-config",
             )
         )
         registry.register(
@@ -32,6 +56,7 @@ class TestFleetLangfuseEndpoint:
                 id="other-comp",
                 image="other:latest",
                 container_name="other-comp",
+                config_volume="other-comp-config",
             )
         )
 
@@ -52,6 +77,7 @@ class TestFleetLangfuseEndpoint:
                 id="no-langfuse",
                 image="test:latest",
                 container_name="no-langfuse",
+                config_volume="no-langfuse-config",
             )
         )
 
@@ -66,8 +92,7 @@ class TestFleetLangfuseEndpoint:
         self, client: AsyncClient, auth_headers: dict
     ):
         """Component with a canonical langfuse block returns host + projects."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "traced-comp",
             {
                 "langfuse": {
@@ -88,6 +113,7 @@ class TestFleetLangfuseEndpoint:
                 id="traced-comp",
                 image="traced:latest",
                 container_name="traced-comp",
+                config_volume="traced-comp-config",
             )
         )
 
@@ -106,8 +132,7 @@ class TestFleetLangfuseEndpoint:
         self, client: AsyncClient, auth_headers: dict
     ):
         """Projects missing public_key or secret_key are excluded."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "partial-comp",
             {
                 "langfuse": {
@@ -127,6 +152,7 @@ class TestFleetLangfuseEndpoint:
                 id="partial-comp",
                 image="partial:latest",
                 container_name="partial-comp",
+                config_volume="partial-comp-config",
             )
         )
 
@@ -143,8 +169,7 @@ class TestFleetLangfuseEndpoint:
         self, client: AsyncClient, auth_headers: dict
     ):
         """An empty string langfuse.host is reported as None."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "empty-host-comp",
             {
                 "langfuse": {
@@ -161,6 +186,7 @@ class TestFleetLangfuseEndpoint:
                 id="empty-host-comp",
                 image="empty:latest",
                 container_name="empty-host-comp",
+                config_volume="empty-host-comp-config",
             )
         )
 
@@ -194,6 +220,7 @@ class TestFleetLangfuseEndpoint:
                 id="running-comp",
                 image="run:latest",
                 container_name="running-comp",
+                config_volume="running-comp-config",
             )
         )
 
@@ -275,8 +302,7 @@ class TestFleetLangfuseOperatorConfigured:
             OPERATOR_COMPONENT_ID,
         )
 
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "owned-comp",
             {
                 "langfuse": {
@@ -290,7 +316,10 @@ class TestFleetLangfuseOperatorConfigured:
         registry = server_mod.app.state.registry
         registry.register(
             ComponentConfig(
-                id="owned-comp", image="owned:latest", container_name="owned-comp"
+                id="owned-comp",
+                image="owned:latest",
+                container_name="owned-comp",
+                config_volume="owned-comp-config",
             )
         )
         self._set_operator_projects(shared=("pk-new", "sk-new"))
@@ -366,8 +395,7 @@ class TestFleetLangfuseOpenRouterKeys:
     ):
         """A canonical `openrouter.keys.<alias>` block is joined by alias."""
         self._set_operator_openrouter()
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "or-comp",
             {
                 "langfuse": {
@@ -382,7 +410,12 @@ class TestFleetLangfuseOpenRouterKeys:
         )
         registry = server_mod.app.state.registry
         registry.register(
-            ComponentConfig(id="or-comp", image="or:latest", container_name="or-comp")
+            ComponentConfig(
+                id="or-comp",
+                image="or:latest",
+                container_name="or-comp",
+                config_volume="or-comp-config",
+            )
         )
 
         resp = await client.get("/fleet/langfuse", headers=auth_headers)
@@ -403,8 +436,7 @@ class TestFleetLangfuseOpenRouterKeys:
         This is the case that makes reconciliation work today: chat and mill
         declare Langfuse projects but no canonical `openrouter` block.
         """
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "unmigrated",
             {
                 "langfuse": {
@@ -418,7 +450,10 @@ class TestFleetLangfuseOpenRouterKeys:
         registry = server_mod.app.state.registry
         registry.register(
             ComponentConfig(
-                id="unmigrated", image="u:latest", container_name="unmigrated"
+                id="unmigrated",
+                image="u:latest",
+                container_name="unmigrated",
+                config_volume="unmigrated-config",
             )
         )
         self._set_operator_openrouter(**{"proj-c": "sk-or-operator"})
@@ -434,8 +469,7 @@ class TestFleetLangfuseOpenRouterKeys:
         self, client: AsyncClient, auth_headers: dict
     ):
         """Operator wins on collision, so a key can be rotated centrally."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "or-override",
             {
                 "langfuse": {
@@ -450,7 +484,10 @@ class TestFleetLangfuseOpenRouterKeys:
         registry = server_mod.app.state.registry
         registry.register(
             ComponentConfig(
-                id="or-override", image="o:latest", container_name="or-override"
+                id="or-override",
+                image="o:latest",
+                container_name="or-override",
+                config_volume="or-override-config",
             )
         )
         self._set_operator_openrouter(**{"proj-d": "sk-or-rotated"})
@@ -466,8 +503,7 @@ class TestFleetLangfuseOpenRouterKeys:
         self, client: AsyncClient, auth_headers: dict
     ):
         """An empty key is unconfigured, not a credential to hand out."""
-        config_yaml_store = server_mod.app.state.config_yaml_store
-        await config_yaml_store.update_current(
+        _seed_component_config(
             "or-empty",
             {
                 "langfuse": {
@@ -480,7 +516,12 @@ class TestFleetLangfuseOpenRouterKeys:
         )
         registry = server_mod.app.state.registry
         registry.register(
-            ComponentConfig(id="or-empty", image="e:latest", container_name="or-empty")
+            ComponentConfig(
+                id="or-empty",
+                image="e:latest",
+                container_name="or-empty",
+                config_volume="or-empty-config",
+            )
         )
         self._set_operator_openrouter(**{"proj-e": ""})
 

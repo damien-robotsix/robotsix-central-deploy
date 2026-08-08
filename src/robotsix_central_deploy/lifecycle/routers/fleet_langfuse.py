@@ -28,14 +28,15 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends
 
+from .._config_utils import read_component_config
 from .._langfuse_config import extract_langfuse_block
 from .._openrouter_config import extract_openrouter_keys
 from ..auth import verify_auth
 from ..config import LifecycleConfig
-from ..deps import _get_config, _get_config_yaml_store, _get_registry, _get_store
+from ..deps import _get_backend, _get_config, _get_registry, _get_store
 from ..models import ServiceState
 from ..store import ServiceStore
-from ...registry.config_yaml_store import ConfigYamlStore
+from ..backends.base import ExecutionBackend
 from ...registry.loader import ComponentRegistry
 
 router = APIRouter(tags=["fleet-langfuse"])
@@ -188,7 +189,7 @@ def _with_openrouter(
 async def fleet_langfuse_credentials(
     store: ServiceStore = Depends(_get_store),
     registry: ComponentRegistry = Depends(_get_registry),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> FleetLangfuseResponse:
@@ -221,7 +222,7 @@ async def fleet_langfuse_credentials(
         state = record_by_name.get(comp.container_name, ServiceState.UNKNOWN)
 
         # Try to read the component's standardized config for Langfuse keys.
-        current = await config_yaml_store.get_current(comp.id)
+        current = await read_component_config(backend, comp)
         if current:
             host, projects = _extract_langfuse_projects(current)
         else:
