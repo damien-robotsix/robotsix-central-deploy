@@ -312,19 +312,21 @@ async def _run_deploy_job(
     try:
         # Write merged config.json into the config volume before starting.
         if config.config_volume:
+            # The component's own config file is the source of truth, so read
+            # it first — both the drift guard and the seed decision below
+            # depend on knowing whether it exists.
+            try:
+                live_dict = await backend.read_config_from_volume(config.config_volume)
+            except Exception:
+                live_dict = {}
+
             # --- drift guard ---
-            # If the live volume has been edited out-of-band (drift),
-            # auto-import it as current before proceeding so the deploy
-            # never silently overwrites operator changes with stale stored
-            # defaults.
+            # Keep the stored copy in step with the volume while it still
+            # exists. It is on its way out (the deploy plane is moving to
+            # reading the component directly), but until then a stale entry
+            # is what other readers see.
             stored_hash = await config_yaml_store.get_volume_hash(name)
             if stored_hash is not None:
-                try:
-                    live_dict = await backend.read_config_from_volume(
-                        config.config_volume
-                    )
-                except Exception:
-                    live_dict = {}
                 live_hash = _canonical_hash(live_dict)
                 if live_dict and live_hash != stored_hash:
                     logger.warning(
@@ -337,22 +339,40 @@ async def _run_deploy_job(
                     )
             # --- end drift guard ---
 
-            merged_cfg = await config_yaml_store.get_current(
-                name
-            ) or await config_yaml_store.get_template(name)
-            if merged_cfg:
-                try:
-                    await backend.write_config_to_volume(
-                        config.config_volume, merged_cfg
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "deploy %s: could not write config.json to volume %s: %s",
-                        _sanitize_log(name),
-                        _sanitize_log(config.config_volume),
-                        exc,
-                    )
-                    # non-fatal: container may still start if config was written earlier
+            # Seed only. The component owns its config; the deploy plane must
+            # never write over a config file that already exists.
+            #
+            # This used to push the stored `current` onto the volume on every
+            # deploy, which made the deploy-side copy authoritative in
+            # practice: a stale entry silently reverted the component's own
+            # settings, and fixing the volume by hand lasted until the next
+            # deploy. On 2026-08-07 that overwrote chat's Langfuse credentials
+            # with an empty pre-migration block and removed it from fleet-wide
+            # Langfuse discovery, with nothing erroring anywhere.
+            #
+            # A component with no config file yet still needs one, so the
+            # shipped template is written when — and only when — the volume is
+            # empty.
+            if not live_dict:
+                template_cfg = await config_yaml_store.get_template(name)
+                if template_cfg:
+                    try:
+                        await backend.write_config_to_volume(
+                            config.config_volume, template_cfg
+                        )
+                        logger.info(
+                            "deploy %s: seeded config.json into empty volume %s",
+                            _sanitize_log(name),
+                            _sanitize_log(config.config_volume),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "deploy %s: could not seed config.json into volume %s: %s",
+                            _sanitize_log(name),
+                            _sanitize_log(config.config_volume),
+                            exc,
+                        )
+                        # non-fatal: the component may ship its own default
 
         # Write the fleet-global llmio tier config mapping (all four levels)
         # into the component's config volume so robotsix-llmio's

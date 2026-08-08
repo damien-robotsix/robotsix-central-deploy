@@ -539,6 +539,96 @@ class TestDeployDriftGuard:
         stored_hash = await cys.get_volume_hash("chat")
         assert stored_hash == _canonical_hash(real_config)
 
+    async def test_deploy_never_overwrites_an_existing_config(
+        self, auth_headers: dict, registry
+    ):
+        """The drift guard only fired when a stored hash existed and differed.
+
+        With no stored hash — a component whose config was never saved through
+        the deploy UI — the old code fell straight through to writing the
+        stored `current` over the volume. That is what erased chat's Langfuse
+        credentials on 2026-08-07. The component owns its config file; deploy
+        must not write over it under any circumstances.
+        """
+        tracking = TrackingInMemoryBackend()
+        server_mod.app.state.backend = tracking
+        server_mod._backend = tracking
+
+        comp = ComponentConfig(
+            id="chat",
+            image="ghcr.io/org/chat:latest",
+            container_name="chat",
+            ports=[PortMapping(host=8080, container=8080)],
+            mounts=[VolumeMount(host="chat-config", container="/config")],
+            config_volume="chat-config",
+        )
+        await server_mod.app.state.component_config_store.put(comp)
+        registry.register(comp)
+        await server_mod.app.state.store.put(
+            ServiceRecord(
+                name="chat",
+                state=ServiceState.STOPPED,
+                image="ghcr.io/org/chat:latest",
+            )
+        )
+
+        cys = server_mod.app.state.config_yaml_store
+        # A stored `current` exists but no volume_hash was ever recorded.
+        await cys.update_current("chat", {"langfuse": {"public_key": ""}})
+
+        live = {"langfuse": {"public_key": "pk-real", "secret_key": "sk-real"}}
+        tracking._volumes["chat-config"] = copy.deepcopy(live)
+
+        transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/services/chat/deploy", headers=auth_headers)
+            assert resp.status_code == 202
+        await asyncio.sleep(0)
+
+        assert tracking._volumes["chat-config"] == live, (
+            "deploy overwrote the component's own config with the stored copy"
+        )
+
+    async def test_deploy_seeds_the_template_into_an_empty_volume(
+        self, auth_headers: dict, registry
+    ):
+        """Never-overwrite must not mean never-write: a component booting with
+        no config file at all still needs one, so the shipped template is
+        written when the volume is empty."""
+        tracking = TrackingInMemoryBackend()
+        server_mod.app.state.backend = tracking
+        server_mod._backend = tracking
+
+        comp = ComponentConfig(
+            id="chat",
+            image="ghcr.io/org/chat:latest",
+            container_name="chat",
+            ports=[PortMapping(host=8080, container=8080)],
+            mounts=[VolumeMount(host="chat-config", container="/config")],
+            config_volume="chat-config",
+        )
+        await server_mod.app.state.component_config_store.put(comp)
+        registry.register(comp)
+        await server_mod.app.state.store.put(
+            ServiceRecord(
+                name="chat",
+                state=ServiceState.STOPPED,
+                image="ghcr.io/org/chat:latest",
+            )
+        )
+
+        template: dict[str, Any] = {"server_port": 3000}
+        await server_mod.app.state.config_yaml_store.save_template("chat", template)
+        # Volume deliberately absent from tracking._volumes.
+
+        transport = ASGITransport(app=server_mod.app)  # type: ignore[arg-type]
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/services/chat/deploy", headers=auth_headers)
+            assert resp.status_code == 202
+        await asyncio.sleep(0)
+
+        assert tracking._volumes.get("chat-config") == template
+
 
 # ---------------------------------------------------------------------------
 # TestDockerSdkBackendDeploy — unit tests with mocked Docker SDK
