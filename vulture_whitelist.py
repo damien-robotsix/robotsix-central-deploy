@@ -70,24 +70,12 @@ STOP  # unused variable (src/robotsix_central_deploy/lifecycle/models.py:73)
 # ===========================================================================
 # Framework/idiom entries: Starlette calls BaseHTTPMiddleware.dispatch; the
 # deps package swaps its module __class__ for attribute interception;
-# SIDECAR_SUFFIXES documents the exclusion patterns enforced in shell.
+# SIDECAR_SUFFIXES documents the exclusion patterns enforced in shell;
+# token_type OVERRIDES PyGithub's Auth.Token.token_type — PyGithub reads it
+# internally to emit "Authorization: Bearer" (removing it breaks App auth).
 # ===========================================================================
 SIDECAR_SUFFIXES  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/growth.py:11)
 _.__class__  # unused attribute (src/robotsix_central_deploy/lifecycle/deps/__init__.py:104)
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/gateway_docs_middleware.py:46)
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/rate_limiter.py:178)
-
-# ===========================================================================
-# Known-dead code deliberately deferred to the removal ticket filed with the
-# vulture adoption PR: run_config_assist (all backends), ComponentRegistry.
-# from_yaml, GithubToken.token_type, _canonical_hash, SecretKeyManager.
-# _key_path — each is production-unreferenced and kept alive only by tests.
-# ===========================================================================
-_canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:339)
-_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/base.py:137)
-_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/docker_cli.py:199)
-_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/docker_sdk.py:832)
-_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/noop.py:99)
-_.token_type  # unused property (src/robotsix_central_deploy/lifecycle/github_app.py:70)
-_.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:30)
-_._key_path  # unused attribute (src/robotsix_central_deploy/registry/secret_key.py:21)
+_.token_type  # PyGithub Auth.Token override (src/robotsix_central_deploy/lifecycle/github_app.py:70)

@@ -6,7 +6,7 @@ from .models import (
     ServiceConfig,
     VolumeMount,
 )
-from .loader import ComponentRegistry, RegistryLoadError
+from .loader import ComponentRegistry
 
 __all__ = [
     "ComponentConfig",
@@ -16,5 +16,4 @@ __all__ = [
     "ServiceConfig",
     "VolumeMount",
     "ComponentRegistry",
-    "RegistryLoadError",
 ]

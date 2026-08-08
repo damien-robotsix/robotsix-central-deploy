@@ -205,4 +205,6 @@ ignore_decorators = [
     "@model_validator",
 ]
 # model_config: pydantic BaseModel configuration attribute, read by pydantic.
-ignore_names = ["model_config"]
+# cls: required first param of @classmethod (flagged once no code path
+# happens to reference the name explicitly anywhere in the project).
+ignore_names = ["model_config", "cls"]

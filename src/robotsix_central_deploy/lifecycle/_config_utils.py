@@ -6,11 +6,9 @@ so the config-merge logic is independently testable.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 
-import yaml
 
 if TYPE_CHECKING:
     from .backends import ExecutionBackend
@@ -334,20 +332,6 @@ async def read_component_config(backend: Any, cfg: Any) -> dict[str, Any]:
         )
         return {}
     return loaded if isinstance(loaded, dict) else {}
-
-
-def _canonical_hash(d: dict[str, Any]) -> str:
-    """SHA-256 of a canonically serialised YAML dict.
-
-    Serialises via ``yaml.dump`` with ``sort_keys=True`` before hashing so
-    key-insertion-order differences and Python-vs-docker-exec YAML
-    formatting differences do not cause false drift positives.
-    Returns the full 64-char hex digest.
-    """
-    serialised = yaml.dump(
-        d, default_flow_style=False, allow_unicode=True, sort_keys=True
-    )
-    return hashlib.sha256(serialised.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
