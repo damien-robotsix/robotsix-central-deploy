@@ -11,7 +11,7 @@ from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.config import LangfuseProjectCreds
-from robotsix_central_deploy.lifecycle.routers.chat_langfuse import (
+from robotsix_central_deploy.lifecycle._langfuse_config import (
     _reconcile_auto_langfuse_projects,
 )
 from robotsix_central_deploy.registry.models import ComponentConfig
