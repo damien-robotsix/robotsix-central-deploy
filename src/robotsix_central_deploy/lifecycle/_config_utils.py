@@ -69,6 +69,15 @@ class _SchemaWalker:
     A visitor method returns the value to store under *key* (including
     ``None``), or the ``SKIP`` sentinel to omit the key from the result
     entirely (used by ``_strip_secret_values`` to drop secret leaves).
+
+    **Map-typed objects.**  An object whose entry keys are data rather than
+    schema — ``{"type": "object", "additionalProperties": {…}}`` with no
+    ``properties`` — is walked entry by entry against the
+    ``additionalProperties`` sub-schema.  Without this the walk found no
+    declared properties and returned ``{}``, so every such field came back
+    empty from all three visitors: masked reads showed nothing, and a merge
+    wiped the stored value.  ``langfuse.projects.<alias>`` is exactly this
+    shape, so the failure mode was a silent credential wipe on write.
     """
 
     #: sentinel returned by a visitor to omit a key from the result.
@@ -77,6 +86,53 @@ class _SchemaWalker:
     def __init__(self, schema: dict[str, Any], visitor: Any) -> None:
         self._schema = schema
         self._visitor = visitor
+
+    @staticmethod
+    def _map_keys(
+        value_dicts: tuple[dict[str, Any], ...], visited: set[str]
+    ) -> list[str]:
+        """Return every map entry key across *value_dicts*, in first-seen order.
+
+        The union matters for merges: an entry present only in ``existing``
+        must survive a partial update, and one present only in ``submitted``
+        must be created.  Iterating a single dict would drop one or the other.
+        """
+        keys: list[str] = []
+        for d in value_dicts:
+            if not isinstance(d, dict):
+                continue
+            for key in d:
+                if key not in visited and key not in keys:
+                    keys.append(key)
+        return keys
+
+    def _dispatch(
+        self,
+        key: str,
+        resolved: dict[str, Any],
+        value_dicts: tuple[dict[str, Any], ...],
+    ) -> Any:
+        """Route one key to the visitor method matching its resolved type."""
+        if _is_secret_prop(resolved):
+            return self._visitor.secret(key, resolved, value_dicts, self.walk)
+        if resolved.get("type") == "object":
+            sub_dicts: list[dict[str, Any]] = []
+            for d in value_dicts:
+                if isinstance(d, dict):
+                    child = d.get(key)
+                    sub_dicts.append(child if isinstance(child, dict) else {})
+            return self.walk(resolved, *sub_dicts)
+        if resolved.get("type") == "array":
+            items_schema = resolved.get("items", {})
+            resolved_items = (
+                _resolve_ref(items_schema, self._schema)
+                if isinstance(items_schema, dict)
+                else None
+            )
+            return self._visitor.array(
+                key, resolved, resolved_items, value_dicts, self.walk
+            )
+        return self._visitor.scalar(key, resolved, value_dicts, self.walk)
 
     def walk(
         self, i_schema: dict[str, Any], *value_dicts: dict[str, Any]
@@ -87,29 +143,22 @@ class _SchemaWalker:
         for key, prop in props.items():
             visited.add(key)
             resolved = _resolve_ref(prop, self._schema)
-            if _is_secret_prop(resolved):
-                value = self._visitor.secret(key, resolved, value_dicts, self.walk)
-            elif resolved.get("type") == "object":
-                sub_dicts: list[dict[str, Any]] = []
-                for d in value_dicts:
-                    if isinstance(d, dict):
-                        child = d.get(key)
-                        sub_dicts.append(child if isinstance(child, dict) else {})
-                value = self.walk(resolved, *sub_dicts)
-            elif resolved.get("type") == "array":
-                items_schema = resolved.get("items", {})
-                resolved_items = (
-                    _resolve_ref(items_schema, self._schema)
-                    if isinstance(items_schema, dict)
-                    else None
-                )
-                value = self._visitor.array(
-                    key, resolved, resolved_items, value_dicts, self.walk
-                )
-            else:
-                value = self._visitor.scalar(key, resolved, value_dicts, self.walk)
+            value = self._dispatch(key, resolved, value_dicts)
             if value is not _SchemaWalker.SKIP:
                 result[key] = value
+        # Map-typed entries: keys carried by the values, described by one
+        # shared ``additionalProperties`` sub-schema.  Only engaged for a
+        # sub-schema that actually describes something — ``True`` or ``{}``
+        # ("any value permitted") carries no type to dispatch on, so those
+        # keys fall through to ``unknown`` as before.
+        additional = i_schema.get("additionalProperties")
+        if isinstance(additional, dict) and additional:
+            resolved_additional = _resolve_ref(additional, self._schema)
+            for key in self._map_keys(value_dicts, visited):
+                visited.add(key)
+                value = self._dispatch(key, resolved_additional, value_dicts)
+                if value is not _SchemaWalker.SKIP:
+                    result[key] = value
         # Dispatch keys present in value dicts but absent from the schema
         # (preserves unrecognized keys for _strip_secret_values; a no-op
         # for visitors that don't implement ``unknown``).
