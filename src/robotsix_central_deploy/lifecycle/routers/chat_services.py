@@ -26,6 +26,7 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._fleet_auth import reconcile_fleet_auth_hosts
 from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -41,16 +42,6 @@ from ..deps import (
     _get_or_create_record,
     _get_registry,
     _get_store,
-)
-from .._fleet_auth import reconcile_fleet_auth_hosts
-from ._chat_common import (
-    _check_rate_limit,
-    _require_allowed_service,
-    logger,
-)
-from ._sibling_utils import (
-    _fanout_siblings_best_effort,
-    _fanout_siblings_deploy_best_effort,
 )
 
 from ..models import ActionType, ServiceRecord, ServiceState, can_transition

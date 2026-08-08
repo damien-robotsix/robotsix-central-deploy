@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shlex
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
