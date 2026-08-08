@@ -19,16 +19,16 @@ from typing import Any
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ...gateway.proxy import PROXY_NETWORK
+from ...registry.models import ComponentConfig, PortMapping
 from ..auth import verify_auth
-from ..deps import _get_backend, _get_config, _get_registry
 from ..config import LifecycleConfig
+from ..deps import _get_backend, _get_config, _get_registry
 from ..schemas import (
     ChatAgentPreviewDeployRequest,
     ChatAgentPreviewDeployResponse,
     ChatAgentPreviewTeardownResponse,
 )
-from ...gateway.proxy import PROXY_NETWORK
-from ...registry.models import ComponentConfig, PortMapping
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ async def _clone_repo(repo_url: str, branch: str, target_dir: Path) -> None:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    _stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
         err = stderr.decode(errors="replace") if stderr else "unknown error"
         raise HTTPException(
@@ -232,7 +232,7 @@ async def _build_image(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
+        _stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
             err = stderr.decode(errors="replace") if stderr else "build failed"
             raise HTTPException(
@@ -301,17 +301,17 @@ async def _stop_and_remove_preview_container(backend: Any) -> None:
         )
     except docker.errors.NotFound:
         return
-    except Exception:
+    except Exception:  # noqa: BLE001
         return
 
     logger.info("Stopping existing preview container")
     try:
         await loop.run_in_executor(None, lambda: container.stop(timeout=10))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.debug("Stop preview container: %s", exc)
     try:
         await loop.run_in_executor(None, lambda: container.remove(force=True))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.debug("Remove preview container: %s", exc)
 
 
@@ -369,7 +369,7 @@ async def _create_preview_container(
         # Best-effort cleanup
         try:
             await loop.run_in_executor(None, lambda: container.remove(force=True))
-        except Exception as cleanup_exc:
+        except Exception as cleanup_exc:  # noqa: BLE001
             logger.debug(
                 "Cleanup preview container after start failure: %s", cleanup_exc
             )
@@ -398,7 +398,7 @@ def _register_preview_component(
     # Unregister first if it was previously registered
     try:
         registry.unregister(_PREVIEW_COMPONENT_ID)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.debug("Unregister preview component: %s", exc)
     registry.register(config)
     logger.info("Registered preview component in registry")
@@ -408,7 +408,7 @@ def _unregister_preview_component(registry: Any) -> None:
     """Remove the preview component from the in-memory registry (best-effort)."""
     try:
         registry.unregister(_PREVIEW_COMPONENT_ID)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.debug("Unregister preview component on teardown: %s", exc)
 
 
@@ -430,9 +430,9 @@ def _unregister_preview_component(registry: Any) -> None:
 async def preview_deploy(
     body: ChatAgentPreviewDeployRequest,
     request: Request,
-    backend: Any = Depends(_get_backend),
-    registry: Any = Depends(_get_registry),
-    config: LifecycleConfig = Depends(_get_config),
+    backend: Any = Depends(_get_backend),  # noqa: B008
+    registry: Any = Depends(_get_registry),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentPreviewDeployResponse:
     """Deploy *repo_url* at *branch* into the single reusable preview slot.
@@ -506,8 +506,8 @@ async def preview_deploy(
 )
 async def preview_teardown(
     request: Request,
-    backend: Any = Depends(_get_backend),
-    registry: Any = Depends(_get_registry),
+    backend: Any = Depends(_get_backend),  # noqa: B008
+    registry: Any = Depends(_get_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentPreviewTeardownResponse:
     """Tear down the preview slot — stop/remove the container and clean up."""

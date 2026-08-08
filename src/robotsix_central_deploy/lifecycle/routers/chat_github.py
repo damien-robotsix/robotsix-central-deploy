@@ -31,6 +31,6 @@ module and the domain routers.
 
 from __future__ import annotations
 
-from ..github_app import get_github_client, get_repo_create_client  # noqa: F401
+from ..github_app import get_github_client, get_repo_create_client
 
 __all__ = ["get_github_client", "get_repo_create_client"]

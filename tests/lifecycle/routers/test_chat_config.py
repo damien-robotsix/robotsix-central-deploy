@@ -10,6 +10,8 @@ import logging
 
 from httpx import AsyncClient
 
+# Import the server module itself so we can access/wire app.state globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
@@ -21,10 +23,6 @@ from robotsix_central_deploy.registry.models import (
     ComponentConfig,
     PortMapping,
 )
-
-# Import the server module itself so we can access/wire app.state globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers

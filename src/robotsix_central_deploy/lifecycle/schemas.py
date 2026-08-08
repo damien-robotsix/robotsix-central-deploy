@@ -17,9 +17,8 @@ from robotsix_central_deploy.lifecycle.models import (
     OnboardJobPhase,
     VolumeEntryType,
 )
-from robotsix_central_deploy.onboard.models import DerivedSpec  # noqa: TCH001
-from robotsix_central_deploy.registry import ConfigAssistSeed  # noqa: TCH001
-
+from robotsix_central_deploy.onboard.models import DerivedSpec
+from robotsix_central_deploy.registry import ConfigAssistSeed
 
 # ---------------------------------------------------------------------------
 # Onboard request / response models
@@ -941,7 +940,7 @@ class ChatAgentDiskReclaimResponse(BaseModel):
         description="Total bytes freed by the reclaim operation."
     )
     detail: str = Field(default="", description="Human-readable summary")
-    disk_snapshot: "DiskUsageResponse | None" = Field(
+    disk_snapshot: DiskUsageResponse | None = Field(
         default=None,
         description="Full disk-usage snapshot taken after the reclaim operation.",
     )

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from robotsix_central_deploy.lifecycle.backends.docker_cli import DockerBackend, _run
 from robotsix_central_deploy.lifecycle.backends.base import ExecutionBackend
+from robotsix_central_deploy.lifecycle.backends.docker_cli import DockerBackend, _run
 from robotsix_central_deploy.lifecycle.models import ServiceRecord, ServiceState
-
 
 # ---------------------------------------------------------------------------
 # _run helper — subprocess I/O, timeout, error handling
@@ -47,7 +45,7 @@ class TestRunHelper:
             "robotsix_central_deploy.lifecycle.backends.docker_cli.asyncio.create_subprocess_exec",
             AsyncMock(return_value=mock_subprocess),
         ):
-            rc, stdout, stderr = await _run("docker", "ps")
+            rc, _stdout, _stderr = await _run("docker", "ps")
         assert rc == 0
 
     async def test_timeout_returns_minus_one(self):
@@ -55,7 +53,7 @@ class TestRunHelper:
         with patch(
             "robotsix_central_deploy.lifecycle.backends.docker_cli.asyncio.create_subprocess_exec"
         ) as mock_create:
-            mock_create.side_effect = asyncio.TimeoutError()
+            mock_create.side_effect = TimeoutError()
             rc, stdout, stderr = await _run("docker", "ps", timeout=1.0)
         assert rc == -1
         assert stdout == ""

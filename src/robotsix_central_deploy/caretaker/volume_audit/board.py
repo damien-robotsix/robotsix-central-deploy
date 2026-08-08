@@ -96,7 +96,7 @@ class BoardClient:
         if resp.is_error:
             try:
                 detail = resp.json().get("detail", resp.text)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 detail = resp.text
             logger.warning(
                 "Board API POST /tickets -> %d %s", resp.status_code, resp.reason_phrase

@@ -35,7 +35,6 @@ from robotsix_central_deploy.registry.models import (
 )
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

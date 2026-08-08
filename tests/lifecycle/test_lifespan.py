@@ -21,7 +21,6 @@ from robotsix_central_deploy.lifecycle.deps.lifespan import (
 from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
-
 # ---------------------------------------------------------------------------
 # _parse_self_contract_settings
 # ---------------------------------------------------------------------------

@@ -213,7 +213,7 @@ class TestDiskEndpoint:
         # Return empty list so the fallback to config.disk_path triggers.
         monkeypatch.setattr(
             "robotsix_central_deploy.lifecycle.routers.health.discover_mounted_disks",
-            lambda: [],
+            list,
         )
         server_mod.app.state.config.disk_path = "/host_root"
 
@@ -247,7 +247,7 @@ class TestDiskEndpoint:
 
         async def _fake_prune_images(
             self, protected_refs: set[str], *, force: bool = False
-        ) -> "PruneImagesResult":
+        ) -> PruneImagesResult:
             return PruneImagesResult(space_reclaimed_bytes=2_000, removed_count=1)
 
         monkeypatch.setattr(NoopBackend, "prune_builds", _fake_prune_builds)
@@ -274,7 +274,7 @@ class TestDiskEndpoint:
 
         async def _fake_prune_images(
             self, protected_refs: set[str], *, force: bool = False
-        ) -> "PruneImagesResult":
+        ) -> PruneImagesResult:
             seen.append(protected_refs)
             return PruneImagesResult()
 

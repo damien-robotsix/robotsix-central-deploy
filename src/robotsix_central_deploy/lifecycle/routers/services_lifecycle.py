@@ -7,16 +7,16 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from ...registry.loader import ComponentRegistry
+from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
-from .._config_utils import _sanitize_log
 from ..deps import (
     _get_backend,
     _get_or_create_record,
     _get_registry,
     _get_store,
 )
-from ._sibling_utils import _fanout_siblings_best_effort
 from ..models import (
     ActionResponse,
     ActionType,
@@ -25,8 +25,7 @@ from ..models import (
     can_transition,
 )
 from ..store import ServiceStore
-from ...registry.loader import ComponentRegistry
-
+from ._sibling_utils import _fanout_siblings_best_effort
 
 logger = logging.getLogger(__name__)
 
@@ -143,9 +142,9 @@ async def _lifecycle_action(
 )
 async def start_service(
     name: str,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     """Start a service. Idempotent — returns success if already running or starting.
@@ -183,9 +182,9 @@ async def start_service(
 )
 async def stop_service(
     name: str,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     """Stop a service. Idempotent — returns success if already stopped or stopping.
@@ -223,9 +222,9 @@ async def stop_service(
 )
 async def restart_service(
     name: str,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     """Restart a service. Idempotent — returns success if a restart is already in progress.

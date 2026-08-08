@@ -30,7 +30,6 @@ from robotsix_central_deploy.lifecycle.routers.chat_preview import (
 )
 from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
 
-
 # ---------------------------------------------------------------------------
 # _log_safe
 # ---------------------------------------------------------------------------
@@ -591,7 +590,7 @@ class TestPreviewDeployEndpoint:
         mock_proc.communicate = AsyncMock(return_value=(b"", b""))
         mock_proc.returncode = 0
 
-        with patch.object(cp_mod, "_PREVIEW_DIR", real_preview_dir):
+        with patch.object(cp_mod, "_PREVIEW_DIR", real_preview_dir):  # noqa: SIM117
             with patch.object(cp_mod, "_clone_repo", _fake_clone):
                 with patch(
                     "robotsix_central_deploy.lifecycle.routers.chat_preview.asyncio.create_subprocess_exec",

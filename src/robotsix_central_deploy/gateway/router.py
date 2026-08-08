@@ -12,15 +12,15 @@ Registered LAST on the FastAPI app so that built-in routes (``/health``,
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from ..lifecycle.auth import verify_session
 from ..registry.models import ComponentConfig
 from .proxy import filter_hop_by_hop, http_proxy, ws_proxy
-from ..lifecycle.auth import verify_session
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ RESERVED_NAMES: frozenset[str] = frozenset(
 def _resolve(
     app: Any,  # FastAPI / Starlette app
     name: str,
-) -> tuple[Optional[ComponentConfig], Optional[int]]:
+) -> tuple[ComponentConfig | None, int | None]:
     """Look up *name* in the component registry.
 
     Returns ``(config, None)`` on success, ``(None, http_status)`` on failure.
@@ -67,7 +67,7 @@ def _resolve(
     if registry is None:
         return None, 503
 
-    config: Optional[ComponentConfig] = registry.get(name)
+    config: ComponentConfig | None = registry.get(name)
     if config is None:
         return None, 404
 
@@ -82,7 +82,7 @@ def _resolve(
 # ---------------------------------------------------------------------------
 
 
-def _extract_subdomain_name(headers: Any, app: Any) -> Optional[str]:
+def _extract_subdomain_name(headers: Any, app: Any) -> str | None:
     """Return the component name encoded in the Host subdomain, or ``None``.
 
     With ``gateway_base_domain="deploy.robotsix.net"``:

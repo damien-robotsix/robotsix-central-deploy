@@ -16,8 +16,7 @@ pytest.importorskip("secure")
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
-from secure import Secure, Preset
+from secure import Preset, Secure
 
 from robotsix_central_deploy.lifecycle.secure_headers import (
     GatewayAwareSecureMiddleware,

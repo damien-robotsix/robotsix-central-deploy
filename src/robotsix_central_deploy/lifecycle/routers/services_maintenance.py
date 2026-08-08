@@ -8,6 +8,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from ...onboard.port_utils import (
+    collect_occupied_host_ports,
+    preserve_host_port_assignments,
+)
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.env_store import EnvStore
+from ...registry.loader import ComponentRegistry
+from ...registry.models import ComponentConfig
 from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -28,16 +37,6 @@ from ..deps import (
 from ..models import ErrorDetail
 from ..schemas import ContractRefreshResponse
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
-from ...registry.env_store import EnvStore
-from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig
-from ...onboard.port_utils import (
-    collect_occupied_host_ports,
-    preserve_host_port_assignments,
-)
-
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +105,10 @@ async def _delete_component_volumes(
 )
 async def refresh_contract(
     name: str,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    registry: ComponentRegistry = Depends(_get_registry),
-    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ContractRefreshResponse:
     """Re-parse the component's deploy/docker-compose.yml and update stored settings.
@@ -123,7 +122,7 @@ async def refresh_contract(
     component did not already expose.  The endpoint returns which fields
     changed so the operator can decide whether a redeploy is needed.
     """
-    from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
+    from robotsix_central_deploy.onboard.parser import (
         ParseError,
         parse_compose,
     )
@@ -288,12 +287,12 @@ async def delete_service(
         default=False,
         description="Also delete the component's data volumes (IRREVERSIBLE — destroys stored data)",
     ),
-    store: ServiceStore = Depends(_get_store),
-    config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    env_store: EnvStore = Depends(_get_env_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Remove an onboarded component and optionally its container and volumes.

@@ -46,7 +46,6 @@ from robotsix_central_deploy.gateway.router import (
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -266,7 +265,7 @@ class TestHttpProxy:
         client = _make_client(None, side_effect=httpx.ConnectError("refused"))
         request = _make_request()
 
-        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
+        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):  # noqa: SIM117
             with pytest.raises(HTTPException) as exc_info:
                 await http_proxy(request, "http://backend:9000", "x")
 
@@ -278,7 +277,7 @@ class TestHttpProxy:
         client = _make_client(None, side_effect=httpx.TimeoutException("slow"))
         request = _make_request()
 
-        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
+        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):  # noqa: SIM117
             with pytest.raises(HTTPException) as exc_info:
                 await http_proxy(request, "http://backend:9000", "x")
 
@@ -289,7 +288,7 @@ class TestHttpProxy:
         client = _make_client(None, side_effect=httpx.HTTPError("boom"))
         request = _make_request()
 
-        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):
+        with patch.object(proxy_mod.httpx, "AsyncClient", return_value=client):  # noqa: SIM117
             with pytest.raises(HTTPException) as exc_info:
                 await http_proxy(request, "http://backend:9000", "x")
 
@@ -317,7 +316,7 @@ class _FakeBackendWS:
         self._iter_error = iter_error
         self.send = AsyncMock()
 
-    def __aiter__(self) -> "_FakeBackendWS":
+    def __aiter__(self) -> _FakeBackendWS:
         return self
 
     async def __anext__(self) -> object:
@@ -463,7 +462,7 @@ class TestWsProxy:
         connect = MagicMock(return_value=_FakeConnectRaises(_InvalidStatus("HTTP 400")))
         fake_ws = _fake_websockets_module(connect)
 
-        with patch.dict(sys.modules, {"websockets": fake_ws}):
+        with patch.dict(sys.modules, {"websockets": fake_ws}):  # noqa: SIM117
             with caplog.at_level(logging.WARNING):
                 await ws_proxy(
                     client_ws,

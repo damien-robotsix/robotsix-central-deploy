@@ -24,8 +24,8 @@ class TestErrorHandlerRegistration:
         # The handler keys are the exception *types*.
         handler_types = {exc for exc in handlers}
         # We expect at least StarletteHTTPException, RequestValidationError, and Exception.
-        from starlette.exceptions import HTTPException as StarletteHTTPException
         from fastapi.exceptions import RequestValidationError
+        from starlette.exceptions import HTTPException as StarletteHTTPException
 
         assert StarletteHTTPException in handler_types, (
             f"StarletteHTTPException not in {handler_types}"

@@ -6,12 +6,11 @@ The gateway router MUST be registered last — it includes catch-all routes
 
 from __future__ import annotations
 
-from fastapi import FastAPI, APIRouter
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from starlette.routing import Match, Mount
 
 from robotsix_central_deploy.lifecycle.app import app
-
 
 # ---------------------------------------------------------------------------
 # Helpers

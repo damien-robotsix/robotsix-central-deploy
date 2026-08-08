@@ -10,6 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 
+from ...registry.config_store import ComponentConfigStore
+from ...registry_check import RegistryChecker
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import (
@@ -23,8 +25,6 @@ from ..deps import (
 from ..models import ServiceStatus
 from ..schemas import VolumeFileResponse
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry_check import RegistryChecker
 from ._chat_common import _require_allowed_service
 from ._status_refresh import refresh_record_status
 
@@ -50,9 +50,9 @@ async def chat_service_logs(
     name: str,
     tail: int = Query(100, ge=1, le=10000),
     since: str | None = Query(None, description="ISO 8601 or Unix timestamp"),
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> PlainTextResponse:
     """Return recent container logs (bounded tail, no follow).
@@ -100,9 +100,9 @@ async def chat_service_logs(
 async def chat_service_status(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     """Return machine-readable lifecycle status for an allowlisted service.
@@ -132,7 +132,7 @@ async def chat_service_status(
 )
 async def chat_service_volumes(
     name: str,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> list[str]:
     """Return the named volumes owned by an allowlisted service.
@@ -170,8 +170,8 @@ async def chat_volume_file(
     name: str,
     vol: str,
     path: str = Query("", description="File path relative to the volume root"),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> VolumeFileResponse:
     """Return the text content of a file within a service's named volume.

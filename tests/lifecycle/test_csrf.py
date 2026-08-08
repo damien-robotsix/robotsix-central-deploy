@@ -5,13 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from robotsix_central_deploy.lifecycle.csrf import (
-    CSRFHelper,
     _HAS_ITSDANGEROUS,
+    CSRFHelper,
 )
 
 try:

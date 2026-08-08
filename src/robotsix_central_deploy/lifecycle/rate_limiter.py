@@ -241,15 +241,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return response
 
         # -- API paths: broader limit ------------------------------------
-        if _is_api_path(path):
-            if not await store.check_api_rate(
-                ip,
-                cfg.rate_limit_api_per_hour,
-                3600.0,
-            ):
-                return JSONResponse(
-                    {"detail": "API rate limit exceeded — slow down."},
-                    status_code=429,
-                )
+        if _is_api_path(path) and not await store.check_api_rate(
+            ip,
+            cfg.rate_limit_api_per_hour,
+            3600.0,
+        ):
+            return JSONResponse(
+                {"detail": "API rate limit exceeded — slow down."},
+                status_code=429,
+            )
 
         return await call_next(request)  # type: ignore[no-any-return, operator]

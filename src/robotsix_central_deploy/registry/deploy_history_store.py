@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any
 
 from ..lifecycle.models import DeployHistoryEntry
-
 from ._store_utils import JsonFileStore
 
 MAX_HISTORY_ENTRIES: int = 20

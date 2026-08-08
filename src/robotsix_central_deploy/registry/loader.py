@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from pathlib import Path
 
+from ..lifecycle._yaml_utils import (
+    InvalidConfigStructureError,
+    YamlParseError,
+    YamlReadError,
+    read_yaml_file,
+)
 from .models import ComponentConfig
+
+
+class RegistryLoadError(RuntimeError):
+    """Raised when a component registry YAML file cannot be loaded."""
 
 
 class ComponentRegistry:
@@ -12,6 +22,58 @@ class ComponentRegistry:
 
     def __init__(self, components: list[ComponentConfig]) -> None:
         self._index: dict[str, ComponentConfig] = {c.id: c for c in components}
+
+    # -- factory ------------------------------------------------------------
+
+    @classmethod
+    def from_yaml(cls, path: Path) -> ComponentRegistry:
+        """
+        Load and validate a component registry YAML file.
+
+        Expected file shape::
+
+            components:
+              - id: my-service
+                image: ghcr.io/your-org/my-service:latest
+                container_name: my-service
+                ports:
+                  - host: 8080
+                    container: 8080
+                mounts: []
+                env: {}
+                health_check:
+                  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+
+        Raises ``RegistryLoadError`` on missing file, YAML syntax errors,
+        or Pydantic validation failures.
+        """
+        if not path.exists():
+            raise RegistryLoadError(f"Registry file not found: {path}")
+        try:
+            raw = read_yaml_file(path)
+        except YamlReadError as exc:
+            raise RegistryLoadError(f"Failed to read {path}: {exc}") from exc
+        except YamlParseError as exc:
+            raise RegistryLoadError(f"Invalid YAML in {path}: {exc}") from exc
+        except InvalidConfigStructureError as exc:
+            raise RegistryLoadError(f"Invalid structure in {path}: {exc}") from exc
+
+        if not isinstance(raw, dict) or "components" not in raw:
+            raise RegistryLoadError(
+                f"Registry file {path} must have a top-level 'components' list"
+            )
+
+        components: list[ComponentConfig] = []
+        from pydantic import ValidationError
+
+        for i, entry in enumerate(raw["components"]):
+            try:
+                components.append(ComponentConfig.model_validate(entry))
+            except ValidationError as exc:
+                raise RegistryLoadError(
+                    f"Invalid component entry at index {i} in {path}: {exc}"
+                ) from exc
+        return cls(components)
 
     # -- query --------------------------------------------------------------
 
@@ -23,7 +85,7 @@ class ComponentRegistry:
         """Remove *id* from the in-memory index. No-op if absent."""
         self._index.pop(id, None)
 
-    def get(self, component_id: str) -> Optional[ComponentConfig]:
+    def get(self, component_id: str) -> ComponentConfig | None:
         """Return the component with *component_id*, or ``None``."""
         return self._index.get(component_id)
 

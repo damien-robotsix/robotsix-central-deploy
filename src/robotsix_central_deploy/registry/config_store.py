@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -60,7 +60,7 @@ class ComponentConfigStore:
             encoding="utf-8",
         )
 
-    def get(self, id: str) -> Optional[ComponentConfig]:
+    def get(self, id: str) -> ComponentConfig | None:
         return self._load().get(id)
 
     async def put(self, config: ComponentConfig) -> None:

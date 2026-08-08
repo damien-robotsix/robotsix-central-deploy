@@ -14,23 +14,22 @@ from fastapi import FastAPI
 from robotsix_http import RetryClient
 
 from ..._http import wrap_retry_client
-
-from ..backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
-from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntry
-from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
-from ..store import FileStore, InMemoryStore, ServiceStore
+from ...caretaker.scheduler import CaretakerScheduler
+from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
+from ...gateway.proxy import PROXY_NETWORK
+from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
-from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 from ...registry.secret_key import SecretKeyManager
 from ...registry_check import RegistryChecker
-from ...gateway.proxy import PROXY_NETWORK
-from ...caretaker.scheduler import CaretakerScheduler
-from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
+from ..backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
+from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntry
+from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
+from ..store import FileStore, InMemoryStore, ServiceStore
 from .background import _claude_auth_refresh_loop, _registry_check_loop
 from .jobs import JobRegistry
 
@@ -76,7 +75,7 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
 # ---------------------------------------------------------------------------
 
 
-def _parse_self_contract_settings(config: LifecycleConfig) -> "SystemSettings | None":  # type: ignore[name-defined]  # noqa: F821
+def _parse_self_contract_settings(config: LifecycleConfig) -> SystemSettings | None:  # type: ignore[name-defined]  # noqa: F821
     """Parse central-deploy's own deploy contract and extract system settings.
 
     Reads the YAML file at ``config.self_contract_path``, looks for the
@@ -220,7 +219,7 @@ def _parse_self_contract_settings(config: LifecycleConfig) -> "SystemSettings | 
 
     try:
         return SystemSettings(**settings_kwargs)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Self-contract %s: failed to build SystemSettings — %s", contract_path, exc
         )
@@ -273,7 +272,6 @@ async def _init_settings(app: FastAPI) -> None:
     global _config, _backend
     assert _config is not None
     from ...registry.settings_store import SystemSettings, SystemSettingsStore
-
     from .._settings_defaults import SETTINGS_DEFAULTS
 
     settings_store = SystemSettingsStore(_config.effective_system_settings_path)
@@ -582,8 +580,8 @@ _CENTRAL_DEPLOY_CONFIG_SCHEMA: dict[str, object] = {
 
 
 async def _seed_central_deploy_config_schema(
-    config_yaml_store: "ConfigYamlStore",
-    auto_langfuse: dict[str, "LangfuseProjectCreds"],
+    config_yaml_store: ConfigYamlStore,
+    auto_langfuse: dict[str, LangfuseProjectCreds],
     config: LifecycleConfig,
 ) -> None:
     """Seed central-deploy's own config schema.
@@ -753,7 +751,7 @@ async def _init_component_registry(app: FastAPI) -> None:
     _caretaker_task = asyncio.create_task(caretaker_scheduler.loop())
     app.state._caretaker_task = _caretaker_task
 
-    if not initial_settings.caretaker_enabled:
+    if not initial_settings.caretaker_enabled:  # noqa: SIM102
         # Caretaker disabled at startup: start the standalone volume audit
         # loop if configured. When caretaker is hot-enabled later the
         # volume-audit loop continues — double-scan on phase_volumes is

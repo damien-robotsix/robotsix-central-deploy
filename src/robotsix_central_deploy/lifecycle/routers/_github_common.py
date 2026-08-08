@@ -17,11 +17,11 @@ from typing import Any, TypeVar
 
 from fastapi import HTTPException, status
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ..config import LifecycleConfig
 from ..github_app import (
     GitHubAppNotConfiguredError,
 )
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 
 # get_github_client and get_repo_create_client are looked up lazily from
 # .chat_github (inside the functions that need them) so that test-suite

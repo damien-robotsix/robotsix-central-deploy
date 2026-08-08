@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -121,8 +121,8 @@ class _FakePull:
         self.mergeable = mergeable
         self.merged = merged
         self.merged_at = merged_at
-        self.created_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=timezone.utc)
-        self.updated_at = datetime(2026, 7, 7, 12, 5, 0, tzinfo=timezone.utc)
+        self.created_at = datetime(2026, 7, 7, 12, 0, 0, tzinfo=UTC)
+        self.updated_at = datetime(2026, 7, 7, 12, 5, 0, tzinfo=UTC)
         self.body = body
 
 
@@ -962,9 +962,7 @@ class _FakeReview:
         self.id = review_id
         self.user = _FakeUser(user_login)
         self.state = state
-        self.submitted_at = submitted_at or datetime(
-            2026, 7, 7, 12, 10, 0, tzinfo=timezone.utc
-        )
+        self.submitted_at = submitted_at or datetime(2026, 7, 7, 12, 10, 0, tzinfo=UTC)
         self.commit_id = commit_id
         self.body = body
 
@@ -991,9 +989,7 @@ class _FakeReviewComment:
         self.user = _FakeUser(user_login)
         self.in_reply_to_id = in_reply_to_id
         self.commit_id = commit_id
-        self.created_at = created_at or datetime(
-            2026, 7, 7, 12, 10, 0, tzinfo=timezone.utc
-        )
+        self.created_at = created_at or datetime(2026, 7, 7, 12, 10, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

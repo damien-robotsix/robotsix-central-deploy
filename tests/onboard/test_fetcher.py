@@ -22,7 +22,6 @@ from robotsix_central_deploy.onboard.fetcher import (
     fetch_repo_files,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
@@ -163,22 +162,26 @@ class TestFetchRepoFiles:
         source_repo = tmp_path / "source"
         _init_local_git_repo(source_repo)
 
-        with mock.patch(
-            "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
+        with (
+            mock.patch(
+                "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
+            ),
+            pytest.raises(FetchError, match="no deploy/docker-compose.yml found"),
         ):
-            with pytest.raises(FetchError, match="no deploy/docker-compose.yml found"):
-                fetch_repo_files("https://example.com/repo.git")
+            fetch_repo_files("https://example.com/repo.git")
 
     def test_root_compose_is_ignored(self, tmp_path: Path):
         """Root ``docker-compose.yml`` is not the deploy contract — still raises."""
         source_repo = tmp_path / "source"
         _init_local_git_repo(source_repo, extra_file="docker-compose.yml")
 
-        with mock.patch(
-            "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
+        with (
+            mock.patch(
+                "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
+            ),
+            pytest.raises(FetchError, match="no deploy/docker-compose.yml found"),
         ):
-            with pytest.raises(FetchError, match="no deploy/docker-compose.yml found"):
-                fetch_repo_files("https://example.com/repo.git")
+            fetch_repo_files("https://example.com/repo.git")
 
     def test_non_https_url_raises_fetch_error(self):
         """Non-HTTPS URLs are rejected before any subprocess call."""
@@ -260,11 +263,13 @@ class TestFetchComposeBytes:
         source_repo = tmp_path / "source"
         _init_local_git_repo(source_repo)
 
-        with mock.patch(
-            "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
+        with (
+            mock.patch(
+                "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
+            ),
+            pytest.raises(FetchError, match="no deploy/docker-compose.yml found"),
         ):
-            with pytest.raises(FetchError, match="no deploy/docker-compose.yml found"):
-                fetch_compose_bytes("https://example.com/repo.git")
+            fetch_compose_bytes("https://example.com/repo.git")
 
 
 # ---------------------------------------------------------------------------

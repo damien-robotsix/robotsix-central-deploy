@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-
+# Import the server module itself (not just symbols) so we can set its globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle.deps.seed import _namespace_spec_volumes
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
@@ -12,11 +14,6 @@ from robotsix_central_deploy.onboard.models import DerivedSpec, SiblingDerivedSp
 from robotsix_central_deploy.registry.models import (
     VolumeMount,
 )
-
-# Import the server module itself (not just symbols) so we can set its globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-from robotsix_central_deploy.lifecycle.deps.seed import _namespace_spec_volumes
-
 
 # ---------------------------------------------------------------------------
 # Helpers

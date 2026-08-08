@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
@@ -20,9 +22,6 @@ from ..deps import (
 )
 from ..models import SelfInspect
 from ..schemas import ChatAgentSelfRestartResponse, ChatAgentSelfUpdateResponse
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-from ...registry.config_store import ComponentConfigStore
-
 from ._chat_common import (
     _check_rate_limit,
     _require_allowed_service,
@@ -49,9 +48,9 @@ router = APIRouter(tags=["chat"])
 )
 async def chat_self_restart(
     request: Request,
-    backend: ExecutionBackend = Depends(_get_backend),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentSelfRestartResponse:
     """Restart the central-deploy container itself.
@@ -111,10 +110,10 @@ async def chat_self_restart(
 )
 async def chat_self_update(
     request: Request,
-    backend: ExecutionBackend = Depends(_get_backend),
-    config: LifecycleConfig = Depends(_get_config),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentSelfUpdateResponse:
     """Pull the latest image and recreate the central-deploy container itself.

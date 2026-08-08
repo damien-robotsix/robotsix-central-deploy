@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -75,13 +73,13 @@ class ServiceConfig(BaseModel):
         False,
         description="If true, bind-mount the host Docker socket into this sibling",
     )
-    health_check: Optional[HealthCheck] = Field(
+    health_check: HealthCheck | None = Field(
         default=None, description="Docker health check configuration for this sibling"
     )
-    command: Optional[list[str]] = Field(
+    command: list[str] | None = Field(
         default=None, description="Override the image's default CMD"
     )
-    entrypoint: Optional[list[str]] = Field(
+    entrypoint: list[str] | None = Field(
         default=None, description="Override the image's default ENTRYPOINT"
     )
     tmpfs: list[str] = Field(
@@ -91,7 +89,7 @@ class ServiceConfig(BaseModel):
     mem_limit: str = Field(
         "2g", description="Memory limit for this sibling's container (e.g. '2g')"
     )
-    user: Optional[str] = Field(
+    user: str | None = Field(
         default=None, description="Container user override (e.g. '1000:1000' or 'root')"
     )
 
@@ -131,7 +129,7 @@ class ComponentConfig(BaseModel):
         default_factory=dict,
         description="Static environment variables for the primary service",
     )
-    health_check: Optional[HealthCheck] = Field(
+    health_check: HealthCheck | None = Field(
         default=None, description="Docker health check configuration"
     )
     claude_mount: bool = Field(
@@ -152,11 +150,11 @@ class ComponentConfig(BaseModel):
         default_factory=list,
         description="Additional sibling services; empty list for single-service components",
     )
-    command: Optional[list[str]] = Field(
+    command: list[str] | None = Field(
         default=None,
         description="Override the image's default CMD (from compose 'command:')",
     )
-    entrypoint: Optional[list[str]] = Field(
+    entrypoint: list[str] | None = Field(
         default=None,
         description="Override the image's default ENTRYPOINT (from compose 'entrypoint:')",
     )
@@ -166,11 +164,11 @@ class ComponentConfig(BaseModel):
     git_url: str = Field(
         "", description="Source repository URL recorded at onboard time"
     )
-    config_volume: Optional[str] = Field(
+    config_volume: str | None = Field(
         default=None,
         description="Named volume holding config.json, resolved from the robotsix.deploy.config-target label",
     )
-    config_assist_command: Optional[str] = Field(
+    config_assist_command: str | None = Field(
         default=None,
         description="Command from the robotsix.deploy.config-assist label",
     )
@@ -187,11 +185,11 @@ class ComponentConfig(BaseModel):
     mem_limit: str = Field(
         "2g", description="Memory limit for the primary container (e.g. '2g')"
     )
-    user: Optional[str] = Field(
+    user: str | None = Field(
         default=None,
         description="Container user override (e.g. '1000:1000' or 'root')",
     )
-    llmio_tier_level: Optional[str] = Field(
+    llmio_tier_level: str | None = Field(
         default=None,
         description="Capability tier: 'level1', 'level2', 'level3', or 'level4'",
     )

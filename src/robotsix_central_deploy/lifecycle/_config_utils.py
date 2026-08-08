@@ -6,15 +6,36 @@ so the config-merge logic is independently testable.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 
+import yaml
 
 if TYPE_CHECKING:
-    from .backends import ExecutionBackend
     from ..registry.models import ComponentConfig
+    from .backends import ExecutionBackend
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Canonical hash (config drift detection)
+# ---------------------------------------------------------------------------
+
+
+def _canonical_hash(d: dict[str, Any]) -> str:
+    """SHA-256 of a canonically serialised YAML dict.
+
+    Serialises via ``yaml.dump`` with ``sort_keys=True`` before hashing so
+    key-insertion-order differences and Python-vs-docker-exec YAML
+    formatting differences do not cause false drift positives.
+    Returns the full 64-char hex digest.
+    """
+    serialised = yaml.dump(
+        d, default_flow_style=False, allow_unicode=True, sort_keys=True
+    )
+    return hashlib.sha256(serialised.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +228,7 @@ def _strip_secret_values(
             walk: Any,
         ) -> Any:
             (i_values,) = value_dicts
-            return i_values[key] if key in i_values else _SchemaWalker.SKIP
+            return i_values.get(key, _SchemaWalker.SKIP)
 
         def array(
             self,
@@ -378,7 +399,7 @@ def _mask_secrets_json_schema(
             walk: Any,
         ) -> Any:
             (i_current,) = value_dicts
-            return i_current[key] if key in i_current else ""
+            return i_current.get(key, "")
 
         def array(
             self,
@@ -713,7 +734,7 @@ def _restore_secrets_from_current(
             value_dicts: tuple[dict[str, Any], ...],
             walk: Any,
         ) -> Any:
-            (i_restored, i_current) = value_dicts
+            (i_restored, _i_current) = value_dicts
             if key in i_restored:
                 return i_restored[key]
             return _SchemaWalker.SKIP
@@ -776,7 +797,7 @@ async def _write_llmio_tier_config(
             await backend.write_llmio_tier_config_to_volume(
                 component_config.config_volume, settings.llmio_tier_config
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "%s %s: could not write llmio tier config to volume %s: %s",
             log_context,

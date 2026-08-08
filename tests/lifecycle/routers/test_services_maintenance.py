@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
@@ -17,9 +18,6 @@ from robotsix_central_deploy.registry.models import (
     ServiceConfig,
     VolumeMount,
 )
-
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers

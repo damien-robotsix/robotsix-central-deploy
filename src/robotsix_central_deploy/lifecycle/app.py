@@ -8,9 +8,8 @@ are in ``deps.py``.  Endpoint handlers are organised by resource in the
 
 from __future__ import annotations
 
-import re
-
 import logging
+import re
 
 from fastapi import FastAPI
 
@@ -25,7 +24,7 @@ except ImportError:
     )
 
 try:
-    from secure import Secure, Preset
+    from secure import Preset, Secure
 
     from .secure_headers import GatewayAwareSecureMiddleware
 
@@ -33,33 +32,33 @@ try:
 except ImportError:  # pragma: no cover — optional dep
     _HAS_SECURE = False
 
+from ..ui.router import router as ui_router
 from .csrf import get_csrf_secret
 from .deps import lifespan
 from .error_handlers import register_error_handlers
-from .models import ErrorDetail
 from .gateway_docs_middleware import GatewayAwareDocsMiddleware
+from .models import ErrorDetail
 from .rate_limiter import RateLimitMiddleware
-from .routers.health import router as health_router
-from .routers.services import router as services_router
-from .routers.services_maintenance import router as services_maintenance_router
-from .routers.services_lifecycle import router as services_lifecycle_router
-from .routers.services_deploy import router as services_deploy_router
-from .routers.services_config import router as services_config_router
-from .routers.services_env import router as services_env_router
-from .routers.system import router as system_router
-from .routers.volumes import router as volumes_router
 from .routers.caretaker import router as caretaker_router
-from .routers.onboard import router as onboard_router
-from .routers.claude_auth import router as claude_auth_router
 from .routers.chat import router as chat_router
 from .routers.chat_github_actions import router as chat_github_actions_router
 from .routers.chat_github_pulls import router as chat_github_pulls_router
 from .routers.chat_github_repos import router as chat_github_repos_router
 from .routers.chat_github_security import router as chat_github_security_router
-from .routers.chat_preview import router as chat_preview_router
 from .routers.chat_langfuse import router as chat_langfuse_router
+from .routers.chat_preview import router as chat_preview_router
+from .routers.claude_auth import router as claude_auth_router
 from .routers.fleet_langfuse import router as fleet_langfuse_router
-from ..ui.router import router as ui_router
+from .routers.health import router as health_router
+from .routers.onboard import router as onboard_router
+from .routers.services import router as services_router
+from .routers.services_config import router as services_config_router
+from .routers.services_deploy import router as services_deploy_router
+from .routers.services_env import router as services_env_router
+from .routers.services_lifecycle import router as services_lifecycle_router
+from .routers.services_maintenance import router as services_maintenance_router
+from .routers.system import router as system_router
+from .routers.volumes import router as volumes_router
 
 # URL patterns exempt from CSRF checks — these are API routes authenticated
 # via X-API-Key / Basic-Auth headers (bearer-style, not vulnerable to CSRF)
@@ -148,7 +147,7 @@ app.include_router(fleet_langfuse_router)
 
 # Gateway router — MUST be registered last so its catch-all routes only
 # match after every specific API route has been tried.
-from ..gateway.router import gateway_router  # noqa: E402
+from ..gateway.router import gateway_router
 
 app.include_router(gateway_router)
 
@@ -159,9 +158,8 @@ app.include_router(gateway_router)
 
 
 if __name__ == "__main__":
-    import uvicorn
-
     import robotsix_config
+    import uvicorn
 
     from .config import LifecycleConfig
 
