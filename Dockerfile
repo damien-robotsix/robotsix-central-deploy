@@ -6,15 +6,6 @@ ARG BASE_DIGEST=sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facf
 # (satisfies hadolint DL3022).
 FROM ghcr.io/astral-sh/uv:0.11.29 AS uv
 
-# CSS stage — fetch the robotsix-ui shared stylesheet directly from the
-# source repo so we avoid dragging a full Node.js toolchain into the build.
-FROM python:3.14-slim@${BASE_DIGEST} AS css
-# hadolint ignore=DL3008
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
-    && curl -sSfL -o /style.css \
-       https://raw.githubusercontent.com/damien-robotsix/robotsix-ui/v0.1.7/dist/style.css \
-    && apt-get remove -y curl && rm -rf /var/lib/apt/lists/*
-
 # Builder stage — uv and git resolve the frozen lockfile (including the
 # git-pinned first-party deps) and install the project. Build tooling stays
 # here; only installed packages are copied into the runtime image.
@@ -30,7 +21,6 @@ RUN apt-get update && apt-get upgrade -y \
 
 COPY pyproject.toml uv.lock _mill_build.py ./
 COPY src/ ./src/
-COPY --from=css /style.css ./src/robotsix_central_deploy/ui/static/robotsix-ui-base.css
 # src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md is a symlink to
 # ../../../docs/ui/DEPLOY_CONTRACT.md; the canonical file must exist in the
 # build stage or hatchling fails to resolve it when building the wheel.

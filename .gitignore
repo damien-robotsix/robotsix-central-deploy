@@ -39,5 +39,4 @@ _gen_openapi_tmp.py
 .deps/
 node_modules/
 package-lock.json
-# Generated at Docker build time from the robotsix-ui npm package
-src/robotsix_central_deploy/ui/static/robotsix-ui-base.css
+
