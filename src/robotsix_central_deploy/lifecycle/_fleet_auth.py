@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from ._config_utils import ConfigWriteRejected, write_config_to_volume_checked
+
 if TYPE_CHECKING:
     from fastapi import Request
 
@@ -24,6 +26,7 @@ async def _rebuild_fleet_auth_hosts(
     component_config_store: "ComponentConfigStore",
     backend: Any,
     gateway_base_domain: str,
+    config_yaml_store: Any = None,
 ) -> None:
     """Core logic: rebuild ``fleet_auth.auth_hosts`` on chat-agent components.
 
@@ -94,7 +97,29 @@ async def _rebuild_fleet_auth_hosts(
         # immediately in the running component.
         if cfg.config_volume:
             try:
-                await backend.write_config_to_volume(cfg.config_volume, volume_config)
+                if config_yaml_store is not None:
+                    await write_config_to_volume_checked(
+                        backend,
+                        config_yaml_store,
+                        cfg.id,
+                        cfg.config_volume,
+                        volume_config,
+                    )
+                else:
+                    await backend.write_config_to_volume(
+                        cfg.config_volume, volume_config
+                    )
+            except ConfigWriteRejected:
+                # The component does not declare this key where we are
+                # writing it. Writing anyway produces a config it rejects
+                # at boot, so skip it and leave the volume untouched.
+                logger.warning(
+                    "Skipped fleet_auth write for %s — its schema rejects the "
+                    "document; the component and the deploy plane disagree on "
+                    "where fleet_auth lives",
+                    cfg.id,
+                    exc_info=True,
+                )
             except Exception:
                 logger.warning(
                     "Could not write fleet_auth to config volume for %s",
@@ -128,6 +153,7 @@ async def reconcile_fleet_auth_hosts(
             component_config_store,
             request.app.state.backend,
             gateway_base_domain,
+            request.app.state.config_yaml_store,
         )
     except Exception:
         logger.warning(

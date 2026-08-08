@@ -672,6 +672,7 @@ async def _init_component_registry(app: FastAPI) -> None:
             component_config_store,
             app.state.backend,
             _config.gateway_base_domain,
+            app.state.config_yaml_store,
         )
         logger.debug("Startup fleet-auth host reconciliation complete")
     except Exception:
