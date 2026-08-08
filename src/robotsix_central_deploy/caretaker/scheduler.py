@@ -233,15 +233,11 @@ class CaretakerScheduler:
             logger.debug("phase_volumes skipped: no VolumeAuditScheduler")
 
         # 5. Report findings: mill ingest or local fallback
-        ingest_attempted = 0
-        ingest_succeeded = 0
         for f in findings:
             if f.repo_id and mill_client is not None:
-                ingest_attempted += 1
                 ok = await mill_client.ingest_finding(f)
                 if ok:
                     mill_reported += 1
-                    ingest_succeeded += 1
                 else:
                     self._append_local(f)
                     local_only += 1

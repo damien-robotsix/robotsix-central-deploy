@@ -305,7 +305,7 @@ class TestBuildImage:
 
     async def test_image_only_no_build(self, tmp_path: Path):
         svc = {"image": "nginx:latest"}
-        result = await _build_image(tmp_path / "compose.yml", svc, tmp_path)
+        result = await _build_image(tmp_path / "compose.yml", svc)
         assert result == "nginx:latest"
 
     async def test_build_success(self, compose_path: Path):
@@ -327,9 +327,7 @@ class TestBuildImage:
             "robotsix_central_deploy.lifecycle.routers.chat_preview.asyncio.create_subprocess_exec",
             AsyncMock(side_effect=create_calls),
         ):
-            result = await _build_image(
-                compose_path, {"build": "."}, compose_path.parent
-            )
+            result = await _build_image(compose_path, {"build": "."})
             assert result == _PREVIEW_IMAGE_TAG
 
     async def test_build_failure_raises_500(self, compose_path: Path):
@@ -342,12 +340,12 @@ class TestBuildImage:
             AsyncMock(return_value=mock),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await _build_image(compose_path, {"build": "."}, compose_path.parent)
+                await _build_image(compose_path, {"build": "."})
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     async def test_no_image_no_build_raises_400(self, tmp_path: Path):
         with pytest.raises(HTTPException) as exc_info:
-            await _build_image(tmp_path / "compose.yml", {}, tmp_path)
+            await _build_image(tmp_path / "compose.yml", {})
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
