@@ -12,6 +12,7 @@
   "docker_sdk_timeout": 120,
   "disk_path": "/",
   "disk_warn_pct": 10.0,
+  "target_disk": "",
   "env_store_path": "component_env.json",
   "secret_key_path": "secrets.key",
   "config_yaml_store_path": "data/component_config_yaml.json",
@@ -21,6 +22,7 @@
   "registry_check_ttl": 300,
   "registry_check_interval": 300,
   "system_settings_path": "data/system_settings.json",
+  "self_contract_path": "deploy/docker-compose.yml",
   "log_level": "INFO",
   "gateway_base_domain": "",
   "volume_audit_enabled": false,
@@ -32,10 +34,27 @@
   "board_api_url": "",
   "board_api_token": "",
   "board_repo_id": "",
+  "github_app_id": "",
+  "github_app_private_key": "",
+  "installation_id": "",
+  "github_repo_create_token": "",
+  "ghcr_pull_token": "",
+  "langfuse_projects": {},
+  "langfuse_base_url": "",
+  "openrouter_keys": {},
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
   "mill_component_id": "",
   "image_auto_prune": false,
+  "chat_agent_audit_store_path": "data/chat_agent_audit.json",
+  "claude_auth_refresh_interval": 1800,
+  "rate_limit_login_per_minute": 10,
+  "rate_limit_api_per_hour": 20000,
+  "rate_limit_login_max_attempts": 20,
+  "rate_limit_login_lockout_seconds": 300,
+  "csrf_secret": "",
+  "chat_agent_registration_enabled": true,
+  "chat_agent_deployable_components": [],
   "virtual_components": [
     {
       "id": "langfuse",
@@ -56,6 +75,12 @@
       "auth_token_env": "DEPLOY_API_KEY"
     }
   ],
+  "ovh_sftp": {
+    "host": "",
+    "port": 22,
+    "user": "",
+    "password": ""
+  },
   "llmio_tier_config": {
     "level1": {
       "provider": "openai",
