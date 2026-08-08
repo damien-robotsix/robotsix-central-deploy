@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..lifecycle._yaml_utils import (
+    InvalidConfigStructureError,
+    YamlParseError,
+    YamlReadError,
+    read_yaml_file,
+)
 from .models import ComponentConfig
+
+
+class RegistryLoadError(RuntimeError):
+    """Raised when a component registry YAML file cannot be loaded."""
 
 
 class ComponentRegistry:

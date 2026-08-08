@@ -17,14 +17,13 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
-from .._config_utils import _sanitize_log, _write_llmio_tier_config
-from ..auth import verify_auth
-from ..backends import ExecutionBackend, collect_protected_image_refs
 from .._config_utils import (
     _sanitize_log,
     _write_llmio_tier_config,
     inject_deploy_api_key,
 )
+from ..auth import verify_auth
+from ..backends import ExecutionBackend, collect_protected_image_refs
 from ..deploy_lock import (
     get_deploy_lock_info,
     release_deploy_lock,
