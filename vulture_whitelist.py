@@ -12,6 +12,7 @@
 severity  # unused variable (src/robotsix_central_deploy/caretaker/models.py:67)
 prev_size_bytes  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/models.py:36)
 last_scan_at  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/models.py:76)
+restored  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:539) — GET /chat/config
 latest_digest  # unused variable (src/robotsix_central_deploy/lifecycle/models.py:232)
 sibling_health  # unused variable (src/robotsix_central_deploy/lifecycle/models.py:234)
 overall_health  # unused variable (src/robotsix_central_deploy/lifecycle/models.py:236)

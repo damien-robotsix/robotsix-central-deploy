@@ -227,272 +227,93 @@ def auth_headers() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Config update — happy path
+# Config write endpoints — retired (410 Gone)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_chat_config_update_happy_path(
+async def test_chat_config_put_is_retired(
     client: AsyncClient,
     auth_headers: dict[str, str],
-    store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
 ):
-    """PUT /chat/config/chat with valid non-secret keys succeeds."""
-    # Seed the config template
+    """The write path rebuilt the document from the stored schema template."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    # Seed a service record
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True, "log_level": "debug"}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["component"] == "chat"
-    assert "restored" in data
-    assert data["restored"]["debug"] is True
-    # log_level is intercepted and applied to the root logger — the
-    # submitted value ("debug") is not written to the component config;
-    # only the template default ("info") remains.
-    assert data["restored"]["log_level"] == "info"
-    # Secrets must be masked
-    assert data["restored"]["api_token"] == ""
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_partial_keeps_unsubmitted_keys(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """A partial update must not reset unsubmitted keys to template defaults.
-
-    Regression test for the 2026-07-18 chat outage: the chat agent submitted
-    only two keys and every other field (server port, API keys, integration
-    URLs) was silently reset to its schema default, taking the service down.
-    """
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-    # Seed a current config with non-default values, including secrets.
-    backend.volumes["test-config-vol"] = {
-        "debug": True,
-        "log_level": "info",
-        "api_token": "real-secret",
-        "nested": {"host": "prod.example.com", "secret_key": "nested-secret"},
-    }
-
-    resp = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": False}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-
-    current = backend.volumes.get("test-config-vol")
-    assert current is not None
-    assert current["debug"] is False
-    # Unsubmitted keys keep their existing values instead of template defaults.
-    assert current["api_token"] == "real-secret"
-    assert current["nested"]["host"] == "prod.example.com"
-    assert current["nested"]["secret_key"] == "nested-secret"
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_accepts_and_updates_secret_keys(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """PUT /chat/config with a secret key updates it."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True, "api_token": "new-secret-value"}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    # Secret value is masked in the response
-    assert body["restored"]["api_token"] == "***"
-    assert body["restored"]["debug"] is True
-    # Verify the secret was actually stored
-    stored = backend.volumes.get("test-config-vol")
-    assert stored["api_token"] == "new-secret-value"
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_nested_secret_keys_are_accepted(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """Nested secret keys are accepted and updated."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/chat",
-        json={
-            "values": {"nested": {"host": "newhost", "secret_key": "new-nested-secret"}}
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    # Secret value is masked in the response
-    assert body["restored"]["nested"]["secret_key"] == "***"
-    assert body["restored"]["nested"]["host"] == "newhost"
-    # Verify the secret was actually stored
-    stored = backend.volumes.get("test-config-vol")
-    assert stored["nested"]["secret_key"] == "new-nested-secret"
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_not_allowlisted(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """PUT /chat/config/other-svc returns 403 for non-allowlisted service."""
-    await config_yaml_store.save_template("other-svc", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
-
-    resp = await client.put(
-        "/chat/config/other-svc",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_chat_config_update_no_schema_returns_404(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """PUT /chat/config/chat with no stored template returns 404."""
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
     resp = await client.put(
         "/chat/config/chat",
         json={"values": {"debug": True}},
         headers=auth_headers,
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 410
 
 
 @pytest.mark.asyncio
-async def test_chat_config_write_follows_restart_access(
+async def test_chat_config_rollback_is_retired(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    config_yaml_store: ConfigYamlStore,
+):
+    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    resp = await client.post("/chat/config/chat/rollback", headers=auth_headers)
+    assert resp.status_code == 410
+
+
+# ---------------------------------------------------------------------------
+# Config read — allowlist gating
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chat_config_read_follows_restart_access(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
     backend: NoopBackend,
 ):
-    """Services the chat agent can restart are also config-writable.
+    """Services the chat agent can restart are also config-readable.
 
-    Verifies acceptance criterion: restart and config-write authorizations
-    are coupled through the single ``chat_agent_mutatable`` flag.  An
-    allowlisted service returns 200 on both; a non-allowlisted service
-    returns 403 on both.
+    Restart and config access are coupled through the same per-component
+    flags: an allowlisted service returns 200 on both, a non-allowlisted
+    one returns 403 on both.
     """
-    # -- Allowlisted service: both restart and config-write succeed -----
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
     resp_restart = await client.post(
-        "/chat/services/chat/restart",
-        headers=auth_headers,
+        "/chat/services/chat/restart", headers=auth_headers
     )
-    assert resp_restart.status_code == 200, f"restart failed: {resp_restart.text}"
+    assert resp_restart.status_code == 200
+    resp_read = await client.get("/chat/config/chat", headers=auth_headers)
+    assert resp_read.status_code == 200
 
-    resp_config = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp_config.status_code == 200, (
-        f"config-write should succeed when restart succeeds; "
-        f"got {resp_config.status_code}: {resp_config.text}"
-    )
-
-    # -- Non-allowlisted service: both return 403 -----------------------
-    resp_restart2 = await client.post(
-        "/chat/services/other-svc/restart",
-        headers=auth_headers,
-    )
-    assert resp_restart2.status_code == 403
-
-    resp_config2 = await client.put(
-        "/chat/config/other-svc",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp_config2.status_code == 403
+    resp_denied = await client.get("/chat/config/other-svc", headers=auth_headers)
+    assert resp_denied.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_chat_mutation_allowed_via_allow_chat_access_flag(
+async def test_chat_access_allowed_via_allow_chat_access_flag(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
     component_config_store: ComponentConfigStore,
 ):
-    """``allow_chat_access`` alone (operator toggle) grants mutation access.
-
-    A component with ``allow_chat_access=True`` and
-    ``chat_agent_mutatable=False`` must still be reachable through the
-    mutation endpoints — the operator-facing "Allow chat agent access"
-    checkbox is the single control surface.
-    """
-    # -- Register a component with allow_chat_access=True only ----------
+    """``allow_chat_access`` alone (operator toggle) grants access."""
     cfg = _make_config("chat-access-only", "ghcr.io/test/access-only:main")
     cfg.allow_chat_access = True
+    cfg.chat_agent_mutatable = False
     component_config_store.register(cfg)
 
     await config_yaml_store.save_template("chat-access-only", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat-access-only", state=ServiceState.RUNNING))
 
-    # Config-write must succeed.
-    resp_config = await client.put(
-        "/chat/config/chat-access-only",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp_config.status_code == 200, (
-        f"config-write should succeed when allow_chat_access=True; "
-        f"got {resp_config.status_code}: {resp_config.text}"
-    )
-
-    # Restart must also succeed.
-    resp_restart = await client.post(
-        "/chat/services/chat-access-only/restart",
-        headers=auth_headers,
-    )
-    assert resp_restart.status_code == 200, (
-        f"restart should succeed when allow_chat_access=True; "
-        f"got {resp_restart.status_code}: {resp_restart.text}"
-    )
+    resp = await client.get("/chat/config/chat-access-only", headers=auth_headers)
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_chat_mutation_denied_when_both_flags_are_false(
+async def test_chat_access_denied_when_both_flags_are_false(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
@@ -501,7 +322,6 @@ async def test_chat_mutation_denied_when_both_flags_are_false(
 ):
     """Both flags false → 403, even when the service record exists."""
     cfg = _make_config("no-access", "ghcr.io/test/no-access:main")
-    # Explicitly confirm both flags are false.
     cfg.allow_chat_access = False
     cfg.chat_agent_mutatable = False
     component_config_store.register(cfg)
@@ -509,80 +329,7 @@ async def test_chat_mutation_denied_when_both_flags_are_false(
     await config_yaml_store.save_template("no-access", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="no-access", state=ServiceState.RUNNING))
 
-    resp = await client.put(
-        "/chat/config/no-access",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 403
-
-
-# ---------------------------------------------------------------------------
-# Config rollback
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_chat_config_rollback_happy_path(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """POST /chat/config/chat/rollback restores previous snapshot."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    # First update to create a rollback snapshot.
-    await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True, "log_level": "debug"}},
-        headers=auth_headers,
-    )
-
-    # Then rollback.
-    resp = await client.post(
-        "/chat/config/chat/rollback",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["component"] == "chat"
-    # Restored should have the template defaults (since the "previous" was the template).
-    assert data["restored"]["debug"] is False
-    assert data["restored"]["log_level"] == "info"
-
-
-@pytest.mark.asyncio
-async def test_chat_config_rollback_no_previous(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """POST /chat/config/rollback with no stored snapshot returns 404."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp = await client.post(
-        "/chat/config/chat/rollback",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_chat_config_rollback_not_allowlisted(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-):
-    """POST /chat/config/other-svc/rollback returns 403."""
-    resp = await client.post(
-        "/chat/config/other-svc/rollback",
-        headers=auth_headers,
-    )
+    resp = await client.get("/chat/config/no-access", headers=auth_headers)
     assert resp.status_code == 403
 
 
@@ -739,12 +486,8 @@ async def test_chat_audit_log(
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
-    # Perform a config update to generate an audit entry.
-    await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
+    # Perform a restart to generate an audit entry.
+    await client.post("/chat/services/chat/restart", headers=auth_headers)
 
     # Read the audit log.
     resp = await client.get(
@@ -756,9 +499,7 @@ async def test_chat_audit_log(
     assert len(data["entries"]) >= 1
     entry = data["entries"][0]
     assert entry["component"] == "chat"
-    assert entry["action"] == "config_update"
-    assert entry["key"] == "debug"
-    assert entry["new_value"] is True
+    assert entry["action"] == "restart"
 
 
 @pytest.mark.asyncio
@@ -775,11 +516,7 @@ async def test_chat_audit_log_filtered(
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
     await store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
 
-    await client.put(
-        "/chat/config/cognee",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
+    await client.post("/chat/services/cognee/restart", headers=auth_headers)
 
     resp = await client.get(
         "/chat/audit-log?component=cognee",

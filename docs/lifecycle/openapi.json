@@ -2485,10 +2485,9 @@
         "tags": [
           "chat"
         ],
-        "summary": "Update non-secret config keys for an allowlisted service",
-        "description": "Update non-secret config keys for an allowlisted service.\n\nSaves the current config as a rollback snapshot before applying the\nupdate.  Secret keys are rejected with 403.  Writes the merged config\nto the service's config volume and records an audit entry for every\nchanged key.",
-        "operationId": "chat_update_config_chat_config__name__put",
-        "deprecated": true,
+        "summary": "Retired \u2014 write to the component's own PUT /config instead",
+        "description": "Always 410. Config writes belong to the component that owns the config.",
+        "operationId": "chat_update_config_retired_chat_config__name__put",
         "parameters": [
           {
             "name": "name",
@@ -2500,24 +2499,12 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatAgentConfigUpdate"
-              }
-            }
-          }
-        },
         "responses": {
-          "200": {
-            "description": "Successful Response",
+          "410": {
+            "description": "Endpoint retired",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatAgentConfigRollbackResponse"
-                }
+                "schema": {}
               }
             }
           },
@@ -2530,15 +2517,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Service not allowlisted or secret key rejected"
-          },
-          "404": {
-            "description": "Service has no config schema"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "422": {
             "description": "Validation Error",
@@ -2558,9 +2536,9 @@
         "tags": [
           "chat"
         ],
-        "summary": "Restore the previous config version for an allowlisted service",
-        "description": "Restore the previous config snapshot for an allowlisted service.\n\nReturns 404 when no previous snapshot exists (e.g. no config update\nhas been performed yet through the chat surface).",
-        "operationId": "chat_rollback_config_chat_config__name__rollback_post",
+        "summary": "Retired \u2014 use the component's own POST /config/rollback instead",
+        "description": "Always 410. Rollback restored a template-shaped snapshot over the volume.",
+        "operationId": "chat_rollback_config_retired_chat_config__name__rollback_post",
         "parameters": [
           {
             "name": "name",
@@ -2573,13 +2551,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
+          "410": {
+            "description": "Endpoint retired",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatAgentConfigRollbackResponse"
-                }
+                "schema": {}
               }
             }
           },
@@ -2592,15 +2568,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Service not allowlisted"
-          },
-          "404": {
-            "description": "No previous config snapshot available"
-          },
-          "429": {
-            "description": "Rate limited"
           },
           "422": {
             "description": "Validation Error",
@@ -6516,23 +6483,7 @@
           "restored"
         ],
         "title": "ChatAgentConfigRollbackResponse",
-        "description": "Response body for PUT /chat/config/{name} and POST /chat/config/{name}/rollback."
-      },
-      "ChatAgentConfigUpdate": {
-        "properties": {
-          "values": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Values",
-            "description": "Key-value pairs to write; sentinel '***' values preserve existing secrets"
-          }
-        },
-        "type": "object",
-        "required": [
-          "values"
-        ],
-        "title": "ChatAgentConfigUpdate",
-        "description": "Request body for PUT /chat/config/{name}.\n\nSecret keys are accepted with partial-update semantics: omitted or\nsentinel (``\"***\"``) values keep the stored secret; only an explicitly\nsupplied non-empty value overwrites it."
+        "description": "Response body for GET /chat/config/{name}.\n\nNamed for the retired rollback endpoint it used to share; the field\nnames are part of the chat agent's read contract, so they stay put."
       },
       "ChatAgentDeployRequest": {
         "properties": {
