@@ -40,6 +40,7 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 from ...registry_check import RegistryChecker
+from ._status_refresh import refresh_record_status
 
 
 logger = logging.getLogger(__name__)
@@ -189,43 +190,8 @@ async def get_service_status(
     digest data to the store.
     """
     record = await _get_or_create_record(name, store)
-    # Refresh live state from backend (best-effort).
-    inspect = await backend.status(record)
-    changed = (
-        inspect.state != record.state
-        or inspect.image_revision != record.image_revision
-        or inspect.health != record.health
-    )
-    if changed:
-        record.state = inspect.state
-        record.image_revision = inspect.image_revision
-        record.health = inspect.health
-        await store.put(record)
-
-    # Persist running_digest from image inspect if available
-    if (
-        inspect.running_digest
-        and inspect.running_digest != record.deployed_image_digest
-    ):
-        record.deployed_image_digest = inspect.running_digest
-        await store.put(record)
-
-    # Registry check — update if we have image+digest and checker is available
     checker: RegistryChecker = _get_registry_checker(request)
-    if record.image and record.deployed_image_digest:
-        try:
-            latest = await checker.get_latest_digest(record.image)
-            if latest is not None:
-                new_ua = latest != record.deployed_image_digest
-                if (
-                    record.update_available != new_ua
-                    or record.latest_registry_digest != latest
-                ):
-                    record.update_available = new_ua
-                    record.latest_registry_digest = latest
-                    await store.put(record)
-        except Exception:  # noqa: BLE001
-            pass  # degrade gracefully; return last known update_available
+    inspect = await refresh_record_status(record, backend, store, checker)
 
     result = record.to_status()
 
