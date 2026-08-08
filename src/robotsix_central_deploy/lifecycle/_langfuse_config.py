@@ -36,7 +36,19 @@ reports no projects, which is the intended, visible failure.
 
 from __future__ import annotations
 
+import logging
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from fastapi import Request
+
+    from ..registry.config_store import ComponentConfigStore
+    from ..registry.config_yaml_store import ConfigYamlStore
+    from .config import LangfuseProjectCreds
+
+logger = logging.getLogger(__name__)
 
 
 class LangfuseProjectEntry(BaseModel):
@@ -94,3 +106,106 @@ def extract_langfuse_block(
             )
 
     return host, projects
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery reconciliation
+# ---------------------------------------------------------------------------
+
+
+def _extract_langfuse_project_creds(
+    config_dict: dict[str, object],
+) -> dict[str, "LangfuseProjectCreds"]:
+    """Extract Langfuse project credentials from a component's config.
+
+    Reads the canonical ``langfuse.projects.<alias>`` block via
+    :func:`extract_langfuse_block`, which is the single definition of
+    that shape.  Returns an empty dict when the config has no Langfuse
+    projects.
+    """
+    from .config import LangfuseProjectCreds
+
+    _host, entries = extract_langfuse_block(config_dict)
+    return {
+        entry.alias: LangfuseProjectCreds(
+            public_key=entry.public_key,
+            secret_key=entry.secret_key,
+        )
+        for entry in entries
+    }
+
+
+async def _reconcile_auto_langfuse_projects(
+    component_config_store: "ComponentConfigStore",
+    config_yaml_store: "ConfigYamlStore",
+) -> dict[str, "LangfuseProjectCreds"]:
+    """Scan every component with chat access enabled and extract Langfuse keys.
+
+    Components are processed in registration order.  When two components
+    declare the same project alias the first one wins (no overwrite).
+    """
+    result: dict[str, "LangfuseProjectCreds"] = {}
+    for cfg in component_config_store.all():
+        if not (cfg.allow_chat_access or cfg.chat_agent_mutatable):
+            continue
+        current = await config_yaml_store.get_current(cfg.id)
+        if current is None:
+            continue
+        projects = _extract_langfuse_project_creds(current)
+        for alias, creds in projects.items():
+            if alias not in result:
+                result[alias] = creds
+    return result
+
+
+async def reconcile_langfuse_after_toggle(
+    component_config_store: "ComponentConfigStore",
+    config_yaml_store: "ConfigYamlStore",
+    request: "Request",
+) -> None:
+    """Re-run Langfuse auto-discovery and update ``app.state``.
+
+    Called after every ``allow_chat_access`` or ``chat_agent_mutatable``
+    toggle (and at onboarding) so the chat-agent Langfuse proxy sees the
+    latest project set.  Also refreshes central-deploy's own config
+    current values so ``GET /services/central-deploy/config`` stays in
+    sync.
+
+    Failures are logged but never raised — auto-projects degrade
+    gracefully to the last-known-good set.
+    """
+    try:
+        auto_langfuse = await _reconcile_auto_langfuse_projects(
+            component_config_store, config_yaml_store
+        )
+        request.app.state.auto_langfuse_projects = auto_langfuse
+
+        # Also refresh central-deploy's own config current values so
+        # GET /services/central-deploy/config stays in sync.
+        from .config import LifecycleConfig
+
+        config: LifecycleConfig = request.app.state.config
+        current_projects: dict[str, dict[str, str]] = {}
+        for alias, creds in auto_langfuse.items():
+            current_projects[alias] = {
+                "public_key": creds.public_key,
+                "secret_key": creds.secret_key.get_secret_value(),
+            }
+        for alias, creds in config.langfuse_projects.items():
+            current_projects[alias] = {
+                "public_key": creds.public_key,
+                "secret_key": creds.secret_key.get_secret_value(),
+            }
+        await config_yaml_store.update_current(
+            "central-deploy", {"langfuse_projects": current_projects}
+        )
+
+        logger.debug(
+            "Reconciled Langfuse auto-projects: %d project(s)",
+            len(auto_langfuse),
+        )
+    except Exception:
+        logger.warning(
+            "Langfuse auto-discovery reconciliation failed",
+            exc_info=True,
+        )

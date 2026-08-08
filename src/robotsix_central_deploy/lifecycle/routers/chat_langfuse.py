@@ -31,7 +31,6 @@ from __future__ import annotations
 import base64
 import logging
 import urllib.parse
-from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
@@ -40,14 +39,9 @@ from robotsix_http import ExternalHTTPError
 
 from ..._http import retry_client_context
 
-from .._langfuse_config import extract_langfuse_block
 from ..auth import verify_auth
 from ..config import LangfuseProjectCreds, LifecycleConfig
 from ..deps import _get_config
-
-if TYPE_CHECKING:
-    from ...registry.config_store import ComponentConfigStore
-    from ...registry.config_yaml_store import ConfigYamlStore
 
 logger = logging.getLogger(__name__)
 
@@ -107,53 +101,7 @@ def _resolve_project_keys(
 # ---------------------------------------------------------------------------
 # Auto-discovery: extract Langfuse project credentials from a component's
 # standardized config and reconcile the full auto-projects dict.
-# ---------------------------------------------------------------------------
-
-
-def _extract_langfuse_projects(
-    config_dict: dict[str, object],
-) -> dict[str, LangfuseProjectCreds]:
-    """Extract Langfuse project credentials from a component's config.
-
-    Reads the canonical ``langfuse.projects.<alias>`` block via
-    :func:`~.._langfuse_config.extract_langfuse_block`, which is the single
-    definition of that shape.
-
-    Returns an empty dict when the config has no Langfuse projects.
-    """
-    _host, entries = extract_langfuse_block(config_dict)
-    return {
-        entry.alias: LangfuseProjectCreds(
-            public_key=entry.public_key,
-            secret_key=entry.secret_key,
-        )
-        for entry in entries
-    }
-
-
-async def _reconcile_auto_langfuse_projects(
-    component_config_store: "ComponentConfigStore",
-    config_yaml_store: "ConfigYamlStore",
-) -> dict[str, LangfuseProjectCreds]:
-    """Scan every component with chat access enabled and extract Langfuse keys.
-
-    Components are processed in registration order.  When two components
-    declare the same project alias the first one wins (no overwrite).
-    """
-    result: dict[str, LangfuseProjectCreds] = {}
-    for cfg in component_config_store.all():
-        if not (cfg.allow_chat_access or cfg.chat_agent_mutatable):
-            continue
-        current = await config_yaml_store.get_current(cfg.id)
-        if current is None:
-            continue
-        projects = _extract_langfuse_projects(current)
-        for alias, creds in projects.items():
-            if alias not in result:
-                result[alias] = creds
-    return result
-
-
+#
 def _basic_auth_header(username: str, password: str) -> str:
     """Return an ``Authorization: Basic ...`` header value for *username*/*password*."""
     raw = f"{username}:{password}"
