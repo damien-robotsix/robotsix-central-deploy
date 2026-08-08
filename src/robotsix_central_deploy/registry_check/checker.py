@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import logging
 import time
 from dataclasses import dataclass
 
 from robotsix_http import RetryClient
+
+from .._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -15,16 +21,23 @@ class _CacheEntry:
 
 
 class RegistryChecker:
-    """Checks whether a container image has a newer manifest in its registry."""
+    """Checks whether a container image has a newer manifest in its registry.
+
+    ``ghcr_credentials`` is the fleet-wide GHCR credential resolver shared
+    with the image-pull path.  Without it the checker talks to ghcr.io
+    anonymously, which reports every *private* package as "unknown".
+    """
 
     def __init__(
         self,
         http_client: RetryClient,
         ttl_seconds: int = 300,
+        ghcr_credentials: GhcrCredentialResolver | None = None,
     ) -> None:
         self._client = http_client
         self._ttl = ttl_seconds
         self._cache: dict[str, _CacheEntry] = {}
+        self._ghcr_credentials = ghcr_credentials
 
     async def get_latest_digest(self, image_ref: str) -> str | None:
         """Return cached or freshly fetched manifest digest for *image_ref*.
@@ -50,9 +63,9 @@ class RegistryChecker:
             first = segments[0]
 
             # --- classify registry ---
-            if first == "ghcr.io":
+            if first == GHCR_HOST:
                 repo = "/".join(segments[1:])
-                manifest_host = "ghcr.io"
+                manifest_host = GHCR_HOST
                 token = await self._fetch_ghcr_token(repo)
             elif first == "docker.io" or ("." not in first and ":" not in first):
                 if first == "docker.io":
@@ -79,6 +92,15 @@ class RegistryChecker:
 
             url = f"https://{manifest_host}/v2/{repo}/manifests/{tag}"
             resp = await self._client.head(url, headers=headers, follow_redirects=True)
+            if resp.status_code in (401, 403):
+                logger.warning(
+                    "registry auth failed — %s returned %s for the manifest of %s; "
+                    "update status stays unknown",
+                    manifest_host,
+                    resp.status_code,
+                    image_ref,
+                )
+                return None
             if resp.status_code not in (200, 206):
                 return None
             return resp.headers.get("Docker-Content-Digest") or None
@@ -100,13 +122,53 @@ class RegistryChecker:
             return None
 
     async def _fetch_ghcr_token(self, repo: str) -> str | None:
-        """GET ``https://ghcr.io/token?scope=repository:<repo>:pull&service=ghcr.io``.
+        """Exchange the fleet GHCR credential for a pull token on *repo*.
 
-        Return ``.token`` on success, ``None`` on failure.
+        Falls back to an anonymous exchange when no credential is configured,
+        which only resolves public packages.  Returns ``None`` on failure.
         """
+        headers: dict[str, str] = {}
+        authenticated = False
         try:
-            url = f"https://ghcr.io/token?scope=repository:{repo}:pull&service=ghcr.io"
-            resp = await self._client.get(url)
+            creds = (
+                await self._ghcr_credentials.resolve()
+                if self._ghcr_credentials is not None
+                else None
+            )
+        except Exception:
+            logger.warning(
+                "registry auth failed — could not resolve the ghcr.io credential "
+                "for %s; falling back to an anonymous update check",
+                repo,
+                exc_info=True,
+            )
+            creds = None
+        if creds is not None:
+            basic = base64.b64encode(
+                f"{creds.username}:{creds.password}".encode()
+            ).decode()
+            headers["Authorization"] = f"Basic {basic}"
+            authenticated = True
+
+        try:
+            url = (
+                f"https://{GHCR_HOST}/token"
+                f"?scope=repository:{repo}:pull&service={GHCR_HOST}"
+            )
+            resp = await self._client.get(url, headers=headers)
+            if resp.status_code in (401, 403):
+                logger.warning(
+                    "registry auth failed — ghcr.io returned %s for %s token "
+                    "exchange on %s. %s",
+                    resp.status_code,
+                    "a credentialed" if authenticated else "an anonymous",
+                    repo,
+                    "Check ghcr_pull_token / the GitHub App installation."
+                    if authenticated
+                    else "The package is private; configure ghcr_pull_token "
+                    "(a read:packages PAT) or the GitHub App credentials.",
+                )
+                return None
             if resp.status_code != 200:
                 return None
             return resp.json().get("token") or None

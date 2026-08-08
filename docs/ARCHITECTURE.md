@@ -128,7 +128,7 @@ localhost + API-key restricted),
 
 | File | Role |
 |------|------|
-| `checker.py` | `RegistryChecker` — fetches OCI/Docker manifest digests from GHCR, caches results with a configurable TTL. Returns `None` for unsupported registries. |
+| `checker.py` | `RegistryChecker` — fetches OCI/Docker manifest digests from GHCR, caches results with a configurable TTL. Returns `None` for unsupported registries. Authenticates to `ghcr.io` with the shared `GhcrCredentialResolver` (`_ghcr_auth.py`), the same credential the image pull uses, so private packages resolve a digest. |
 
 ### `caretaker/volume_audit/` — Volume growth detection (caretaker sub-package)
 

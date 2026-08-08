@@ -9,14 +9,6 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
-try:
-    from robotsix_github_auth import mint_installation_token
-
-    _HAS_GITHUB_AUTH = True
-except ImportError:  # pragma: no cover
-    mint_installation_token = None
-    _HAS_GITHUB_AUTH = False
-
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
 from ._util import (
     PruneImagesResult,
@@ -27,6 +19,7 @@ from ._util import (
 )
 from ._volume_ops import VolumeOps
 from .base import ExecutionBackend
+from ..._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
 from ...gateway.proxy import PROXY_NETWORK
 from ..models import (
     ComponentInspect,
@@ -75,25 +68,27 @@ class DockerSdkBackend(ExecutionBackend):
 
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
         self._auth = AuthOps(self._client)
-        self._github_app_id = github_app_id.strip()
-        self._github_app_private_key = github_app_private_key.strip()
-        self._installation_id = installation_id.strip()
-        self._github_app_configured = bool(
-            self._github_app_id
-            and self._github_app_private_key
-            and self._installation_id
+        self._ghcr_credentials = GhcrCredentialResolver(
+            github_app_id=github_app_id,
+            github_app_private_key=github_app_private_key,
+            installation_id=installation_id,
+            ghcr_pull_token=ghcr_pull_token,
         )
-        self._ghcr_pull_token = ghcr_pull_token.strip()
         self._volume = VolumeOps(self._client)
+
+    @property
+    def ghcr_credentials(self) -> GhcrCredentialResolver:
+        """The shared GHCR credential resolver, also used by the update check."""
+        return self._ghcr_credentials
 
     @property
     def ghcr_pull_token(self) -> str:
         """The fleet-wide read:packages PAT for private GHCR pulls."""
-        return self._ghcr_pull_token
+        return self._ghcr_credentials.pull_token
 
     @ghcr_pull_token.setter
     def ghcr_pull_token(self, value: str) -> None:
-        self._ghcr_pull_token = value.strip()
+        self._ghcr_credentials.pull_token = value
 
     # -- helpers ------------------------------------------------------------
 
@@ -593,52 +588,24 @@ class DockerSdkBackend(ExecutionBackend):
     async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
         """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
 
-        Only ``ghcr.io`` images are authenticated.  Auth priority:
-        1. Static ``ghcr_pull_token`` (PAT) — configured via the config UI.
-        2. GitHub App installation token (minted via ``robotsix-github-auth``).
-        3. Anonymous pull (public images only — a 401 on a private image
-           surfaces a diagnostic error).
+        Only ``ghcr.io`` images are authenticated; the credential itself comes
+        from the shared resolver, so the pull and the update check present the
+        same identity.  Anonymous pull (``None``) works for public images only
+        — a 401 on a private image surfaces a diagnostic error.
         """
-        if _image_registry_host(image_ref) != "ghcr.io":
+        if _image_registry_host(image_ref) != GHCR_HOST:
             return None
 
-        # 1. Static GHCR PAT (ghcr_pull_token config field)
-        if self._ghcr_pull_token:
-            return {
-                "username": "robot",
-                "password": self._ghcr_pull_token,
-                "serveraddress": "ghcr.io",
-            }
-
-        # 2. GitHub App installation token
-        if not self._github_app_configured:
-            return None
-        if not _HAS_GITHUB_AUTH:
-            logger.warning(
-                "robotsix-github-auth is not installed — ghcr.io pull will be anonymous"
-            )
-            return None
         try:
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None,
-                mint_installation_token,
-                self._github_app_id,
-                self._github_app_private_key,
-                self._installation_id,
-            )
-            token: str = result.token
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to mint GitHub App installation token for ghcr.io "
-                f"pull of {image_ref!r}: {exc}"
-            ) from exc
-        # GHCR accepts GitHub App installation tokens with username
-        # "x-access-token" (the standard convention for App tokens).
+            creds = await self._ghcr_credentials.resolve()
+        except RuntimeError as exc:
+            raise RuntimeError(f"{exc} (pull of {image_ref!r})") from exc
+        if creds is None:
+            return None
         return {
-            "username": "x-access-token",
-            "password": token,
-            "serveraddress": "ghcr.io",
+            "username": creds.username,
+            "password": creds.password,
+            "serveraddress": GHCR_HOST,
         }
 
     async def deploy(

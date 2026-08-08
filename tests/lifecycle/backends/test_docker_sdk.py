@@ -555,17 +555,20 @@ class TestDockerSdkBackendDeploy:
         """401 on ghcr.io with GitHub App creds raises generic error (token may be
         invalid/expired — don't mislead into thinking no creds are set)."""
         b, client, dm = backend
-        b._github_app_configured = True
         # Mock mint_installation_token so _build_auth_config returns an auth_config
+        resolver = b.ghcr_credentials
+        resolver._github_app_id = "123"
+        resolver._github_app_private_key = "key"
+        resolver._installation_id = "456"
         fake_token = MagicMock()
         fake_token.token = "ghs_test_token"
         mock_mint = MagicMock(return_value=fake_token)
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.backends.docker_sdk.mint_installation_token",
+            "robotsix_central_deploy._ghcr_auth.mint_installation_token",
             mock_mint,
         )
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.backends.docker_sdk._HAS_GITHUB_AUTH",
+            "robotsix_central_deploy._ghcr_auth._HAS_GITHUB_AUTH",
             True,
         )
         config = self._make_config()
@@ -646,11 +649,11 @@ class TestDockerSdkBackendBuildAuthConfig:
         fake_token.token = "ghs_test_token"
         mock_mint = MagicMock(return_value=fake_token)
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.backends.docker_sdk.mint_installation_token",
+            "robotsix_central_deploy._ghcr_auth.mint_installation_token",
             mock_mint,
         )
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.backends.docker_sdk._HAS_GITHUB_AUTH",
+            "robotsix_central_deploy._ghcr_auth._HAS_GITHUB_AUTH",
             True,
         )
         b = backend(

@@ -1,11 +1,14 @@
 """Tests for the RegistryChecker."""
 
+import base64
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from robotsix_http import RetryClient
 
+from robotsix_central_deploy._ghcr_auth import GhcrCredentials
 from robotsix_central_deploy.registry_check.checker import RegistryChecker
 
 
@@ -157,3 +160,124 @@ class TestRegistryChecker:
         accept = call_headers.get("Accept", "")
         assert "application/vnd.oci.image.manifest.v1+json" in accept
         assert "application/vnd.docker.distribution.manifest.v1+json" not in accept
+
+
+class TestRegistryCheckerGhcrAuth:
+    """The update check must present the same credential as the image pull.
+
+    Anonymously, a private GHCR package 401s at the token exchange and its
+    dashboard status stays "unknown" forever — while pulls of the very same
+    image succeed, because only the pull path authenticated.
+    """
+
+    @pytest.fixture
+    def mock_client(self):
+        return AsyncMock(spec=RetryClient)
+
+    @staticmethod
+    def _resolver(creds):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock(return_value=creds)
+        return resolver
+
+    @staticmethod
+    def _auth_header(mock_client) -> str:
+        return mock_client.get.call_args[1]["headers"]["Authorization"]
+
+    async def test_private_package_with_credential_resolves_a_digest(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "scoped-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:private"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(
+            mock_client,
+            ghcr_credentials=self._resolver(GhcrCredentials("robot", "ghp_secret")),
+        )
+
+        result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result == "sha256:private"
+        scheme, _, value = self._auth_header(mock_client).partition(" ")
+        assert scheme == "Basic"
+        assert base64.b64decode(value).decode() == "robot:ghp_secret"
+
+    async def test_no_credential_falls_back_to_an_anonymous_exchange(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "anon-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:public"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(mock_client, ghcr_credentials=self._resolver(None))
+
+        result = await checker.get_latest_digest("ghcr.io/owner/public:main")
+
+        assert result == "sha256:public"
+        assert "Authorization" not in mock_client.get.call_args[1]["headers"]
+
+    async def test_unauthorized_token_exchange_logs_and_reports_unknown(
+        self, mock_client, caplog
+    ):
+        token_resp = MagicMock(status_code=401)
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock()
+        checker = RegistryChecker(mock_client)
+
+        with caplog.at_level(logging.WARNING):
+            result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result is None
+        assert "registry auth failed" in caplog.text
+        assert "read:packages" in caplog.text, "the log must say how to fix it"
+
+    async def test_unauthorized_manifest_head_is_logged(self, mock_client, caplog):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        manifest_resp = MagicMock(status_code=403, headers={})
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(mock_client)
+
+        with caplog.at_level(logging.WARNING):
+            result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result is None
+        assert "registry auth failed" in caplog.text
+
+    async def test_credential_resolution_failure_degrades_to_anonymous(
+        self, mock_client, caplog
+    ):
+        """A broken GitHub App must not take the whole update check down."""
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock(side_effect=RuntimeError("mint failed"))
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "anon-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:pub"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(mock_client, ghcr_credentials=resolver)
+
+        with caplog.at_level(logging.WARNING):
+            result = await checker.get_latest_digest("ghcr.io/owner/image:main")
+
+        assert result == "sha256:pub"
+        assert "registry auth failed" in caplog.text
+
+    async def test_dockerhub_is_never_sent_the_ghcr_credential(self, mock_client):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "dh-token"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:abc"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(
+            mock_client,
+            ghcr_credentials=self._resolver(GhcrCredentials("robot", "ghp_secret")),
+        )
+
+        await checker.get_latest_digest("docker.io/robotsix/mill:latest")
+
+        assert "headers" not in mock_client.get.call_args[1]
