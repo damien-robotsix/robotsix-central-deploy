@@ -12,7 +12,7 @@ from fastapi.params import Body
 
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
-from .._config_utils import _canonical_hash, _sanitize_log, _write_llmio_tier_config
+from .._config_utils import _sanitize_log, _write_llmio_tier_config
 from ..deps import (
     JobRegistry,
     _get_backend,
@@ -319,25 +319,6 @@ async def _run_deploy_job(
                 live_dict = await backend.read_config_from_volume(config.config_volume)
             except Exception:
                 live_dict = {}
-
-            # --- drift guard ---
-            # Keep the stored copy in step with the volume while it still
-            # exists. It is on its way out (the deploy plane is moving to
-            # reading the component directly), but until then a stale entry
-            # is what other readers see.
-            stored_hash = await config_yaml_store.get_volume_hash(name)
-            if stored_hash is not None:
-                live_hash = _canonical_hash(live_dict)
-                if live_dict and live_hash != stored_hash:
-                    logger.warning(
-                        "deploy %s: config volume drifted — "
-                        "auto-importing live volume as current",
-                        _sanitize_log(name),
-                    )
-                    await config_yaml_store.update_current_and_hash(
-                        name, live_dict, live_hash
-                    )
-            # --- end drift guard ---
 
             # Seed only. The component owns its config; the deploy plane must
             # never write over a config file that already exists.

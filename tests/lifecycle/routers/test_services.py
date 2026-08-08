@@ -842,7 +842,6 @@ class TestDeleteService:
         await store.put(prim)
         await env_store.upsert("orphan", {"KEY": "val"}, {"SECRET": "tok"})
         await config_yaml_store.save_template("orphan", {"type": "object"})
-        await config_yaml_store.update_current("orphan", {"foo": "bar"})
 
         resp = await client.delete("/services/orphan", headers=auth_headers)
         assert resp.status_code == 204
@@ -857,7 +856,6 @@ class TestDeleteService:
 
         # Config YAML is cleared
         assert await config_yaml_store.get_template("orphan") is None
-        assert await config_yaml_store.get_current("orphan") is None
 
     async def test_delete_clears_config_yaml_store(
         self, client: AsyncClient, auth_headers: dict
@@ -869,14 +867,12 @@ class TestDeleteService:
         await _seed_config(config_store, "svc-a")
         await _seed_store("svc-a", image="svc-a:latest")
         await config_yaml_store.save_template("svc-a", {"type": "object"})
-        await config_yaml_store.update_current("svc-a", {"host": "example.com"})
 
         resp = await client.delete("/services/svc-a", headers=auth_headers)
         assert resp.status_code == 204
 
         # Both template and current are gone
         assert await config_yaml_store.get_template("svc-a") is None
-        assert await config_yaml_store.get_current("svc-a") is None
 
     async def test_delete_with_socket_proxy_helper(
         self, client: AsyncClient, auth_headers: dict

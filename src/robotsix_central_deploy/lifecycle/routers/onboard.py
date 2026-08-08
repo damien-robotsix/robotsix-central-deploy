@@ -27,7 +27,7 @@ from ..deps import (
     _build_component_config_from_spec,
     JobRegistry,
 )
-from .._config_utils import _canonical_hash, _merge_config, _strip_secret_values
+from .._config_utils import _merge_config, _strip_secret_values
 from ..config import LifecycleConfig
 from ..models import (
     DeployHistoryEntry,
@@ -700,14 +700,11 @@ async def onboard_confirm(
         if spec.config_volume is not None:
             try:
                 await backend.write_config_to_volume(spec.config_volume, merged)
-                await config_yaml_store.update_current_and_hash(
-                    spec.name, merged, _canonical_hash(merged)
-                )
             except Exception:
+                # Roll back the schema we just stored — a component whose
+                # config could not be written must not be left half-onboarded.
                 await config_yaml_store.delete(spec.name)
                 raise
-        else:
-            await config_yaml_store.update_current(spec.name, merged)
 
     # Write the fleet-global llmio tier config mapping (all four levels)
     # into the component's config volume before the deploy starts, so

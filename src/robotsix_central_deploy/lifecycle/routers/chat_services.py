@@ -57,7 +57,6 @@ from ...registry.models import ComponentConfig
 import asyncio
 
 from robotsix_central_deploy.lifecycle._config_utils import (
-    _canonical_hash,
     _merge_config,
 )
 from robotsix_central_deploy.lifecycle.deps.seed import (
@@ -645,16 +644,11 @@ async def _resolve_deploy_contract(
                 await backend.write_config_to_volume(
                     derived_spec.config_volume, merged_config
                 )
-                await config_yaml_store.update_current_and_hash(
-                    body.name,
-                    merged_config,
-                    _canonical_hash(merged_config),
-                )
             except Exception:
+                # Roll back the schema we just stored — a component whose
+                # config could not be written must not be left half-onboarded.
                 await config_yaml_store.delete(body.name)
                 raise
-        else:
-            await config_yaml_store.update_current(body.name, merged_config)
 
     # --- Seed EnvStore from the repo's env contract ---
     env_store = await _get_env_store(request)

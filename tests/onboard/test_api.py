@@ -1698,9 +1698,6 @@ class TestOnboardConfirmWithConfig:
         }
 
         # current stored in ConfigYamlStore reflects entered values
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        current = await store.get_current("cfg-svc")
-        assert current == {"host": "10.0.0.1", "password": "s3cret", "port": 8080}
 
     async def test_confirm_without_config_values_writes_template_only(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -1747,11 +1744,6 @@ class TestOnboardConfirmWithConfig:
         # Template written as-is (empty defaults)
         assert len(captured) == 1
         assert captured[0][1] == {"host": "", "password": ""}
-
-        # current still stored (equals template defaults since no user values)
-        store: ConfigYamlStore = server_mod.app.state.config_yaml_store
-        current = await store.get_current("cfg-svc2")
-        assert current == {"host": "", "password": ""}
 
 
 # ---------------------------------------------------------------------------

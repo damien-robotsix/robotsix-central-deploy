@@ -439,7 +439,6 @@ class TestDeployDriftGuard:
         """Simulate the 2026-07-16 incident: stored current = template defaults,
         volume = real operator config.  Deploy must auto-import the live volume
         rather than overwrite it with the stale stored current."""
-        from robotsix_central_deploy.lifecycle._config_utils import _canonical_hash
 
         # -- tracking backend so we can inspect volume writes --
         tracking = TrackingInMemoryBackend()
@@ -490,15 +489,8 @@ class TestDeployDriftGuard:
         }
         await cys.save_template("chat", template)
 
-        # Stored current = stale template defaults (simulating the post-migration
-        # state where `current` was never updated to reflect the live volume).
-        stale_current: dict[str, Any] = {
-            "server_port": 3000,
-            "url": "https://default.example.com",
-            "api_key": "",
-        }
-        stale_hash = _canonical_hash(stale_current)
-        await cys.update_current_and_hash("chat", stale_current, stale_hash)
+        # There is no longer any stored copy of the values to go stale — the
+        # deploy plane keeps only the schema above.
 
         # Live volume = real operator config (the config that was hand-edited
         # on the volume after the YAML→JSON migration).
@@ -528,16 +520,10 @@ class TestDeployDriftGuard:
         )
         assert volume_after["url"] == "https://real.example.com"
 
-        # 2. The stored current must have been auto-imported to match the
-        #    live volume (so subsequent GET /config shows no drift).
-        imported = await cys.get_current("chat")
-        assert imported is not None
-        assert imported["server_port"] == 8080
-        assert imported["url"] == "https://real.example.com"
-
-        # 3. The stored volume_hash must now match the volume content.
-        stored_hash = await cys.get_volume_hash("chat")
-        assert stored_hash == _canonical_hash(real_config)
+        # There is deliberately no second assertion about a stored copy:
+        # the deploy plane no longer keeps one, so there is nothing to
+        # auto-import and nothing that can drift. The volume being untouched
+        # IS the whole guarantee now.
 
     async def test_deploy_never_overwrites_an_existing_config(
         self, auth_headers: dict, registry
@@ -572,9 +558,7 @@ class TestDeployDriftGuard:
             )
         )
 
-        cys = server_mod.app.state.config_yaml_store
-        # A stored `current` exists but no volume_hash was ever recorded.
-        await cys.update_current("chat", {"langfuse": {"public_key": ""}})
+        # No stored values exist at all now; the volume is the only source.
 
         live = {"langfuse": {"public_key": "pk-real", "secret_key": "sk-real"}}
         tracking._volumes["chat-config"] = copy.deepcopy(live)

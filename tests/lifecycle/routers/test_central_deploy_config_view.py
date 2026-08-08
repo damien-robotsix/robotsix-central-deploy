@@ -82,8 +82,11 @@ class TestNothingIsPersisted:
             server_mod.app.state.component_config_store, _Req()
         )
 
-        current = await store.get_current("central-deploy")
-        assert current is None or "langfuse_projects" not in current
+        raw = await store._load()
+        entry = raw.get("central-deploy") or {}
+        assert "current" not in entry, (
+            "the toggle path persisted a central-deploy config copy"
+        )
 
     async def test_endpoint_still_serves_the_view(
         self, client: AsyncClient, auth_headers: dict

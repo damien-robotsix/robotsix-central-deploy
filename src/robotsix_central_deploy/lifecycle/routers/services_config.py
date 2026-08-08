@@ -23,9 +23,9 @@ from ..schemas import ConfigExportResponse, ConfigResponse
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
+from .._config_utils import read_component_config
 from .._langfuse_config import build_central_deploy_langfuse_config
 from .._config_utils import (  # noqa: E402
-    _canonical_hash,
     _mask_secrets,
     _merge_config,
 )
@@ -149,7 +149,8 @@ def _resolve_ref(prop_schema: dict[str, Any], defs: dict[str, Any]) -> dict[str,
 
 async def _current_config_values(
     name: str,
-    config_yaml_store: ConfigYamlStore,
+    component_config_store: ComponentConfigStore,
+    backend: ExecutionBackend,
     request: Request,
 ) -> dict[str, Any] | None:
     """Return the component's current config values for display/export.
@@ -165,7 +166,7 @@ async def _current_config_values(
             request.app.state.config,
             getattr(request.app.state, "auto_langfuse_projects", {}) or {},
         )
-    return await config_yaml_store.get_current(name)
+    return await read_component_config(backend, component_config_store.get(name))
 
 
 @router.get(
@@ -201,18 +202,22 @@ async def get_service_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No config schema for component '{name}'",
         )
-    current_raw = await _current_config_values(name, config_yaml_store, request)
-    if current_raw is None:
+    current_raw = await _current_config_values(
+        name, component_config_store, backend, request
+    )
+    if not current_raw:
+        # A component with no config file yet shows the template defaults.
+        # read_component_config returns {} where the old store returned None,
+        # so this must test falsiness, not identity.
         current_raw = _merge_config(template, {}, {})
     current_masked = _mask_secrets(template, current_raw)
     comp_cfg = component_config_store.get(name)
 
+    # Always False: the deploy plane no longer keeps a copy of component
+    # config values, so there is no second version for the component's own
+    # file to drift from. The field is retained so the response shape does
+    # not change for existing clients.
     drift = False
-    if comp_cfg and comp_cfg.config_volume:
-        stored_hash = await config_yaml_store.get_volume_hash(name)
-        if stored_hash is not None:
-            live_dict = await backend.read_config_from_volume(comp_cfg.config_volume)
-            drift = _canonical_hash(live_dict) != stored_hash
 
     # Annotate the schema with config-ownership metadata per the
     # robotsix-standards config-ownership standard.
@@ -258,6 +263,8 @@ async def export_service_config(
     name: str,
     request: Request,
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ConfigExportResponse:
     """Export the full current config INCLUDING unmasked secret values.
@@ -284,8 +291,13 @@ async def export_service_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No config schema for component '{name}'",
         )
-    current_raw = await _current_config_values(name, config_yaml_store, request)
-    if current_raw is None:
+    current_raw = await _current_config_values(
+        name, component_config_store, backend, request
+    )
+    if not current_raw:
+        # A component with no config file yet shows the template defaults.
+        # read_component_config returns {} where the old store returned None,
+        # so this must test falsiness, not identity.
         current_raw = _merge_config(template, {}, {})
 
     logger.info(

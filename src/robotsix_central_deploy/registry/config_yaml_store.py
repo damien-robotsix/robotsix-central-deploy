@@ -1,7 +1,19 @@
-"""JSON-backed persistence for per-component config.json schema and values.
+"""JSON-backed persistence for per-component config *schema*.
 
-Stores a ``template`` (parsed from the repo's ``config/config.json``, immutable
-after onboard) and ``current`` (user-saved merged dict) for each component.
+Stores the ``template`` — the JSON Schema parsed from the repo's shipped
+``config/config.json`` — which the deploy UI renders its config form from.
+
+It deliberately does **not** store config *values*. Per robotsix-standards
+``config-ownership.md`` the deploy plane keeps no copy of them: a component's
+own config file is the single source of truth, read through
+``read_component_config``. The previous ``current`` / ``volume_hash`` fields
+were exactly such a copy, and their staleness was silent — on 2026-08-07 a
+stale entry was written over chat's live Langfuse credentials during a deploy,
+removing chat from fleet-wide discovery with nothing erroring anywhere.
+
+``previous`` remains for the chat-agent mutation rollback. That belongs in the
+component's own version history too, and moves there once every component
+serves ``POST /config/rollback``.
 """
 
 from __future__ import annotations
@@ -29,14 +41,6 @@ class ConfigYamlStore(JsonFileStore):
         template: dict[str, Any] | None = entry.get("template")
         return template
 
-    async def get_current(self, name: str) -> dict[str, Any] | None:
-        data = await self._load()
-        entry: dict[str, Any] | None = data.get(name)
-        if entry is None:
-            return None
-        current: dict[str, Any] | None = entry.get("current")
-        return current
-
     async def save_template(self, name: str, template: dict[str, Any]) -> None:
         """Store/overwrite *template*; preserve existing *current* if present."""
 
@@ -44,35 +48,6 @@ class ConfigYamlStore(JsonFileStore):
             existing = data.get(name, {})
             existing["template"] = template
             data[name] = existing
-
-        await self._update(_mutate)
-
-    async def update_current(self, name: str, current: dict[str, Any]) -> None:
-        """Update only the *current* dict for *name*."""
-
-        def _mutate(data: dict[str, Any]) -> None:
-            entry = data.get(name, {})
-            entry["current"] = current
-            data[name] = entry
-
-        await self._update(_mutate)
-
-    async def get_volume_hash(self, name: str) -> str | None:
-        """Return the stored volume hash for *name*, or None if absent."""
-        data = await self._load()
-        result: str | None = data.get(name, {}).get("volume_hash")
-        return result
-
-    async def update_current_and_hash(
-        self, name: str, current: dict[str, Any], volume_hash: str
-    ) -> None:
-        """Atomically update *current* and *volume_hash* in one JSON write."""
-
-        def _mutate(data: dict[str, Any]) -> None:
-            entry = data.get(name, {})
-            entry["current"] = current
-            entry["volume_hash"] = volume_hash
-            data[name] = entry
 
         await self._update(_mutate)
 
