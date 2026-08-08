@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -122,6 +123,11 @@ async def refresh_contract(
     the manifest's host ports are only honoured for container ports this
     component did not already expose.  The endpoint returns which fields
     changed so the operator can decide whether a redeploy is needed.
+
+    The stored config *schema* is refreshed from the repo's
+    ``config/config.schema.json`` too, and reported as a ``config_schema``
+    entry in ``changed_fields`` (the schemas themselves are too large to
+    include in the ``previous``/``current`` snapshots).
     """
     from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
         ParseError,
@@ -152,6 +158,21 @@ async def refresh_contract(
             status_code=422,
             detail=f"deploy/docker-compose.yml parse failed: {'; '.join(exc.violations)}",
         ) from exc
+
+    # parse_compose only reads the compose file; the config schema is a
+    # separate repo file, so it has to be attached here. Without this the
+    # save_template call below is unreachable and the stored template stays
+    # pinned to whatever the component shipped at onboarding — the dashboard
+    # editor and PUT /chat/config/{name} then silently drop every key the
+    # component has added since (they walk the template's properties).
+    if repo_files.config_schema_json is not None:
+        try:
+            spec.config_schema = json.loads(repo_files.config_schema_json)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"config/config.schema.json is not valid JSON: {exc}",
+            ) from exc
 
     # Namespace volume names (same as onboard confirm)
     spec = _namespace_spec_volumes(spec, name)
@@ -250,6 +271,8 @@ async def refresh_contract(
 
     # If the config schema changed (new or removed), refresh the stored template.
     if spec.config_schema is not None:
+        if spec.config_schema != await config_yaml_store.get_template(name):
+            changed.append("config_schema")
         await config_yaml_store.save_template(name, spec.config_schema)
     # Note: we do NOT remove the template if the schema is now absent —
     # the operator may still want the old schema in the dashboard.
