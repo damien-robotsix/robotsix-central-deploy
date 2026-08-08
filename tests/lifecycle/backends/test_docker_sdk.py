@@ -1957,6 +1957,121 @@ class TestInspectSelf:
 
 
 # ---------------------------------------------------------------------------
+# Self network-alias heal — watchtower recreates drop the compose alias
+# ---------------------------------------------------------------------------
+
+
+class TestHealSelfNetworkAlias:
+    """heal_self_network_alias repairs the own-container service alias."""
+
+    NETWORK = "central-deploy-proxy"
+
+    @pytest.fixture
+    def backend(self):
+        dm = _make_docker_mock()
+        client = MagicMock()
+        dm.DockerClient.return_value = client
+        with patch.dict(sys.modules, {"docker": dm}):
+            b = DockerSdkBackend()
+            yield b, client, dm
+
+    def _own_container(self, client, *, endpoint):
+        """Wire ``client`` so the hostname lookup finds our container."""
+        container = MagicMock()
+        networks = {self.NETWORK: endpoint} if endpoint is not None else {}
+        container.attrs = {
+            "Id": "abc123",
+            "Name": "/central-deploy-1",
+            "Config": {
+                "Hostname": "abc123",
+                "Labels": {"com.docker.compose.service": "central-deploy"},
+            },
+            "NetworkSettings": {"Networks": networks},
+        }
+        client.containers.get.return_value = container
+        return container
+
+    async def test_alias_present_is_noop(self, backend):
+        b, client, dm = backend
+        self._own_container(client, endpoint={"Aliases": ["central-deploy", "abc123"]})
+        with patch("socket.gethostname", return_value="abc123"):
+            assert await b.heal_self_network_alias(self.NETWORK) is None
+        client.networks.get.assert_not_called()
+
+    async def test_alias_in_dnsnames_is_noop(self, backend):
+        """Newer daemons surface names via DNSNames with empty Aliases."""
+        b, client, dm = backend
+        self._own_container(
+            client, endpoint={"Aliases": [], "DNSNames": ["central-deploy"]}
+        )
+        with patch("socket.gethostname", return_value="abc123"):
+            assert await b.heal_self_network_alias(self.NETWORK) is None
+        client.networks.get.assert_not_called()
+
+    async def test_alias_absent_disconnects_then_reconnects(self, backend):
+        b, client, dm = backend
+        container = self._own_container(client, endpoint={"Aliases": ["abc123"]})
+        net = MagicMock()
+        client.networks.get.return_value = net
+
+        with patch("socket.gethostname", return_value="abc123"):
+            healed = await b.heal_self_network_alias(self.NETWORK)
+
+        assert healed == "central-deploy"
+        client.networks.get.assert_called_once_with(self.NETWORK)
+        net.disconnect.assert_called_once_with(container)
+        net.connect.assert_called_once_with(
+            container, aliases=["central-deploy", "central-deploy-1"]
+        )
+
+    async def test_not_attached_connects_without_disconnect(self, backend):
+        b, client, dm = backend
+        container = self._own_container(client, endpoint=None)
+        net = MagicMock()
+        client.networks.get.return_value = net
+
+        with patch("socket.gethostname", return_value="abc123"):
+            healed = await b.heal_self_network_alias(self.NETWORK)
+
+        assert healed == "central-deploy"
+        net.disconnect.assert_not_called()
+        net.connect.assert_called_once_with(
+            container, aliases=["central-deploy", "central-deploy-1"]
+        )
+
+    async def test_no_compose_label_is_noop(self, backend):
+        """A container not run by compose has no service name to repair."""
+        b, client, dm = backend
+        container = MagicMock()
+        container.attrs = {
+            "Id": "abc123",
+            "Name": "/adhoc",
+            "Config": {"Hostname": "abc123", "Labels": {}},
+            "NetworkSettings": {"Networks": {self.NETWORK: {"Aliases": []}}},
+        }
+        client.containers.get.return_value = container
+        with patch("socket.gethostname", return_value="abc123"):
+            assert await b.heal_self_network_alias(self.NETWORK) is None
+        client.networks.get.assert_not_called()
+
+    async def test_own_container_not_found_is_noop(self, backend):
+        b, client, dm = backend
+        client.containers.get.side_effect = dm.errors.NotFound("gone")
+        client.containers.list.return_value = []
+        with patch("socket.gethostname", return_value="abc123"):
+            assert await b.heal_self_network_alias(self.NETWORK) is None
+
+    async def test_reattach_api_error_returns_none(self, backend):
+        b, client, dm = backend
+        self._own_container(client, endpoint={"Aliases": ["abc123"]})
+        net = MagicMock()
+        net.disconnect.side_effect = dm.errors.APIError("boom")
+        client.networks.get.return_value = net
+        with patch("socket.gethostname", return_value="abc123"):
+            assert await b.heal_self_network_alias(self.NETWORK) is None
+
+
+# ---------------------------------------------------------------------------
 # Contract conformance
 # ---------------------------------------------------------------------------
 

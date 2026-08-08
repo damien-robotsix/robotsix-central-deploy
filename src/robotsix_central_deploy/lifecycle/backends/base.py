@@ -201,6 +201,15 @@ class ExecutionBackend(ABC):
         """
         pass
 
+    async def heal_self_network_alias(self, network_name: str) -> Optional[str]:
+        """Repair this server's own service alias on *network_name*.
+
+        Default implementation is a no-op returning ``None`` — only
+        backends that can inspect and re-attach their own container
+        (``DockerSdkBackend``) override this.
+        """
+        return None
+
     @abstractmethod
     async def trigger_self_update(
         self,

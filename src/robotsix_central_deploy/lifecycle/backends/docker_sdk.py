@@ -1237,6 +1237,87 @@ class DockerSdkBackend(ExecutionBackend):
             networks=networks,
         )
 
+    async def heal_self_network_alias(self, network_name: str) -> Optional[str]:
+        """Repair the server's own service alias on *network_name*.
+
+        The watchtower self-update recreate re-attaches networks via raw
+        ``POST /networks/{id}/connect`` calls that carry no aliases, so
+        after every self-update the container sits on the proxy network
+        reachable only by container id: components resolving the compose
+        service name (e.g. ``http://central-deploy:8100``) get NXDOMAIN
+        while every health probe stays green (2026-08-03 incident — chat
+        lost the deploy API for four days).
+
+        The alias is read from the container's own
+        ``com.docker.compose.service`` label, keeping engine code free of
+        service names. Docker cannot add an alias to a live attachment,
+        so an attached-but-aliasless endpoint is disconnected first, then
+        reconnected with ``[service, container_name]``. Conservative:
+        touches only this server's own container on *network_name*, and
+        only when the alias is absent. Returns the repaired alias, or
+        ``None`` when nothing needed doing (or the repair failed).
+        """
+        import socket
+
+        import docker
+
+        hostname = socket.gethostname()
+        try:
+            container = await self._get_container(hostname)
+            if container is None:
+                container = await self._find_by_config_hostname(hostname)
+        except docker.errors.APIError as exc:
+            logger.warning("alias self-heal: self-inspection failed: %s", exc)
+            return None
+        if container is None:
+            return None
+
+        attrs = container.attrs
+        service_alias: str = ((attrs.get("Config") or {}).get("Labels") or {}).get(
+            "com.docker.compose.service", ""
+        )
+        if not service_alias:
+            logger.debug(
+                "alias self-heal: no com.docker.compose.service label; skipping"
+            )
+            return None
+
+        endpoint = ((attrs.get("NetworkSettings") or {}).get("Networks") or {}).get(
+            network_name
+        )
+        known = (endpoint or {}).get("Aliases") or []
+        # Newer daemons report the effective DNS names separately.
+        known = known + ((endpoint or {}).get("DNSNames") or [])
+        if endpoint is not None and service_alias in known:
+            return None
+
+        container_name = (attrs.get("Name") or "").lstrip("/")
+        aliases = [service_alias]
+        if container_name:
+            aliases.append(container_name)
+        loop = asyncio.get_running_loop()
+
+        def _reattach() -> None:
+            net = self._client.networks.get(network_name)
+            if endpoint is not None:
+                net.disconnect(container)
+            net.connect(container, aliases=aliases)
+
+        try:
+            await loop.run_in_executor(None, _reattach)
+        except docker.errors.APIError as exc:
+            logger.warning(
+                "alias self-heal: repair on %r failed: %s", network_name, exc
+            )
+            return None
+        logger.warning(
+            "alias self-heal: reattached %r to %r with aliases %r",
+            container_name or attrs.get("Id", ""),
+            network_name,
+            aliases,
+        )
+        return service_alias
+
     async def trigger_self_update(
         self,
         target: SelfInspect,
