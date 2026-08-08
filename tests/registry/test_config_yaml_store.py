@@ -81,20 +81,16 @@ async def test_config_yaml_store_round_trip(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_config_yaml_store_save_template_preserves_previous(tmp_path: Path):
-    """Re-seeding the schema must not discard the rollback snapshot."""
+async def test_config_yaml_store_save_template_overwrites(tmp_path: Path):
+    """Re-seeding the schema replaces the stored template."""
     store_path = tmp_path / "component_config_yaml.json"
     store = ConfigYamlStore(store_path)
 
-    template = {"key": "val"}
-    await store.save_template("svc", template)
-    await store.save_previous("svc", {"key": "rollback-target"})
-
+    await store.save_template("svc", {"key": "val"})
     new_template = {"key": "new_default", "extra": "yes"}
     await store.save_template("svc", new_template)
 
     assert await store.get_template("svc") == new_template
-    assert await store.get_previous("svc") == {"key": "rollback-target"}
 
 
 # ---------------------------------------------------------------------------

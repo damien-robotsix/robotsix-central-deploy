@@ -11,9 +11,10 @@ were exactly such a copy, and their staleness was silent — on 2026-08-07 a
 stale entry was written over chat's live Langfuse credentials during a deploy,
 removing chat from fleet-wide discovery with nothing erroring anywhere.
 
-``previous`` remains for the chat-agent mutation rollback. That belongs in the
-component's own version history too, and moves there once every component
-serves ``POST /config/rollback``.
+The ``previous`` slot is gone too. It backed the chat-agent config rollback,
+which restored a template-shaped snapshot over the component's volume — the
+same defect as the write path it paired with. Rollback now belongs to the
+component's own ``POST /config/rollback`` and its own version history.
 """
 
 from __future__ import annotations
@@ -48,25 +49,6 @@ class ConfigYamlStore(JsonFileStore):
             existing = data.get(name, {})
             existing["template"] = template
             data[name] = existing
-
-        await self._update(_mutate)
-
-    async def get_previous(self, name: str) -> dict[str, Any] | None:
-        """Return the previous (pre-rollback) config snapshot for *name*, or None."""
-        data = await self._load()
-        entry: dict[str, Any] | None = data.get(name)
-        if entry is None:
-            return None
-        previous: dict[str, Any] | None = entry.get("previous")
-        return previous
-
-    async def save_previous(self, name: str, previous: dict[str, Any]) -> None:
-        """Store a previous-config snapshot for *name* (rollback target)."""
-
-        def _mutate(data: dict[str, Any]) -> None:
-            entry = data.get(name, {})
-            entry["previous"] = previous
-            data[name] = entry
 
         await self._update(_mutate)
 

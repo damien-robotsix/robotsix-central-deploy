@@ -528,21 +528,12 @@ class ClaudeAuthCredentialsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ChatAgentConfigUpdate(BaseModel):
-    """Request body for PUT /chat/config/{name}.
-
-    Secret keys are accepted with partial-update semantics: omitted or
-    sentinel (``"***"``) values keep the stored secret; only an explicitly
-    supplied non-empty value overwrites it.
-    """
-
-    values: dict[str, Any] = Field(
-        description="Key-value pairs to write; sentinel '***' values preserve existing secrets"
-    )
-
-
 class ChatAgentConfigRollbackResponse(BaseModel):
-    """Response body for PUT /chat/config/{name} and POST /chat/config/{name}/rollback."""
+    """Response body for GET /chat/config/{name}.
+
+    Named for the retired rollback endpoint it used to share; the field
+    names are part of the chat agent's read contract, so they stay put.
+    """
 
     component: str = Field(description="Component name")
     restored: dict[str, Any] = Field(
