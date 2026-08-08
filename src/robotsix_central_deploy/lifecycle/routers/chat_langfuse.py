@@ -202,9 +202,23 @@ async def _proxy_to_langfuse(
             raise HTTPException(status_code=502, detail=f"Bad Gateway — {exc}")
 
         # -- Build response headers (strip hop-by-hop) ------------------
+        #
+        # content-encoding must go with them. We forward the caller's
+        # accept-encoding upstream, so Langfuse replies gzipped — but httpx
+        # decompresses transparently, making ``upstream.content`` plain
+        # bytes. Passing the header through then labels an identity body as
+        # gzip, and any client that honours it (httpx, requests) fails with
+        # a zlib "incorrect header check". content-length is stripped for
+        # the same reason: the length no longer matches.
         resp_headers: dict[str, str] = {}
         _STRIP: frozenset[str] = frozenset(
-            {"connection", "keep-alive", "transfer-encoding", "content-length"}
+            {
+                "connection",
+                "keep-alive",
+                "transfer-encoding",
+                "content-length",
+                "content-encoding",
+            }
         )
         for key, value in upstream.headers.items():
             if key.lower() not in _STRIP:
