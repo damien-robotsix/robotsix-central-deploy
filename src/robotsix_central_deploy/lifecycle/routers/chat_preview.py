@@ -206,7 +206,6 @@ def _parse_ports(svc: dict[str, Any]) -> list[PortMapping]:
 async def _build_image(
     compose_path: Path,
     svc: dict[str, Any],
-    project_dir: Path,
 ) -> str:
     """Build the Docker image for *svc* and return the image reference.
 
@@ -258,7 +257,7 @@ async def _build_image(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout2, stderr2 = await proc2.communicate()
+            stdout2, _ = await proc2.communicate()
             if proc2.returncode != 0 or not stdout2.strip():
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -473,7 +472,7 @@ async def preview_deploy(
                 env[k] = v
 
     # 5 — Build or resolve the image
-    image_ref = await _build_image(compose_path, svc, _PREVIEW_DIR)
+    image_ref = await _build_image(compose_path, svc)
 
     # 6 — Create and start the preview container
     container_id = await _create_preview_container(backend, image_ref, ports, env)

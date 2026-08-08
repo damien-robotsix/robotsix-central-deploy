@@ -47,6 +47,7 @@ modules:
       - mkdocs.yml
       - pyproject.toml
       - uv.lock
+      - vulture_whitelist.py
 
   - id: gateway
     description: >

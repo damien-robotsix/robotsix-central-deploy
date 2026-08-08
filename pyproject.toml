@@ -39,6 +39,9 @@ dev = [
     "types-docker>=7.1.0.20260712",
     "towncrier>=24.0",
     "hypothesis>=6.156.7",
+    # vulture: dead-code detection (CI gate). Findings that are false
+    # positives are recorded in vulture_whitelist.py.
+    "vulture>=2.14",
     "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules.git@39a1d024f7656de661779c594c2b07bb84162023",
 ]
 docs = [
@@ -82,6 +85,9 @@ markers = [
 
 [tool.ruff]
 target-version = "py312"
+# vulture_whitelist.py is a parse-only dead-code allowlist: bare name
+# references and an undefined `_` placeholder are inherent to its format.
+extend-exclude = ["vulture_whitelist.py"]
 
 [tool.ruff.lint]
 extend-select = ["S"]
@@ -185,3 +191,18 @@ showcontent = true
 directory = "misc"
 name = "Miscellaneous"
 showcontent = false
+
+[tool.vulture]
+paths = ["src/robotsix_central_deploy", "vulture_whitelist.py"]
+# FastAPI/Starlette register these callables via decorators — vulture cannot
+# see the registration, so decorated defs are exempt wholesale. Pydantic
+# validator decorators likewise.
+ignore_decorators = [
+    "@router.*",
+    "@app.*",
+    "@gateway_router.*",
+    "@field_validator",
+    "@model_validator",
+]
+# model_config: pydantic BaseModel configuration attribute, read by pydantic.
+ignore_names = ["model_config"]
