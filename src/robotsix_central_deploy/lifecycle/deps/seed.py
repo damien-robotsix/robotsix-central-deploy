@@ -11,21 +11,24 @@ from fastapi import HTTPException, status
 if TYPE_CHECKING:
     from robotsix_central_deploy.onboard.fetcher import RepoFiles
     from robotsix_central_deploy.onboard.models import DerivedSpec
-    from ...registry.config_store import ComponentConfigStore
+
     from ...registry import ComponentConfig, ConfigAssistSeed
+    from ...registry.config_store import ComponentConfigStore
 
 _ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
-def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "DerivedSpec":
+def _namespace_spec_volumes(spec: DerivedSpec, component_name: str) -> DerivedSpec:
     """Prefix all named-volume hosts with the component name.
 
     Converts image-hardcoded names (e.g. ``auto-mail-config``) into
     per-component names (e.g. ``mail-auto-mail-config``) so two components
     from the same image never share storage.
     """
-    from robotsix_central_deploy.onboard.models import SiblingDerivedSpec  # noqa: PLC0415
-    from robotsix_central_deploy.registry.models import VolumeMount  # noqa: PLC0415
+    from robotsix_central_deploy.onboard.models import (
+        SiblingDerivedSpec,
+    )
+    from robotsix_central_deploy.registry.models import VolumeMount
 
     old_to_new: dict[str, str] = {}
 
@@ -57,8 +60,8 @@ def _namespace_spec_volumes(spec: "DerivedSpec", component_name: str) -> "Derive
 
 
 def _build_component_config_from_spec(
-    spec: "DerivedSpec", *, git_url: str, **overrides: Any
-) -> "ComponentConfig":
+    spec: DerivedSpec, *, git_url: str, **overrides: Any
+) -> ComponentConfig:
     """Build a ``ComponentConfig`` from a parsed ``DerivedSpec``.
 
     Shared factory for the onboard-confirm and contract-refresh paths so
@@ -71,36 +74,36 @@ def _build_component_config_from_spec(
     branching — an override always wins over the spec-derived value, including
     for fields this factory also sets from *spec*.
     """
-    from robotsix_central_deploy.registry.models import ComponentConfig  # noqa: PLC0415
+    from robotsix_central_deploy.registry.models import ComponentConfig
 
-    fields: dict[str, Any] = dict(
-        id=spec.name,
-        image=spec.image,
-        container_name=spec.container_name or spec.name,
-        ports=spec.ports,
-        mounts=spec.volume_mounts,
-        env=spec.env,
-        health_check=spec.health_check,
-        command=spec.command,
-        entrypoint=spec.entrypoint,
-        tmpfs=spec.tmpfs,
-        mem_limit=spec.mem_limit,
-        claude_mount=spec.claude_mount,
-        claude_mount_path=spec.claude_mount_path,
-        host_docker_sock=spec.host_docker_sock,
-        named_volumes=[m.host for m in spec.volume_mounts]
+    fields: dict[str, Any] = {
+        "id": spec.name,
+        "image": spec.image,
+        "container_name": spec.container_name or spec.name,
+        "ports": spec.ports,
+        "mounts": spec.volume_mounts,
+        "env": spec.env,
+        "health_check": spec.health_check,
+        "command": spec.command,
+        "entrypoint": spec.entrypoint,
+        "tmpfs": spec.tmpfs,
+        "mem_limit": spec.mem_limit,
+        "claude_mount": spec.claude_mount,
+        "claude_mount_path": spec.claude_mount_path,
+        "host_docker_sock": spec.host_docker_sock,
+        "named_volumes": [m.host for m in spec.volume_mounts]
         + [m.host for sib in spec.siblings for m in sib.mounts],
-        siblings=[sib.model_copy() for sib in spec.siblings],
-        git_url=git_url,
-        config_volume=spec.config_volume,
-        config_assist_command=spec.config_assist_command,
-        config_assist_seeds=spec.config_assist_seeds,
-        llmio_tier_level=spec.llmio_tier_level,
-        allow_chat_access=spec.allow_chat_access,
-        chat_agent_mutatable=spec.chat_agent_mutatable,
-        user=spec.user,
-        target_disk=spec.target_disk,
-    )
+        "siblings": [sib.model_copy() for sib in spec.siblings],
+        "git_url": git_url,
+        "config_volume": spec.config_volume,
+        "config_assist_command": spec.config_assist_command,
+        "config_assist_seeds": spec.config_assist_seeds,
+        "llmio_tier_level": spec.llmio_tier_level,
+        "allow_chat_access": spec.allow_chat_access,
+        "chat_agent_mutatable": spec.chat_agent_mutatable,
+        "user": spec.user,
+        "target_disk": spec.target_disk,
+    }
     fields.update(overrides)
     return ComponentConfig(**fields)
 
@@ -122,7 +125,7 @@ def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> N
         )
 
 
-def _require_config_standard(derived_spec: "DerivedSpec") -> None:
+def _require_config_standard(derived_spec: DerivedSpec) -> None:
     """Raise HTTP 422 if *derived_spec* does not satisfy the robotsix config standard."""
     if derived_spec.config_schema is None or derived_spec.config_volume is None:
         missing: list[str] = []
@@ -302,7 +305,7 @@ def _seed_for_detect(
 
 def _relocate_account_seed_values(
     values: dict[str, Any],
-    seeds: list["ConfigAssistSeed"],
+    seeds: list[ConfigAssistSeed],
     src_idx: int,
     dst_idx: int,
 ) -> None:
@@ -368,7 +371,7 @@ def _relocate_account_seed_values(
 
 
 def _derive_account_id(
-    seeds: list["ConfigAssistSeed"],
+    seeds: list[ConfigAssistSeed],
     partial: dict[str, Any],
     n: int,
 ) -> str:
@@ -447,8 +450,8 @@ def _resolve_placeholders(command_str: str, values: dict[str, Any]) -> str:
 
 async def _fetch_component_repo_files(
     name: str,
-    component_config_store: "ComponentConfigStore",
-) -> "tuple[ComponentConfig, RepoFiles]":
+    component_config_store: ComponentConfigStore,
+) -> tuple[ComponentConfig, RepoFiles]:
     """Look up *name* in *component_config_store*, verify it has a git_url,
     and fetch its repo files — raising the appropriate HTTPException at
     each step (404, 400, 422).  Returns the ``ComponentConfig`` and the
@@ -466,7 +469,7 @@ async def _fetch_component_repo_files(
             detail=f"Component '{name}' has no git_url — cannot fetch its repo",
         )
 
-    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
+    from robotsix_central_deploy.onboard.fetcher import (
         FetchError,
         fetch_repo_files,
     )

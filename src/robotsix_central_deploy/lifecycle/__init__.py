@@ -1,41 +1,41 @@
 """Lifecycle control API — start, stop, restart, and status for managed services."""
 
-from .models import (
-    ServiceState,
-    ServiceRecord,
-    ServiceStatus,
-    ServiceListItem,
-    ErrorDetail,
-    DeployHistoryEntry,
-    DeployHistoryResponse,
-    RollbackRequest,
-)
 from .backends import (
-    ExecutionBackend,
     DockerBackend,
     DockerSdkBackend,
+    ExecutionBackend,
     NoopBackend,
     collect_protected_image_refs,
 )
-from .store import ServiceStore, InMemoryStore, FileStore
 from .config import LifecycleConfig
+from .models import (
+    DeployHistoryEntry,
+    DeployHistoryResponse,
+    ErrorDetail,
+    RollbackRequest,
+    ServiceListItem,
+    ServiceRecord,
+    ServiceState,
+    ServiceStatus,
+)
+from .store import FileStore, InMemoryStore, ServiceStore
 
 __all__ = [
-    "ServiceState",
-    "ServiceRecord",
-    "ServiceStatus",
-    "ServiceListItem",
-    "ErrorDetail",
     "DeployHistoryEntry",
     "DeployHistoryResponse",
-    "RollbackRequest",
-    "ExecutionBackend",
     "DockerBackend",
     "DockerSdkBackend",
-    "NoopBackend",
-    "collect_protected_image_refs",
-    "ServiceStore",
-    "InMemoryStore",
+    "ErrorDetail",
+    "ExecutionBackend",
     "FileStore",
+    "InMemoryStore",
     "LifecycleConfig",
+    "NoopBackend",
+    "RollbackRequest",
+    "ServiceListItem",
+    "ServiceRecord",
+    "ServiceState",
+    "ServiceStatus",
+    "ServiceStore",
+    "collect_protected_image_refs",
 ]

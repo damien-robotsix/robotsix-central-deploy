@@ -11,7 +11,6 @@ pytest.importorskip("github")
 
 import robotsix_central_deploy.lifecycle.app as server_mod
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

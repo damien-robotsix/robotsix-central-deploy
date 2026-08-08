@@ -15,7 +15,6 @@ from robotsix_central_deploy.lifecycle.deps.background import (
 )
 from robotsix_central_deploy.lifecycle.models import ComponentInspect, ServiceRecord
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

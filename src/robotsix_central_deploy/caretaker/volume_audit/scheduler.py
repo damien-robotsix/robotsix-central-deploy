@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -55,7 +55,7 @@ class VolumeAuditScheduler:
         try:
             raw = json.loads(self._snapshot_path.read_text(encoding="utf-8"))
             return {k: VolumeSizeSnapshot.model_validate(v) for k, v in raw.items()}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to load volume snapshots: %s", exc)
             return {}
 
@@ -74,7 +74,7 @@ class VolumeAuditScheduler:
                 self._findings_path.read_text(encoding="utf-8")
             )
             return [AuditFinding.model_validate(f) for f in raw[-5:]]
-        except Exception:
+        except Exception:  # noqa: BLE001
             return []
 
     # ------------------------------------------------------------------
@@ -99,7 +99,7 @@ class VolumeAuditScheduler:
             return []
 
         # 2. Measure each volume
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         current: dict[str, VolumeSizeSnapshot] = {}
         for component_id, vol_name in volume_owners:
             size = await self._backend.measure_volume_bytes(vol_name)
@@ -126,7 +126,7 @@ class VolumeAuditScheduler:
             for finding in findings:
                 try:
                     await report_finding(finding, self._findings_path, board_client)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.error(
                         "report_finding failed for %s: %s",
                         finding.volume_name,
@@ -136,7 +136,7 @@ class VolumeAuditScheduler:
             if board_client is not None:
                 try:
                     await board_client.close()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.error("Failed to close board client: %s", exc)
 
         # 5. Persist new snapshot and update in-memory state
@@ -167,7 +167,7 @@ class VolumeAuditScheduler:
                     token=cfg.board_api_token.get_secret_value(),
                     repo_id=cfg.board_repo_id,
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.error("Failed to create board client: %s", exc)
                 return None
         return None
@@ -185,7 +185,7 @@ class VolumeAuditScheduler:
                     await self.run_once()
                 except asyncio.CancelledError:
                     raise
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.error("VolumeAudit scan failed: %s", exc)
                 await asyncio.sleep(interval_seconds)
         except asyncio.CancelledError:

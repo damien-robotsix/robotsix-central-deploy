@@ -6,6 +6,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.env_store import EnvStore
+from ...registry.loader import ComponentRegistry
+from ...registry.settings_store import SystemSettingsStore
+from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import (
@@ -21,12 +27,7 @@ from ..deps import (
 from ..models import ErrorDetail
 from ..schemas import EnvResponse, EnvSyncResponse, EnvUpdate
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.env_store import EnvStore
-from ...registry.loader import ComponentRegistry
-from ...registry.settings_store import SystemSettingsStore
 from .._fleet_auth import reconcile_fleet_auth_hosts
-from .._langfuse_config import reconcile_langfuse_after_toggle
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +47,10 @@ router = APIRouter(tags=["services"])
 )
 async def get_service_env(
     name: str,
-    store: ServiceStore = Depends(_get_store),
-    env_store: EnvStore = Depends(_get_env_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    settings_store: SystemSettingsStore = Depends(_get_settings_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> EnvResponse:
     """Return stored environment variables and masked secret keys for a service.
@@ -100,12 +101,13 @@ async def put_service_env(
     name: str,
     body: EnvUpdate,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    env_store: EnvStore = Depends(_get_env_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    registry: ComponentRegistry = Depends(_get_registry),
-    settings_store: SystemSettingsStore = Depends(_get_settings_store),
-    backend: "ExecutionBackend" = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Create or update environment variables and secrets for a service.
@@ -179,8 +181,8 @@ async def put_service_env(
 )
 async def sync_env_keys(
     name: str,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    env_store: EnvStore = Depends(_get_env_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> EnvSyncResponse:
     """Re-read the repo's compose env contract and seed newly declared keys.
@@ -191,7 +193,7 @@ async def sync_env_keys(
     are never modified. Keys the contract no longer declares are pruned
     (deleted) from the store.
     """
-    from robotsix_central_deploy.onboard.parser import (  # noqa: PLC0415
+    from robotsix_central_deploy.onboard.parser import (
         ParseError,
         parse_compose,
     )
@@ -242,10 +244,10 @@ async def sync_env_keys(
 async def delete_service_env_key(
     name: str,
     key: str,
-    store: ServiceStore = Depends(_get_store),
-    env_store: EnvStore = Depends(_get_env_store),
-    settings_store: SystemSettingsStore = Depends(_get_settings_store),
-    backend: "ExecutionBackend" = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Delete a single environment-variable or secret key for a service.

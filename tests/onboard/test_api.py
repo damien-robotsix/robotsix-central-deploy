@@ -12,21 +12,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+# Import the server module itself so we can set its globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
-from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.models import (
     ExecutionBackendType,
     ServiceRecord,
     ServiceState,
 )
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.onboard.models import (
     DerivedSpec,
     ParseError,
     SiblingDerivedSpec,
 )
-from robotsix_central_deploy.onboard.fetcher import RepoFiles
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.config_yaml_store import ConfigYamlStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
@@ -38,10 +40,6 @@ from robotsix_central_deploy.registry.settings_store import (
     SystemSettings,
     SystemSettingsStore,
 )
-
-# Import the server module itself so we can set its globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 SAMPLE_SCHEMA = {
     "type": "object",

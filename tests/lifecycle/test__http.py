@@ -15,7 +15,6 @@ from robotsix_http import DEFAULT_CONFIG, RetryClient, RetryConfig
 
 from robotsix_central_deploy._http import retry_client_context, wrap_retry_client
 
-
 # ---------------------------------------------------------------------------
 # retry_client_context
 # ---------------------------------------------------------------------------

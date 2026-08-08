@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
@@ -12,8 +13,6 @@ from robotsix_central_deploy.registry.models import (
     ComponentConfig,
     ServiceConfig,
 )
-
-import robotsix_central_deploy.lifecycle.app as server_mod
 
 
 async def _seed_store(*names: str, image: str = "") -> None:

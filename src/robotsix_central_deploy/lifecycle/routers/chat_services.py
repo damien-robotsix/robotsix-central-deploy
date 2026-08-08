@@ -7,10 +7,30 @@ generically deploy an allowlisted service.
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from robotsix_central_deploy.lifecycle._config_utils import (
+    _merge_config,
+)
+from robotsix_central_deploy.lifecycle.deps.seed import (
+    _build_component_config_from_spec,
+    _namespace_spec_volumes,
+    _validate_config_or_422,
+)
+
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.loader import ComponentRegistry
+from ...registry.models import ComponentConfig
+from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from ..config import LifecycleConfig
+from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..deps import (
     _get_backend,
     _get_chat_agent_audit_store,
@@ -22,7 +42,7 @@ from ..deps import (
     _get_registry,
     _get_store,
 )
-from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._fleet_auth import reconcile_fleet_auth_hosts
 from ._chat_common import (
     _check_rate_limit,
     _require_allowed_service,
@@ -32,9 +52,6 @@ from ._sibling_utils import (
     _fanout_siblings_best_effort,
     _fanout_siblings_deploy_best_effort,
 )
-from .._fleet_auth import reconcile_fleet_auth_hosts
-from .._langfuse_config import reconcile_langfuse_after_toggle
-from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..models import ActionType, ServiceRecord, ServiceState, can_transition
 from ..schemas import (
     ChatAgentDeployRequest,
@@ -49,22 +66,15 @@ from ..schemas import (
     ChatAgentUpdateResponse,
 )
 from ..store import ServiceStore
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig
-
-import asyncio
-
-from robotsix_central_deploy.lifecycle._config_utils import (
-    _merge_config,
+from ._chat_common import (
+    _check_rate_limit,
+    _require_allowed_service,
+    logger,
 )
-from robotsix_central_deploy.lifecycle.deps.seed import (
-    _build_component_config_from_spec,
-    _namespace_spec_volumes,
-    _validate_config_or_422,
+from ._sibling_utils import (
+    _fanout_siblings_best_effort,
+    _fanout_siblings_deploy_best_effort,
 )
-from ..config import LifecycleConfig
 
 router = APIRouter(tags=["chat"])
 
@@ -87,10 +97,10 @@ router = APIRouter(tags=["chat"])
 async def chat_register_component(
     body: ChatAgentRegisterRequest,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    registry: ComponentRegistry = Depends(_get_registry),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentRegisterResponse:
     """Register a new managed component in the service inventory.
@@ -114,7 +124,7 @@ async def chat_register_component(
         )
 
     # Reject reserved names that would shadow API routes.
-    from ...gateway.router import RESERVED_NAMES  # noqa: PLC0415
+    from ...gateway.router import RESERVED_NAMES
 
     if body.name in RESERVED_NAMES:
         raise HTTPException(
@@ -198,11 +208,11 @@ async def chat_register_component(
 async def chat_restart_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentRestartResponse:
     """Restart an allowlisted service. Idempotent.
@@ -242,7 +252,7 @@ async def chat_restart_service(
 
     try:
         final_state = await backend.restart(record)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("chat restart %s failed", _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
@@ -305,11 +315,11 @@ async def chat_restart_service(
 async def chat_update_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentUpdateResponse:
     """Pull the latest image and recreate the container for an allowlisted service.
@@ -364,7 +374,7 @@ async def chat_update_service(
 
     try:
         outcome = await backend.deploy(record, config, config.image)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("chat update %s failed", _sanitize_log(name))
         await audit_store.append(
             ChatAgentAuditEntry(
@@ -446,11 +456,11 @@ async def chat_update_service(
 async def chat_deploy_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentServiceDeployResponse:
     """Deploy an already-registered component for the first time.
@@ -531,7 +541,7 @@ async def chat_deploy_service(
 
     try:
         outcome = await backend.deploy(record, config, config.image)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("chat deploy %s failed", _sanitize_log(name))
         await audit_store.append(
             ChatAgentAuditEntry(
@@ -621,9 +631,9 @@ async def _resolve_deploy_contract(
     loop = asyncio.get_running_loop()
     from robotsix_central_deploy.lifecycle.deps._compose_resolver import (
         _resolve_compose_backbone,
-    )  # noqa: PLC0415
+    )
 
-    repo_files, derived_spec = await _resolve_compose_backbone(
+    _repo_files, derived_spec = await _resolve_compose_backbone(
         body.repo, body.name, lifecycle_config, loop
     )
 
@@ -692,11 +702,11 @@ async def _resolve_deploy_contract(
 async def chat_deploy(
     body: ChatAgentDeployRequest,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentDeployResponse:
     """Deploy an allowlisted component by fetching and parsing its deploy contract.
@@ -761,7 +771,7 @@ async def chat_deploy(
     deploy_image = comp_cfg.image
     try:
         outcome = await backend.deploy(record, comp_cfg, deploy_image)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.exception("chat deploy %s failed", _sanitize_log(body.name))
         await audit_store.append(
             ChatAgentAuditEntry(
@@ -875,7 +885,7 @@ def _schedule_ttl_task(
                         detail=f"Auto-disabled after TTL ({ttl_seconds}s)",
                     )
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "TTL auto-disable for '%s' failed",
                 _sanitize_log(name),
@@ -904,8 +914,9 @@ async def chat_enable_mutation(
     name: str,
     body: ChatAgentMutationEnableRequest,
     request: Request,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentMutationEnableResponse:
     """Enable the per-service ``chat_agent_mutatable`` flag for *name*.
@@ -1004,8 +1015,9 @@ async def chat_enable_mutation(
 async def chat_disable_mutation(
     name: str,
     request: Request,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentMutationDisableResponse:
     """Disable the per-service ``chat_agent_mutatable`` flag for *name*.

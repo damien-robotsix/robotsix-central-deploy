@@ -26,8 +26,8 @@ async def health() -> dict[str, str]:
 @router.get("/disk", response_model=DiskUsageResponse)
 async def get_disk_usage(
     _auth: None = Depends(verify_auth),
-    backend: ExecutionBackend = Depends(_get_backend),
-    config: LifecycleConfig = Depends(_get_config),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
 ) -> DiskUsageResponse:
     """Host disk usage and Docker storage breakdown.
 
@@ -78,8 +78,8 @@ async def get_disk_usage(
 @router.post("/disk/reclaim", response_model=ReclaimResponse)
 async def reclaim_build_cache(
     _auth: None = Depends(verify_auth),
-    backend: ExecutionBackend = Depends(_get_backend),
-    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
 ) -> ReclaimResponse:
     """Prune Docker build cache and dangling images, return bytes freed.
 

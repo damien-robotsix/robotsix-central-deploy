@@ -10,7 +10,6 @@ from typing import Any
 
 from ..models import ServiceState
 
-
 # ---------------------------------------------------------------------------
 # PruneImagesResult — rich return from prune_images()
 # ---------------------------------------------------------------------------

@@ -10,9 +10,9 @@ import pytest
 
 pytest.importorskip("hypothesis")
 
-from hypothesis import HealthCheck, given, settings  # noqa: E402
-from hypothesis import strategies as st  # noqa: E402
-from hypothesis.stateful import (  # noqa: E402
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
     precondition,
@@ -28,7 +28,6 @@ from robotsix_central_deploy.lifecycle.models import (
     VolumeEntryType,
     can_transition,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. State-machine transition completeness (RuleBasedStateMachine)

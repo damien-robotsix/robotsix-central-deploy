@@ -6,9 +6,9 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from ...registry.config_store import ComponentConfigStore
 from ..backends import ExecutionBackend
 from ..models import VolumeStat
-from ...registry.config_store import ComponentConfigStore
 
 #: Maximum bytes returned by ``GET /volumes/{name}/cat`` (1 MiB).
 VOLUME_CAT_MAX_BYTES: int = 1_048_576
@@ -23,8 +23,7 @@ def _validate_volume_path(rel_path: str) -> str:
     if "\x00" in rel_path:
         raise HTTPException(status_code=400, detail="Path contains NUL byte")
     # Strip a single leading slash so callers can pass "/" or "/foo".
-    if rel_path.startswith("/"):
-        rel_path = rel_path[1:]
+    rel_path = rel_path.removeprefix("/")
     # Collapse to a clean relative path.
     norm = str(Path(rel_path))
     if norm == ".":

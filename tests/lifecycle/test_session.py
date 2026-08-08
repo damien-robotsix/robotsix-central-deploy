@@ -69,7 +69,7 @@ class TestSessionStore:
                     t = store.create()
                     results.append(t)
                     assert store.validate(t) is True
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 errors.append(exc)
 
         threads = [threading.Thread(target=make_and_check) for _ in range(10)]

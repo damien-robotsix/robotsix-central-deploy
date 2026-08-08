@@ -1,7 +1,7 @@
 """Unit tests for volume_audit.reporter.report_finding."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,7 +16,7 @@ def _make_finding(**overrides) -> AuditFinding:
     defaults: dict = {
         "volume_name": "test-vol",
         "component_id": "test-comp",
-        "finding_at": datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+        "finding_at": datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC),
         "size_bytes": 50_000_000,
         "delta_bytes": 10_000_000,
         "growth_pct": 25.0,

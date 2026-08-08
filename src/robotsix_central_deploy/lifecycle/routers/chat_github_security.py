@@ -15,11 +15,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ..auth import verify_auth
 from ..config import LifecycleConfig
 from ..deps import _get_chat_agent_audit_store, _get_config
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-
 from ._github_common import (
     _call_github_endpoint,
     _call_github_endpoint_with_pat_fallback,
@@ -55,8 +54,8 @@ def _enable_vulnerability_alerts_sync(
 async def enable_vulnerability_alerts(
     owner: str,
     repo: str,
-    config: LifecycleConfig = Depends(_get_config),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Enable *owner*/*repo*'s Dependency graph and Dependabot alerts.
@@ -160,8 +159,8 @@ async def set_security_features(
     owner: str,
     repo: str,
     body: SecurityFeaturesRequest,
-    config: LifecycleConfig = Depends(_get_config),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Enable or disable security features on *owner*/*repo*.

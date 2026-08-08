@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from .backends import ExecutionBackend
     from ..registry.models import ComponentConfig
+    from .backends import ExecutionBackend
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ def _strip_secret_values(
             walk: Any,
         ) -> Any:
             (i_values,) = value_dicts
-            return i_values[key] if key in i_values else _SchemaWalker.SKIP
+            return i_values.get(key, _SchemaWalker.SKIP)
 
         def array(
             self,
@@ -378,7 +378,7 @@ def _mask_secrets_json_schema(
             walk: Any,
         ) -> Any:
             (i_current,) = value_dicts
-            return i_current[key] if key in i_current else ""
+            return i_current.get(key, "")
 
         def array(
             self,
@@ -713,7 +713,7 @@ def _restore_secrets_from_current(
             value_dicts: tuple[dict[str, Any], ...],
             walk: Any,
         ) -> Any:
-            (i_restored, i_current) = value_dicts
+            (i_restored, _i_current) = value_dicts
             if key in i_restored:
                 return i_restored[key]
             return _SchemaWalker.SKIP
@@ -776,7 +776,7 @@ async def _write_llmio_tier_config(
             await backend.write_llmio_tier_config_to_volume(
                 component_config.config_volume, settings.llmio_tier_config
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "%s %s: could not write llmio tier config to volume %s: %s",
             log_context,

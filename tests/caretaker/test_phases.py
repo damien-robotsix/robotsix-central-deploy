@@ -3,9 +3,21 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from robotsix_central_deploy.caretaker.models import FindingKind
+from robotsix_central_deploy.caretaker.phases import (
+    phase_health,
+    phase_update,
+    phase_volumes,
+)
+from robotsix_central_deploy.caretaker.volume_audit.models import (
+    AuditFinding,
+    VolumeAuditResponse,
+)
 
 # Import lifecycle models FIRST to break the circular import:
 #   caretaker.phases → lifecycle.models → lifecycle.__init__ → app → deps → caretaker.scheduler → caretaker.phases
@@ -22,19 +34,6 @@ from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
-from robotsix_central_deploy.caretaker.volume_audit.models import (
-    AuditFinding,
-    VolumeAuditResponse,
-)
-
-from robotsix_central_deploy.caretaker.models import FindingKind
-from robotsix_central_deploy.caretaker.phases import (
-    phase_health,
-    phase_update,
-    phase_volumes,
-)
-
-from datetime import datetime, timezone
 
 
 def _make_record(name="svc", update_available=True):
@@ -537,7 +536,7 @@ class TestPhaseVolumes:
         finding = AuditFinding(
             volume_name="vol1",
             component_id="svc",
-            finding_at=datetime.now(tz=timezone.utc),
+            finding_at=datetime.now(tz=UTC),
             size_bytes=1000,
             delta_bytes=500,
             growth_pct=50.0,
@@ -576,8 +575,8 @@ class TestPhaseVolumes:
     @pytest.mark.asyncio
     async def test_orphan(self):
         from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+        from robotsix_central_deploy.lifecycle.models import DockerDfStats, VolumeStat
         from robotsix_central_deploy.registry.settings_store import SystemSettings
-        from robotsix_central_deploy.lifecycle.models import VolumeStat, DockerDfStats
 
         vas = MagicMock()
         vas.run_once = AsyncMock()

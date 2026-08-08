@@ -6,8 +6,13 @@ Exposes:
 
 from __future__ import annotations
 
+import os
+import shutil
+
 from fastapi import APIRouter, Depends, Request
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
 from ..auth import verify_auth
 from ..backends import (
     ExecutionBackend,
@@ -25,16 +30,10 @@ from ..deps import (
 from ..models import DiskUsageResponse
 from ..schemas import ChatAgentDiskReclaimRequest, ChatAgentDiskReclaimResponse
 from ..store import ServiceStore
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-from ...registry.config_store import ComponentConfigStore
-
 from ._chat_common import (
     _check_rate_limit,
     _require_allowed_service,
 )
-
-import os
-import shutil
 
 router = APIRouter(tags=["chat"])
 
@@ -56,11 +55,11 @@ router = APIRouter(tags=["chat"])
 async def chat_disk_reclaim(
     body: ChatAgentDiskReclaimRequest,
     request: Request,
-    backend: ExecutionBackend = Depends(_get_backend),
-    store: ServiceStore = Depends(_get_store),
-    config: LifecycleConfig = Depends(_get_config),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentDiskReclaimResponse:
     """Prune safe Docker disk targets: dangling images and/or build cache.

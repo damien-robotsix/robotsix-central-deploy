@@ -25,7 +25,6 @@ from robotsix_central_deploy.registry.models import (
     HealthCheck,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helper — create a mock backend with a patched docker module
 # ---------------------------------------------------------------------------
@@ -185,7 +184,7 @@ class TestDockerSdkBackendGetContainer:
             yield b, client, dm
 
     async def test_get_container_returns_container_on_success(self, backend):
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         client.containers.get.return_value = container
         result = await b._get_container("test-svc")
@@ -294,7 +293,7 @@ class TestDockerSdkBackendDeploy:
 
     async def test_deploy_happy_path_no_health_check(self, backend):
         """Deploy pulls image, removes old container, creates + starts new."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = self._make_config()
         record = ServiceRecord(
             name="test-svc", container_name="test-svc", state=ServiceState.STOPPED
@@ -430,7 +429,7 @@ class TestDockerSdkBackendDeploy:
 
     async def test_deploy_create_start_fails_triggers_restore(self, backend):
         """When container create/start fails, _try_restore is called."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = self._make_config()
         record = ServiceRecord(
             name="test-svc", container_name="test-svc", state=ServiceState.STOPPED
@@ -686,7 +685,7 @@ class TestDockerSdkBackendRollback:
 
     async def test_rollback_happy_path(self, backend):
         """Rollback stops old, creates + starts from prior digest."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = ComponentConfig(
             id="test-svc", image="img:latest", container_name="test-svc"
         )
@@ -835,7 +834,7 @@ class TestDockerSdkBackendWaitHealthy:
 
     async def test_wait_healthy_returns_when_healthy(self, backend):
         """_wait_healthy returns immediately when health status is healthy."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
 
         def _reload():
@@ -850,7 +849,7 @@ class TestDockerSdkBackendWaitHealthy:
 
     async def test_wait_healthy_raises_on_unhealthy(self, backend):
         """_wait_healthy raises RuntimeError when health goes unhealthy."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.attrs = {"State": {"Health": {"Status": "unhealthy"}}}
         client.containers.get.return_value = container
@@ -860,7 +859,7 @@ class TestDockerSdkBackendWaitHealthy:
 
     async def test_wait_healthy_no_healthcheck_treats_as_healthy(self, backend):
         """Container with no Health key is treated as healthy."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.attrs = {"State": {}}  # No Health key
         client.containers.get.return_value = container
@@ -870,7 +869,7 @@ class TestDockerSdkBackendWaitHealthy:
 
     async def test_wait_healthy_container_disappears_raises(self, backend):
         """_wait_healthy raises RuntimeError when container disappears."""
-        b, client, dm = backend
+        b, client, _dm = backend
 
         # First call returns container, second returns None (disappeared)
         container = MagicMock()
@@ -882,7 +881,7 @@ class TestDockerSdkBackendWaitHealthy:
 
     async def test_wait_healthy_timeout_proceeds(self, backend, monkeypatch):
         """_wait_healthy logs warning and returns when timeout expires."""
-        b, client, dm = backend
+        b, client, _dm = backend
 
         container = MagicMock()
         container.attrs = {"State": {"Health": {"Status": "starting"}}}
@@ -919,7 +918,7 @@ class TestDockerSdkBackendStreamLogs:
 
     async def test_stream_logs_yields_chunks(self, backend):
         """stream_logs yields log chunks from the container."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.logs.return_value = iter([b"line1\n", b"line2\n", b"line3\n"])
         client.containers.get.return_value = container
@@ -951,7 +950,7 @@ class TestDockerSdkBackendStreamLogs:
 
     async def test_stream_logs_with_since_parameter(self, backend):
         """stream_logs passes 'since' parameter to container.logs()."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.logs.return_value = iter([b"log\n"])
         client.containers.get.return_value = container
@@ -971,7 +970,7 @@ class TestDockerSdkBackendStreamLogs:
 
     async def test_stream_logs_with_follow(self, backend):
         """stream_logs passes follow=True to container.logs()."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.logs.return_value = iter([b"log\n"])
         client.containers.get.return_value = container
@@ -996,7 +995,7 @@ class TestDockerSdkBackendStreamLogs:
 
     async def test_stream_logs_handles_non_bytes_chunks(self, backend):
         """Non-bytes chunks are encoded to bytes."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         # Simulate chunks that are strings (some Docker SDK versions)
         container.logs.return_value = iter(["string-chunk\n"])
@@ -1038,7 +1037,7 @@ class TestDockerSdkBackendRemoveContainer:
 
     async def test_remove_container_generic_exception_logged_not_raised(self, backend):
         """remove_container catches generic Exception, logs warning, does not raise."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.remove.side_effect = RuntimeError("volume in use")
         client.containers.get.return_value = container
@@ -1076,7 +1075,7 @@ class TestDockerSdkBackendRemoveOldContainer:
 
     async def test_remove_old_container_returns_prior_digest(self, backend):
         """Returns the old container's image id as prior_digest."""
-        b, client, dm = backend
+        b, _client, _dm = backend
         old = MagicMock()
         old.image.id = "sha256:old-digest"
         prior = await b._remove_old_container("test-svc", old)
@@ -1086,7 +1085,7 @@ class TestDockerSdkBackendRemoveOldContainer:
 
     async def test_remove_old_container_image_id_access_fails_gracefully(self, backend):
         """When image.id raises, prior_digest stays empty but remove proceeds."""
-        b, client, dm = backend
+        b, _client, _dm = backend
         old = MagicMock()
         # Accessing image.id raises
         old_image = MagicMock()
@@ -1102,7 +1101,7 @@ class TestDockerSdkBackendRemoveOldContainer:
     ):
         """When _stop_and_remove's remove(force=True) raises APIError,
         RuntimeError propagates."""
-        b, client, dm = backend
+        b, _client, dm = backend
         old = MagicMock()
         # _stop_and_remove swallows exceptions from stop(), but an
         # APIError from remove(force=True) propagates.
@@ -1130,7 +1129,7 @@ class TestDockerSdkBackendPrepareVolumes:
 
     async def test_prepare_volumes_creates_named_volumes(self, backend):
         """Named volumes are created via volumes.create()."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = ComponentConfig(
             id="test-svc",
             image="img:latest",
@@ -1185,11 +1184,13 @@ class TestDockerSdkBackendPrepareVolumes:
         api_error.status_code = 500
         client.volumes.create.side_effect = api_error
 
-        with patch.object(
-            b._volume, "resolve_user_to_uid_gid", return_value=(1000, 1000)
+        with (
+            patch.object(
+                b._volume, "resolve_user_to_uid_gid", return_value=(1000, 1000)
+            ),
+            pytest.raises(RuntimeError, match="Failed to create volume"),
         ):
-            with pytest.raises(RuntimeError, match="Failed to create volume"):
-                await b._prepare_volumes(config)
+            await b._prepare_volumes(config)
 
     async def test_prepare_volumes_docker_exception_raises(self, backend):
         """DockerException during volume creation raises RuntimeError."""
@@ -1202,15 +1203,17 @@ class TestDockerSdkBackendPrepareVolumes:
         )
         client.volumes.create.side_effect = dm.errors.DockerException("socket error")
 
-        with patch.object(
-            b._volume, "resolve_user_to_uid_gid", return_value=(1000, 1000)
+        with (
+            patch.object(
+                b._volume, "resolve_user_to_uid_gid", return_value=(1000, 1000)
+            ),
+            pytest.raises(RuntimeError, match="Docker daemon unreachable"),
         ):
-            with pytest.raises(RuntimeError, match="Docker daemon unreachable"):
-                await b._prepare_volumes(config)
+            await b._prepare_volumes(config)
 
     async def test_prepare_volumes_with_claude_mount(self, backend):
         """When claude_mount=True, claude-auth volume is created and validated."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = ComponentConfig(
             id="test-svc",
             image="img:latest",
@@ -1235,7 +1238,7 @@ class TestDockerSdkBackendPrepareVolumes:
 
     async def test_prepare_volumes_claude_cred_check_warning(self, backend):
         """When claude cred check returns warnings, they're included in result."""
-        b, client, dm = backend
+        b, _client, _dm = backend
         config = ComponentConfig(
             id="test-svc",
             image="img:latest",
@@ -1260,7 +1263,7 @@ class TestDockerSdkBackendPrepareVolumes:
 
     async def test_prepare_volumes_claude_cred_check_exception_non_fatal(self, backend):
         """When claude cred check raises, it's caught and logged (non-fatal)."""
-        b, client, dm = backend
+        b, _client, _dm = backend
         config = ComponentConfig(
             id="test-svc",
             image="img:latest",
@@ -1304,7 +1307,7 @@ class TestDockerSdkBackendTryRestore:
 
     async def test_try_restore_with_prior_digest(self, backend):
         """Restore creates and starts container from prior_digest."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = ComponentConfig(
             id="test-svc", image="img:latest", container_name="test-svc"
         )
@@ -1320,7 +1323,7 @@ class TestDockerSdkBackendTryRestore:
 
     async def test_try_restore_empty_prior_digest_noop(self, backend):
         """When prior_digest is empty, _try_restore is a no-op."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = ComponentConfig(
             id="test-svc", image="img:latest", container_name="test-svc"
         )
@@ -1329,7 +1332,7 @@ class TestDockerSdkBackendTryRestore:
 
     async def test_try_restore_failure_logged_not_raised(self, backend):
         """When restore fails, exception is logged but not re-raised."""
-        b, client, dm = backend
+        b, client, _dm = backend
         config = ComponentConfig(
             id="test-svc", image="img:latest", container_name="test-svc"
         )
@@ -1366,7 +1369,7 @@ class TestDockerSdkBackendDiskDf:
 
     async def test_disk_df_success(self, backend):
         """disk_df returns DockerDfStats with images, build cache, volumes."""
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.df.return_value = {
             "Images": [{"Size": 100}],
             "BuildCache": [
@@ -1423,7 +1426,7 @@ class TestDockerSdkBackendDiskDf:
 
     async def test_disk_df_layers_size_zero_falls_back_to_sum(self, backend):
         """When LayersSize is 0, falls back to sum of image sizes."""
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.df.return_value = {
             "Images": [{"Size": 150}, {"Size": 250}],
             "BuildCache": [],
@@ -1446,7 +1449,7 @@ class TestDockerSdkBackendDiskDf:
 
     async def test_disk_df_volume_sentinel_negative_one_skipped(self, backend):
         """Volumes with Size==-1 (unknown sentinel) are skipped."""
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.df.return_value = {
             "Images": [],
             "BuildCache": [],
@@ -1485,7 +1488,7 @@ class TestDockerSdkBackendDiskDf:
         ``dangling_images_reclaimable_bytes`` is the subset that are leaf
         nodes — the ones ``prune_images()`` can actually remove.
         """
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.df.return_value = {
             "Images": [
                 # Simulate intermediate layers that df reports as untagged
@@ -1567,7 +1570,7 @@ class TestDockerSdkBackendPruneBuilds:
 
     async def test_prune_builds_returns_reclaimed_bytes(self, backend):
         """prune_builds calls api.prune_builds(all=True) and returns SpaceReclaimed."""
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.prune_builds.return_value = {"SpaceReclaimed": 12345}
         result = await b.prune_builds()
         assert result == 12345
@@ -1575,10 +1578,93 @@ class TestDockerSdkBackendPruneBuilds:
 
     async def test_prune_builds_missing_key_returns_zero(self, backend):
         """When SpaceReclaimed is missing from result, returns 0."""
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.prune_builds.return_value = {}
         result = await b.prune_builds()
         assert result == 0
+
+
+# ---------------------------------------------------------------------------
+# run_config_assist
+# ---------------------------------------------------------------------------
+
+
+class TestDockerSdkBackendRunConfigAssist:
+    """Tests for run_config_assist."""
+
+    @pytest.fixture
+    def backend(self):
+        dm = _make_docker_mock()
+        client = MagicMock()
+        dm.DockerClient.return_value = client
+        with patch.dict(sys.modules, {"docker": dm}):
+            b = DockerSdkBackend()
+            yield b, client, dm
+
+    async def test_run_config_assist_success(self, backend):
+        """run_config_assist returns container logs on success."""
+        b, client, _dm = backend
+        container = MagicMock()
+        container.wait.return_value = {"StatusCode": 0}
+        container.logs.return_value = b"config applied\n"
+        client.containers.create.return_value = container
+
+        result = await b.run_config_assist(
+            image="busybox",
+            command_str="cat /config/config.yaml",
+            volume_name="data-vol",
+            volume_mount_path="/config",
+            env_dict={"KEY": "val"},
+            timeout_seconds=30,
+        )
+
+        assert result == "config applied\n"
+        container.start.assert_called_once()
+        container.wait.assert_called_once_with(timeout=30)
+        container.remove.assert_called_once_with(force=True)
+
+    async def test_run_config_assist_non_zero_exit_raises(self, backend):
+        """run_config_assist raises RuntimeError on non-zero exit code."""
+        b, client, _dm = backend
+        container = MagicMock()
+        container.wait.return_value = {"StatusCode": 1}
+        container.logs.return_value = b"error: something broke\n"
+        client.containers.create.return_value = container
+
+        with pytest.raises(RuntimeError, match="exited with code 1"):
+            await b.run_config_assist(
+                image="busybox",
+                command_str="false",
+                volume_name="vol",
+                volume_mount_path="/mnt",
+                env_dict={},
+            )
+
+        # Container was still removed
+        container.remove.assert_called_once_with(force=True)
+
+    async def test_run_config_assist_timeout(self, backend):
+        """run_config_assist raises TimeoutError on timeout, kills container."""
+        b, client, _dm = backend
+        container = MagicMock()
+        import requests.exceptions
+
+        container.wait.side_effect = requests.exceptions.ReadTimeout("timed out")
+        client.containers.create.return_value = container
+
+        with pytest.raises(TimeoutError, match="timed out"):
+            await b.run_config_assist(
+                image="busybox",
+                command_str="sleep 999",
+                volume_name="vol",
+                volume_mount_path="/mnt",
+                env_dict={},
+                timeout_seconds=5,
+            )
+
+        # Container was killed and removed
+        container.kill.assert_called_once()
+        container.remove.assert_called_once_with(force=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1602,7 +1688,7 @@ class TestDockerSdkBackendTriggerSelfUpdate:
         """Returns watchtower container id on success."""
         from robotsix_central_deploy.lifecycle.models import SelfInspect
 
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.create_container.return_value = {"Id": "watchtower-abc123"}
         target = SelfInspect(
             container_id="self-id",
@@ -1633,7 +1719,7 @@ class TestDockerSdkBackendTriggerSelfUpdate:
         """When target has no networks, networking_config is None."""
         from robotsix_central_deploy.lifecycle.models import SelfInspect
 
-        b, client, dm = backend
+        b, client, _dm = backend
         client.api.create_container.return_value = {"Id": "ctr-id"}
         target = SelfInspect(
             container_id="self-id",
@@ -1692,7 +1778,7 @@ class TestDockerSdkBackendClaudeAuthDelegation:
             yield b, client, dm
 
     async def test_check_claude_auth_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(
             b._auth,
             "check_claude_auth",
@@ -1703,7 +1789,7 @@ class TestDockerSdkBackendClaudeAuthDelegation:
             assert result == {"status": "authenticated"}
 
     async def test_write_claude_credentials_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(
             b._auth,
             "write_claude_credentials",
@@ -1714,7 +1800,7 @@ class TestDockerSdkBackendClaudeAuthDelegation:
             assert result == {"status": "ok"}
 
     async def test_read_claude_credentials_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(
             b._auth,
             "read_claude_credentials",
@@ -1743,19 +1829,19 @@ class TestDockerSdkBackendVolumeOpsDelegation:
             yield b, client, dm
 
     async def test_write_config_to_volume_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(b._volume, "write_config_to_volume") as mock_fn:
             await b.write_config_to_volume("vol", {"a": 1})
             mock_fn.assert_called_once_with("vol", {"a": 1})
 
     async def test_write_llmio_tier_config_to_volume_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(b._volume, "write_llmio_tier_config_to_volume") as mock_fn:
             await b.write_llmio_tier_config_to_volume("vol", {"tier": "level1"})
             mock_fn.assert_called_once_with("vol", {"tier": "level1"})
 
     async def test_read_config_from_volume_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(
             b._volume, "read_config_from_volume", return_value={"key": "val"}
         ) as mock_fn:
@@ -1764,7 +1850,7 @@ class TestDockerSdkBackendVolumeOpsDelegation:
             assert result == {"key": "val"}
 
     async def test_measure_volume_bytes_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(
             b._volume, "measure_volume_bytes", return_value=42
         ) as mock_fn:
@@ -1773,7 +1859,7 @@ class TestDockerSdkBackendVolumeOpsDelegation:
             assert result == 42
 
     async def test_list_volume_dir_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(
             b._volume,
             "list_volume_dir",
@@ -1784,7 +1870,7 @@ class TestDockerSdkBackendVolumeOpsDelegation:
             assert result == [{"name": "f.txt", "type": "file", "size_bytes": 10}]
 
     async def test_read_volume_file_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         expected = {
             "size_bytes": 100,
             "content": "hello",
@@ -1799,7 +1885,7 @@ class TestDockerSdkBackendVolumeOpsDelegation:
             assert result == expected
 
     async def test_remove_volume_delegates(self, backend):
-        b, client, dm = backend
+        b, _client, _dm = backend
         with patch.object(b._volume, "remove_volume") as mock_fn:
             await b.remove_volume("vol")
             mock_fn.assert_called_once_with("vol")
@@ -1909,7 +1995,7 @@ class TestHealSelfNetworkAlias:
         return container
 
     async def test_alias_present_is_noop(self, backend):
-        b, client, dm = backend
+        b, client, _dm = backend
         self._own_container(client, endpoint={"Aliases": ["central-deploy", "abc123"]})
         with patch("socket.gethostname", return_value="abc123"):
             assert await b.heal_self_network_alias(self.NETWORK) is None
@@ -1917,7 +2003,7 @@ class TestHealSelfNetworkAlias:
 
     async def test_alias_in_dnsnames_is_noop(self, backend):
         """Newer daemons surface names via DNSNames with empty Aliases."""
-        b, client, dm = backend
+        b, client, _dm = backend
         self._own_container(
             client, endpoint={"Aliases": [], "DNSNames": ["central-deploy"]}
         )
@@ -1926,7 +2012,7 @@ class TestHealSelfNetworkAlias:
         client.networks.get.assert_not_called()
 
     async def test_alias_absent_disconnects_then_reconnects(self, backend):
-        b, client, dm = backend
+        b, client, _dm = backend
         container = self._own_container(client, endpoint={"Aliases": ["abc123"]})
         net = MagicMock()
         client.networks.get.return_value = net
@@ -1942,7 +2028,7 @@ class TestHealSelfNetworkAlias:
         )
 
     async def test_not_attached_connects_without_disconnect(self, backend):
-        b, client, dm = backend
+        b, client, _dm = backend
         container = self._own_container(client, endpoint=None)
         net = MagicMock()
         client.networks.get.return_value = net
@@ -1958,7 +2044,7 @@ class TestHealSelfNetworkAlias:
 
     async def test_no_compose_label_is_noop(self, backend):
         """A container not run by compose has no service name to repair."""
-        b, client, dm = backend
+        b, client, _dm = backend
         container = MagicMock()
         container.attrs = {
             "Id": "abc123",

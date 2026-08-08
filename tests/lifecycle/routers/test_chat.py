@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
 
 from httpx import AsyncClient
 
-from unittest.mock import AsyncMock, MagicMock
-
+# Import the server module itself (not just symbols) so we can set its globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
@@ -17,10 +18,6 @@ from robotsix_central_deploy.registry.models import (
     ComponentConfig,
     PortMapping,
 )
-
-# Import the server module itself (not just symbols) so we can set its globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers

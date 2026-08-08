@@ -5,10 +5,9 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Shared enumerations
@@ -165,7 +164,7 @@ class ServiceRecord:
     )
     repo_id: str = ""
 
-    def to_status(self) -> "ServiceStatus":
+    def to_status(self) -> ServiceStatus:
         if not self.deployed_image_digest or not self.latest_registry_digest:
             update_state = UpdateState.UNKNOWN
         elif self.deployed_image_digest == self.latest_registry_digest:
@@ -186,7 +185,7 @@ class ServiceRecord:
             update_state=update_state,
         )
 
-    def to_list_item(self) -> "ServiceListItem":
+    def to_list_item(self) -> ServiceListItem:
         return ServiceListItem(
             name=self.name,
             state=self.state,
@@ -223,7 +222,7 @@ class ServiceStatus(BaseModel):
     image: str = ""
     image_revision: str = ""
     health: str = ""
-    last_error: Optional[str] = None
+    last_error: str | None = None
     updated_at: float = Field(default_factory=time.time)
     update_available: bool = False
     running_digest: str = Field(
@@ -304,7 +303,7 @@ class RollbackOutcome:
 class DeployRequest(BaseModel):
     """Optional overrides for a deploy request."""
 
-    image: Optional[str] = Field(
+    image: str | None = Field(
         None, description="override image ref; if None, uses ComponentConfig.image"
     )
     target_disk: str = Field(
@@ -324,7 +323,7 @@ class RollbackRequest(BaseModel):
     (swap deployed ↔ previous) is preserved.
     """
 
-    digest: Optional[str] = None
+    digest: str | None = None
 
 
 class RollbackResponse(BaseModel):

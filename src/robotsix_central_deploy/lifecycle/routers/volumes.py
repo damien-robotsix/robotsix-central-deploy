@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
+from ...caretaker.volume_audit.models import VolumeAuditResponse
+from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
+from ...registry.config_store import ComponentConfigStore
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
@@ -16,7 +19,6 @@ from ..deps import (
     _get_config,
     _validate_volume_path,
 )
-from ...registry.config_store import ComponentConfigStore
 from ..schemas import (
     OrphanVolume,
     OrphanVolumesResponse,
@@ -26,8 +28,6 @@ from ..schemas import (
     VolumeFileResponse,
     VolumeListResponse,
 )
-from ...caretaker.volume_audit.models import VolumeAuditResponse
-from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
 
 router = APIRouter(tags=["volumes"])
 
@@ -36,7 +36,7 @@ router = APIRouter(tags=["volumes"])
 async def get_volume_audit(
     request: Request,
     _auth: None = Depends(verify_auth),
-    config: LifecycleConfig = Depends(_get_config),
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
 ) -> VolumeAuditResponse:
     """Current volume audit state (sizes and growth). Returns enabled=false when subsystem is off."""
     if not config.volume_audit_enabled:
@@ -51,8 +51,8 @@ async def get_volume_audit(
     summary="List Docker volumes owned by no component and not in use",
 )
 async def list_orphan_volumes(
-    backend: ExecutionBackend = Depends(_get_backend),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> OrphanVolumesResponse:
     """Return the prune-safe orphan volumes and their total size.
@@ -73,9 +73,9 @@ async def list_orphan_volumes(
     summary="Remove orphan Docker volumes (owned by no component, not in use)",
 )
 async def prune_orphan_volumes(
-    body: PruneVolumesRequest | None = Body(default=None),
-    backend: ExecutionBackend = Depends(_get_backend),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    body: PruneVolumesRequest | None = Body(default=None),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> PruneVolumesResponse:
     """Delete orphan volumes (IRREVERSIBLE).
@@ -124,8 +124,8 @@ async def prune_orphan_volumes(
 async def list_volume_files(
     name: str,
     path: str = "",
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> VolumeListResponse:
     """Return immediate children of a directory within a named volume.
@@ -153,8 +153,8 @@ async def list_volume_files(
 async def cat_volume_file(
     name: str,
     path: str = "",
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> VolumeFileResponse:
     """Return the text content of a file within a named volume.

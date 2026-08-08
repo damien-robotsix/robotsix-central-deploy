@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
@@ -15,7 +14,6 @@ from robotsix_central_deploy.lifecycle.gateway_docs_middleware import (
     GatewayAwareDocsMiddleware,
 )
 from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
-
 
 # ---------------------------------------------------------------------------
 # Helpers

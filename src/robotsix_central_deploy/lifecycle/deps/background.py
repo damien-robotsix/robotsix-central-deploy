@@ -11,19 +11,18 @@ from typing import Any
 from robotsix_http import ExternalHTTPError
 
 from ..._http import retry_client_context
-
+from ...registry_check import RegistryChecker
 from ..backends import ExecutionBackend
 from ..models import CLAUDE_AUTH_VOLUME, ServiceRecord
 from ..store import ServiceStore
-from ...registry_check import RegistryChecker
 
 logger = logging.getLogger(__name__)
 
 # -- Claude auth constants -------------------------------------------------
 
 CLAUDE_AUTH_REFRESH_BEFORE_SECONDS = 3600  # refresh when ≤ 1 hour until expiry
-CLAUDE_AUTH_USER_AGENT = "claude-cli/2.1.199 (external, cli)"  # noqa: E501 — avoids Cloudflare 403
-CLAUDE_AUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL, not a password
+CLAUDE_AUTH_USER_AGENT = "claude-cli/2.1.199 (external, cli)"
+CLAUDE_AUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 CLAUDE_AUTH_CLIENT_ID = (
     "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # gitleaks:allow — public OAuth client id
 )
@@ -64,7 +63,7 @@ async def _check_and_update_record(
             if ins.running_digest:
                 record.deployed_image_digest = ins.running_digest
                 await store.put(record)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass  # Status check may fail if the container isn't running; proceed without digest
 
     if not record.image or not record.deployed_image_digest:
@@ -140,12 +139,12 @@ async def _refresh_claude_credentials(
                     if exc.response is not None
                     else error_detail
                 )
-            except Exception:  # noqa: S110 — non-JSON body is fine
+            except Exception:  # noqa: BLE001
                 pass
             error_msg = f"Refresh failed ({exc.status_code}): {error_detail}"
             logger.warning("Claude auth refresh: %s", error_detail)
             return False, error_msg
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Not every transport surfaces a rejected request as
             # ExternalHTTPError — httpx's own HTTPStatusError lands here too.
             # Those carry a `response`, so reporting them as "unreachable" is
@@ -161,7 +160,7 @@ async def _refresh_claude_credentials(
                 detail = str(getattr(response, "text", "") or exc)[:500]
                 try:
                     detail = response.json().get("error", {}).get("message", detail)
-                except Exception:  # noqa: S110 — non-JSON body is fine
+                except Exception:  # noqa: BLE001
                     pass
                 error_msg = f"Refresh rejected ({status}): {detail}"
             logger.warning("Claude auth refresh: request failed: %s", error_msg)
@@ -170,7 +169,7 @@ async def _refresh_claude_credentials(
     # -- 2xx response ----------------------------------------------------
     try:
         payload: dict[str, Any] = resp.json()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         error_msg = f"Invalid JSON in refresh response: {exc}"
         logger.warning("Claude auth refresh: bad response JSON: %s", exc)
         return False, error_msg
@@ -203,7 +202,7 @@ async def _refresh_claude_credentials(
         await backend.write_claude_credentials(
             CLAUDE_AUTH_VOLUME, json.dumps(new_creds, indent=2)
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         error_msg = f"Failed to write refreshed credentials: {exc}"
         logger.warning("Claude auth refresh: write failed: %s", exc)
         return False, error_msg

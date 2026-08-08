@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-
 from httpx import AsyncClient
 
-
+# Import the server module itself (not just symbols) so we can set its globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
 )
-
-# Import the server module itself (not just symbols) so we can set its globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers

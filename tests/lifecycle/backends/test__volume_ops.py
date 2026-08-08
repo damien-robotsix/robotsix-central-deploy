@@ -9,7 +9,6 @@ import pytest
 from robotsix_central_deploy.lifecycle._yaml_utils import YamlParseError
 from robotsix_central_deploy.lifecycle.backends._volume_ops import VolumeOps
 
-
 # ---------------------------------------------------------------------------
 # resolve_user_to_uid_gid (static)
 # ---------------------------------------------------------------------------
@@ -211,7 +210,7 @@ class TestVolumeOpsReadConfig:
         client.containers.run.return_value = b"{not valid json}"
 
         docker_mock = self._make_docker_mock()
-        with patch.dict(sys.modules, {"docker": docker_mock}):
+        with patch.dict(sys.modules, {"docker": docker_mock}):  # noqa: SIM117
             with pytest.raises(YamlParseError, match="JSON parse error"):
                 await vo.read_config_from_volume("config-vol")
 
@@ -220,7 +219,7 @@ class TestVolumeOpsReadConfig:
         client.containers.run.return_value = b'["list", "not", "dict"]'
 
         docker_mock = self._make_docker_mock()
-        with patch.dict(sys.modules, {"docker": docker_mock}):
+        with patch.dict(sys.modules, {"docker": docker_mock}):  # noqa: SIM117
             # InvalidConfigStructureError extends ValueError, so it is
             # caught by the except (JSONDecodeError, ValueError) handler
             # and re-raised as a YamlParseError.

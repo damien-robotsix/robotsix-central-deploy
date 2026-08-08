@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
-from ._util import PruneImagesResult
-from .base import ExecutionBackend
 from ..models import (
     ComponentInspect,
     DeployOutcome,
@@ -16,6 +14,8 @@ from ..models import (
     ServiceRecord,
     ServiceState,
 )
+from ._util import PruneImagesResult
+from .base import ExecutionBackend
 
 if TYPE_CHECKING:
     from ...registry.models import ComponentConfig
@@ -40,7 +40,7 @@ class NoopBackend(ExecutionBackend):
         return ComponentInspect(state=service.state)
 
     async def deploy(
-        self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
+        self, service: ServiceRecord, config: ComponentConfig, image_ref: str
     ) -> DeployOutcome:
         return DeployOutcome(
             deployed_digest="sha256:noop",
@@ -49,7 +49,7 @@ class NoopBackend(ExecutionBackend):
         )
 
     async def rollback(
-        self, service: ServiceRecord, config: "ComponentConfig"
+        self, service: ServiceRecord, config: ComponentConfig
     ) -> RollbackOutcome:
         return RollbackOutcome(
             deployed_digest=service.previous_image_digest or "sha256:noop",
@@ -112,7 +112,7 @@ class NoopBackend(ExecutionBackend):
     async def remove_volume(self, volume_name: str) -> None:
         pass
 
-    async def inspect_self(self) -> Optional[SelfInspect]:
+    async def inspect_self(self) -> SelfInspect | None:
         return None
 
     async def trigger_self_update(

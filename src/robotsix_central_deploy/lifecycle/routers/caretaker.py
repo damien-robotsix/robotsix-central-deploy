@@ -25,7 +25,7 @@ async def _get_caretaker_scheduler(request: Request) -> CaretakerScheduler:
 @router.get("/caretaker/status")
 async def get_caretaker_status(
     _auth: None = Depends(verify_auth),
-    scheduler: CaretakerScheduler = Depends(_get_caretaker_scheduler),
+    scheduler: CaretakerScheduler = Depends(_get_caretaker_scheduler),  # noqa: B008
 ) -> dict[str, Any]:
     """Return the current caretaker status."""
     return await scheduler.get_status()

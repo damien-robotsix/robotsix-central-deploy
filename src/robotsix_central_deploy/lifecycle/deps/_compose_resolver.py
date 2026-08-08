@@ -52,11 +52,14 @@ async def _resolve_compose_backbone(
     target-disk, volume-namespacing, port-collision preflight, etc.)
     on the returned objects.
     """
-    from robotsix_central_deploy.onboard.fetcher import (  # noqa: PLC0415
+    from robotsix_central_deploy.onboard.fetcher import (
         FetchError,
         fetch_repo_files,
     )
-    from robotsix_central_deploy.onboard.parser import ParseError, parse_compose  # noqa: PLC0415
+    from robotsix_central_deploy.onboard.parser import (
+        ParseError,
+        parse_compose,
+    )
 
     # --- Token fetch (GitHub App installation token for private repos) ---
     github_token: str | None = None
@@ -69,7 +72,7 @@ async def _resolve_compose_backbone(
     ):
         owner, repo = parsed
         try:
-            from robotsix_central_deploy.lifecycle.github_app import (  # noqa: PLC0415
+            from robotsix_central_deploy.lifecycle.github_app import (
                 get_installation_token_sync,
             )
 
@@ -80,7 +83,7 @@ async def _resolve_compose_backbone(
                 lifecycle_config.github_app_private_key.get_secret_value(),
                 lifecycle_config.installation_id.get_secret_value(),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             # owner/repo come from a regex match on a user-supplied URL;
             # sanitise to prevent log-injection (newline forgery).
             safe_owner = owner.replace("\n", "_").replace("\r", "_")

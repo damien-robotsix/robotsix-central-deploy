@@ -10,25 +10,33 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ...onboard.models import DerivedSpec
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.deploy_history_store import DeployHistoryStore
+from ...registry.env_store import EnvStore
+from ...registry.loader import ComponentRegistry
+from ...registry.models import ComponentConfig
+from .._config_utils import _merge_config, _strip_secret_values, inject_deploy_api_key
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from ..config import LifecycleConfig
 from ..deps import (
-    _get_store,
+    JobRegistry,
+    _build_component_config_from_spec,
     _get_backend,
-    _get_registry,
     _get_component_config_store,
+    _get_config,
     _get_config_yaml_store,
+    _get_deploy_history_store,
     _get_env_store,
     _get_job_registry,
-    _get_config,
-    _get_deploy_history_store,
+    _get_registry,
+    _get_store,
     _namespace_spec_volumes,
     _validate_config_or_422,
-    _build_component_config_from_spec,
-    JobRegistry,
 )
-from .._config_utils import _merge_config, _strip_secret_values, inject_deploy_api_key
-from ..config import LifecycleConfig
+
 from ..models import (
     DeployHistoryEntry,
     DeploySource,
@@ -36,21 +44,14 @@ from ..models import (
     ServiceRecord,
 )
 from ..schemas import (
+    OnboardConfirmAcceptedResponse,
+    OnboardConfirmRequest,
+    OnboardJobStatusResponse,
     OnboardPreflightRequest,
     OnboardPreflightResponse,
-    OnboardConfirmRequest,
-    OnboardConfirmAcceptedResponse,
-    OnboardJobStatusResponse,
     PortShift,
 )
 from ..store import ServiceStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
-from ...registry.deploy_history_store import DeployHistoryStore
-from ...registry.env_store import EnvStore
-from ...registry.loader import ComponentRegistry
-from ...registry.models import ComponentConfig
-from ...onboard.models import DerivedSpec  # noqa: TCH001
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ router = APIRouter(tags=["onboard"])
 
 
 async def _deploy_onboard_siblings(
-    spec: "DerivedSpec",
+    spec: DerivedSpec,
     store: ServiceStore,
     backend: ExecutionBackend,
     out_records: list[ServiceRecord],
@@ -123,7 +124,7 @@ async def _deploy_onboard_siblings(
             sib_record.deployed_image_digest = sib_outcome.deployed_digest
             sib_record.previous_image_digest = sib_outcome.previous_digest
             await store.put(sib_record)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             msg = f"deploy onboard sibling '{sib_name}' failed: {exc}"
             logger.warning(msg)
             failures.append(msg)
@@ -188,9 +189,9 @@ async def _rollback_onboard(
 async def onboard_preflight(
     req: OnboardPreflightRequest,
     _: None = Depends(verify_auth),
-    store: ServiceStore = Depends(_get_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
 ) -> OnboardPreflightResponse:
     """Fetch and parse a service repo's docker-compose.yml, returning a DerivedSpec.
 
@@ -208,7 +209,7 @@ async def onboard_preflight(
         )
 
     # Reserved-name guard
-    from ...gateway.router import RESERVED_NAMES  # noqa: PLC0415
+    from ...gateway.router import RESERVED_NAMES
 
     if req.name in RESERVED_NAMES:
         raise HTTPException(
@@ -227,7 +228,7 @@ async def onboard_preflight(
     # Resolve repo files + parse compose + validate config standard
     # (shared backbone extracted from _resolve_deploy_contract)
     loop = asyncio.get_running_loop()
-    from ..deps._compose_resolver import _resolve_compose_backbone  # noqa: PLC0415
+    from ..deps._compose_resolver import _resolve_compose_backbone
 
     repo_files, derived_spec = await _resolve_compose_backbone(
         req.git_url, req.name, lifecycle_config, loop
@@ -236,7 +237,7 @@ async def onboard_preflight(
     # Resolve target_disk: explicit request value > config default > empty
     resolved_target_disk = req.target_disk or lifecycle_config.target_disk
     if resolved_target_disk:
-        from robotsix_central_deploy.lifecycle._disk_utils import (  # noqa: PLC0415
+        from robotsix_central_deploy.lifecycle._disk_utils import (
             resolve_target_disk,
         )
 
@@ -302,7 +303,10 @@ async def onboard_preflight(
             )
 
     # Port-collision preflight: auto-assign free host ports when defaults collide
-    from ...onboard.port_utils import collect_occupied_host_ports, find_free_host_port  # noqa: PLC0415
+    from ...onboard.port_utils import (
+        collect_occupied_host_ports,
+        find_free_host_port,
+    )
 
     occupied = collect_occupied_host_ports(
         component_config_store, lifecycle_config.port
@@ -396,7 +400,7 @@ async def _run_onboard_deploy_job(
         await store.put(record)
 
         # Best-effort mill repo registration
-        from ...caretaker.mill_client import MillClient  # noqa: PLC0415
+        from ...caretaker.mill_client import MillClient
 
         mill_component_id = ""
         if settings_store is not None:
@@ -413,7 +417,10 @@ async def _run_onboard_deploy_job(
         # File port-collision tickets on affected components' boards
         port_shift_warnings: list[str] = []
         if port_shifts:
-            from ...caretaker.models import CaretakerFinding, FindingKind  # noqa: PLC0415
+            from ...caretaker.models import (
+                CaretakerFinding,
+                FindingKind,
+            )
 
             for shift in port_shifts:
                 filed = False
@@ -578,15 +585,15 @@ async def onboard_confirm(
     req: OnboardConfirmRequest,
     request: Request,
     _: None = Depends(verify_auth),
-    store: ServiceStore = Depends(_get_store),
-    backend: ExecutionBackend = Depends(_get_backend),
-    registry: ComponentRegistry = Depends(_get_registry),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    env_store: EnvStore = Depends(_get_env_store),
-    job_registry: JobRegistry = Depends(_get_job_registry),
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
-    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
+    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
 ) -> OnboardConfirmAcceptedResponse:
     """Persist a reviewed DerivedSpec, then schedule the deploy as a background job.
 
@@ -601,7 +608,7 @@ async def onboard_confirm(
 
     # Apply target_disk override from confirm request (overrides preflight value).
     if req.target_disk:
-        from robotsix_central_deploy.lifecycle._disk_utils import (  # noqa: PLC0415
+        from robotsix_central_deploy.lifecycle._disk_utils import (
             resolve_target_disk,
         )
 
@@ -632,7 +639,7 @@ async def onboard_confirm(
         )
 
     # Reserved-name guard: don't allow names that shadow API routes
-    from ...gateway.router import RESERVED_NAMES  # noqa: PLC0415
+    from ...gateway.router import RESERVED_NAMES
 
     if spec.name in RESERVED_NAMES:
         raise HTTPException(
@@ -733,7 +740,7 @@ async def onboard_confirm(
                 await backend.write_llmio_tier_config_to_volume(
                     config.config_volume, settings.llmio_tier_config
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "onboard %s: could not write llmio tier config to volume %s: %s",
                 config.id,
@@ -803,7 +810,7 @@ async def onboard_confirm(
 async def onboard_job_status(
     job_id: str,
     _: None = Depends(verify_auth),
-    job_registry: JobRegistry = Depends(_get_job_registry),
+    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
 ) -> OnboardJobStatusResponse:
     """Return the current phase of an onboard background deploy job."""
     job = job_registry.get(job_id)

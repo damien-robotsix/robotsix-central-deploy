@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -98,7 +98,7 @@ class CaretakerScheduler:
 
     async def run_once(self) -> CaretakerReport:
         """Execute a full three-phase caretaker pass."""
-        started_at = datetime.now(tz=timezone.utc)
+        started_at = datetime.now(tz=UTC)
         errors: list[str] = []
         findings: list[CaretakerFinding] = []
         phases_run: list[str] = []
@@ -127,7 +127,7 @@ class CaretakerScheduler:
             mill_client = MillClient(mill_url, self._http_client)
             try:
                 healthy = await mill_client.health_check()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("mill health probe raised: %s", exc)
                 healthy = False
             if healthy:
@@ -183,7 +183,7 @@ class CaretakerScheduler:
                 try:
                     # Imported lazily: the lifecycle package's __init__ chain
                     # imports this module, so a top-level import is circular.
-                    from ..lifecycle.backends import (  # noqa: PLC0415
+                    from ..lifecycle.backends import (
                         collect_protected_image_refs,
                     )
 
@@ -252,7 +252,7 @@ class CaretakerScheduler:
         mill_reachable = mill_reachable_detail == "ok"
         self._mill_reachable = mill_reachable
 
-        finished_at = datetime.now(tz=timezone.utc)
+        finished_at = datetime.now(tz=UTC)
         report = CaretakerReport(
             started_at=started_at,
             finished_at=finished_at,
@@ -280,7 +280,7 @@ class CaretakerScheduler:
             if len(lines) > _MAX_LOCAL_FINDINGS:
                 lines = lines[-_MAX_LOCAL_FINDINGS:]
             self._findings_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error("Failed to write local finding: %s", exc)
 
     async def get_status(self) -> dict[str, Any]:
@@ -317,7 +317,7 @@ class CaretakerScheduler:
             while True:
                 try:
                     settings = await self._settings_store.get()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     logger.error("CaretakerScheduler: failed to read settings: %s", exc)
                     await asyncio.sleep(60)
                     continue
@@ -327,7 +327,8 @@ class CaretakerScheduler:
                         await self.run_once()
                     except Exception as exc:
                         logger.exception(
-                            "CaretakerScheduler: run_once crashed: %s", exc
+                            "CaretakerScheduler: run_once crashed: %s",
+                            exc,  # noqa: TRY401
                         )
 
                 interval = max(settings.caretaker_interval_hours, 1) * 3600

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from robotsix_central_deploy.registry.models import ComponentConfig
 import robotsix_central_deploy.caretaker.volume_audit.scheduler as sched_mod
+from robotsix_central_deploy.registry.models import ComponentConfig
 
 
 def _make_scheduler(
@@ -132,7 +132,7 @@ class TestVolumeAuditScheduler:
     @pytest.mark.asyncio
     async def test_run_once_corrupt_snapshot_file(self, tmp_path):
         """Corrupt (non-JSON) snapshot file falls back to empty dict."""
-        sched, backend, store = _make_scheduler(tmp_path)
+        sched, _backend, store = _make_scheduler(tmp_path)
         comp = ComponentConfig(
             id="svc",
             image="ghcr.io/test/image:latest",
@@ -149,7 +149,7 @@ class TestVolumeAuditScheduler:
     @pytest.mark.asyncio
     async def test_run_once_snapshot_wrong_schema(self, tmp_path):
         """Snapshot file with valid JSON but wrong schema falls back to empty."""
-        sched, backend, store = _make_scheduler(tmp_path)
+        sched, _backend, store = _make_scheduler(tmp_path)
         comp = ComponentConfig(
             id="svc",
             image="ghcr.io/test/image:latest",
@@ -167,7 +167,7 @@ class TestVolumeAuditScheduler:
     async def test_run_once_board_client_creation_failure(self, tmp_path, monkeypatch):
         """When _maybe_create_board_client raises, the exception propagates
         and snapshots are NOT saved."""
-        sched, backend, store = _make_scheduler(tmp_path)
+        sched, _backend, store = _make_scheduler(tmp_path)
         comp = ComponentConfig(
             id="svc",
             image="ghcr.io/test/image:latest",
@@ -189,7 +189,7 @@ class TestVolumeAuditScheduler:
     async def test_run_once_board_client_close_failure(self, tmp_path, monkeypatch):
         """When board_client.close() raises, it is caught and logged,
         not propagated — scan completes and snapshots are saved."""
-        sched, backend, store = _make_scheduler(tmp_path)
+        sched, _backend, store = _make_scheduler(tmp_path)
         comp = ComponentConfig(
             id="svc",
             image="ghcr.io/test/image:latest",
@@ -273,7 +273,7 @@ class TestVolumeAuditScheduler:
     @pytest.mark.asyncio
     async def test_loop_cancellation_propagates(self, tmp_path, monkeypatch):
         """loop() re-raises CancelledError when the task is cancelled."""
-        sched, backend, store = _make_scheduler(tmp_path)
+        sched, _backend, store = _make_scheduler(tmp_path)
         store.all.return_value = []
 
         call_count = 0
@@ -296,7 +296,7 @@ class TestVolumeAuditScheduler:
     async def test_loop_error_skip_continues(self, tmp_path, monkeypatch):
         """loop() catches Exceptions from run_once(), logs them,
         and continues to the next iteration."""
-        sched, backend, store = _make_scheduler(tmp_path)
+        sched, _backend, store = _make_scheduler(tmp_path)
         store.all.return_value = []
 
         call_count = 0

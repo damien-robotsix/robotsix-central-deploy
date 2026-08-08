@@ -27,7 +27,6 @@ from robotsix_central_deploy.registry.models import (
     VolumeMount,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers to build test fixtures
 # ---------------------------------------------------------------------------

@@ -7,6 +7,19 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.settings_store import VALID_LOG_LEVELS
+from .._config_utils import (
+    _is_key_secret,
+    _mask_secrets,
+    _merge_config,
+    _restore_secrets_from_current,
+    _sanitize_log,
+    _strip_secret_values,
+    read_component_config,
+)
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import (
@@ -17,29 +30,16 @@ from ..deps import (
     _get_store,
     _validate_config_or_422,
 )
-from ..store import ServiceStore
-from .._config_utils import (
-    read_component_config,
-    _is_key_secret,
-    _mask_secrets,
-    _merge_config,
-    _restore_secrets_from_current,
-    _sanitize_log,
-    _strip_secret_values,
+from ..schemas import (
+    ChatAgentConfigRollbackResponse,
+    ChatAgentConfigUpdate,
 )
+from ..store import ServiceStore
 from ._chat_common import (
     _check_rate_limit,
     _require_allowed_service,
     logger,
 )
-from ..schemas import (
-    ChatAgentConfigRollbackResponse,
-    ChatAgentConfigUpdate,
-)
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
-from ...registry.settings_store import VALID_LOG_LEVELS
 
 router = APIRouter(tags=["chat"])
 
@@ -60,9 +60,9 @@ router = APIRouter(tags=["chat"])
 )
 async def chat_get_config(
     name: str,
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Return the current config for an allowlisted service.
@@ -109,11 +109,11 @@ async def chat_update_config(
     body: ChatAgentConfigUpdate,
     request: Request,
     response: Response,
-    store: ServiceStore = Depends(_get_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Update non-secret config keys for an allowlisted service.
@@ -264,11 +264,11 @@ async def chat_update_config(
 async def chat_rollback_config(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Restore the previous config snapshot for an allowlisted service.
