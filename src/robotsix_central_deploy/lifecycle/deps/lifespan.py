@@ -667,11 +667,9 @@ async def _init_component_registry(app: FastAPI) -> None:
     # toggle was pending.
     from .._fleet_auth import _rebuild_fleet_auth_hosts
 
-    config_yaml_store: ConfigYamlStore = app.state.config_yaml_store
     try:
         await _rebuild_fleet_auth_hosts(
             component_config_store,
-            config_yaml_store,
             app.state.backend,
             _config.gateway_base_domain,
         )

@@ -51,7 +51,6 @@ from ..schemas import (
 from ..store import ServiceStore
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 
@@ -881,7 +880,6 @@ async def chat_enable_mutation(
     body: ChatAgentMutationEnableRequest,
     request: Request,
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentMutationEnableResponse:
@@ -954,9 +952,9 @@ async def chat_enable_mutation(
     # Reconcile Langfuse auto-projects — enabling mutation may add
     # project aliases discoverable from this service's config.
     await reconcile_langfuse_after_toggle(
-        component_config_store, config_yaml_store, request
+        component_config_store, request
     )
-    await reconcile_fleet_auth_hosts(component_config_store, config_yaml_store, request)
+    await reconcile_fleet_auth_hosts(component_config_store, request)
 
     return ChatAgentMutationEnableResponse(
         name=name,
@@ -984,7 +982,6 @@ async def chat_disable_mutation(
     name: str,
     request: Request,
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentMutationDisableResponse:
@@ -1035,9 +1032,9 @@ async def chat_disable_mutation(
     # Reconcile Langfuse auto-projects — disabling mutation may remove
     # project aliases that were only discoverable from this service.
     await reconcile_langfuse_after_toggle(
-        component_config_store, config_yaml_store, request
+        component_config_store, request
     )
-    await reconcile_fleet_auth_hosts(component_config_store, config_yaml_store, request)
+    await reconcile_fleet_auth_hosts(component_config_store, request)
 
     return ChatAgentMutationDisableResponse(
         name=name,

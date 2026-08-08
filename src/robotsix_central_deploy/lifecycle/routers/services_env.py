@@ -12,7 +12,6 @@ from ..deps import (
     _fetch_component_repo_files,
     _get_backend,
     _get_component_config_store,
-    _get_config_yaml_store,
     _get_env_store,
     _get_or_create_record,
     _get_registry,
@@ -23,7 +22,6 @@ from ..models import ErrorDetail
 from ..schemas import EnvResponse, EnvSyncResponse, EnvUpdate
 from ..store import ServiceStore
 from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.settings_store import SystemSettingsStore
@@ -105,7 +103,6 @@ async def put_service_env(
     store: ServiceStore = Depends(_get_store),
     env_store: EnvStore = Depends(_get_env_store),
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     registry: ComponentRegistry = Depends(_get_registry),
     settings_store: SystemSettingsStore = Depends(_get_settings_store),
     backend: "ExecutionBackend" = Depends(_get_backend),
@@ -153,10 +150,10 @@ async def put_service_env(
             # Reconcile Langfuse auto-projects — a toggle may add or
             # remove project aliases discoverable from this service.
             await reconcile_langfuse_after_toggle(
-                component_config_store, config_yaml_store, request
+                component_config_store, request
             )
             await reconcile_fleet_auth_hosts(
-                component_config_store, config_yaml_store, request
+                component_config_store, request
             )
     if body.claude_mount is not None:
         comp_cfg = component_config_store.get(name)
