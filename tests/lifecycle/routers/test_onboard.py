@@ -174,7 +174,15 @@ class TestPreflightConfigJsonValidation:
     @staticmethod
     def _mock_parse_compose(repo_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         """Return a minimal DerivedSpec — config_json validation fires before
-        the config_schema/config_volume precondition check."""
+        the config_schema/config_volume precondition check.
+
+        .. note::
+
+           ``_resolve_compose_backbone`` (shared with ``_resolve_deploy_contract``)
+           validates the config-standard precondition inside the backbone.
+           The mock must supply a ``config_volume`` so the backbone passes
+           through to the per-caller validation gates under test.
+        """
         return DerivedSpec.model_construct(
             name="my-svc",
             git_url="https://github.com/org/my-svc",
@@ -184,6 +192,7 @@ class TestPreflightConfigJsonValidation:
             env={},
             claude_mount=False,
             siblings=[],
+            config_volume="test-config-vol",
         )
 
     async def test_invalid_json_in_config_json_returns_422(

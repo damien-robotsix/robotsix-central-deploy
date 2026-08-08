@@ -1102,11 +1102,11 @@ async def test_chat_deploy_happy_path_auto_create_config(
 
     with (
         patch(
-            "robotsix_central_deploy.lifecycle.routers.chat_services.fetch_repo_files",
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
             return_value=repo_files,
         ),
         patch(
-            "robotsix_central_deploy.lifecycle.routers.chat_services.parse_compose",
+            "robotsix_central_deploy.onboard.parser.parse_compose",
             return_value=derived_spec,
         ),
     ):
@@ -1216,11 +1216,11 @@ async def test_chat_deploy_missing_config_schema_returns_422(
 
     with (
         patch(
-            "robotsix_central_deploy.lifecycle.routers.chat_services.fetch_repo_files",
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
             return_value=repo_files,
         ),
         patch(
-            "robotsix_central_deploy.lifecycle.routers.chat_services.parse_compose",
+            "robotsix_central_deploy.onboard.parser.parse_compose",
             return_value=derived_spec,
         ),
     ):
@@ -1269,11 +1269,11 @@ async def test_chat_deploy_missing_config_target_returns_422(
 
     with (
         patch(
-            "robotsix_central_deploy.lifecycle.routers.chat_services.fetch_repo_files",
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
             return_value=repo_files,
         ),
         patch(
-            "robotsix_central_deploy.lifecycle.routers.chat_services.parse_compose",
+            "robotsix_central_deploy.onboard.parser.parse_compose",
             return_value=derived_spec,
         ),
     ):

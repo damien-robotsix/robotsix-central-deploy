@@ -21,7 +21,6 @@ from ..deps import (
     _get_or_create_record,
     _get_registry,
     _get_store,
-    _require_config_standard,
 )
 from .._config_utils import _sanitize_log
 from ._chat_common import (
@@ -56,21 +55,17 @@ from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 
 import asyncio
-import json
 
-from robotsix_central_deploy.onboard.fetcher import FetchError, fetch_repo_files
-from robotsix_central_deploy.onboard.parser import ParseError, parse_compose
+from robotsix_central_deploy.lifecycle._config_utils import (
+    _canonical_hash,
+    _merge_config,
+)
 from robotsix_central_deploy.lifecycle.deps.seed import (
     _build_component_config_from_spec,
     _namespace_spec_volumes,
     _validate_config_or_422,
 )
-from robotsix_central_deploy.lifecycle._config_utils import (
-    _canonical_hash,
-    _merge_config,
-)
 from ..config import LifecycleConfig
-from .onboard import _parse_github_owner_repo as _parse_gh
 
 router = APIRouter(tags=["chat"])
 
@@ -607,76 +602,15 @@ async def _resolve_deploy_contract(
     ``registry``, writes merged config.json to the config volume, and
     seeds the ``EnvStore`` from the repo's env contract.
     """
-    # --- Fetch repo files (clone is blocking → run in executor) ---
+    # --- Fetch repo, parse compose, validate config standard ---
     loop = asyncio.get_running_loop()
+    from robotsix_central_deploy.lifecycle.deps._compose_resolver import (
+        _resolve_compose_backbone,
+    )  # noqa: PLC0415
 
-    github_token: str | None = None
-    parsed = _parse_gh(body.repo)
-
-    if (
-        parsed is not None
-        and lifecycle_config.github_app_id.get_secret_value()
-        and lifecycle_config.github_app_private_key.get_secret_value()
-        and lifecycle_config.installation_id.get_secret_value()
-    ):
-        owner, repo_name = parsed
-        try:
-            from robotsix_central_deploy.lifecycle.github_app import (
-                get_installation_token_sync,
-            )
-
-            github_token = await loop.run_in_executor(
-                None,
-                get_installation_token_sync,
-                lifecycle_config.github_app_id.get_secret_value(),
-                lifecycle_config.github_app_private_key.get_secret_value(),
-                lifecycle_config.installation_id.get_secret_value(),
-            )
-        except Exception:
-            safe_owner = owner.replace("\n", "_").replace("\r", "_")
-            safe_repo = repo_name.replace("\n", "_").replace("\r", "_")
-            logger.warning(
-                "Cannot get GitHub App installation token for %s/%s; "
-                "cloning unauthenticated (public repos only)",
-                safe_owner,
-                safe_repo,
-            )
-
-    try:
-        repo_files = await loop.run_in_executor(
-            None, fetch_repo_files, body.repo, 30, github_token
-        )
-    except FetchError as e:
-        raise HTTPException(status_code=422, detail={"error": str(e)})
-
-    # --- Parse deploy/docker-compose.yml ---
-    try:
-        derived_spec = parse_compose(repo_files.compose_bytes, body.name, body.repo)
-    except ParseError as e:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": "compose validation failed",
-                "violations": e.violations,
-            },
-        )
-
-    # --- Parse config/config.schema.json if present ---
-    if repo_files.config_schema_json is not None:
-        try:
-            derived_spec.config_schema = json.loads(repo_files.config_schema_json)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": (f"config/config.schema.json is not valid JSON: {exc}"),
-                },
-            )
-    else:
-        derived_spec.config_schema = None
-
-    # --- Hard precondition: config contract must be satisfied ---
-    _require_config_standard(derived_spec)
+    repo_files, derived_spec = await _resolve_compose_backbone(
+        body.repo, body.name, lifecycle_config, loop
+    )
 
     # --- Namespace volume names ---
     derived_spec = _namespace_spec_volumes(derived_spec, body.name)

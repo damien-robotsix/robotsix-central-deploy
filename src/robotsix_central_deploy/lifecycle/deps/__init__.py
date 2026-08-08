@@ -35,6 +35,7 @@ from .dependencies import (
 )
 from .jobs import DeployJob, Job, JobRegistry, OnboardJob
 from .lifespan import _seed_component_registry, lifespan
+from ._compose_resolver import _resolve_compose_backbone
 from .seed import (
     _build_component_config_from_spec,
     _derive_account_id,
@@ -133,6 +134,8 @@ __all__ = [
     # lifespan
     "_seed_component_registry",
     "lifespan",
+    # _compose_resolver
+    "_resolve_compose_backbone",
     # seed
     "_build_component_config_from_spec",
     "_derive_account_id",
