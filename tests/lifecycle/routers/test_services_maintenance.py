@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from httpx import AsyncClient
 
 from robotsix_central_deploy.lifecycle.models import (
@@ -467,3 +469,128 @@ class TestRefreshContract:
         assert data["name"] == "svc-a"
         assert "image" in data["changed_fields"]
         assert "command" in data["changed_fields"]
+
+    async def test_stored_schema_refreshed_from_repo(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A key the component added since onboarding reaches the template.
+
+        parse_compose only reads the compose file, so the schema has to be
+        attached from the separately-fetched config/config.schema.json.  When
+        it wasn't, the stored template stayed pinned at its onboarding version
+        and the config editor silently dropped every key added since.
+        """
+        config_store = server_mod.app.state.component_config_store
+        yaml_store = server_mod.app.state.config_yaml_store
+        await _seed_config(
+            config_store, "svc-a", git_url="https://github.com/org/test.git"
+        )
+        await yaml_store.save_template(
+            "svc-a", {"properties": {"old_key": {"type": "string"}}}
+        )
+
+        new_schema = {
+            "properties": {
+                "old_key": {"type": "string"},
+                "new_key": {"type": "string"},
+            }
+        }
+        spec = _make_derived_spec(name="svc-a")
+
+        async def _fake_fetch(name, ccs):
+            return (
+                config_store.get("svc-a"),
+                RepoFiles(
+                    compose_bytes=b"services:\n  svc:\n    image: svc-a:latest",
+                    config_json=None,
+                    config_schema_json=json.dumps(new_schema).encode(),
+                ),
+            )
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            _fake_fetch,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            lambda compose_bytes, name, git_url: spec,
+        )
+
+        resp = await client.post(
+            "/services/svc-a/refresh-contract", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert "config_schema" in resp.json()["changed_fields"]
+        assert await yaml_store.get_template("svc-a") == new_schema
+
+    async def test_unchanged_schema_not_reported_as_changed(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        config_store = server_mod.app.state.component_config_store
+        yaml_store = server_mod.app.state.config_yaml_store
+        await _seed_config(
+            config_store, "svc-a", git_url="https://github.com/org/test.git"
+        )
+        schema = {"properties": {"only_key": {"type": "string"}}}
+        await yaml_store.save_template("svc-a", schema)
+
+        spec = _make_derived_spec(name="svc-a")
+
+        async def _fake_fetch(name, ccs):
+            return (
+                config_store.get("svc-a"),
+                RepoFiles(
+                    compose_bytes=b"services:\n  svc:\n    image: svc-a:latest",
+                    config_json=None,
+                    config_schema_json=json.dumps(schema).encode(),
+                ),
+            )
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            _fake_fetch,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            lambda compose_bytes, name, git_url: spec,
+        )
+
+        resp = await client.post(
+            "/services/svc-a/refresh-contract", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert "config_schema" not in resp.json()["changed_fields"]
+
+    async def test_malformed_schema_returns_422(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A corrupt schema must not silently leave the old template in place."""
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(
+            config_store, "svc-a", git_url="https://github.com/org/test.git"
+        )
+        spec = _make_derived_spec(name="svc-a")
+
+        async def _fake_fetch(name, ccs):
+            return (
+                config_store.get("svc-a"),
+                RepoFiles(
+                    compose_bytes=b"services:\n  svc:\n    image: svc-a:latest",
+                    config_json=None,
+                    config_schema_json=b"{not json",
+                ),
+            )
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            _fake_fetch,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            lambda compose_bytes, name, git_url: spec,
+        )
+
+        resp = await client.post(
+            "/services/svc-a/refresh-contract", headers=auth_headers
+        )
+        assert resp.status_code == 422
