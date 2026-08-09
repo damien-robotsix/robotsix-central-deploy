@@ -22,7 +22,7 @@ from ..deps import (
     _get_registry,
     _get_store,
 )
-from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._config_utils import _sanitize_log
 from ._chat_common import (
     _check_rate_limit,
     _require_allowed_service,
@@ -32,6 +32,7 @@ from ._sibling_utils import (
     _fanout_siblings_best_effort,
     _fanout_siblings_deploy_best_effort,
 )
+from .._deploy_credential import reconcile_deploy_credential
 from .._fleet_auth import reconcile_fleet_auth_hosts
 from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock
@@ -348,11 +349,6 @@ async def chat_update_service(
     env_store = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(name, config.env)
     # Inject the deploy API key when chat access is enabled.
-    merged_env = inject_deploy_api_key(
-        merged_env,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
-    )
     config = config.model_copy(update={"env": merged_env})
 
     # Serialise concurrent deploys.
@@ -394,8 +390,6 @@ async def chat_update_service(
         backend,
         "chat update",
         env_store=env_store,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
     )
 
     await audit_store.append(
@@ -515,11 +509,6 @@ async def chat_deploy_service(
     env_store = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(name, config.env)
     # Inject the deploy API key when chat access is enabled.
-    merged_env = inject_deploy_api_key(
-        merged_env,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
-    )
     config = config.model_copy(update={"env": merged_env})
 
     # Serialise concurrent deploys.
@@ -561,8 +550,6 @@ async def chat_deploy_service(
         backend,
         "chat deploy",
         env_store=env_store,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
     )
 
     await audit_store.append(
@@ -738,11 +725,6 @@ async def chat_deploy(
     env_store = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(body.name, comp_cfg.env)
     # Inject the deploy API key when chat access is enabled.
-    merged_env = inject_deploy_api_key(
-        merged_env,
-        allow_chat_access=comp_cfg.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
-    )
     comp_cfg = comp_cfg.model_copy(update={"env": merged_env})
 
     # --- Get or create the service record ---
@@ -808,8 +790,6 @@ async def chat_deploy(
         backend,
         "chat deploy",
         env_store=env_store,
-        allow_chat_access=comp_cfg.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
     )
 
     await audit_store.append(
@@ -978,6 +958,7 @@ async def chat_enable_mutation(
     # project aliases discoverable from this service's config.
     await reconcile_langfuse_after_toggle(component_config_store, request)
     await reconcile_fleet_auth_hosts(component_config_store, request)
+    await reconcile_deploy_credential(component_config_store, request)
 
     return ChatAgentMutationEnableResponse(
         name=name,
@@ -1056,6 +1037,7 @@ async def chat_disable_mutation(
     # project aliases that were only discoverable from this service.
     await reconcile_langfuse_after_toggle(component_config_store, request)
     await reconcile_fleet_auth_hosts(component_config_store, request)
+    await reconcile_deploy_credential(component_config_store, request)
 
     return ChatAgentMutationDisableResponse(
         name=name,

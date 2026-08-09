@@ -685,6 +685,26 @@ async def _init_component_registry(app: FastAPI) -> None:
             exc_info=True,
         )
 
+    # -- Deploy-credential provisioning ---------------------------------------
+    # Put the deploy API key in the chat agent's own config, where the
+    # config standard requires first-party credentials to live.
+    from .._deploy_credential import _rebuild_deploy_credential
+
+    try:
+        await _rebuild_deploy_credential(
+            component_config_store,
+            app.state.backend,
+            _config.api_key.get_secret_value(),
+            app.state.config_yaml_store,
+        )
+        logger.debug("Startup deploy-credential reconciliation complete")
+    except Exception:
+        logger.warning(
+            "Startup deploy-credential reconciliation failed — "
+            "chat-agent components keep their current token",
+            exc_info=True,
+        )
+
     # -- Seed central-deploy's own config schema -----------------------------
     # So GET /services/central-deploy/config returns the langfuse_projects
     # field that was previously an unmanaged side store.  Auto-discovered

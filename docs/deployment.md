@@ -230,22 +230,29 @@ redeploys.
 
 ### Deploy API key provision
 
-Enabling chat access (`allow_chat_access`) on a component also **auto-provisions
-the deploy API key** into that component's container at deploy/recreate time —
-no manual Env & Secrets paste needed.  The key is delivered through the single
-standardized credential path as the `DEPLOY_API_KEY` environment variable, and
-lands where `component_request("deploy", ...)` already reads it
-(`central_deploy.component_credentials.deploy`), so the component can call back
-to the deploy API immediately.  This is component-agnostic: any component with
-the toggle enabled receives the credential, and a newly onboarded component
-gets working deploy access purely by enabling the toggle.
+A chat-agent component (`chat_agent_mutatable`) calls the deploy API with the
+plane's own API key.  That key is a credential of the component's application,
+so it is delivered the way the config standard requires — in the component's
+**config file**, never as an environment variable
+([config-standard §5](https://damien-robotsix.github.io/robotsix-standards/config-standard/#5-what-environment-is-for)
+forbids first-party secrets in `environment:`).
 
-Injection is driven purely by the toggle state, re-evaluated on every deploy /
-recreate / rollback (including caretaker auto-updates and sibling fan-out).
-Disabling the toggle and recreating removes the key.  The key is treated as a
-secret: it is masked in all read surfaces (Env & Secrets read, config read),
-never returned in plaintext.  The standardized convention itself is documented
-in the robotsix-standards deploy section.
+The deploy plane writes `central_deploy.api_token` into the component's config
+volume at startup and after every chat-access toggle, through the same schema
+guard as `fleet_auth.auth_hosts`: a component whose config schema does not
+declare the key is skipped and logged, so this stays component-agnostic.  Chat
+resolves the token from that key (falling back from any per-component
+`central_deploy.component_credentials.<id>.header_token` override), so a
+chat-agent component gets working deploy access with no Env & Secrets paste.
+
+> **Removed 2026-08-09.** An earlier revision injected the key as a
+> `DEPLOY_API_KEY` environment variable into every component with
+> `allow_chat_access`, and into their siblings.  Nothing read it — chat has
+> resolved deploy credentials from config since `FeedbackSettings.deploy_api_key`
+> replaced the env var — so it spread an unread admin credential across the
+> fleet's container environments.  If a component still carries the variable,
+> it disappears on the next recreate; env is baked at container create, so a
+> restart is not enough.
 
 ### Langfuse trace access
 

@@ -595,26 +595,6 @@ def _merge_config_flat(
 # ---------------------------------------------------------------------------
 
 
-def inject_deploy_api_key(
-    merged_env: dict[str, str],
-    *,
-    allow_chat_access: bool,
-    api_key: str,
-) -> dict[str, str]:
-    """Inject ``DEPLOY_API_KEY`` into *merged_env* when chat access is enabled.
-
-    Called by every deploy / recreate / rollback path so that any component
-    with the operator-managed ``allow_chat_access`` toggle enabled receives
-    the deploy-plane API key automatically — no per-component Env & Secrets
-    paste needed.
-
-    No-op when *allow_chat_access* is ``False`` or *api_key* is empty.
-    """
-    if allow_chat_access and api_key:
-        return {**merged_env, "DEPLOY_API_KEY": api_key}
-    return merged_env
-
-
 def _sanitize_log(s: str) -> str:
     """Replace newlines so user input cannot inject fake log entries."""
     return s.replace("\n", "\\n").replace("\r", "\\r")
