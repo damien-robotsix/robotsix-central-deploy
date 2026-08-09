@@ -77,11 +77,11 @@ The lifecycle server is configured via environment variables, all prefixed with 
 |---|---|---|
 | `ROBOTSIX_LIFECYCLE_LOG_LEVEL` | `INFO` | Log level for the lifecycle server. |
 
-### Gateway
+### Edge
 
 | Variable | Default | Description |
 |---|---|---|
-| `ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN` | `""` | Base domain for gateway integration. |
+| `ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN` | `""` | Fleet base domain. Components are published at `<id>.<base-domain>`; must match the `domains` block in `deploy/traefik/traefik.yml`. |
 
 ### Volume Audit
 

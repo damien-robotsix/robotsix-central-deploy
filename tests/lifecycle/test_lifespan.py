@@ -170,10 +170,7 @@ class TestParseSelfContractSettings:
                         "robotsix.deploy.settings.registry-check-interval": "120",
                         "robotsix.deploy.settings.caretaker-interval-hours": "48",
                         "robotsix.deploy.settings.claude-auth-refresh-interval": "3600",
-                        "robotsix.deploy.settings.rate-limit-login-per-minute": "5",
                         "robotsix.deploy.settings.rate-limit-api-per-hour": "1000",
-                        "robotsix.deploy.settings.rate-limit-login-max-attempts": "3",
-                        "robotsix.deploy.settings.rate-limit-login-lockout-seconds": "600",
                         "robotsix.deploy.settings.volume-audit-interval-seconds": "7200",
                         "robotsix.deploy.settings.volume-audit-min-delta-bytes": "52428800",
                     },
@@ -186,10 +183,7 @@ class TestParseSelfContractSettings:
         assert result.registry_check_interval == 120
         assert result.caretaker_interval_hours == 48
         assert result.claude_auth_refresh_interval == 3600
-        assert result.rate_limit_login_per_minute == 5
         assert result.rate_limit_api_per_hour == 1000
-        assert result.rate_limit_login_max_attempts == 3
-        assert result.rate_limit_login_lockout_seconds == 600
         assert result.volume_audit_interval_seconds == 7200
         assert result.volume_audit_min_delta_bytes == 52428800
 

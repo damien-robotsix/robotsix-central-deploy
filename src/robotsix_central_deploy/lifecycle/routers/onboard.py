@@ -200,7 +200,7 @@ async def onboard_preflight(
         )
 
     # Reserved-name guard
-    from ...gateway.router import RESERVED_NAMES
+    from ...registry.constants import RESERVED_NAMES
 
     if req.name in RESERVED_NAMES:
         raise HTTPException(
@@ -627,7 +627,7 @@ async def onboard_confirm(
         )
 
     # Reserved-name guard: don't allow names that shadow API routes
-    from ...gateway.router import RESERVED_NAMES
+    from ...registry.constants import RESERVED_NAMES
 
     if spec.name in RESERVED_NAMES:
         raise HTTPException(

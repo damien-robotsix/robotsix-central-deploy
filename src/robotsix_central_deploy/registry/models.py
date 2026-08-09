@@ -122,6 +122,14 @@ class ComponentConfig(BaseModel):
     ports: list[PortMapping] = Field(
         default_factory=list, description="Port mappings for the primary service"
     )
+    routable: bool = Field(
+        True,
+        description=(
+            "If true, the edge publishes this service at <id>.<base-domain>. "
+            "Set false for sibling services (databases, caches) that must stay "
+            "reachable only on the internal network."
+        ),
+    )
     mounts: list[VolumeMount] = Field(
         default_factory=list, description="Volume mounts for the primary service"
     )

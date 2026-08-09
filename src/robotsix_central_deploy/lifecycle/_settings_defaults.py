@@ -24,10 +24,7 @@ class _SettingsDefaults(TypedDict):
     image_auto_prune: bool
     llmio_tier_config: dict[str, Any]
     claude_auth_refresh_interval: int
-    rate_limit_login_per_minute: int
     rate_limit_api_per_hour: int
-    rate_limit_login_max_attempts: int
-    rate_limit_login_lockout_seconds: int
     volume_audit_enabled: bool
     volume_audit_interval_seconds: int
     volume_audit_growth_threshold_pct: float
@@ -49,10 +46,7 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "image_auto_prune": False,
     "llmio_tier_config": {},
     "claude_auth_refresh_interval": 1800,
-    "rate_limit_login_per_minute": 10,
     "rate_limit_api_per_hour": 20000,
-    "rate_limit_login_max_attempts": 20,
-    "rate_limit_login_lockout_seconds": 300,
     "volume_audit_enabled": False,
     "volume_audit_interval_seconds": 3600,
     "volume_audit_growth_threshold_pct": 10.0,

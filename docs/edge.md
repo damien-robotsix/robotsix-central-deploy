@@ -1,0 +1,119 @@
+# The fleet edge
+
+Every request to the fleet — the dashboard, every component UI, every scripted
+API call — arrives at one place: a **Traefik** container that terminates TLS,
+authenticates the caller, and forwards to the right container.
+
+central-deploy is not on that path. It is the **control plane**: it decides what
+runs and stamps the routing rules onto containers as Docker labels. Traefik
+watches the Docker API and picks them up. The two never share a process.
+
+```
+DNS *.deploy.robotsix.net ─▶ :443 Traefik ── TLS: ACME DNS-01 / OVH, one wildcard
+                                   │       ── routes: container labels, live
+                                   │
+                     ┌─────────────┼──────────────┐
+              forwardAuth      basicauth        (no auth)
+               → tinyauth       machine          /health
+                                   │
+           ┌─────────┬─────────────┼─────────────┐
+         chat      board         mill      central-deploy
+```
+
+## Why the proxy is not in central-deploy any more
+
+It used to be. `gateway/router.py` was registered last on the same FastAPI app
+that serves the dashboard, and proxied component traffic through `httpx` and a
+hand-written WebSocket relay. That coupling caused, in order:
+
+- Every middleware needed a component-subdomain escape hatch — CSRF rejecting
+  proxied POSTs, the dashboard's CSP disabling inline handlers in mill, chat and
+  board, `/docs` on a component host serving the lifecycle API's destructive
+  endpoints. Three "gateway-aware" wrappers existed only to undo the coupling.
+- Component slugs needed a reserved-name list, because they shared a router
+  table with control-plane paths.
+- **Restarting the deployer took every UI in the fleet offline** — and
+  self-update via watchtower is a routine operation.
+
+All of it is gone. Traefik restarts independently of central-deploy, so
+deploying or self-updating the control plane no longer interrupts anyone.
+
+## How a component gets routed
+
+Nothing is configured per component — not here, not in DNS, not in Traefik.
+When central-deploy creates a container it calls
+[`traefik_labels()`][robotsix_central_deploy.registry.traefik_labels.traefik_labels],
+which derives the labels from the component's `id` and its first container port.
+Onboard a component and it is live at `<id>.deploy.robotsix.net`.
+
+Three routers are emitted, ordered by priority so the most specific wins:
+
+| Priority | Router | Matches | Authenticated by |
+|---|---|---|---|
+| 30 | `<id>-health` | `GET /health` | nothing — the [health-endpoint standard](https://damien-robotsix.github.io/robotsix-standards/health-endpoints/) requires an uncredentialed probe |
+| 20 | `<id>-machine` | an `Authorization: Basic` header | Traefik's `basicauth` middleware |
+| 10 | `<id>` | everything else | tinyauth SSO via `forwardAuth` |
+
+### Why two authenticated routers
+
+tinyauth answers an unauthenticated request with a redirect to a login page.
+A browser follows it; a script cannot. The chat agent probes fleet UIs over
+their public URLs with server-injected Basic credentials (`fleet_auth.auth_hosts`
+in robotsix-chat), and would break against an SSO-only edge.
+
+tinyauth has no bypass mechanism, so machine callers get their own
+higher-priority router. That router is **not** a bypass — it carries Traefik's
+`basicauth` middleware, so it is a second door with its own lock.
+
+The credential lives in `deploy/traefik/fleet-users`, which is **git-ignored**:
+this repo is public, and a committed bcrypt hash is an offline-crackable copy of
+the fleet password. Traefik reads the standard htpasswd formats, so the existing
+`/etc/nginx/htpasswd/deploy.robotsix.net` can be copied across unchanged and the
+current password keeps working.
+
+### What does not get routed
+
+`traefik_labels()` returns no labels at all — so Traefik ignores the container —
+when the component has no port, when no base domain is configured, or when
+`routable` is false. Sibling services set `routable=False`: publishing a
+component's database at `<component>-db.deploy.robotsix.net` would put it on the
+public internet behind nothing but the SSO gate.
+
+## Components ship no auth of their own
+
+This is a fleet-wide rule, not a central-deploy convention — see
+[the component standard](https://damien-robotsix.github.io/robotsix-standards/component-standard/).
+A component behind the edge only ever receives authenticated requests, so a
+second login (or a second bearer token) is just another credential to
+provision, rotate, and get wrong.
+
+central-deploy holds itself to the same rule: it has no login page and no
+session store. `verify_auth` remains on the JSON API as defence-in-depth
+against a caller already on the internal Docker network.
+
+## TLS
+
+One wildcard certificate covers the whole fleet, obtained by Traefik over the
+ACME **DNS-01** challenge against OVH — the only challenge type that can issue
+a wildcard. It is requested once at the `websecure` entrypoint rather than
+per-router, so a day with several onboardings does not turn into several ACME
+orders.
+
+Credentials come from the environment (`OVH_*`, see `.env.example`), never from
+a committed file. There is no certbot, no renewal cron, and no per-component
+certificate.
+
+## Operating it
+
+| Task | Where |
+|---|---|
+| Change the auth gates | `deploy/traefik/dynamic.yml` — watched, applies live |
+| Change entrypoints, TLS, or providers | `deploy/traefik/traefik.yml` — needs a Traefik restart |
+| Rotate the machine credential | `htpasswd -B deploy/traefik/fleet-users fleet` (Traefik re-reads it live) |
+| Add an operator login | `htpasswd -nbB <user> '<password>'` → `TINYAUTH_AUTH_USERS` |
+| See why a route is missing | `docker inspect <container> --format '{{json .Config.Labels}}'` |
+
+Traefik reads the Docker API through its own read-only socket proxy
+(`CONTAINERS` and `EVENTS` only). It never receives the write scopes
+central-deploy needs, so a compromised edge cannot start, stop, or replace a
+container.

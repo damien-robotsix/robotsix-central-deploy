@@ -163,7 +163,7 @@ header as a line (conventionally the first line):
 ### `robotsix.deploy.primary: "true"` (service-level)
 
 Required when the compose file contains more than one service. Designates
-this service as the primary: its first host port receives gateway traffic
+this service as the primary: its first container port receives edge traffic
 (`<name>.deploy.robotsix.net`), and its Docker health state is the
 component health reported in the dashboard. Exactly one service may carry
 this label; presence on multiple services or absence when N>1 are **parse
@@ -552,7 +552,7 @@ In this example:
 - Component id: `auto-mail` (user-supplied `name` from the preflight request).
 - Primary container: `auto-mail` (or overridden by `container_name:` on `board`).
 - Sibling container: `auto-mail-ingester` (derived from `<name>-ingester`).
-- Gateway route: `deploy.robotsix.net/auto-mail/*` → primary's port 8202.
+- Edge route: `auto-mail.deploy.robotsix.net` → primary's port 8202.
 - `mail-spool` volume declared at top level.
 - All configuration is declared as environment variables (secret-store pattern).
   There is **no** `robotsix.deploy.config-target` label and **no**

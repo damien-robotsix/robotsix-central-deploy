@@ -481,32 +481,11 @@
       "title": "Claude Auth Refresh Interval",
       "type": "integer"
     },
-    "rate_limit_login_per_minute": {
-      "advanced": true,
-      "default": 10,
-      "description": "Max POST /login requests per IP per minute.",
-      "title": "Rate Limit Login Per Minute",
-      "type": "integer"
-    },
     "rate_limit_api_per_hour": {
       "advanced": true,
       "default": 20000,
       "description": "Max API requests per IP per hour. Must accommodate the dashboard UI, which polls several endpoints every few seconds from one IP (~5000/h per open tab).",
       "title": "Rate Limit Api Per Hour",
-      "type": "integer"
-    },
-    "rate_limit_login_max_attempts": {
-      "advanced": true,
-      "default": 20,
-      "description": "Failed login attempts before IP lockout.",
-      "title": "Rate Limit Login Max Attempts",
-      "type": "integer"
-    },
-    "rate_limit_login_lockout_seconds": {
-      "advanced": true,
-      "default": 300,
-      "description": "Lockout duration (seconds) after too many failed logins.",
-      "title": "Rate Limit Login Lockout Seconds",
       "type": "integer"
     },
     "csrf_secret": {

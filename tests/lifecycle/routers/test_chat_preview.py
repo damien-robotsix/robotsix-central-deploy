@@ -424,15 +424,51 @@ class TestDockerHelpers:
         client.containers.create.return_value = container
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
-            result = await _create_preview_container(backend, "preview:latest", [], {})
+            result = await _create_preview_container(
+                backend, "preview:latest", [], {}, "deploy.test"
+            )
         assert result == "abc123"
         container.start.assert_called_once()
+
+    async def test_create_container_stamps_traefik_labels(
+        self, backend_with_client, docker_mock
+    ):
+        """The preview must be routable at <preview>.<base-domain>.
+
+        This path builds its container directly instead of going through
+        DockerSdkBackend._create_container, so it has to stamp the routing
+        labels itself — without them Traefik never sees the preview and the
+        URL handed back to the chat agent 404s.
+        """
+        backend, client = backend_with_client
+        container = MagicMock()
+        container.short_id = "abc123"
+        container.start = MagicMock()
+        client.containers.create.return_value = container
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            await _create_preview_container(
+                backend,
+                "preview:latest",
+                [PortMapping(host=0, container=8080)],
+                {},
+                "deploy.test",
+            )
+
+        labels = client.containers.create.call_args.kwargs["labels"]
+        assert labels["traefik.enable"] == "true"
+        assert (
+            labels["traefik.http.routers.preview.rule"] == "Host(`preview.deploy.test`)"
+        )
+        assert (
+            labels["traefik.http.services.preview.loadbalancer.server.port"] == "8080"
+        )
 
     async def test_create_container_no_client_raises_500(self, docker_mock):
         backend = MagicMock(spec=[])
         with patch.dict(sys.modules, {"docker": docker_mock}):
             with pytest.raises(HTTPException) as exc_info:
-                await _create_preview_container(backend, "img", [], {})
+                await _create_preview_container(backend, "img", [], {}, "deploy.test")
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     async def test_create_api_error_raises_500(self, backend_with_client, docker_mock):
@@ -441,7 +477,7 @@ class TestDockerHelpers:
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
             with pytest.raises(HTTPException) as exc_info:
-                await _create_preview_container(backend, "img", [], {})
+                await _create_preview_container(backend, "img", [], {}, "deploy.test")
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     async def test_start_failure_cleans_up_and_raises(
@@ -454,7 +490,7 @@ class TestDockerHelpers:
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
             with pytest.raises(HTTPException) as exc_info:
-                await _create_preview_container(backend, "img", [], {})
+                await _create_preview_container(backend, "img", [], {}, "deploy.test")
             assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         # Verify cleanup attempted
         # The remove call is wrapped in a lambda inside run_in_executor

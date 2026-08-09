@@ -22,7 +22,6 @@ class TestSystemSettingsModel:
         assert s.log_level == "INFO"
         assert s.auth_username == ""
         assert s.registry_check_interval == 300
-        assert s.rate_limit_login_per_minute == 10
 
     def test_log_level_validation_valid(self):
         for level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
@@ -176,10 +175,7 @@ class TestSystemSettingsStore:
         path.write_text(
             json.dumps(
                 {
-                    "rate_limit_login_per_minute": 5,
                     "rate_limit_api_per_hour": 15000,
-                    "rate_limit_login_max_attempts": 10,
-                    "rate_limit_login_lockout_seconds": 600,
                 }
             ),
             encoding="utf-8",
@@ -187,13 +183,7 @@ class TestSystemSettingsStore:
         store = SystemSettingsStore(path)
 
         config = LifecycleConfig(
-            rate_limit_login_per_minute=10,
             rate_limit_api_per_hour=20000,
-            rate_limit_login_max_attempts=20,
-            rate_limit_login_lockout_seconds=300,
         )
         result = store.overlay(config)
-        assert result.rate_limit_login_per_minute == 5
         assert result.rate_limit_api_per_hour == 15000
-        assert result.rate_limit_login_max_attempts == 10
-        assert result.rate_limit_login_lockout_seconds == 600

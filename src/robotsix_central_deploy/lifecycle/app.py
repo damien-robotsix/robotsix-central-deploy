@@ -14,7 +14,7 @@ import re
 from fastapi import FastAPI
 
 try:
-    from .csrf import GatewayAwareCSRFMiddleware
+    from .csrf import CSRFMiddleware
 
     _HAS_CSRF = True
 except ImportError:
@@ -25,8 +25,7 @@ except ImportError:
 
 try:
     from secure import Preset, Secure
-
-    from .secure_headers import GatewayAwareSecureMiddleware
+    from secure.middleware import SecureASGIMiddleware
 
     _HAS_SECURE = True
 except ImportError:  # pragma: no cover — optional dep
@@ -36,7 +35,6 @@ from ..ui.router import router as ui_router
 from .csrf import get_csrf_secret
 from .deps import lifespan
 from .error_handlers import register_error_handlers
-from .gateway_docs_middleware import GatewayAwareDocsMiddleware
 from .models import ErrorDetail
 from .rate_limiter import RateLimitMiddleware
 from .routers.caretaker import router as caretaker_router
@@ -61,12 +59,9 @@ from .routers.system import router as system_router
 from .routers.volumes import router as volumes_router
 
 # URL patterns exempt from CSRF checks — these are API routes authenticated
-# via X-API-Key / Basic-Auth headers (bearer-style, not vulnerable to CSRF)
-# plus the login/logout endpoints which handle CSRF tokens manually.
+# via X-API-Key / Basic-Auth headers (bearer-style, not vulnerable to CSRF).
 _CSRF_EXEMPT_URLS: list[re.Pattern[str]] = [
     re.compile(r"^/health$"),
-    re.compile(r"^/login$"),
-    re.compile(r"^/logout$"),
     re.compile(r"^/services"),
     re.compile(r"^/system/"),
     re.compile(r"^/onboard"),
@@ -96,12 +91,11 @@ app = FastAPI(
 register_error_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
-app.add_middleware(GatewayAwareDocsMiddleware)
 
 if _HAS_CSRF:
     _initial_csrf_secret = get_csrf_secret("")
     app.add_middleware(
-        GatewayAwareCSRFMiddleware,
+        CSRFMiddleware,
         secret=_initial_csrf_secret,
         cookie_secure=True,
         cookie_samesite="lax",
@@ -116,12 +110,11 @@ if _HAS_SECURE:
     # click, change, and submit, plus static .js files exclusively,
     # so the tight CSP works correctly.
     #
-    # Applied via a gateway-aware wrapper so the strict CSP is NOT injected
-    # onto gateway-proxied component subdomains — those UIs (mill, chat, …)
-    # rely on inline handlers the CSP would break; they manage their own
-    # headers, exactly as with GatewayAwareCSRFMiddleware.
+    # This applies to central-deploy's own dashboard only. Component UIs are
+    # served by the Traefik edge and never reach this app, so they set (or
+    # don't set) their own headers — no gateway-aware wrapper needed.
     secure_headers = Secure.from_preset(Preset.BALANCED)
-    app.add_middleware(GatewayAwareSecureMiddleware, secure=secure_headers)
+    app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
 
 app.include_router(ui_router)
 app.include_router(health_router)
@@ -144,12 +137,6 @@ app.include_router(chat_github_security_router)
 app.include_router(chat_preview_router)
 app.include_router(chat_langfuse_router)
 app.include_router(fleet_langfuse_router)
-
-# Gateway router — MUST be registered last so its catch-all routes only
-# match after every specific API route has been tried.
-from ..gateway.router import gateway_router
-
-app.include_router(gateway_router)
 
 
 # ---------------------------------------------------------------------------

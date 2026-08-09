@@ -19,8 +19,9 @@ from typing import Any
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from ...gateway.proxy import PROXY_NETWORK
+from ...registry.constants import PROXY_NETWORK
 from ...registry.models import ComponentConfig, PortMapping
+from ...registry.traefik_labels import traefik_labels
 from ..auth import verify_auth
 from ..config import LifecycleConfig
 from ..deps import _get_backend, _get_config, _get_registry
@@ -320,6 +321,7 @@ async def _create_preview_container(
     image_ref: str,
     ports: list[PortMapping],
     env: dict[str, str],
+    base_domain: str,
 ) -> str:
     """Create and start the preview container, returning its short id."""
     import docker
@@ -339,9 +341,16 @@ async def _create_preview_container(
     # Build environment list from dict
     env_list = [f"{k}={v}" for k, v in env.items()] if env else None
 
-    # Don't publish host ports — the gateway reaches over the proxy network
+    # Don't publish host ports — Traefik reaches it over the proxy network
     container_ports: dict[str, Any] = {}
     volumes: dict[str, Any] = {}
+
+    # This path bypasses DockerSdkBackend._create_container, so the routing
+    # labels must be stamped here too — without them Traefik never sees the
+    # preview and the returned URL 404s.
+    labels = traefik_labels(
+        _preview_component_config(ports, image_ref), base_domain, PROXY_NETWORK
+    )
 
     def _create() -> Any:
         return client.containers.create(
@@ -350,6 +359,7 @@ async def _create_preview_container(
             environment=env_list,
             ports=container_ports,
             volumes=volumes,
+            labels=labels,
             detach=True,
             restart_policy={"Name": "unless-stopped"},
             network=PROXY_NETWORK,
@@ -381,13 +391,17 @@ async def _create_preview_container(
     return str(container.short_id)
 
 
-def _register_preview_component(
-    registry: Any,
+def _preview_component_config(
     ports: list[PortMapping],
     image_ref: str,
-) -> None:
-    """Register (or replace) the preview component in the in-memory registry."""
-    config = ComponentConfig(
+) -> ComponentConfig:
+    """The preview slot's ComponentConfig.
+
+    Shared by the container-create call and the registry registration so the
+    Traefik labels and the registered component can never describe different
+    ports.
+    """
+    return ComponentConfig(
         id=_PREVIEW_COMPONENT_ID,
         image=image_ref,
         container_name=_PREVIEW_CONTAINER_NAME,
@@ -395,6 +409,15 @@ def _register_preview_component(
         env={},
         mounts=[],
     )
+
+
+def _register_preview_component(
+    registry: Any,
+    ports: list[PortMapping],
+    image_ref: str,
+) -> None:
+    """Register (or replace) the preview component in the in-memory registry."""
+    config = _preview_component_config(ports, image_ref)
     # Unregister first if it was previously registered
     try:
         registry.unregister(_PREVIEW_COMPONENT_ID)
@@ -438,8 +461,8 @@ async def preview_deploy(
     """Deploy *repo_url* at *branch* into the single reusable preview slot.
 
     Clones the repo, builds the Docker image via compose when needed,
-    creates + starts the container on the proxy network, and registers
-    the preview component so the gateway can route to it.
+    creates + starts the container on the proxy network with its routing
+    labels, and registers the preview component.
 
     A new deploy replaces whatever currently occupies the slot.
     """
@@ -475,9 +498,11 @@ async def preview_deploy(
     image_ref = await _build_image(compose_path, svc)
 
     # 6 — Create and start the preview container
-    container_id = await _create_preview_container(backend, image_ref, ports, env)
+    container_id = await _create_preview_container(
+        backend, image_ref, ports, env, domain
+    )
 
-    # 7 — Register the component so the gateway can route to it
+    # 7 — Register the component (the edge routes from the labels above)
     _register_preview_component(registry, ports, image_ref)
 
     logger.info("Preview deployed → %s", _log_safe(preview_url))

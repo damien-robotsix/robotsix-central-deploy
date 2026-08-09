@@ -96,7 +96,7 @@ for any operator-configured overrides in `LifecycleConfig.langfuse_projects`.
 For each component in the ownership table above:
 
 1. Open the component's settings UI, or use its `/config` API directly
-   through the gateway:
+   through the edge:
 
    ```bash
    # Export the current config
@@ -136,7 +136,7 @@ For each component in the ownership table above:
      -d @/tmp/cfg.json
    ```
 
-   Or use the component's own `/config` endpoint through the gateway:
+   Or use the component's own `/config` endpoint through the edge:
 
    ```bash
    curl -sH "X-API-Key: $DEPLOY_API_KEY" \

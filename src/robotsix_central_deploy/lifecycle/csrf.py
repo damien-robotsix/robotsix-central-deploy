@@ -1,7 +1,12 @@
 """CSRF protection helpers.
 
-Provides token generation / validation and a gateway-aware wrapper around
-``asgi_csrf`` (Double Submit Cookie pattern).
+Provides token generation / validation and a thin wrapper around ``asgi_csrf``
+(Double Submit Cookie pattern) that exempts header-authenticated API paths.
+
+Scope note: this protects **central-deploy's own dashboard forms** on the base
+domain. Components are served by the Traefik edge and never pass through this
+app, so they are responsible for their own CSRF protection — which is also why
+this wrapper no longer needs to know anything about component subdomains.
 """
 
 from __future__ import annotations
@@ -24,7 +29,6 @@ except ImportError:
 
 try:
     from asgi_csrf import asgi_csrf as _asgi_csrf
-    from starlette.datastructures import Headers
     from starlette.types import ASGIApp
 
     _HAS_ASGI_CSRF = True
@@ -84,7 +88,7 @@ class CSRFHelper:
 
 if _HAS_ASGI_CSRF:
 
-    def GatewayAwareCSRFMiddleware(
+    def CSRFMiddleware(
         app: ASGIApp,
         *,
         secret: str = "",
@@ -92,31 +96,15 @@ if _HAS_ASGI_CSRF:
         cookie_samesite: str = "lax",
         exempt_urls: list[_re.Pattern[str]] | None = None,
     ) -> ASGIApp:
-        """CSRF middleware that skips gateway-proxied component requests.
+        """Wrap *app* with ``asgi_csrf``, skipping *exempt_urls* by path.
 
-        ``exempt_urls`` only matches the request *path*, but the gateway
-        routes components by Host subdomain (``<name>.<gateway_base_domain>``),
-        so unsafe-method requests to proxied apps (e.g. a chat message POST)
-        would be rejected with a CSRF token those apps never receive.
-        Proxied components are responsible for their own CSRF protection.
-
-        Returns an ASGI app wrapped with ``asgi_csrf``, configured to skip
-        CSRF for both gateway-proxied subdomain requests and explicitly
-        exempted URL patterns.
+        Returns an ASGI app wrapped with ``asgi_csrf``, configured to skip CSRF
+        for the given URL patterns — API routes authenticated by an
+        ``X-API-Key`` or ``Authorization`` header, which a browser will not
+        attach cross-site and which are therefore not CSRF-vulnerable.
         """
 
         def _should_skip(scope: dict[str, object]) -> bool:
-            # Gateway subdomain check — proxied components manage their own CSRF.
-            if scope["type"] in ("http", "websocket"):
-                # Imported lazily: gateway.router pulls in lifecycle modules,
-                # and this module is imported during lifecycle.app start-up.
-                from ..gateway.router import _extract_subdomain_name
-
-                headers = Headers(scope=scope)
-                if _extract_subdomain_name(headers, scope.get("app")) is not None:
-                    return True
-            # Exempt URL patterns — API routes authenticated via header-based
-            # auth (X-API-Key / Basic-Auth) not vulnerable to CSRF.
             if exempt_urls and scope["type"] == "http":
                 path: str = str(scope.get("path", ""))
                 for pattern in exempt_urls:

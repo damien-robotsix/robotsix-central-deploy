@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from ..._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
-from ...gateway.proxy import PROXY_NETWORK
+from ...registry.constants import PROXY_NETWORK
+from ...registry.traefik_labels import traefik_labels
 from ..models import (
     ComponentInspect,
     DeployOutcome,
@@ -64,9 +65,11 @@ class DockerSdkBackend(ExecutionBackend):
         github_app_private_key: str = "",
         installation_id: str = "",
         ghcr_pull_token: str = "",
+        gateway_base_domain: str = "",
     ) -> None:
         import docker
 
+        self._gateway_base_domain = gateway_base_domain
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
         self._auth = AuthOps(self._client)
         self._ghcr_credentials = GhcrCredentialResolver(
@@ -294,11 +297,10 @@ class DockerSdkBackend(ExecutionBackend):
         else:
             user = f"{os.getuid()}:{os.getgid()}"
 
-        # Host ports are intentionally NOT published: the gateway reaches
+        # Host ports are intentionally NOT published: the Traefik edge reaches
         # managed containers over the central-deploy-proxy network by
-        # container_name:container_port (gateway/router.py). Publishing host
-        # ports caused "port is already allocated" conflicts with existing
-        # host-bound services.
+        # container_name:container_port. Publishing host ports caused "port is
+        # already allocated" conflicts with existing host-bound services.
         ports: dict[str, Any] = {}
         volumes = {
             m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
@@ -332,6 +334,11 @@ class DockerSdkBackend(ExecutionBackend):
                     "Retries": hc.retries,
                     "StartPeriod": hc.start_period_seconds * int(1e9),
                 }
+        # Routing lives on the container, not in central-deploy: Traefik watches
+        # the Docker API and picks these up with no reload. A component with no
+        # port (or an unconfigured base domain) gets none and Traefik ignores it.
+        labels = traefik_labels(config, self._gateway_base_domain, PROXY_NETWORK)
+
         return self._client.containers.create(
             image=image_ref,
             name=config.container_name,
@@ -341,6 +348,7 @@ class DockerSdkBackend(ExecutionBackend):
             volumes=volumes,
             healthcheck=healthcheck,
             ports=ports,
+            labels=labels,
             tmpfs={p: "" for p in config.tmpfs} if config.tmpfs else None,
             detach=True,
             user=user,

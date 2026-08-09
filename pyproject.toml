@@ -13,7 +13,6 @@ dependencies = [
     "pyyaml>=6.0",
     "docker>=7.2.0",
     "cryptography>=41.0",
-    "websockets>=17.0.1",
     "jsonschema>=4.0",
     "structlog>=24.0",
     "PyGithub>=2.9.0",

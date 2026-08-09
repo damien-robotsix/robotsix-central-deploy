@@ -5,7 +5,7 @@
 
 ## Overview
 
-`robotsix-central-deploy` is a **FastAPI** lifecycle server that manages Docker containers for the robotsix fleet. It acts as a single control plane to start, stop, restart, deploy, rollback, and inspect every managed component. It also provides a **reverse-proxy gateway** so each component is reachable at a well-known URL under the deploy domain, an **onboarding pipeline** for adding new services from docker-compose repos, a **settings API** for operator runtime configuration, and a **registry checker** that monitors GHCR for newer image versions.
+`robotsix-central-deploy` is a **FastAPI** lifecycle server that manages Docker containers for the robotsix fleet. It acts as a single control plane to start, stop, restart, deploy, rollback, and inspect every managed component. Component traffic is carried by a **separate Traefik edge** which central-deploy programs by stamping routing labels onto each container it creates (`registry/traefik_labels.py`) — the control plane is never on the request path. It also provides an **onboarding pipeline** for adding new services from docker-compose repos, a **settings API** for operator runtime configuration, and a **registry checker** that monitors GHCR for newer image versions.
 
 ## Repo-Agnostic Rule (CRITICAL)
 
@@ -24,7 +24,7 @@ Service definitions belong in **declarative data**, never in engine code:
 | Virtual components (non-Docker chat-accessible services) | `LifecycleConfig.virtual_components` in `config/config.json` |
 | Langfuse project credentials | Each component owns them in its own standardized config under the canonical block `langfuse.host` + `langfuse.projects.<project-name>` → `{public_key, secret_key, project_id}`, read by the single-source-of-truth helper `lifecycle/_langfuse_config.py`. Key pairs are **auto-discovered** from any service whose `allow_chat_access`/`chat_agent_mutatable` toggle is enabled and reconciled as chat-proxy aliases (no operator key-pasting); `GET /fleet/langfuse` serves the same data to fleet consumers. `LifecycleConfig.langfuse_projects` in `config/config.json` remains the operator-configured override. **No** fallback to `LANGFUSE_*` env vars or pre-standard shapes |
 | Chat-agent mutation permissions | `ComponentConfig.chat_agent_mutatable` — set per-component via the `robotsix.deploy.chat-agent-mutatable` compose label at onboard time |
-| Gateway routes / TLS | Derived automatically from onboarded component ids + `gateway_base_domain` — no per-service routing rules exist |
+| Edge routes / TLS | Derived automatically from onboarded component ids + `gateway_base_domain` by `registry/traefik_labels.py`, emitted as Docker labels — no per-service routing rules exist |
 
 **When adding a new managed service:** onboard it via the self-service API
 (or declarative manifest), never by editing `central-deploy` engine code.
@@ -131,8 +131,6 @@ Two-phase process:
 
 ### Git clone → parse → deploy → monitor → volume audit
 
-Registered **last** on the FastAPI app. Routes by Host subdomain: `{name}.{gateway_base_domain}` maps to the managed container (`gateway_base_domain` must be configured). HTTP requests proxied via `httpx.AsyncClient`, WebSocket via bidirectional relay. Legacy path-prefix URLs (`/{name}/{path}`) are **not proxied** — they 307-redirect to the component subdomain (path-prefix proxying broke apps serving absolute asset URLs).
-
 ## Execution Backends
 
 | Backend | Config value | Description |
@@ -149,6 +147,8 @@ Configured via environment variables (`ROBOTSIX_LIFECYCLE_` prefix):
 - `AUTH_USERNAME` + `AUTH_PASSWORD` — HTTP Basic Auth
 
 Auth is **off** when no credentials are configured (dev mode). `/health` is always open.
+
+**There is no login page and no session store.** Operator authentication happens once at the fleet edge (Traefik + tinyauth); `verify_auth` above is defence-in-depth on the JSON API against a caller already on the internal Docker network. Do not re-introduce per-app login — see the [component standard](https://damien-robotsix.github.io/robotsix-standards/component-standard/).
 
 ## Configuration
 
@@ -168,7 +168,6 @@ All settings loaded via `pydantic-settings` from environment or `.env.lifecycle`
 
 ```
 src/robotsix_central_deploy/
-├── gateway/          # Reverse proxy (HTTP + WebSocket relay)
 ├── lifecycle/        # FastAPI app, state machine, backends, auth
 ├── onboard/          # Git clone + docker-compose parsing
 ├── registry/         # Component config, env/secrets, settings stores
@@ -178,17 +177,18 @@ src/robotsix_central_deploy/
 │   └── volume_audit/ # Named-volume growth scanner (caretaker sub-package)
 ```
 
-**Rule:** Test files for module X belong under `tests/X/`, never at the `tests/` root. Every module already follows this convention (lifecycle, gateway, registry, ui, registry_check, caretaker, onboard). Do not create new test files at the `tests/` root — place them in the corresponding `tests/<module>/` directory.
+**Rule:** Test files for module X belong under `tests/X/`, never at the `tests/` root. Every module already follows this convention (lifecycle, registry, ui, registry_check, caretaker, onboard). Do not create new test files at the `tests/` root — place them in the corresponding `tests/<module>/` directory.
 
 ## Documentation
 
-**Rule:** When adding a new public `.py` module (not private, not `__init__.py`), add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive to `docs/api.md` under the appropriate section. The section headers in `docs/api.md` mirror the `src/robotsix_central_deploy/` directory structure — new modules should be listed alongside their sibling modules in the matching section.
+**Rule:** When adding a new public `.py` module (not private, not `__init__.py`), add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive to `docs/lifecycle/api.md` under the appropriate section. The section headers in `docs/lifecycle/api.md` mirror the `src/robotsix_central_deploy/` directory structure — new modules should be listed alongside their sibling modules in the matching section.
 
 ## Code Gotchas
 
 1. **Sibling fan-out is best-effort** — failures are logged but don't fail the primary operation.
-2. **Gateway router must be registered LAST** — it's a catch-all that would shadow specific API routes.
-3. **Registry check interval changes require restart** — captured at startup.
-4. **Fernet key loss is irrecoverable** — secrets must be re-entered if `secrets.key` is deleted.
-5. **Reserved names** (`ui`, `health`, `services`, `onboard`, `docs`, `openapi.json`, `redoc`, `disk`, `help`, `volumes`, `login`, `logout`) cannot be used as component slugs — see `RESERVED_NAMES` in `gateway/router.py`.
+2. **Registry check interval changes require restart** — captured at startup.
+3. **Fernet key loss is irrecoverable** — secrets must be re-entered if `secrets.key` is deleted.
+4. **Reserved names** (`traefik`, `tinyauth`, `auth`, `deploy`) cannot be used as component slugs — they would shadow the fleet's own edge hostnames. See `RESERVED_NAMES` in `registry/constants.py`.
+5. **Siblings must stay unroutable** — `_sibling_utils.py` sets `routable=False` on the sibling config copy. Dropping it would publish a component's database at `<component>-db.<base-domain>`.
 6. **`NoopBackend` always reports `sha256:noop`** — never use in production.
+7. **No catch-all routes** — a `/{path:path}` route shadows every endpoint after it. `tests/lifecycle/test_app.py` guards this.

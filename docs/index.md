@@ -16,8 +16,9 @@ Langfuse.
 - **Onboarding pipeline** — add new services from a docker-compose repo
   (preflight parse + confirm deploy) against the
   [deploy contract](ui/DEPLOY_CONTRACT.md).
-- **Reverse-proxy gateway** — each component reachable at a well-known URL
-  under the deploy domain (HTTP + WebSocket).
+- **Edge integration** — each component published at
+  `<id>.<base-domain>` by the Traefik edge, from routing labels
+  central-deploy stamps on its container.
 - **Dashboard UI** — live status, logs, and env/secrets management at `/ui`.
   The deploy UI surfaces **only** deploy-plane-allowlisted settings (image/tag,
   volumes, ports, restart policy, resource limits, env/secrets) and no
@@ -32,9 +33,9 @@ Langfuse.
 ## Documentation
 
 - **[Architecture](ARCHITECTURE.md)** — system design, subpackage responsibilities,
-  data flow, state machine, and gateway routing rules.
+  data flow, and state machine.
 - **Module overviews** — each subsystem is documented in its own
-  `docs/<module>/overview.md`: Gateway, Onboarding, Registry, Registry Check,
+  `docs/<module>/overview.md`: Onboarding, Registry, Registry Check,
   Caretaker (including Volume Audit).
 
 ## Security / Credentials

@@ -116,7 +116,7 @@ async def chat_register_component(
         )
 
     # Reject reserved names that would shadow API routes.
-    from ...gateway.router import RESERVED_NAMES
+    from ...registry.constants import RESERVED_NAMES
 
     if body.name in RESERVED_NAMES:
         raise HTTPException(
