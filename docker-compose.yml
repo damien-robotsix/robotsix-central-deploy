@@ -228,7 +228,10 @@ services:
       - path: ./deploy/traefik/tinyauth.env
         format: raw
     environment:
-      TINYAUTH_APP_URL: "https://auth.${GATEWAY_BASE_DOMAIN}"
+      # TINYAUTH_APPURL, not TINYAUTH_APP_URL. tinyauth reads only the former;
+      # with the latter it starts, fails to parse an empty URL, and crash-loops
+      # — every request through the edge then 500s on the forward-auth call.
+      TINYAUTH_APPURL: "https://auth.${GATEWAY_BASE_DOMAIN}"
       # Trust X-Forwarded-For from Docker's private range rather than from one
       # pinned subnet: pinning the subnet would mean declaring it on the
       # network below, which makes compose recreate that network.
