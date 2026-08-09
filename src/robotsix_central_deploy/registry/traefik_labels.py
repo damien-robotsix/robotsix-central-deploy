@@ -14,15 +14,21 @@ config file.
 Three routers are emitted per component, distinguished by priority so the most
 specific rule wins:
 
-===========  ========  =========================  =================================
-Router       Priority  Matches                    Authenticated by
-===========  ========  =========================  =================================
-``-health``  30        ``GET /health``            nothing — the health contract
-                                                  requires an auth-exempt probe
-``-machine`` 20        an ``Authorization: Basic``  Traefik's ``basicauth``
-                       header                     middleware
-(base)       10        everything else            tinyauth SSO via ``forwardAuth``
-===========  ========  =========================  =================================
+===========  ========  =================  =====================================
+Router       Priority  Matches            Authenticated by
+===========  ========  =================  =====================================
+``-health``  30        ``GET /health``    nothing — the health contract requires
+                                          an auth-exempt probe
+(base)       10        everything else    tinyauth SSO via ``forwardAuth``
+===========  ========  =================  =====================================
+
+There is deliberately no second door for machine callers. An HTTP Basic router
+existed here briefly; because its credential was the fleet's existing htpasswd,
+every browser that had ever authenticated against the old nginx replayed it
+automatically and never saw the SSO gate at all. A bypass that every client
+already holds the key to is not a second lock. Scripts and fleet services reach
+components over the internal Docker network instead, where the edge is not
+involved.
 
 TLS is **not** configured here. The ``websecure`` entrypoint carries the
 wildcard certificate for the whole base domain (see ``deploy/traefik/traefik.yml``),
@@ -33,18 +39,14 @@ from __future__ import annotations
 
 from .models import ComponentConfig
 
-#: Traefik middleware protecting browser traffic — tinyauth forward-auth.
+#: Traefik middleware protecting every externally routed request — tinyauth
+#: forward-auth. There is no second, weaker gate; see the module docstring.
 BROWSER_MIDDLEWARE: str = "tinyauth@file"
-
-#: Traefik middleware protecting machine traffic — HTTP Basic against the
-#: fleet credential.
-MACHINE_MIDDLEWARE: str = "fleet-basicauth@file"
 
 #: Entrypoint every component router binds to (TLS, port 443).
 ENTRYPOINT: str = "websecure"
 
 _HEALTH_PRIORITY = 30
-_MACHINE_PRIORITY = 20
 _BROWSER_PRIORITY = 10
 
 
@@ -92,12 +94,6 @@ def traefik_labels(
 
     for router, priority, rule, middleware in (
         (f"{name}-health", _HEALTH_PRIORITY, f"{host_rule} && Path(`/health`)", None),
-        (
-            f"{name}-machine",
-            _MACHINE_PRIORITY,
-            f"{host_rule} && HeaderRegexp(`Authorization`, `^Basic `)",
-            MACHINE_MIDDLEWARE,
-        ),
         (name, _BROWSER_PRIORITY, host_rule, BROWSER_MIDDLEWARE),
     ):
         prefix = f"traefik.http.routers.{router}"

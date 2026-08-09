@@ -12,10 +12,10 @@ watches the Docker API and picks them up. The two never share a process.
 DNS *.<base-domain> ──────▶ :443 Traefik ── TLS: ACME DNS-01 / OVH, one wildcard
                                    │       ── routes: container labels, live
                                    │
-                     ┌─────────────┼──────────────┐
-              forwardAuth      basicauth        (no auth)
-               → tinyauth       machine          /health
-                                   │
+                     ┌─────────────┴──────────────┐
+              forwardAuth                     (no auth)
+               → tinyauth                       /health
+                     └─────────────┬──────────────┘
            ┌─────────┬─────────────┼─────────────┐
          chat      board         mill      central-deploy
 ```
@@ -51,25 +51,25 @@ Three routers are emitted, ordered by priority so the most specific wins:
 | Priority | Router | Matches | Authenticated by |
 |---|---|---|---|
 | 30 | `<id>-health` | `GET /health` | nothing — the [health-endpoint standard](https://damien-robotsix.github.io/robotsix-standards/health-endpoints/) requires an uncredentialed probe |
-| 20 | `<id>-machine` | an `Authorization: Basic` header | Traefik's `basicauth` middleware |
 | 10 | `<id>` | everything else | tinyauth SSO via `forwardAuth` |
 
-### Why two authenticated routers
+### Why there is no machine door
 
-tinyauth answers an unauthenticated request with a redirect to a login page.
-A browser follows it; a script cannot. The chat agent probes fleet UIs over
-their public URLs with server-injected Basic credentials (`fleet_auth.auth_hosts`
-in robotsix-chat), and would break against an SSO-only edge.
+There was one, briefly: a higher-priority router matching `Authorization: Basic`
+and validated against an htpasswd file, so that scripts and fleet services could
+reach components without following an SSO redirect.
 
-tinyauth has no bypass mechanism, so machine callers get their own
-higher-priority router. That router is **not** a bypass — it carries Traefik's
-`basicauth` middleware, so it is a second door with its own lock.
+It was removed because it did not work as a second lock. The htpasswd was copied
+from the ingress it replaced, so every browser that had ever authenticated
+against the old setup replayed the same credential automatically. The access log
+showed ordinary browser sessions being served by the machine router, having never
+seen a login page — the SSO gate was optional for anyone holding a password that
+was already saved in their browser. A second door keyed to something every client
+already has is not defence in depth.
 
-The credential lives in `deploy/traefik/fleet-users`, which is **git-ignored**:
-this repo is public, and a committed bcrypt hash is an offline-crackable copy of
-the fleet password. Traefik reads the standard htpasswd formats, so the existing
-existing nginx htpasswd can be copied across unchanged and the
-current password keeps working.
+Machine callers reach components over the internal Docker network
+(`http://<container>:<port>`), which never passes through the edge and therefore
+needs no edge credential at all.
 
 ### What does not get routed
 
@@ -105,9 +105,9 @@ certificate.
 
 ### Secrets and the two credential files
 
-Three values never enter git, because this repo is public: the machine
-credential (`deploy/traefik/fleet-users`), the SSO secret and operator login
-(`deploy/traefik/tinyauth.env`), and the OVH API credentials (`.env`).
+Two files never enter git, because this repo is public: the SSO secret and
+operator login (`deploy/traefik/tinyauth.env`), and the OVH API credentials
+(`.env`).
 
 The SSO file is read with compose's `format: raw`, which disables interpolation.
 That is not a stylistic choice. Routing a bcrypt hash through `.env` and
@@ -159,6 +159,7 @@ with a comment pointing back here.
 | `traefik-socket-proxy` `VERSION` | `1` | The Docker client negotiates an API version through `/version` and `/_ping` before any other call |
 | `tinyauth` app URL | `TINYAUTH_APPURL` | The `TINYAUTH_APP_URL` spelling is silently ignored; tinyauth then crash-loops on an empty URL and the edge 500s |
 | SSO credentials | `env_file` + `format: raw` | Routing a bcrypt hash through `.env` interpolates it twice and truncates it |
+| auth gates | tinyauth only | A second HTTP Basic door let every browser holding the old ingress credential skip SSO entirely |
 | `central-deploy-proxy` | driver + name only | Any extra key — even a matching `ipam` subnet — makes compose recreate the network and detach every managed container |
 | `GATEWAY_BASE_DOMAIN` | required, no default | Must equal central-deploy's `gateway_base_domain`; unset produces empty `Host()` rules and a certless edge |
 
@@ -188,7 +189,6 @@ means no router exists.
 |---|---|
 | Change the auth gates | `deploy/traefik/dynamic.yml` — watched, applies live |
 | Change entrypoints, TLS, or providers | the `command:` block in `docker-compose.yml` — needs a Traefik restart |
-| Rotate the machine credential | `htpasswd -B deploy/traefik/fleet-users fleet` (Traefik re-reads it live) |
 | Add an operator login | `htpasswd -nbB <user> '<password>'` → `deploy/traefik/tinyauth.env` |
 | See why a route is missing | `docker inspect <container> --format '{{json .Config.Labels}}'` |
 

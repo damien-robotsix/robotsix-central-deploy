@@ -67,11 +67,6 @@ services:
       traefik.http.routers.central-deploy-health.priority: "30"
       traefik.http.routers.central-deploy-health.entrypoints: websecure
       traefik.http.routers.central-deploy-health.service: central-deploy
-      traefik.http.routers.central-deploy-machine.rule: "Host(`${GATEWAY_BASE_DOMAIN}`) && HeaderRegexp(`Authorization`, `^Basic `)"
-      traefik.http.routers.central-deploy-machine.priority: "20"
-      traefik.http.routers.central-deploy-machine.entrypoints: websecure
-      traefik.http.routers.central-deploy-machine.middlewares: fleet-basicauth@file
-      traefik.http.routers.central-deploy-machine.service: central-deploy
       traefik.http.routers.central-deploy.rule: "Host(`${GATEWAY_BASE_DOMAIN}`)"
       traefik.http.routers.central-deploy.priority: "10"
       traefik.http.routers.central-deploy.entrypoints: websecure
@@ -159,11 +154,6 @@ services:
       - "443:443"
     volumes:
       - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      # The fleet machine credential. Git-ignored — this repo is public, so the
-      # hash must never be committed. Seed it by copying the existing nginx
-      # htpasswd across; the current password then keeps working unchanged:
-      #   cp /etc/nginx/htpasswd/<your-vhost> ./deploy/traefik/fleet-users
-      - ./deploy/traefik/fleet-users:/etc/traefik/fleet-users:ro
       - traefik_letsencrypt:/letsencrypt
     depends_on:
       - traefik-socket-proxy

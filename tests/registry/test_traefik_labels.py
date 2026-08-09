@@ -8,7 +8,6 @@ from robotsix_central_deploy.registry.constants import PROXY_NETWORK
 from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
 from robotsix_central_deploy.registry.traefik_labels import (
     BROWSER_MIDDLEWARE,
-    MACHINE_MIDDLEWARE,
     traefik_labels,
 )
 
@@ -51,11 +50,11 @@ def test_forwards_to_the_container_port_not_the_host_port() -> None:
     assert labels["traefik.docker.network"] == PROXY_NETWORK
 
 
-def test_all_three_routers_share_one_upstream_service() -> None:
+def test_both_routers_share_one_upstream_service() -> None:
     # Without an explicit service, Traefik invents one per router and 404s the
-    # two that have no matching service definition.
+    # one that has no matching service definition.
     labels = _labels()
-    for router in ("board", "board-machine", "board-health"):
+    for router in ("board", "board-health"):
         assert labels[f"traefik.http.routers.{router}.service"] == "board"
 
 
@@ -68,14 +67,19 @@ def test_browser_traffic_goes_through_sso() -> None:
     assert _labels()["traefik.http.routers.board.middlewares"] == BROWSER_MIDDLEWARE
 
 
-def test_machine_traffic_is_authenticated_not_bypassed() -> None:
-    # tinyauth has no bypass, so machine callers get their own router — but it
-    # carries basicauth. A bypass here would be an unauthenticated hole.
+def test_no_router_bypasses_sso_except_health() -> None:
+    """Only /health may answer without the SSO gate.
+
+    A second, weaker door existed here: an HTTP Basic router matched on the
+    Authorization header. Keyed with the fleet's existing htpasswd, it meant
+    every browser holding the old credential was served without ever seeing a
+    login page. Nothing may reintroduce a route that skips tinyauth.
+    """
     labels = _labels()
-    assert "Authorization" in labels["traefik.http.routers.board-machine.rule"]
-    assert (
-        labels["traefik.http.routers.board-machine.middlewares"] == MACHINE_MIDDLEWARE
-    )
+    routers = {k.split(".")[3] for k in labels if k.startswith("traefik.http.routers.")}
+    assert routers == {"board", "board-health"}
+    assert labels["traefik.http.routers.board.middlewares"] == BROWSER_MIDDLEWARE
+    assert not any("Authorization" in v for v in labels.values())
 
 
 def test_health_probe_is_auth_exempt() -> None:
@@ -85,10 +89,10 @@ def test_health_probe_is_auth_exempt() -> None:
     assert "traefik.http.routers.board-health.middlewares" not in labels
 
 
-def test_specific_routers_outrank_the_catch_all() -> None:
+def test_health_router_outranks_the_catch_all() -> None:
     labels = _labels()
     priority = lambda r: int(labels[f"traefik.http.routers.{r}.priority"])
-    assert priority("board-health") > priority("board-machine") > priority("board")
+    assert priority("board-health") > priority("board")
 
 
 # ---------------------------------------------------------------------------
