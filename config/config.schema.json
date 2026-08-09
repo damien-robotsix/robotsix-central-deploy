@@ -108,26 +108,6 @@
           "description": "header name when auth_type=\"header\"",
           "title": "Auth Header Name",
           "type": "string"
-        },
-        "auth_username_env": {
-          "default": "",
-          "description": "env var holding Basic-Auth username",
-          "title": "Auth Username Env",
-          "type": "string"
-        },
-        "auth_password_env": {
-          "default": "",
-          "description": "env var holding Basic-Auth password",
-          "format": "password",
-          "title": "Auth Password Env",
-          "type": "string",
-          "writeOnly": true
-        },
-        "auth_token_env": {
-          "default": "",
-          "description": "env var holding a bearer/header token",
-          "title": "Auth Token Env",
-          "type": "string"
         }
       },
       "required": [

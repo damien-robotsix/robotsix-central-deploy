@@ -443,8 +443,6 @@ class TestChatComponents:
         cfg.chat_base_url = "https://langfuse.robotsix.net"
         cfg.chat_skill = "# Langfuse\n\nObservability platform."
         cfg.auth_type = "basic"
-        cfg.auth_username_env = "LF_PUBLIC"
-        cfg.auth_password_env = "LF_SECRET"
         await config_store.put(cfg)
         server_mod.app.state.registry.register(cfg)
 
@@ -466,19 +464,18 @@ class TestChatComponents:
         entry = data[0]
         assert entry["id"] == "langfuse"
         assert "auth" in entry
-        assert entry["auth"]["type"] == "basic"
-        assert entry["auth"]["username_env"] == "LF_PUBLIC"
-        assert entry["auth"]["password_env"] == "LF_SECRET"
-        # No actual credential values in the response.
-        assert "LF_PUBLIC" not in str(entry["auth"]).replace("LF_PUBLIC", "")
+        assert entry["auth"] == {"type": "basic"}, (
+            "scheme only — the chat agent resolves the credential from its "
+            "own config, and the roster must not name an env var"
+        )
         # httpx must NOT be called — static skill path.
         mock_client.get.assert_not_called()
 
     async def test_virtual_component_with_header_auth(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        """A virtual component with auth_type='header' includes auth metadata
-        with the header name and token env var."""
+        """A virtual component with auth_type='header' advertises the scheme
+        and header name — and no credential location."""
         config_store = server_mod.app.state.component_config_store
         cfg = ComponentConfig(
             id="deploy",
@@ -491,7 +488,6 @@ class TestChatComponents:
         cfg.chat_skill = "# Deploy\n\nLifecycle server."
         cfg.auth_type = "header"
         cfg.auth_header_name = "X-API-Key"
-        cfg.auth_token_env = "DEPLOY_API_KEY"
         await config_store.put(cfg)
         server_mod.app.state.registry.register(cfg)
 
@@ -513,9 +509,7 @@ class TestChatComponents:
         entry = data[0]
         assert entry["id"] == "deploy"
         assert "auth" in entry
-        assert entry["auth"]["type"] == "header"
-        assert entry["auth"]["header_name"] == "X-API-Key"
-        assert entry["auth"]["token_env"] == "DEPLOY_API_KEY"
+        assert entry["auth"] == {"type": "header", "header_name": "X-API-Key"}
         mock_client.get.assert_not_called()
 
     async def test_component_without_auth_omits_auth_key(
@@ -572,8 +566,6 @@ class TestChatComponents:
         lf.chat_base_url = "https://langfuse.robotsix.net"
         lf.chat_skill = "# Langfuse\n\nObservability platform."
         lf.auth_type = "basic"
-        lf.auth_username_env = "LANGFUSE_PUBLIC_KEY"
-        lf.auth_password_env = "LANGFUSE_SECRET_KEY"
         await config_store.put(lf)
         server_mod.app.state.registry.register(lf)
 
@@ -589,7 +581,6 @@ class TestChatComponents:
         dp.chat_skill = "# Deploy\n\nLifecycle server."
         dp.auth_type = "header"
         dp.auth_header_name = "X-API-Key"
-        dp.auth_token_env = "DEPLOY_API_KEY"
         await config_store.put(dp)
         server_mod.app.state.registry.register(dp)
 
@@ -615,16 +606,12 @@ class TestChatComponents:
         assert "langfuse" in by_id
         lf_entry = by_id["langfuse"]
         assert lf_entry["base_url"] == "https://langfuse.robotsix.net"
-        assert lf_entry["auth"]["type"] == "basic"
-        assert lf_entry["auth"]["username_env"] == "LANGFUSE_PUBLIC_KEY"
-        assert lf_entry["auth"]["password_env"] == "LANGFUSE_SECRET_KEY"
+        assert lf_entry["auth"] == {"type": "basic"}
 
         # deploy entry
         assert "deploy" in by_id
         dp_entry = by_id["deploy"]
         assert dp_entry["base_url"] == "http://localhost:8100"
-        assert dp_entry["auth"]["type"] == "header"
-        assert dp_entry["auth"]["header_name"] == "X-API-Key"
-        assert dp_entry["auth"]["token_env"] == "DEPLOY_API_KEY"
+        assert dp_entry["auth"] == {"type": "header", "header_name": "X-API-Key"}
 
         mock_client.get.assert_not_called()

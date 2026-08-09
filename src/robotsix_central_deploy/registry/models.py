@@ -226,15 +226,6 @@ class ComponentConfig(BaseModel):
     auth_header_name: str = Field(
         "", description="Header name when auth_type is 'header'"
     )
-    auth_username_env: str = Field(
-        "", description="Environment variable holding the Basic-Auth username"
-    )
-    auth_password_env: str = Field(
-        "", description="Environment variable holding the Basic-Auth password"
-    )
-    auth_token_env: str = Field(
-        "", description="Environment variable holding a bearer/header token"
-    )
     # --- Credential scoping ---
     consumed_scopes: list[str] = Field(
         default_factory=list,

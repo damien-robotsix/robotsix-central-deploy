@@ -29,17 +29,10 @@ class VirtualComponentEntry(BaseModel):
         "", description="static skill body; when non-empty, used without probing"
     )
     # --- Auth metadata for the chat agent ---
-    # "basic" → HTTP Basic Auth (username_env / password_env)
-    # "header" → custom header (header_name + token_env)
+    # Scheme only.  The credential value lives in the chat agent's own
+    # config (central_deploy.api_token / component_credentials.<id>).
     auth_type: str = Field("", description='"basic" | "header" | ""')
     auth_header_name: str = Field("", description='header name when auth_type="header"')
-    auth_username_env: str = Field(
-        "", description="env var holding Basic-Auth username"
-    )
-    auth_password_env: SecretStr = Field(
-        SecretStr(""), description="env var holding Basic-Auth password"
-    )
-    auth_token_env: str = Field("", description="env var holding a bearer/header token")
 
 
 class LangfuseProjectCreds(BaseModel):
