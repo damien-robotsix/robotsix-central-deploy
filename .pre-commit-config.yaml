@@ -24,18 +24,18 @@ repos:
       - id: actionlint
 
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.14.0
+    rev: v2.15.1
     hooks:
       - id: hadolint-docker
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.17.2
+    rev: v0.23.2
     hooks:
       - id: markdownlint-cli2
         args: ["#fix"]
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.3
     hooks:
       - id: codespell
         args: ["--ignore-words-list", "hist,ist,te,nd,vas", "--skip", "*.lock,uv.lock,*.css,*.map,*.min.*,.git/,node_modules/,site/,vendor/"]
