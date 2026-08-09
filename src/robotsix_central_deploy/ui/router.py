@@ -14,7 +14,12 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+)
 
 router = APIRouter()
 
@@ -26,6 +31,18 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _DEPLOY_CONTRACT_HTML = (_TEMPLATES_DIR / "deploy-contract.html").read_text(
     encoding="utf-8"
 )
+
+
+@router.get("/", include_in_schema=False)
+async def root() -> Response:
+    """Send the bare domain to the dashboard.
+
+    The retired nginx vhost did this with ``location = / { return 302 /ui; }``.
+    It belongs in the app rather than in the edge: the edge routes by host and
+    knows nothing about which path a component serves its UI on, and putting a
+    path rule there would tie the ingress to this app's layout.
+    """
+    return RedirectResponse(url="/ui", status_code=302)
 
 
 @router.get("/ui/static/{filename:path}", include_in_schema=False)
