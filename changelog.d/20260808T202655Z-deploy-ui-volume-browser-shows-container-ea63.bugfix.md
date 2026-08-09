@@ -1,1 +1,0 @@
-Volume browser: list the volume's own files instead of the helper container's root filesystem (an empty path globbed `/*`), show recursive per-directory sizes measured the same way as the Disk Usage table, and reject reading a directory as a file (`400`) instead of returning its 4096-byte inode as blank content.
