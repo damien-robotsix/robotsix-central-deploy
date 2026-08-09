@@ -1,25 +1,28 @@
-# Traefik dynamic configuration — the fleet's two auth gates.
+# Traefik dynamic configuration — the fleet's auth gate.
 #
 # Watched by Traefik, so edits here apply without a restart.
 #
 # Nothing here may name a component or a per-component hostname — that is the
 # repo-agnostic rule in AGENT.md, and it applies to this file exactly as it
 # applies to the engine. Component routes arrive as Docker labels derived by
-# registry/traefik_labels.py; this file holds only fleet-wide middleware. Components refer
-# to these by name (`tinyauth@file`, `fleet-basicauth@file`) through the labels
-# central-deploy stamps on them — see registry/traefik_labels.py.
+# registry/traefik_labels.py, which reference the middleware below by name
+# (`tinyauth@file`).
 #
-# Why two gates: tinyauth is a browser SSO flow (it answers with a redirect to
-# a login page), which a script or a fleet service cannot follow. tinyauth has
-# no bypass mechanism of its own, so machine callers get a separate,
-# higher-priority router matched on the Authorization header. That router is
-# still authenticated — by `fleet-basicauth` below — so this is a second door
-# with its own lock, not a hole.
+# One gate, deliberately. An HTTP Basic middleware for machine callers lived
+# here briefly. Because it was keyed with the fleet's existing nginx htpasswd,
+# every browser that had ever authenticated against the old ingress replayed
+# that credential automatically and was served without ever seeing the SSO
+# login — the access log showed real browser sessions arriving on the machine
+# router. A second door whose key every client already holds is not defence in
+# depth, so there is no longer one. Machine callers reach components over the
+# internal Docker network, which never passes through the edge.
 
 http:
   middlewares:
-    # Browser traffic. Unauthenticated requests are redirected to tinyauth's
-    # login page and come back with a session cookie valid fleet-wide.
+    # Every externally routed request. Unauthenticated ones are redirected to
+    # tinyauth's login page and come back with a session cookie valid
+    # fleet-wide. The only exception is each component's /health route, which
+    # carries no middleware at all — see registry/traefik_labels.py.
     tinyauth:
       forwardAuth:
         address: "http://tinyauth:3000/api/auth/traefik"
@@ -28,21 +31,3 @@ http:
           - Remote-Name
           - Remote-Email
           - Remote-Groups
-
-    # Machine traffic — the chat agent's http_probe/public_fetch, which inject
-    # server-side Basic credentials for hosts listed in `fleet_auth.auth_hosts`,
-    # plus any operator script using `curl -u`.
-    #
-    # The credential is NOT in this file: this repo is public, and a committed
-    # bcrypt hash is an offline-crackable copy of the fleet password. It stays
-    # in an htpasswd file on the host, mounted read-only — the same posture as
-    # the nginx htpasswd it replaces. Traefik reads
-    # the standard htpasswd formats, so the existing file can be copied across
-    # unchanged and the current password keeps working.
-    fleet-basicauth:
-      basicAuth:
-        usersFile: /etc/traefik/fleet-users
-        # The component behind this middleware has no auth of its own and does
-        # not need the header; stripping it avoids leaking the credential
-        # onward.
-        removeHeader: true
