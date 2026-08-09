@@ -182,4 +182,7 @@ async def revoke_user_tokens(
     ``iat`` (issued-at) timestamp earlier than now are rejected.
     """
     await token_store.revoke_user(body.user)
-    logger.info("Revoked all mobile tokens for user %r", body.user.replace("\n", "\\n").replace("\r", "\\r"))
+    logger.info(
+        "Revoked all mobile tokens for user %r",
+        body.user.replace("\n", "\\n").replace("\r", "\\r"),
+    )
