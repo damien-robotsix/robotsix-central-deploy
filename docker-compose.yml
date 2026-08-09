@@ -168,7 +168,7 @@ services:
       # Trust X-Forwarded-For only from the edge network, so a client cannot
       # spoof its own IP past the rate limiter. Must match the pinned subnet
       # of central-deploy-proxy below.
-      TINYAUTH_AUTH_TRUSTEDPROXIES: "172.28.0.0/16"
+      TINYAUTH_AUTH_TRUSTEDPROXIES: "172.24.0.0/16"
     volumes:
       - tinyauth_data:/data
     labels:
@@ -196,6 +196,11 @@ networks:
     name: central-deploy-proxy
     # Pinned so TINYAUTH_AUTH_TRUSTEDPROXIES can name it. Docker would
     # otherwise pick a subnet from its pool and the value would drift.
+    #
+    # This value must match the network as it already exists on the host —
+    # changing it makes compose try to recreate the network, which means
+    # disconnecting every managed container attached to it. Check with:
+    #   docker network inspect central-deploy-proxy --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
     ipam:
       config:
-        - subnet: 172.28.0.0/16
+        - subnet: 172.24.0.0/16
