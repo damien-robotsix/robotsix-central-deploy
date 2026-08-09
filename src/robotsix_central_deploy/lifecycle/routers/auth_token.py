@@ -109,6 +109,7 @@ async def exchange_token(
 @router.api_route(
     "/auth/validate",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    include_in_schema=False,
 )
 async def validate_token(
     request: Request,
