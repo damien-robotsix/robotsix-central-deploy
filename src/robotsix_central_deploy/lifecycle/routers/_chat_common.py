@@ -43,24 +43,18 @@ def _inject_auth(entry: dict[str, Any], comp_cfg: ComponentConfig) -> None:
     """Attach an ``auth`` sub-dict to *entry* when the component carries
     auth metadata the chat agent can use to authenticate requests.
 
-    The auth dict references **environment variable names** — the chat
-    agent resolves them at runtime from its own container environment
-    (which the deploy server populates via the EnvStore at deploy time).
-    Actual credential values are never embedded in the roster response.
+    Metadata only — the scheme and, for header auth, the header name.  The
+    chat agent resolves the credential *value* from its own config
+    (``central_deploy.api_token``, or a per-component
+    ``component_credentials.<id>`` override).  The roster never names an
+    environment variable: first-party credentials do not travel that way
+    (config-standard §5).
     """
     if not comp_cfg.auth_type:
         return
     auth: dict[str, str] = {"type": comp_cfg.auth_type}
-    if comp_cfg.auth_type == "basic":
-        if comp_cfg.auth_username_env:
-            auth["username_env"] = comp_cfg.auth_username_env
-        if comp_cfg.auth_password_env:
-            auth["password_env"] = comp_cfg.auth_password_env
-    elif comp_cfg.auth_type == "header":
-        if comp_cfg.auth_header_name:
-            auth["header_name"] = comp_cfg.auth_header_name
-        if comp_cfg.auth_token_env:
-            auth["token_env"] = comp_cfg.auth_token_env
+    if comp_cfg.auth_type == "header" and comp_cfg.auth_header_name:
+        auth["header_name"] = comp_cfg.auth_header_name
     entry["auth"] = auth
 
 
