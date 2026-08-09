@@ -51,6 +51,8 @@
   "rate_limit_api_per_hour": 20000,
   "csrf_secret": "",
   "chat_agent_registration_enabled": true,
+  "mobile_token_ttl_days": 90,
+  "mobile_token_revocation_path": "data/mobile_token_revocations.json",
   "chat_agent_deployable_components": [],
   "virtual_components": [
     {
