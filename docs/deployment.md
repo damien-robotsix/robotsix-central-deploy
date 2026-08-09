@@ -236,7 +236,7 @@ forbids first-party secrets in `environment:`).
 
 The deploy plane writes `central_deploy.api_token` into the component's config
 volume at startup and after every chat-access toggle, through the same schema
-guard as `fleet_auth.auth_hosts`: a component whose config schema does not
+guard as the canonical Langfuse block: a component whose config schema does not
 declare the key is skipped and logged, so this stays component-agnostic.  Chat
 resolves the token from that key (falling back from any per-component
 `central_deploy.component_credentials.<id>.header_token` override), so a

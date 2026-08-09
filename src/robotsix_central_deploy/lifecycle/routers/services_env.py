@@ -12,7 +12,6 @@ from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.settings_store import SystemSettingsStore
 from .._deploy_credential import reconcile_deploy_credential
-from .._fleet_auth import reconcile_fleet_auth_hosts
 from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
@@ -154,7 +153,6 @@ async def put_service_env(
             # Reconcile Langfuse auto-projects — a toggle may add or
             # remove project aliases discoverable from this service.
             await reconcile_langfuse_after_toggle(component_config_store, request)
-            await reconcile_fleet_auth_hosts(component_config_store, request)
             await reconcile_deploy_credential(component_config_store, request)
     if body.claude_mount is not None:
         comp_cfg = component_config_store.get(name)

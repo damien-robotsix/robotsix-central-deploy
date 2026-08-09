@@ -200,6 +200,33 @@ It also means the relabel pass that follows an edge change — redeploying every
 component so it picks up new labels — takes each component offline for a moment
 in turn. Nothing else is affected while it happens.
 
+## Services that are not fleet components
+
+A machine can host things the deployment system knows nothing about — the
+previous ingress on this host served a CalDAV server, a file-sync GUI and a
+password vault from its own config, none of them managed components. They have
+no container labels and central-deploy will never emit routes for them.
+
+Their routes live in `/etc/traefik-host/`, mounted into the dynamic-config
+directory. That path is deliberately **outside this repo**: naming a specific
+host or service here would break the repo-agnostic rule, and these routes
+belong to the machine rather than to the fleet.
+
+Two things bite when moving such a service off a host-based ingress:
+
+- **It may be bound to `127.0.0.1`.** That was reachable from an ingress
+  running on the host; it is not reachable from a container. Either rebind the
+  service, or forward its port onto the Docker bridge.
+- **It may check the `Host` header.** A bare `proxy_pass` in nginx sends the
+  *upstream's* host by default, not the client's, and an application that
+  validates `Host` will have been relying on that. Traefik preserves the
+  client's `Host`, so such a service needs a `customRequestHeaders` middleware
+  restoring the value it expects.
+
+When taking over an existing ingress, enumerate what it served with
+`grep -rE 'server_name' /etc/nginx/` — the enabled-sites directory is not the
+whole story, as server blocks can live in the main config file too.
+
 ## Operating it
 
 | Task | Where |

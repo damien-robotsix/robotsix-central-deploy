@@ -122,9 +122,11 @@ services:
       - "--providers.docker.endpoint=tcp://traefik-socket-proxy:2375"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=central-deploy-proxy"
-      # Fleet-wide middleware (the auth gates). Dynamic config is a separate
-      # source from static config, so a file here is fine.
-      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      # A directory, not a single file, so the operator can drop host-level
+      # routes alongside the fleet's without editing anything in this repo.
+      # Read recursively. Dynamic config is a separate source from static
+      # config, so files here are fine.
+      - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
       # Wildcards are only obtainable via DNS-01. The OVH credentials are read
       # by the ACME provider from OVH_* in the environment, not by the config
@@ -149,11 +151,21 @@ services:
       OVH_APPLICATION_KEY: "${OVH_APPLICATION_KEY:?set OVH_APPLICATION_KEY in .env}"
       OVH_APPLICATION_SECRET: "${OVH_APPLICATION_SECRET:?set OVH_APPLICATION_SECRET in .env}"
       OVH_CONSUMER_KEY: "${OVH_CONSUMER_KEY:?set OVH_CONSUMER_KEY in .env}"
+    # Lets host-level routes address services bound to the host rather than to
+    # a container network.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic/fleet.yml:ro
+      # Host-level routes for services on this machine that are NOT fleet
+      # components — anything the previous ingress served from its own config.
+      # Kept outside the checkout so no specific host or service is named in
+      # this repo (the repo-agnostic rule in AGENT.md). Absent on a fresh
+      # install, which Traefik tolerates.
+      - /etc/traefik-host:/etc/traefik/dynamic/host:ro
       - traefik_letsencrypt:/letsencrypt
     depends_on:
       - traefik-socket-proxy
