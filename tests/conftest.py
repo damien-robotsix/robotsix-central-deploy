@@ -93,7 +93,6 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.deps import JobRegistry
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType
 from robotsix_central_deploy.lifecycle.rate_limiter import RateLimitStore
-from robotsix_central_deploy.lifecycle.session import SessionStore
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.chat_agent_audit_store import ChatAgentAuditStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
@@ -148,7 +147,6 @@ def _reset_globals(monkeypatch, tmp_path):
     settings_store = SystemSettingsStore(settings_path)
     registry = ComponentRegistry([])
 
-    session_store = SessionStore()
     rate_limit_store = RateLimitStore()
     job_registry = JobRegistry()
 
@@ -170,7 +168,6 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.component_config_store = config_store
     server_mod.app.state.registry = registry
     server_mod.app.state.job_registry = job_registry
-    server_mod.app.state.session_store = session_store
     server_mod.app.state.settings_store = settings_store
     server_mod.app.state.rate_limit_store = rate_limit_store
     server_mod.app.state.http_client = MagicMock(spec=AsyncClient)

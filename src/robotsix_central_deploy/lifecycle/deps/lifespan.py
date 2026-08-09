@@ -16,10 +16,10 @@ from robotsix_http import RetryClient
 from ..._http import wrap_retry_client
 from ...caretaker.scheduler import CaretakerScheduler
 from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
-from ...gateway.proxy import PROXY_NETWORK
 from ...registry.chat_agent_audit_store import ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
+from ...registry.constants import PROXY_NETWORK
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
@@ -64,6 +64,7 @@ def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
             github_app_private_key=cfg.github_app_private_key.get_secret_value(),
             installation_id=cfg.installation_id.get_secret_value(),
             ghcr_pull_token=cfg.ghcr_pull_token.get_secret_value(),
+            gateway_base_domain=cfg.gateway_base_domain,
         )
     if cfg.execution_backend == ExecutionBackendType.DOCKER:
         return DockerBackend()
@@ -165,10 +166,7 @@ def _parse_self_contract_settings(config: LifecycleConfig) -> SystemSettings | N
             "registry_check_interval",
             "caretaker_interval_hours",
             "claude_auth_refresh_interval",
-            "rate_limit_login_per_minute",
             "rate_limit_api_per_hour",
-            "rate_limit_login_max_attempts",
-            "rate_limit_login_lockout_seconds",
             "volume_audit_interval_seconds",
             "volume_audit_min_delta_bytes",
         ):
@@ -264,8 +262,8 @@ async def _init_settings(app: FastAPI) -> None:
     """Read self-contract settings, persist to store, overlay onto config,
     and construct the execution backend.
 
-    Attaches ``settings_store``, ``backend``, ``session_store``, and
-    ``job_registry`` to ``app.state``.  Applies the (possibly overlaid)
+    Attaches ``settings_store``, ``backend``, and ``job_registry`` to
+    ``app.state``.  Applies the (possibly overlaid)
     log level to the root logger.  Updates the module-level ``_config``
     and ``_backend`` globals.
     """
@@ -335,10 +333,6 @@ async def _init_settings(app: FastAPI) -> None:
     _backend = _build_backend(_config)
     app.state.backend = _backend
 
-    # -- Session store (in-memory, no I/O) ------------------------------
-    from ..session import SessionStore
-
-    app.state.session_store = SessionStore()
     app.state.job_registry = JobRegistry()
 
     # -- Rate limiter (in-memory, no I/O) -------------------------------

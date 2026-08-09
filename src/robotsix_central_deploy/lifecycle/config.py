@@ -451,11 +451,6 @@ class LifecycleConfig(BaseModel):
     )
 
     # Rate limiting
-    rate_limit_login_per_minute: int = Field(
-        SETTINGS_DEFAULTS["rate_limit_login_per_minute"],
-        description="Max POST /login requests per IP per minute.",
-        json_schema_extra={"advanced": True},
-    )
     rate_limit_api_per_hour: int = Field(
         SETTINGS_DEFAULTS["rate_limit_api_per_hour"],
         description=(
@@ -463,16 +458,6 @@ class LifecycleConfig(BaseModel):
             "dashboard UI, which polls several endpoints every few "
             "seconds from one IP (~5000/h per open tab)."
         ),
-        json_schema_extra={"advanced": True},
-    )
-    rate_limit_login_max_attempts: int = Field(
-        SETTINGS_DEFAULTS["rate_limit_login_max_attempts"],
-        description="Failed login attempts before IP lockout.",
-        json_schema_extra={"advanced": True},
-    )
-    rate_limit_login_lockout_seconds: int = Field(
-        SETTINGS_DEFAULTS["rate_limit_login_lockout_seconds"],
-        description="Lockout duration (seconds) after too many failed logins.",
         json_schema_extra={"advanced": True},
     )
 

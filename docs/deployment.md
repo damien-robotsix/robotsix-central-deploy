@@ -2,12 +2,12 @@
 
 How central-deploy itself is deployed on `server.robotsix.net`.
 
-!!! note "nginx / TLS / DNS are server-specific"
-    Everything below the compose section describes infrastructure that lives
-    **on the server**, not in this repo. It is documented here as a
-    reference so the setup is reproducible, but no tooling installs or syncs
-    it — the live server configuration is authoritative.
-    [`nginx-deploy.conf`](nginx-deploy.conf) mirrors the deployed vhosts.
+!!! note "The edge is in this repo now"
+    TLS, routing, and authentication are handled by the Traefik and tinyauth
+    containers in `docker-compose.yml`, configured by `deploy/traefik/*.yml`.
+    There is no nginx, no certbot, and no server-side configuration to keep in
+    sync — see [The fleet edge](edge.md) for how it works. Only DNS lives
+    outside the repo.
 
 ## Application (docker compose)
 
@@ -66,15 +66,21 @@ for local development builds from the checkout).
     docker run --rm -v central_deploy_data:/data alpine chown -R 1000:1000 /data
     ```
 
-This starts two containers:
+This starts five containers:
 
+- **central-deploy** — the lifecycle server. Publishes no host port; reachable
+  only over the `central-deploy-proxy` network, through Traefik.
 - **socket-proxy** — [tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy)
   with only the API scopes central-deploy needs (see [index](index.md)).
-- **central-deploy** — the lifecycle server, bound to `127.0.0.1:8100`
-  (only reachable through nginx).
+- **traefik** — the fleet edge: TLS, routing, and the auth middlewares.
+- **traefik-socket-proxy** — a *second*, read-only socket proxy
+  (`CONTAINERS` + `EVENTS` only). Traefik must not inherit the deployer's
+  write scopes, so it gets its own.
+- **tinyauth** — the fleet's single sign-on gate.
 
 State (component configs, env/secrets, Fernet key, settings) persists in the
-`central_deploy_data` named volume.
+`central_deploy_data` named volume; certificates in `traefik_letsencrypt` and
+SSO sessions in `tinyauth_data`.
 
 ## DNS
 
@@ -82,80 +88,45 @@ Two records in the `robotsix.net` zone (OVH), both pointing at the server:
 
 | Record | Type | Purpose |
 |--------|------|---------|
-| `deploy.robotsix.net` | A | Dashboard (legacy `/<name>/…` URLs redirect to subdomains) |
-| `*.deploy.robotsix.net` | A (wildcard) | Subdomain-based gateway — every component, present and future |
+| `deploy.robotsix.net` | A | The dashboard, and the ACME account host |
+| `*.deploy.robotsix.net` | A (wildcard) | Every component, present and future |
 
-Because of the wildcard record and the wildcard vhost below, **onboarding a
-new component requires no DNS or nginx change**: the gateway resolves
-`<name>.deploy.robotsix.net` from the `Host` header at runtime
-(`gateway_base_domain` in `/data/config.json`, also settable from the
-dashboard settings).
+The wildcard is what makes onboarding free of infrastructure work: a new
+component is reachable at `<id>.deploy.robotsix.net` with no DNS change, no
+certificate request, and no edge configuration — central-deploy stamps the
+route onto the container and Traefik picks it up. See
+[The fleet edge](edge.md).
 
-## nginx
+## Edge (TLS, routing, auth)
 
-Deployed files (see [`nginx-deploy.conf`](nginx-deploy.conf) for contents):
-
-| File | Role |
-| ------ | ------ |
-| `/etc/nginx/conf.d/websocket-upgrade.conf` | `map $http_upgrade $connection_upgrade` — WebSocket upgrade support for the gateway relay |
-| `/etc/nginx/sites-available/deploy.robotsix.net` | Main vhost: dashboard, `/health` open |
-| `/etc/nginx/sites-available/wildcard.deploy.robotsix.net` | Catch-all `*.deploy.robotsix.net` vhost for component subdomains |
-| `/etc/nginx/htpasswd/deploy.robotsix.net` | Basic-auth credentials (defense-in-depth in front of the app's own auth) |
+The edge containers come up with the rest of the stack:
 
 ```bash
-htpasswd -c /etc/nginx/htpasswd/deploy.robotsix.net <username>
-ln -s /etc/nginx/sites-available/deploy.robotsix.net /etc/nginx/sites-enabled/
-ln -s /etc/nginx/sites-available/wildcard.deploy.robotsix.net /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
+cp .env.example .env      # ACME email, OVH API credentials, tinyauth secret + users
+docker compose up -d
 ```
 
-## TLS certificates
+Traefik obtains a single wildcard certificate over ACME **DNS-01** against OVH
+on first start; watch `docker compose logs -f traefik` to confirm. Renewal is
+automatic and needs no cron, no systemd timer, and no credentials file on the
+host.
 
-Two certbot certificates:
-
-**Base domain** (`deploy.robotsix.net`) — standard HTTP-01 via the nginx
-authenticator:
-
-```bash
-certbot --nginx -d deploy.robotsix.net
-```
-
-**Wildcard** (`*.deploy.robotsix.net`) — wildcards require the **DNS-01**
-challenge, done with the OVH plugin:
-
-```bash
-apt-get install python3-certbot-dns-ovh
-
-# OVH API token created at https://www.ovh.com/auth/api/createToken
-# with GET/PUT/POST/DELETE rights on /domain/zone/robotsix.net/*
-cat > /root/.secrets/certbot/ovh.ini <<'INI'
-dns_ovh_endpoint = ovh-eu
-dns_ovh_application_key = <application key>
-dns_ovh_application_secret = <application secret>
-dns_ovh_consumer_key = <consumer key>
-INI
-chmod 600 /root/.secrets/certbot/ovh.ini
-
-certbot certonly --dns-ovh \
-  --dns-ovh-credentials /root/.secrets/certbot/ovh.ini \
-  --cert-name wildcard.deploy.robotsix.net \
-  -d '*.deploy.robotsix.net'
-```
-
-Renewal is automatic for both (certbot systemd timer); the DNS-01 renewal
-reuses the credentials file.
+The OVH API token needs `GET`/`POST`/`DELETE` on `/domain/zone/robotsix.net/*`
+and is created at <https://api.ovh.com/createToken/>.
 
 ## Request flow summary
 
 ```
-browser ── https ──> nginx (basic auth, TLS, WS upgrade)
-                        │ proxy_pass 127.0.0.1:8100
-                        ▼
-                central-deploy (session/API auth)
-                        │ Host-based (subdomain) routing
-                        ▼
-                managed component containers
+browser ─── https ──▶ Traefik ─── forwardAuth ──▶ tinyauth (SSO login)
+                         │
+script  ─── https ──▶ Traefik ─── basicauth (fleet credential)
+                         │
+                         ▼  by Host, from container labels
+                 component container   /   central-deploy
 ```
+
+central-deploy publishes **no host port**: it is reachable only over the
+`central-deploy-proxy` network, through Traefik, which authenticates first.
 
 ## Claude authentication
 
@@ -307,7 +278,7 @@ in `config/config.json` (or equivalently the
 
 On first deploy, a minimal `ComponentConfig` is derived from the request body
 (``name``, ``image``, optional ``container_port``), persisted automatically,
-and registered in the gateway's routing table.  Subsequent deploys (via the
+and published at the edge from its container labels.  Subsequent deploys (via the
 dashboard or the chat agent) then use the stored config — this makes the
 deploy target **portable**: adding a new component requires only appending its
 name to the allowlist, with **no engine code change**.

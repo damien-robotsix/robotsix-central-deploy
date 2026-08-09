@@ -21,7 +21,6 @@ from robotsix_central_deploy.lifecycle.models import (
     ServiceState,
 )
 from robotsix_central_deploy.lifecycle.routers import claude_auth as claude_auth_mod
-from robotsix_central_deploy.lifecycle.session import SessionStore
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
@@ -44,7 +43,6 @@ def _wire(cfg: LifecycleConfig) -> SystemSettingsStore:
     backend = NoopBackend()
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
-    session_store = SessionStore()
     registry = ComponentRegistry([])
     tmpdir = Path(tempfile.mkdtemp())
     component_config_store = ComponentConfigStore(tmpdir / "components.json")
@@ -59,7 +57,6 @@ def _wire(cfg: LifecycleConfig) -> SystemSettingsStore:
     server_mod.app.state.store = store
     server_mod.app.state.backend = backend
     server_mod.app.state.registry_checker = mock_checker
-    server_mod.app.state.session_store = session_store
     server_mod.app.state.registry = registry
     server_mod.app.state.component_config_store = component_config_store
     server_mod.app.state.settings_store = settings_store

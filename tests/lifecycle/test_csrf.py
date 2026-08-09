@@ -1,4 +1,4 @@
-"""Tests for the gateway-aware CSRF middleware (lifecycle/csrf.py)."""
+"""Tests for the CSRF middleware (lifecycle/csrf.py)."""
 
 from __future__ import annotations
 
@@ -14,31 +14,36 @@ from robotsix_central_deploy.lifecycle.csrf import (
 )
 
 try:
-    from robotsix_central_deploy.lifecycle.csrf import GatewayAwareCSRFMiddleware
+    from robotsix_central_deploy.lifecycle.csrf import CSRFMiddleware
 
     _HAS_ASGI_CSRF = True
 except ImportError:
-    GatewayAwareCSRFMiddleware = None  # type: ignore[assignment]
+    CSRFMiddleware = None  # type: ignore[assignment]
     _HAS_ASGI_CSRF = False
 
+import re as _re
 
-def _build_app(base_domain: str = "deploy.example") -> FastAPI:
+
+def _build_app(exempt: list[str] | None = None) -> FastAPI:
     app = FastAPI()
 
     @app.post("/{path:path}")
     async def catch_all(path: str) -> dict[str, str]:
         return {"reached": path}
 
-    app.state.config = SimpleNamespace(gateway_base_domain=base_domain)
-    app.add_middleware(GatewayAwareCSRFMiddleware, secret="test-secret")
+    app.state.config = SimpleNamespace(gateway_base_domain="deploy.example")
+    app.add_middleware(
+        CSRFMiddleware,
+        secret="test-secret",
+        exempt_urls=[_re.compile(p) for p in (exempt or [])],
+    )
     return app
 
 
-def _client(app: FastAPI, host: str, cookies: dict[str, str]) -> AsyncClient:
+def _client(app: FastAPI, cookies: dict[str, str]) -> AsyncClient:
     return AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
-        headers={"Host": host},
         cookies=cookies,
     )
 
@@ -135,31 +140,33 @@ class TestCSRFHelper:
 
 
 @pytest.mark.skipif(not _HAS_ASGI_CSRF, reason="asgi_csrf not installed")
-class TestGatewayAwareCSRFMiddleware:
-    async def test_component_subdomain_post_bypasses_csrf(self):
-        """POSTs routed to a component subdomain must not require the panel's
-        CSRF token — proxied apps never receive it."""
+class TestCSRFMiddleware:
+    async def test_post_without_token_is_rejected(self):
         app = _build_app()
-        async with _client(app, "chat.deploy.example", {"session": "s"}) as c:
-            resp = await c.post("/api/message", json={"text": "hi"})
-        assert resp.status_code == 200
-        assert resp.json() == {"reached": "api/message"}
-
-    async def test_panel_host_post_without_token_is_rejected(self):
-        app = _build_app()
-        async with _client(app, "deploy.example", {"session": "s"}) as c:
+        async with _client(app, {"session": "s"}) as c:
             resp = await c.post("/form", json={})
         assert resp.status_code == 403
 
-    async def test_panel_host_post_with_valid_token_passes(self):
+    async def test_post_with_valid_token_passes(self):
         app = _build_app()
         token = CSRFHelper("test-secret").generate()
-        async with _client(app, "deploy.example", {"csrftoken": token}) as c:
+        async with _client(app, {"csrftoken": token}) as c:
             resp = await c.post("/form", headers={"x-csrftoken": token}, json={})
         assert resp.status_code == 200
 
-    async def test_unconfigured_base_domain_still_enforces_csrf(self):
-        app = _build_app(base_domain="")
-        async with _client(app, "chat.deploy.example", {"session": "s"}) as c:
-            resp = await c.post("/api/message", json={})
+    async def test_exempt_path_bypasses_csrf(self):
+        """Header-authenticated API routes are exempt.
+
+        A browser will not attach an ``X-API-Key`` cross-site, so these are
+        not CSRF-vulnerable and must not require a token.
+        """
+        app = _build_app(exempt=[r"^/services"])
+        async with _client(app, {"session": "s"}) as c:
+            resp = await c.post("/services/svc/restart", json={})
+        assert resp.status_code == 200
+
+    async def test_non_exempt_path_still_enforced(self):
+        app = _build_app(exempt=[r"^/services"])
+        async with _client(app, {"session": "s"}) as c:
+            resp = await c.post("/form", json={})
         assert resp.status_code == 403

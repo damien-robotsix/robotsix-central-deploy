@@ -1,0 +1,43 @@
+# Traefik dynamic configuration — the fleet's two auth gates.
+#
+# Watched by Traefik, so edits here apply without a restart. Components refer
+# to these by name (`tinyauth@file`, `fleet-basicauth@file`) through the labels
+# central-deploy stamps on them — see registry/traefik_labels.py.
+#
+# Why two gates: tinyauth is a browser SSO flow (it answers with a redirect to
+# a login page), which a script or a fleet service cannot follow. tinyauth has
+# no bypass mechanism of its own, so machine callers get a separate,
+# higher-priority router matched on the Authorization header. That router is
+# still authenticated — by `fleet-basicauth` below — so this is a second door
+# with its own lock, not a hole.
+
+http:
+  middlewares:
+    # Browser traffic. Unauthenticated requests are redirected to tinyauth's
+    # login page and come back with a session cookie valid fleet-wide.
+    tinyauth:
+      forwardAuth:
+        address: "http://tinyauth:3000/api/auth/traefik"
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Name
+          - Remote-Email
+          - Remote-Groups
+
+    # Machine traffic — the chat agent's http_probe/public_fetch, which inject
+    # server-side Basic credentials for hosts listed in `fleet_auth.auth_hosts`,
+    # plus any operator script using `curl -u`.
+    #
+    # The credential is NOT in this file: this repo is public, and a committed
+    # bcrypt hash is an offline-crackable copy of the fleet password. It stays
+    # in an htpasswd file on the host, mounted read-only — the same posture as
+    # the /etc/nginx/htpasswd/deploy.robotsix.net it replaces. Traefik reads
+    # the standard htpasswd formats, so the existing file can be copied across
+    # unchanged and the current password keeps working.
+    fleet-basicauth:
+      basicAuth:
+        usersFile: /etc/traefik/fleet-users
+        # The component behind this middleware has no auth of its own and does
+        # not need the header; stripping it avoids leaking the credential
+        # onward.
+        removeHeader: true

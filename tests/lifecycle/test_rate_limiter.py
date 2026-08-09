@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from unittest.mock import MagicMock
 
 import pytest
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
 from robotsix_central_deploy.lifecycle.rate_limiter import (
     RateLimitMiddleware,
     RateLimitStore,
     _client_ip,
     _is_api_path,
-    _is_gateway_host,
 )
 
 # ---------------------------------------------------------------------------
@@ -42,12 +40,8 @@ class TestIsApiPath:
     def test_chat_path(self):
         assert _is_api_path("/chat/agents")
 
-    def test_logout_path(self):
-        assert _is_api_path("/logout")
-
     def test_non_api_path_returns_false(self):
         assert not _is_api_path("/health")
-        assert not _is_api_path("/login")
         assert not _is_api_path("/ui")
         assert not _is_api_path("/help/deploy-contract")
 
@@ -111,65 +105,6 @@ class TestClientIp:
 
 
 # ---------------------------------------------------------------------------
-# _is_gateway_host
-# ---------------------------------------------------------------------------
-
-
-def _make_gateway_request(
-    host: str, gateway_base_domain: str = "deploy.robotsix.net"
-) -> Request:
-    app = MagicMock()
-    app.state.config = MagicMock()
-    app.state.config.gateway_base_domain = gateway_base_domain
-    scope: dict = {
-        "type": "http",
-        "app": app,
-        "client": ("1.2.3.4", 12345),
-        "headers": [(b"host", host.encode())],
-    }
-    return Request(scope)
-
-
-class TestIsGatewayHost:
-    def test_component_subdomain_is_gateway(self):
-        req = _make_gateway_request("mill.deploy.robotsix.net")
-        assert _is_gateway_host(req) is True
-
-    def test_naked_domain_is_not_gateway(self):
-        req = _make_gateway_request("deploy.robotsix.net")
-        assert _is_gateway_host(req) is False
-
-    def test_no_base_domain_configured(self):
-        req = _make_gateway_request("mill.deploy.robotsix.net", gateway_base_domain="")
-        assert _is_gateway_host(req) is False
-
-    def test_missing_config(self):
-        app = MagicMock()
-        app.state = MagicMock()
-        app.state.config = None
-        scope: dict = {
-            "type": "http",
-            "app": app,
-            "client": ("1.2.3.4", 12345),
-            "headers": [(b"host", b"mill.deploy.robotsix.net")],
-        }
-        req = Request(scope)
-        assert _is_gateway_host(req) is False
-
-    def test_host_with_port(self):
-        req = _make_gateway_request("mill.deploy.robotsix.net:8080")
-        assert _is_gateway_host(req) is True
-
-    def test_case_insensitive(self):
-        req = _make_gateway_request("MILL.Deploy.Robotsix.NET")
-        assert _is_gateway_host(req) is True
-
-    def test_non_matching_subdomain(self):
-        req = _make_gateway_request("other.example.com")
-        assert _is_gateway_host(req) is False
-
-
-# ---------------------------------------------------------------------------
 # RateLimitStore
 # ---------------------------------------------------------------------------
 
@@ -210,48 +145,6 @@ class TestPrune:
         assert timestamps == [900.0]
 
 
-class TestLoginRateLimit:
-    @pytest.mark.asyncio
-    async def test_allows_within_limit(self):
-        store = RateLimitStore()
-        for _ in range(5):
-            assert await store.check_login_rate("1.2.3.4", limit=10, window=60.0)
-
-    @pytest.mark.asyncio
-    async def test_blocks_when_limit_exceeded(self):
-        store = RateLimitStore()
-        # Exhaust budget
-        for i in range(10):
-            result = await store.check_login_rate("1.2.3.4", limit=10, window=60.0)
-            assert result is (i < 10)
-        # 11th request blocked
-        assert not await store.check_login_rate("1.2.3.4", limit=10, window=60.0)
-
-    @pytest.mark.asyncio
-    async def test_different_ips_independent(self):
-        store = RateLimitStore()
-        for _ in range(10):
-            assert await store.check_login_rate("1.2.3.4", limit=10, window=60.0)
-        # IP A exhausted
-        assert not await store.check_login_rate("1.2.3.4", limit=10, window=60.0)
-        # IP B still allowed
-        assert await store.check_login_rate("5.6.7.8", limit=10, window=60.0)
-
-    @pytest.mark.asyncio
-    async def test_limit_zero_blocks_immediately(self):
-        store = RateLimitStore()
-        assert not await store.check_login_rate("1.2.3.4", limit=0, window=60.0)
-
-    @pytest.mark.asyncio
-    async def test_expired_entries_dont_count(self):
-        """Old timestamps beyond the window shouldn't block new requests."""
-        store = RateLimitStore()
-        now = time.time()
-        # Inject old timestamps directly into the internal dict
-        store._login_requests["1.2.3.4"] = [now - 120.0] * 50  # all outside 60s window
-        assert await store.check_login_rate("1.2.3.4", limit=10, window=60.0)
-
-
 class TestApiRateLimit:
     @pytest.mark.asyncio
     async def test_allows_within_limit(self):
@@ -266,106 +159,25 @@ class TestApiRateLimit:
             assert await store.check_api_rate("1.2.3.4", limit=10, window=3600.0)
         assert not await store.check_api_rate("1.2.3.4", limit=10, window=3600.0)
 
-    @pytest.mark.asyncio
-    async def test_login_and_api_budgets_independent(self):
-        store = RateLimitStore()
-        for _ in range(5):
-            assert await store.check_login_rate("1.2.3.4", limit=5, window=60.0)
-        assert not await store.check_login_rate("1.2.3.4", limit=5, window=60.0)
-        # API budget untouched
-        assert await store.check_api_rate("1.2.3.4", limit=100, window=3600.0)
-
-
-class TestLockout:
-    @pytest.mark.asyncio
-    async def test_not_locked_out_initially(self):
-        store = RateLimitStore()
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=5)
-
-    @pytest.mark.asyncio
-    async def test_not_locked_out_below_max_attempts(self):
-        store = RateLimitStore()
-        for _ in range(4):
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=5, lockout_seconds=300
-            )
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=5)
-
-    @pytest.mark.asyncio
-    async def test_locked_out_when_max_attempts_reached(self):
-        store = RateLimitStore()
-        for _ in range(5):
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=5, lockout_seconds=300
-            )
-        assert await store.is_locked_out("1.2.3.4", max_attempts=5)
-
-    @pytest.mark.asyncio
-    async def test_lockout_expires(self):
-        store = RateLimitStore()
-        for _ in range(3):
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=3, lockout_seconds=0
-            )
-        # lockout_seconds=0 means lockout_until = now, so it should have expired
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=3)
-
-    @pytest.mark.asyncio
-    async def test_record_login_success_clears_failures(self):
-        store = RateLimitStore()
-        await store.record_login_failure("1.2.3.4", max_attempts=5, lockout_seconds=300)
-        await store.record_login_failure("1.2.3.4", max_attempts=5, lockout_seconds=300)
-        await store.record_login_success("1.2.3.4")
-        # After success, should not be locked out
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=5)
-        # And counter should be reset (0 failures)
-        # Verify by checking that 4 more failures don't trigger lockout (since counter was reset)
-        for _ in range(4):
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=5, lockout_seconds=300
-            )
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=5)
-
-    @pytest.mark.asyncio
-    async def test_lockout_per_ip_isolation(self):
-        store = RateLimitStore()
-        for _ in range(5):
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=5, lockout_seconds=300
-            )
-        assert await store.is_locked_out("1.2.3.4", max_attempts=5)
-        assert not await store.is_locked_out("5.6.7.8", max_attempts=5)
-
 
 class TestConcurrentAccess:
     @pytest.mark.asyncio
-    async def test_concurrent_login_rate_limits_stay_consistent(self):
-        """Many concurrent login-rate checks should not exceed the limit."""
+    async def test_concurrent_api_rate_checks_stay_consistent(self):
+        """Concurrent checks must not let more than *limit* through.
+
+        The store is shared across every in-flight request, so without the
+        lock two coroutines can both read a count below the limit and both
+        append.
+        """
         store = RateLimitStore()
 
         async def check() -> bool:
-            return await store.check_login_rate("1.2.3.4", limit=100, window=60.0)
+            return await store.check_api_rate("1.2.3.4", limit=100, window=3600.0)
 
-        tasks = [asyncio.create_task(check()) for _ in range(200)]
-        results = await asyncio.gather(*tasks)
-
-        allowed = sum(results)
-        # At most 100 should be allowed (the lock serialises the checks)
-        assert allowed <= 100
-
-    @pytest.mark.asyncio
-    async def test_concurrent_failures_trigger_lockout_correctly(self):
-        store = RateLimitStore()
-
-        async def fail():
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=10, lockout_seconds=300
-            )
-
-        tasks = [asyncio.create_task(fail()) for _ in range(10)]
-        await asyncio.gather(*tasks)
-
-        assert await store.is_locked_out("1.2.3.4", max_attempts=10)
+        results = await asyncio.gather(
+            *[asyncio.create_task(check()) for _ in range(200)]
+        )
+        assert sum(results) == 100
 
 
 # ---------------------------------------------------------------------------
@@ -383,17 +195,11 @@ def _make_middleware_request(
     gateway_base_domain: str = "deploy.robotsix.net",
     rate_limit_store: RateLimitStore | None = None,
     api_per_hour: int = 20000,
-    login_per_minute: int = 10,
-    login_max_attempts: int = 20,
-    login_lockout_seconds: int = 300,
 ) -> Request:
     app = MagicMock()
     app.state.config = MagicMock()
     app.state.config.gateway_base_domain = gateway_base_domain
-    app.state.config.rate_limit_login_per_minute = login_per_minute
     app.state.config.rate_limit_api_per_hour = api_per_hour
-    app.state.config.rate_limit_login_max_attempts = login_max_attempts
-    app.state.config.rate_limit_login_lockout_seconds = login_lockout_seconds
     app.state.rate_limit_store = rate_limit_store
 
     scope: dict = {
@@ -443,106 +249,13 @@ class TestRateLimitMiddlewareDispatch:
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_gateway_host_passes_through(self, middleware: RateLimitMiddleware):
-        req = _make_middleware_request(
-            path="/login",
-            method="POST",
-            host="mill.deploy.robotsix.net",
-        )
-        resp = await self._call(middleware, req)
-        assert resp.status_code == 200
-
-    @pytest.mark.asyncio
     async def test_no_store_passes_through(self, middleware: RateLimitMiddleware):
         req = _make_middleware_request(
-            path="/login",
-            method="POST",
+            path="/services/svc-a/logs",
             rate_limit_store=None,
         )
         resp = await self._call(middleware, req)
         assert resp.status_code == 200
-
-    # -- Login rate limit ------------------------------------------------
-
-    @pytest.mark.asyncio
-    async def test_login_allowed_within_limit(self, middleware: RateLimitMiddleware):
-        store = RateLimitStore()
-        for _ in range(5):
-            req = _make_middleware_request(
-                path="/login", method="POST", rate_limit_store=store
-            )
-            resp = await self._call(middleware, req)
-            assert resp.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_login_blocked_when_limit_exceeded(
-        self, middleware: RateLimitMiddleware
-    ):
-        store = RateLimitStore()
-        for _ in range(10):
-            req = _make_middleware_request(
-                path="/login", method="POST", rate_limit_store=store
-            )
-            await self._call(middleware, req)
-        # 11th blocked
-        req = _make_middleware_request(
-            path="/login", method="POST", rate_limit_store=store
-        )
-        resp = await self._call(middleware, req)
-        assert resp.status_code == 429
-
-    @pytest.mark.asyncio
-    async def test_login_locked_out_returns_429(self, middleware: RateLimitMiddleware):
-        store = RateLimitStore()
-        for _ in range(20):
-            await store.record_login_failure(
-                "1.2.3.4", max_attempts=20, lockout_seconds=300
-            )
-
-        req = _make_middleware_request(
-            path="/login", method="POST", rate_limit_store=store
-        )
-        resp = await self._call(middleware, req)
-        assert resp.status_code == 429
-
-    @pytest.mark.asyncio
-    async def test_login_failure_increments_failure_counter(
-        self, middleware: RateLimitMiddleware
-    ):
-        store = RateLimitStore()
-        req = _make_middleware_request(
-            path="/login", method="POST", rate_limit_store=store
-        )
-
-        async def call_next_401(req: Request) -> Response:
-            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-
-        await middleware.dispatch(req, call_next_401)
-        # After one 401, failure count should be 1, not locked out yet
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=20)
-
-    @pytest.mark.asyncio
-    async def test_login_success_clears_failure_counter(
-        self, middleware: RateLimitMiddleware
-    ):
-        store = RateLimitStore()
-        # Pre-populate failures
-        await store.record_login_failure(
-            "1.2.3.4", max_attempts=20, lockout_seconds=300
-        )
-        await store.record_login_failure(
-            "1.2.3.4", max_attempts=20, lockout_seconds=300
-        )
-
-        req = _make_middleware_request(
-            path="/login", method="POST", rate_limit_store=store
-        )
-
-        async def call_next_303(req: Request) -> Response:
-            return Response(b"", status_code=303)
-
-        await middleware.dispatch(req, call_next_303)
-        assert not await store.is_locked_out("1.2.3.4", max_attempts=20)
 
     # -- API rate limit --------------------------------------------------
 

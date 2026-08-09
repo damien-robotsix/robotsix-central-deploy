@@ -48,14 +48,7 @@ class SystemSettings(BaseModel):
     claude_auth_refresh_interval: int = SETTINGS_DEFAULTS[
         "claude_auth_refresh_interval"
     ]  # seconds; 0 = disabled
-    rate_limit_login_per_minute: int = SETTINGS_DEFAULTS["rate_limit_login_per_minute"]
     rate_limit_api_per_hour: int = SETTINGS_DEFAULTS["rate_limit_api_per_hour"]
-    rate_limit_login_max_attempts: int = SETTINGS_DEFAULTS[
-        "rate_limit_login_max_attempts"
-    ]
-    rate_limit_login_lockout_seconds: int = SETTINGS_DEFAULTS[
-        "rate_limit_login_lockout_seconds"
-    ]
     volume_audit_enabled: bool = SETTINGS_DEFAULTS["volume_audit_enabled"]
     volume_audit_interval_seconds: int = SETTINGS_DEFAULTS[
         "volume_audit_interval_seconds"

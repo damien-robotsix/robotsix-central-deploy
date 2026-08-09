@@ -110,12 +110,6 @@
 
 ::: robotsix_central_deploy.lifecycle.schemas
 
-::: robotsix_central_deploy.lifecycle.secure_headers
-
-::: robotsix_central_deploy.lifecycle.gateway_docs_middleware
-
-::: robotsix_central_deploy.lifecycle.session
-
 ## Caretaker
 
 ::: robotsix_central_deploy.caretaker.mill_client
@@ -144,12 +138,6 @@
 
 ::: robotsix_central_deploy.caretaker.volume_audit.reporter
 
-## Gateway
-
-::: robotsix_central_deploy.gateway.proxy
-
-::: robotsix_central_deploy.gateway.router
-
 ## Onboarding
 
 ::: robotsix_central_deploy.onboard.fetcher
@@ -165,6 +153,10 @@
 ::: robotsix_central_deploy.registry.loader
 
 ::: robotsix_central_deploy.registry.models
+
+::: robotsix_central_deploy.registry.constants
+
+::: robotsix_central_deploy.registry.traefik_labels
 
 ::: robotsix_central_deploy.registry.config_store
 

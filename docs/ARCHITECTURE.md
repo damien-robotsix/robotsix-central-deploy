@@ -5,8 +5,9 @@
 `robotsix-central-deploy` is a **FastAPI** lifecycle server that manages
 Docker containers for the robotsix fleet. It acts as a single control plane
 to start, stop, restart, deploy, rollback, and inspect every managed
-component. It also provides a **reverse-proxy gateway** so each component
-is reachable at a well-known URL, an **onboarding pipeline** for adding
+component. Component traffic is carried by a **separate Traefik edge**
+(see [The fleet edge](edge.md)) which central-deploy programs by stamping
+routing labels onto each container it creates, an **onboarding pipeline** for adding
 new services from docker-compose repos, a **self-contract** mechanism
 that reads system settings from its own `deploy/docker-compose.yml` labels
 at startup, a **background registry checker** that polls GHCR
@@ -25,11 +26,11 @@ Docker volume growth over time.
 │                     FastAPI Application                           │
 │                                                                   │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │  /health  │  │  /disk   │  │  /ui     │  │  Gateway Router  │ │
-│  │  (open)   │  │  (auth)  │  │  (auth)  │  │  (registered     │ │
-│  │           │  │          │  │          │  │   LAST)          │ │
-│  └──────────┘  └──────────┘  └──────────┘  └────────┬─────────┘ │
-│                                                      │           │
+│  │  /health  │  │  /disk   │  │  /ui     │                      │
+│  │  (open)   │  │  (auth)  │  │ (edge-   │                      │
+│  │           │  │          │  │  authed) │                      │
+│  └──────────┘  └──────────┘  └──────────┘                      │
+│                                                                  │
 │  ┌──────────────────────────────────────────────────────┐        │
 │  │              Lifecycle Router                        │        │
 │  │  /services, /services/{name}/{start,stop,restart,    │        │
@@ -97,13 +98,6 @@ localhost + API-key restricted),
 > https://damien-robotsix.github.io/robotsix-standards/config-ownership/
 > ) for the "Two invariants" (deploy-plane exclusivity + cross-UI uniformity).
 
-### `gateway/` — Reverse proxy
-
-| File | Role |
-|------|------|
-| `proxy.py` | Low-level HTTP and WebSocket relay. Strips hop-by-hop headers, adds `X-Forwarded-*`, handles SSE streaming, rewrites `Location` headers on redirects. |
-| `router.py` | FastAPI route definitions — **must be registered last** on the app so built-in API routes match first. Implements subdomain routing and path-prefix routing. |
-
 ### `onboard/` — Git-clone ingestion
 
 | File | Role |
@@ -117,7 +111,9 @@ localhost + API-key restricted),
 | File | Store class | Purpose |
 | ------ | ------------- | --------- |
 | `models.py` | *(data types)* | `ComponentConfig`, `ServiceConfig`, `PortMapping`, `VolumeMount`, `HealthCheck` — Pydantic models defining the shape of a deployed component. |
-| `loader.py` | `ComponentRegistry` | Reads **static** YAML manifest (`registry.yaml`) into an in-memory index. Backs the gateway's component name resolution. |
+| `loader.py` | `ComponentRegistry` | Reads **static** YAML manifest (`registry.yaml`) into an in-memory index. |
+| `traefik_labels.py` | `traefik_labels()` | Derives the edge's routing labels for a component from its id and primary port. Stamped onto the container at create time. |
+| `constants.py` | `PROXY_NETWORK`, `RESERVED_NAMES` | The shared Docker network, and slugs that would shadow the fleet's own edge hostnames. |
 | `config_store.py` | `ComponentConfigStore` | JSON store for **dynamically onboarded** components. Async-locked, atomic write (tmp + rename). |
 | `env_store.py` | `EnvStore` | JSON store for per-component environment variables and Fernet-encrypted secrets. |
 | `config_yaml_store.py` | `ConfigYamlStore` | JSON store for per-component `config.yaml` templates and user-saved values. |
@@ -197,9 +193,9 @@ localhost + API-key restricted),
       persist ServiceRecord → ServiceStore
       │
       ▼
-6.  Gateway resolves component name at runtime
-      .deploy.robotsix.net subdomain → container_name
-      or path-prefix /component-name/...
+6.  Traefik sees the new container's labels (Docker events)
+      publishes <id>.deploy.robotsix.net → container_name:port
+      no reload, no config file, no DNS change
       │
       ▼
 7.  Background tasks:
@@ -265,58 +261,6 @@ stateDiagram-v2
     UNKNOWN --> STARTING
     UNKNOWN --> STOPPING
 ```
-
-## Gateway routing rules
-
-The gateway router is **registered last** on the FastAPI app so
-built-in endpoints (`/health`, `/ui`, `/services`, `/onboard`, …)
-match first. Two routing modes exist:
-
-### 1. Subdomain routing (primary)
-
-When the `Host` header ends with the configured gateway base domain
-(default: `.deploy.robotsix.net`), the subdomain is extracted as the
-component name:
-
-- `mail.deploy.robotsix.net` → component `"mail"`
-- `auth.deploy.robotsix.net/some/path` → component `"auth"`, path `/some/path`
-
-This mode is only active for HTTP (not WebSocket) at the root `"/"` route.
-
-### 2. Path-prefix routing (legacy fallback)
-
-When no subdomain matches, the first path segment is the component name:
-
-- `deploy.robotsix.net/mail/` → component `"mail"`
-- `deploy.robotsix.net/auth/api/v1` → component `"auth"`, path `/api/v1`
-
-This mode handles both HTTP and WebSocket via the catch-all `"/{path:path}"` route.
-
-### Reserved names
-
-These names shadow central-deploy's own endpoints and are **never**
-resolved as component slugs: `ui`, `health`, `services`, `onboard`,
-`docs`, `openapi.json`, `redoc`, `disk`, `help`, `volumes`,
-`login`, `logout`.
-
-### Resolution
-
-`_resolve(name)` looks up `app.state.registry` (a `ComponentRegistry`),
-which indexes both statically-configured and dynamically-onboarded
-components. The `container_name` and first port from the component's
-`ComponentConfig` are used to build the upstream URL
-(`http://<container_name>:<port>`).
-
-### Proxy behaviour
-
-- **HTTP**: strips hop-by-hop headers (`Connection`, `Keep-Alive`,
-  `Transfer-Encoding`, `Host`, …), adds `X-Forwarded-*` headers,
-  streams the response chunk-by-chunk. SSE (`text/event-stream`) is
-  passed through transparently. Redirect `Location` headers are
-  rewritten to preserve the path prefix.
-- **WebSocket**: bidirectional relay via two asyncio Tasks
-  (`client→backend`, `backend→client`), cancelled when either side
-  disconnects.
 
 ## Key design decisions
 

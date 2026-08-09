@@ -52,16 +52,141 @@ services:
     volumes:
       - central_deploy_data:/data
       - /:/host_root:ro      # exposes host filesystem at /host_root (read-only)
-    ports:
-      - "127.0.0.1:8100:8100"
+    # No host port. central-deploy is reachable only over central-deploy-proxy,
+    # via Traefik, which authenticates every request. Publishing 127.0.0.1:8100
+    # would be a way onto the control plane that skips the fleet's auth gate.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: central-deploy-proxy
+      traefik.http.services.central-deploy.loadbalancer.server.port: "8100"
+      # The dashboard answers on the bare base domain; components live on
+      # subdomains of it. Same three-router shape central-deploy stamps on
+      # every component (registry/traefik_labels.py) — kept literal here
+      # because central-deploy cannot label its own container.
+      traefik.http.routers.central-deploy-health.rule: "Host(`deploy.robotsix.net`) && Path(`/health`)"
+      traefik.http.routers.central-deploy-health.priority: "30"
+      traefik.http.routers.central-deploy-health.entrypoints: websecure
+      traefik.http.routers.central-deploy-health.service: central-deploy
+      traefik.http.routers.central-deploy-machine.rule: "Host(`deploy.robotsix.net`) && HeaderRegexp(`Authorization`, `^Basic `)"
+      traefik.http.routers.central-deploy-machine.priority: "20"
+      traefik.http.routers.central-deploy-machine.entrypoints: websecure
+      traefik.http.routers.central-deploy-machine.middlewares: fleet-basicauth@file
+      traefik.http.routers.central-deploy-machine.service: central-deploy
+      traefik.http.routers.central-deploy.rule: "Host(`deploy.robotsix.net`)"
+      traefik.http.routers.central-deploy.priority: "10"
+      traefik.http.routers.central-deploy.entrypoints: websecure
+      traefik.http.routers.central-deploy.middlewares: tinyauth@file
+      traefik.http.routers.central-deploy.service: central-deploy
     depends_on:
       - socket-proxy
     networks:
       - internal
       - central-deploy-proxy
 
+  # ── The fleet edge ────────────────────────────────────────────────────
+  # Terminates TLS, authenticates, and routes to every component. Runs as a
+  # separate container from central-deploy on purpose: restarting or
+  # self-updating the deployer must not take the fleet's UIs offline, which is
+  # exactly what the old in-process gateway did.
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    environment:
+      # ACME account address — kept out of the committed static config.
+      TRAEFIK_CERTIFICATESRESOLVERS_OVH_ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL in .env}"
+      # OVH API credentials for the DNS-01 wildcard challenge.
+      OVH_ENDPOINT: "${OVH_ENDPOINT:-ovh-eu}"
+      OVH_APPLICATION_KEY: "${OVH_APPLICATION_KEY:?set OVH_APPLICATION_KEY in .env}"
+      OVH_APPLICATION_SECRET: "${OVH_APPLICATION_SECRET:?set OVH_APPLICATION_SECRET in .env}"
+      OVH_CONSUMER_KEY: "${OVH_CONSUMER_KEY:?set OVH_CONSUMER_KEY in .env}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      # The fleet machine credential. Git-ignored — this repo is public, so the
+      # hash must never be committed. Seed it by copying the existing nginx
+      # htpasswd across; the current password then keeps working unchanged:
+      #   cp /etc/nginx/htpasswd/deploy.robotsix.net ./deploy/traefik/fleet-users
+      - ./deploy/traefik/fleet-users:/etc/traefik/fleet-users:ro
+      - traefik_letsencrypt:/letsencrypt
+    depends_on:
+      - traefik-socket-proxy
+      - tinyauth
+    networks:
+      - internal
+      - central-deploy-proxy
+
+  # Traefik's own window onto the Docker API: containers and events, read-only.
+  # Deliberately NOT the socket-proxy central-deploy uses — that one grants
+  # POST/DELETE/IMAGES so the deployer can manage containers, and the edge has
+  # no business with any of it.
+  traefik-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"   # read container labels to build routes
+      EVENTS: "1"       # watch for containers starting/stopping
+      POST: "0"         # no mutations of any kind
+      DELETE: "0"
+      IMAGES: "0"
+      BUILD: "0"
+      NETWORKS: "0"
+      VOLUMES: "0"
+      SYSTEM: "0"
+      AUTH: "0"
+      EXEC: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SWARM: "0"
+      NODES: "0"
+      TASKS: "0"
+      CONFIGS: "0"
+      PLUGINS: "0"
+      SESSION: "0"
+      COMMIT: "0"
+      DISTRIBUTION: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal
+
+  # ── The fleet's single sign-on gate ───────────────────────────────────
+  # One login for the dashboard and every component UI. Components ship no auth
+  # of their own — see the component standard in robotsix-standards.
+  tinyauth:
+    image: ghcr.io/tinyauthapp/tinyauth:v5
+    restart: unless-stopped
+    environment:
+      TINYAUTH_APP_URL: "https://auth.deploy.robotsix.net"
+      TINYAUTH_SECRET: "${TINYAUTH_SECRET:?set TINYAUTH_SECRET in .env (32 chars)}"
+      # user:bcrypt-hash — generate with `htpasswd -nbB <user> '<password>'`.
+      # Compose eats a single `$`, so every `$` in the hash must be doubled
+      # when the value is written inline rather than supplied via .env.
+      TINYAUTH_AUTH_USERS: "${TINYAUTH_AUTH_USERS:?set TINYAUTH_AUTH_USERS in .env}"
+      # Trust X-Forwarded-For only from the edge network, so a client cannot
+      # spoof its own IP past the rate limiter. Must match the pinned subnet
+      # of central-deploy-proxy below.
+      TINYAUTH_AUTH_TRUSTEDPROXIES: "172.28.0.0/16"
+    volumes:
+      - tinyauth_data:/data
+    labels:
+      # tinyauth needs a public hostname of its own: the browser is redirected
+      # here to log in, so this router must not be behind the tinyauth
+      # middleware or the redirect would loop.
+      traefik.enable: "true"
+      traefik.docker.network: central-deploy-proxy
+      traefik.http.routers.tinyauth.rule: "Host(`auth.deploy.robotsix.net`)"
+      traefik.http.routers.tinyauth.entrypoints: websecure
+      traefik.http.services.tinyauth.loadbalancer.server.port: "3000"
+    networks:
+      - central-deploy-proxy
+
 volumes:
   central_deploy_data:
+  traefik_letsencrypt:
+  tinyauth_data:
 
 networks:
   internal:
@@ -69,3 +194,8 @@ networks:
   central-deploy-proxy:
     driver: bridge
     name: central-deploy-proxy
+    # Pinned so TINYAUTH_AUTH_TRUSTEDPROXIES can name it. Docker would
+    # otherwise pick a subnet from its pool and the value would drift.
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

@@ -63,12 +63,12 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Deployment: deployment.md
+  - Fleet Edge: edge.md
   - Architecture: ARCHITECTURE.md
   - Configuration: lifecycle/configuration.md
   - Langfuse Migration: lifecycle/langfuse-migration.md
   - API Reference: lifecycle/api.md
   - Modules:
-      - Gateway: gateway/overview.md
       - Onboarding: onboard/overview.md
       - Registry: registry/overview.md
       - Registry Check: registry_check/overview.md

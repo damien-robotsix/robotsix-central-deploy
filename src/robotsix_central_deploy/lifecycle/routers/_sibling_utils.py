@@ -81,6 +81,12 @@ async def _fanout_siblings_deploy_best_effort(
                     "image": sib_cfg.image,
                     "container_name": sib_cfg.container_name,
                     "ports": sib_cfg.ports,
+                    # Only the primary is published at the edge. A sibling's
+                    # ports are for its parent to dial over the internal
+                    # network — publishing e.g. a database at
+                    # <component>-db.<base-domain> would put it on the public
+                    # internet behind nothing but the SSO gate.
+                    "routable": False,
                     "mounts": sib_cfg.mounts,
                     "env": sib_env,
                     "health_check": sib_cfg.health_check,
