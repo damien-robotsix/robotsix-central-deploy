@@ -2198,7 +2198,7 @@ function renderVolumeListing(entries) {
     const size = e.size_bytes !== undefined ? fmt_bytes(e.size_bytes) : '\u2014';
     const fullPath = (currentVolumePath ? currentVolumePath + '/' : '') + e.name;
     if (e.type === 'dir') {
-      return `<tr><td><span class="vb-entry vb-dir" data-action="loadVolumeDir" data-arg-0="${escAttr(fullPath)}">${name}</span></td><td class="vb-sep">\u2014</td></tr>`;
+      return `<tr><td><span class="vb-entry vb-dir" data-action="loadVolumeDir" data-arg-0="${escAttr(fullPath)}">${name}</span></td><td class="text-subtle">${size}</td></tr>`;
     }
     return `<tr><td><span class="vb-entry vb-file" data-action="loadVolumeFile" data-arg-0="${escAttr(fullPath)}" data-arg-1="${escAttr(e.name)}">${name}</span></td><td class="text-subtle">${size}</td></tr>`;
   }).join('');

@@ -290,6 +290,26 @@ async def test_volume_file_read(
 
 
 @pytest.mark.asyncio
+async def test_volume_file_on_a_directory_returns_400(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """Reading a directory answered 200 with an empty 4096-byte body."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    mock = MagicMock()
+    mock.read_volume_file = AsyncMock(side_effect=IsADirectoryError(""))
+    server_mod.app.state.backend = mock
+
+    resp = await client.get(
+        "/chat/services/test-svc/volumes/data-vol/files?path=/",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert "is a directory" in resp.json()["error"]
+
+
+@pytest.mark.asyncio
 async def test_volume_file_not_owned(
     client: AsyncClient,
     auth_headers: dict[str, str],

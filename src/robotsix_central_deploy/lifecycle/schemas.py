@@ -267,7 +267,9 @@ class VolumeEntry(BaseModel):
 
     name: str = Field(description="Entry name relative to the listed directory")
     type: VolumeEntryType = Field(description="Entry type: file or dir")
-    size_bytes: int = Field(description="Entry size in bytes")
+    size_bytes: int = Field(
+        description="Entry size in bytes; for a directory, its recursive size"
+    )
 
 
 class VolumeListResponse(BaseModel):

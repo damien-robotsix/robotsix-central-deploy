@@ -230,3 +230,67 @@ class TestVolumeBrowserHappyPath:
         mock_backend.read_volume_file.assert_called_once_with(
             "vol10", "readme.txt", VOLUME_CAT_MAX_BYTES
         )
+
+
+# ---------------------------------------------------------------------------
+# Directory / file mix-ups
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeBrowserWrongEntryType:
+    """A path that is not what the endpoint expects must say so.
+
+    Reading a directory used to answer 200 with an empty 4096-byte body,
+    which reads as a blank file rather than a mistake (2026-08-08).
+    """
+
+    async def test_cat_on_a_directory_returns_400(self, client: AsyncClient):
+        store: ComponentConfigStore = server_mod.app.state.component_config_store
+        await _register_component_with_volume(store, "svc11", "vol11")
+
+        mock_backend = MagicMock()
+        mock_backend.read_volume_file = AsyncMock(side_effect=IsADirectoryError("sub"))
+        server_mod.app.state.__setattr__("backend", mock_backend)
+
+        resp = await client.get(
+            "/volumes/vol11/cat",
+            params={"path": "sub"},
+            headers={"X-API-Key": "test-key"},
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["error"]
+        assert "is a directory" in detail
+        assert "/volumes/vol11/ls" in detail, "point the caller at the listing route"
+
+    async def test_ls_on_a_file_or_missing_path_returns_404(self, client: AsyncClient):
+        store: ComponentConfigStore = server_mod.app.state.component_config_store
+        await _register_component_with_volume(store, "svc12", "vol12")
+
+        mock_backend = MagicMock()
+        mock_backend.list_volume_dir = AsyncMock(
+            side_effect=NotADirectoryError("notes.txt")
+        )
+        server_mod.app.state.__setattr__("backend", mock_backend)
+
+        resp = await client.get(
+            "/volumes/vol12/ls",
+            params={"path": "notes.txt"},
+            headers={"X-API-Key": "test-key"},
+        )
+        assert resp.status_code == 404
+        assert "not a directory" in resp.json()["error"]
+
+    async def test_ls_reports_recursive_directory_sizes(self, client: AsyncClient):
+        """Dirs carry their own size now — the UI showed a dash for every one."""
+        store: ComponentConfigStore = server_mod.app.state.component_config_store
+        await _register_component_with_volume(store, "svc13", "vol13")
+
+        mock_backend = MagicMock()
+        mock_backend.list_volume_dir = AsyncMock(
+            return_value=[{"name": "data", "type": "dir", "size_bytes": 710_000}]
+        )
+        server_mod.app.state.__setattr__("backend", mock_backend)
+
+        resp = await client.get("/volumes/vol13/ls", headers={"X-API-Key": "test-key"})
+        assert resp.status_code == 200
+        assert resp.json()["entries"][0]["size_bytes"] == 710_000

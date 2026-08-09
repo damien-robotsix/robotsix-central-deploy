@@ -204,4 +204,11 @@ async def chat_volume_file(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Volume browsing not supported by this backend",
         )
+    except IsADirectoryError:
+        # Reading a directory used to answer 200 with an empty 4096-byte
+        # body — a blank file, as far as the caller could tell.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{rel or '/'}' is a directory, not a file.",
+        )
     return VolumeFileResponse(**result)
