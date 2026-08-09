@@ -43,3 +43,4 @@ package-lock.json
 
 # Fleet machine credential (htpasswd) — never commit; this repo is public.
 deploy/traefik/fleet-users
+deploy/traefik/tinyauth.env
