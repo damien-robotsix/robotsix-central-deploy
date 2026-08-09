@@ -4,6 +4,42 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.5.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.4.0...v0.5.0) (2026-08-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **edge:** components no longer answer to HTTP Basic at the edge, and deploy/traefik/fleet-users is unused. robotsix-chat's http_probe/public_fetch against *.deploy.robotsix.net will receive the SSO redirect instead of the component until they are pointed at internal container addresses.
+* **edge:** GATEWAY_BASE_DOMAIN is now required in .env, and deploy/traefik/traefik.yml is gone. Existing deployments must add the variable before the next `docker compose up -d`.
+
+### Features
+
+* **edge:** make the fleet base domain configurable ([#728](https://github.com/damien-robotsix/robotsix-central-deploy/issues/728)) ([4eabb8f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4eabb8f71c3e5b96e2d7291d1bddcf708b63856f))
+* **edge:** remove the HTTP Basic machine router, SSO is the only gate ([#736](https://github.com/damien-robotsix/robotsix-central-deploy/issues/736)) ([09392e5](https://github.com/damien-robotsix/robotsix-central-deploy/commit/09392e561926b9491b77e8530331c58dfee9f538))
+* Per-disk usage display + choose target disk for a component's data volume on deploy (20260808T235829Z-per-disk-usage-display-choose-target-dis-8804) ([#729](https://github.com/damien-robotsix/robotsix-central-deploy/issues/729)) ([a46c2bf](https://github.com/damien-robotsix/robotsix-central-deploy/commit/a46c2bf9cfc2541d5d8062d75ba147763215fe15))
+
+
+### Bug Fixes
+
+* **edge:** pass the SSO credentials through without interpolation ([#730](https://github.com/damien-robotsix/robotsix-central-deploy/issues/730)) ([549e30f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/549e30f640719549c7ab88848d504c1c64090647))
+* **edge:** pin the proxy network to the subnet it already has ([#726](https://github.com/damien-robotsix/robotsix-central-deploy/issues/726)) ([c695b74](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c695b74be44fe588f10f1a67436982151c0aab30))
+* **edge:** preserve the chat.robotsix.net redirect at cutover ([#724](https://github.com/damien-robotsix/robotsix-central-deploy/issues/724)) ([e30085d](https://github.com/damien-robotsix/robotsix-central-deploy/commit/e30085d2a9fa9e964bad5cdb47308705aeadf835))
+* **edge:** require Traefik v3.6+ for Docker Engine 29, track v3.7 ([#732](https://github.com/damien-robotsix/robotsix-central-deploy/issues/732)) ([f0f2c79](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f0f2c79a4a79818e03263b17bca54308781ec3e2))
+* **edge:** stop compose recreating the shared proxy network ([#731](https://github.com/damien-robotsix/robotsix-central-deploy/issues/731)) ([0305adb](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0305adbdf00fa4691af139a43670ad4d234a19b4))
+* **edge:** use TINYAUTH_APPURL, and document the cutover's constraints ([#734](https://github.com/damien-robotsix/robotsix-central-deploy/issues/734)) ([ec5dc22](https://github.com/damien-robotsix/robotsix-central-deploy/commit/ec5dc22194385b8632e45888cc2ecd558928b45a))
+* **release:** don't fail lock-sync when the release branch is gone ([#733](https://github.com/damien-robotsix/robotsix-central-deploy/issues/733)) ([7351953](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7351953cf5e5a16ab6c2fe4b2e889b29bed86ad4))
+* **ui:** redirect the bare domain to the dashboard ([#735](https://github.com/damien-robotsix/robotsix-central-deploy/issues/735)) ([53e85b1](https://github.com/damien-robotsix/robotsix-central-deploy/commit/53e85b1cb8050fda71779d96c319c3f0be3ecfc1))
+
+
+### Reverts
+
+* **edge:** drop the chat.robotsix.net redirect ([#727](https://github.com/damien-robotsix/robotsix-central-deploy/issues/727)) ([e677789](https://github.com/damien-robotsix/robotsix-central-deploy/commit/e6777891ea52e808946971607a442e8ec59dba8d))
+
+
+### Documentation
+
+* **edge:** redeploying a component briefly 404s it ([#737](https://github.com/damien-robotsix/robotsix-central-deploy/issues/737)) ([f05836f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f05836f4d28e5fb1c508b6979d8a0020fcf8af72))
+
 ## [0.4.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.3.0...v0.4.0) (2026-08-09)
 
 
