@@ -162,7 +162,10 @@ async def revoke_token(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Token '{token_id}' not found or already revoked.",
         )
-    logger.info("Revoked mobile token %r", token_id)
+    logger.info(
+        "Revoked mobile token %r",
+        token_id.replace("\n", "\\n").replace("\r", "\\r"),
+    )
 
 
 # ---------------------------------------------------------------------------
