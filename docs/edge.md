@@ -133,6 +133,20 @@ compose interpolates them from `.env` and nothing deployment-specific is
 committed. The `OVH_*` credentials remain environment variables because the ACME
 provider reads them directly, not through the config parser.
 
+## Version constraint
+
+Traefik must be **v3.6 or newer**; the compose file tracks the current minor
+line (v3.7 at the time of writing). Docker Engine 29 dropped support for API
+versions below 1.40, and Traefik up to v3.5 asks its docker client for 1.24, so
+every provider call comes back `client version 1.24 is too old`. The docker
+provider then never loads and no container route is ever published — the edge
+answers, but with a default certificate and 404 for everything.
+
+Measured against Docker 29.6.1: v3.3, v3.4 and v3.5 all fail this way; v3.6 and
+v3.7 discover containers normally. Neither a socket-proxy setting nor
+`DOCKER_API_VERSION` works around it, because the version Traefik requests is
+compiled in.
+
 ## Operating it
 
 | Task | Where |

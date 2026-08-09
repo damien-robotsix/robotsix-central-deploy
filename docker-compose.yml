@@ -89,7 +89,19 @@ services:
   # self-updating the deployer must not take the fleet's UIs offline, which is
   # exactly what the old in-process gateway did.
   traefik:
-    image: traefik:v3.3
+    # Pinned to the minor line, not a patch: patch releases arrive without a
+    # code change here, but a minor bump stays a reviewed decision.
+    #
+    # v3.6 or newer is REQUIRED. Docker Engine 29 dropped support for API
+    # versions below 1.40, and Traefik up to v3.5 asks its docker client for
+    # 1.24 — every provider call is then rejected with "client version 1.24 is
+    # too old", the docker provider never loads, and no container route is ever
+    # published. Verified against Docker 29.6.1: v3.3/v3.4/v3.5 fail; v3.6 and
+    # v3.7 both discover containers normally.
+    #
+    # Being pinned too far BEHIND is the failure mode that bit this file, so
+    # prefer the current minor line over an older "known good" one.
+    image: traefik:v3.7
     restart: unless-stopped
     # Static configuration lives here rather than in a traefik.yml, because
     # Traefik does not merge static-config sources — the docs are explicit that
@@ -170,6 +182,8 @@ services:
     environment:
       CONTAINERS: "1"   # read container labels to build routes
       EVENTS: "1"       # watch for containers starting/stopping
+      VERSION: "1"      # /version + /_ping — the docker client negotiates the
+                        # API version through these before any other call
       POST: "0"         # no mutations of any kind
       DELETE: "0"
       IMAGES: "0"
