@@ -91,6 +91,20 @@ central-deploy holds itself to the same rule: it has no login page and no
 session store. `verify_auth` remains on the JSON API as defence-in-depth
 against a caller already on the internal Docker network.
 
+## Legacy hostnames
+
+`chat.robotsix.net` predates the move to `<component>.deploy.robotsix.net`. The
+nginx vhost it used to live in did nothing but 301 across, so the redirect is
+reproduced as a router in `deploy/traefik/dynamic.yml` — declared there rather
+than as a container label because the hostname belongs to no component and
+nothing would ever stamp it. It carries its own certificate, since the
+`websecure` entrypoint's default covers only the `deploy.robotsix.net` names.
+
+`cost.robotsix.net` needed no such treatment: its vhost still pointed at
+`127.0.0.1:8099`, which nothing has listened on since cost-monitor stopped
+publishing a host port. It was already returning 502; cost-monitor is reachable
+at `cost-monitor.deploy.robotsix.net`.
+
 ## TLS
 
 One wildcard certificate covers the whole fleet, obtained by Traefik over the
