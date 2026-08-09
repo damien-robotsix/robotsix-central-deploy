@@ -41,3 +41,31 @@ http:
         # not need the header; stripping it avoids leaking the credential
         # onward.
         removeHeader: true
+
+    # Legacy-hostname shim. `chat.robotsix.net` predates the move to
+    # `<component>.deploy.robotsix.net`; the retired nginx vhost 301'd it
+    # across, so without this old bookmarks and links break at cutover.
+    legacy-chat-redirect:
+      redirectRegex:
+        regex: "^https?://chat\\.robotsix\\.net/(.*)"
+        replacement: "https://chat.deploy.robotsix.net/${1}"
+        permanent: true
+
+  routers:
+    # Declared here rather than as container labels because this hostname
+    # belongs to no component — it is an edge-level name on the robotsix.net
+    # zone, so nothing would ever stamp it. `noop@internal` is Traefik's
+    # built-in sink for redirect-only routers, which have no upstream.
+    #
+    # It needs its own certificate: the websecure entrypoint's default covers
+    # deploy.robotsix.net and *.deploy.robotsix.net, not this zone. The same
+    # OVH DNS-01 resolver issues it.
+    legacy-chat:
+      rule: "Host(`chat.robotsix.net`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - legacy-chat-redirect
+      service: noop@internal
+      tls:
+        certResolver: ovh
