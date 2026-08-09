@@ -115,6 +115,31 @@ host.
 The OVH API token needs `GET`/`POST`/`DELETE` on `/domain/zone/robotsix.net/*`
 and is created at <https://api.ovh.com/createToken/>.
 
+## Rolling back the edge
+
+The edge and the control plane are separate containers, so reverting means
+stopping the former and restoring nginx — the managed components are untouched
+throughout.
+
+A rollback that restores an older central-deploy must retag it, because `:main`
+now points at the newer build:
+
+```bash
+docker tag <old-image-id> ghcr.io/damien-robotsix/robotsix-central-deploy:main
+```
+
+!!! warning "Undo that tag before the next deploy"
+    Leave it in place and the *next* deploy silently starts the old code again,
+    which presents as a broken feature rather than a stale tag. Re-pull `:main`
+    before retrying.
+
+Two things do not restore themselves and must be checked by hand:
+
+- central-deploy's attachment to `central-deploy-proxy`
+  (`docker network connect --alias central-deploy central-deploy-proxy <container>`)
+- the components' Traefik labels, which are stamped at container-create time and
+  therefore only reappear after each component is redeployed
+
 ## Request flow summary
 
 ```

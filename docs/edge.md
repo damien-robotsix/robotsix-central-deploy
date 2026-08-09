@@ -147,6 +147,41 @@ v3.7 discover containers normally. Neither a socket-proxy setting nor
 `DOCKER_API_VERSION` works around it, because the version Traefik requests is
 compiled in.
 
+## Constraints this deployment is pinned to
+
+Every value below was established by a failure during the initial cutover.
+They are configuration, not folklore — each one is set in `docker-compose.yml`
+with a comment pointing back here.
+
+| Setting | Value | Why it is not free to change |
+|---|---|---|
+| `image` | `traefik:v3.7` | v3.5 and older ask the Docker API for 1.24; Engine 29 rejects anything below 1.40, so the provider never loads and no route is published |
+| `traefik-socket-proxy` `VERSION` | `1` | The Docker client negotiates an API version through `/version` and `/_ping` before any other call |
+| `tinyauth` app URL | `TINYAUTH_APPURL` | The `TINYAUTH_APP_URL` spelling is silently ignored; tinyauth then crash-loops on an empty URL and the edge 500s |
+| SSO credentials | `env_file` + `format: raw` | Routing a bcrypt hash through `.env` interpolates it twice and truncates it |
+| `central-deploy-proxy` | driver + name only | Any extra key — even a matching `ipam` subnet — makes compose recreate the network and detach every managed container |
+| `GATEWAY_BASE_DOMAIN` | required, no default | Must equal central-deploy's `gateway_base_domain`; unset produces empty `Host()` rules and a certless edge |
+
+### Verifying an edge change
+
+`docker compose config` proves nothing here. It validated cleanly through the
+truncated credential, the network recreation, and the dead Docker provider
+alike, and it re-escapes `$` as `$$` in both YAML and JSON output so it cannot
+even be used to inspect a hash. Two checks that do work:
+
+```bash
+# does a value actually reach the container?
+docker compose run --rm --entrypoint sh <svc> -c 'echo "$VAR"'
+
+# has the edge actually discovered routes? (a 404 here is a dead provider)
+curl -s -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' \
+  -H 'Accept: text/html' https://<component>.<base-domain>/
+```
+
+A browser gets `302` to the SSO login. A plain `curl` gets `401` — tinyauth
+distinguishes the two, so **`401` is a healthy answer**, not a failure. `404`
+means no router exists.
+
 ## Operating it
 
 | Task | Where |
