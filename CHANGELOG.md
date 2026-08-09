@@ -4,6 +4,104 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.3.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.2.0...v0.3.0) (2026-08-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove path-prefix gateway routing, redirect legacy URLs to subdomains ([#203](https://github.com/damien-robotsix/robotsix-central-deploy/issues/203))
+
+### Features
+
+* add GET/PATCH /chat/github/repos/{owner}/{repo} ([#386](https://github.com/damien-robotsix/robotsix-central-deploy/issues/386)) ([caee158](https://github.com/damien-robotsix/robotsix-central-deploy/commit/caee15816e58475e4973e77fb9d017e2d5c98e6a))
+* add POST /chat/github/repos so the chat agent can create repos ([#379](https://github.com/damien-robotsix/robotsix-central-deploy/issues/379)) ([fa6f13d](https://github.com/damien-robotsix/robotsix-central-deploy/commit/fa6f13d81545056363c5f29a2e8bbb349ad21bdc))
+* add pull-request status endpoints to the github chat component ([#388](https://github.com/damien-robotsix/robotsix-central-deploy/issues/388)) ([3f23006](https://github.com/damien-robotsix/robotsix-central-deploy/commit/3f23006c09ad9a395d42d52c17e209609f30ec31))
+* **ci:** add vulture dead-code detection as a CI gate ([#701](https://github.com/damien-robotsix/robotsix-central-deploy/issues/701)) ([42cfd7b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/42cfd7bdebac4b63204cf2bcff28049bd8293bd1))
+* **ci:** wire the shared auto-release workflow ([#694](https://github.com/damien-robotsix/robotsix-central-deploy/issues/694)) ([3f48e06](https://github.com/damien-robotsix/robotsix-central-deploy/commit/3f48e06d3976b85dd999abbb38233d312f6de66b))
+* config field descriptions in help bubbles + schema refresh from repo ([#229](https://github.com/damien-robotsix/robotsix-central-deploy/issues/229)) ([6fc638a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/6fc638ab263a731646d919ea76d4a8976d5098b4))
+* **config:** compute central-deploy's own config view instead of storing it ([#687](https://github.com/damien-robotsix/robotsix-central-deploy/issues/687)) ([bc87689](https://github.com/damien-robotsix/robotsix-central-deploy/commit/bc876895b8f37eaf9f733dcf109330b05349fdd1))
+* **config:** remove the deploy-plane copy of component config values ([#689](https://github.com/damien-robotsix/robotsix-central-deploy/issues/689)) ([3e352ec](https://github.com/damien-robotsix/robotsix-central-deploy/commit/3e352ecc308c3cd6a143ddffabe393706fb4d1cb))
+* configurable mill component id for caretaker discovery ([#220](https://github.com/damien-robotsix/robotsix-central-deploy/issues/220)) ([1626915](https://github.com/damien-robotsix/robotsix-central-deploy/commit/1626915802d53dc0ab71910fefa740c96119479c))
+* dashboard self-update button via one-shot watchtower container ([#212](https://github.com/damien-robotsix/robotsix-central-deploy/issues/212)) ([a0c9bdc](https://github.com/damien-robotsix/robotsix-central-deploy/commit/a0c9bdc2c2b7506d621fb0ba5a3bcce13e5086fe))
+* enable Dependency graph automatically for chat-created repos ([#405](https://github.com/damien-robotsix/robotsix-central-deploy/issues/405)) ([c56f372](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c56f372a2d2b6460126083ff2fba6881c51888ca))
+* env keys follow the repo contract — no free-form add/remove in UI ([#234](https://github.com/damien-robotsix/robotsix-central-deploy/issues/234)) ([0ee6eb4](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0ee6eb446d141d5c7e2a6754cace5d9c205bd6e0))
+* **fleet-langfuse:** serve per-project OpenRouter keys for reconciliation ([#659](https://github.com/damien-robotsix/robotsix-central-deploy/issues/659)) ([4445a12](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4445a123f1e71d19d7a726a51c9bddc80f6c3edc))
+* **langfuse:** read component config from the component, not a mirror ([#686](https://github.com/damien-robotsix/robotsix-central-deploy/issues/686)) ([10c652f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/10c652f8c74090beec896239b656264a41b35f7b))
+* **mill:** enable the credit_balance and trace_review periodic passes ([#706](https://github.com/damien-robotsix/robotsix-central-deploy/issues/706)) ([61d5a7b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/61d5a7bdff6a2ff7d79471326ae533cc5fd5a45a))
+* opt-in auto-prune of dangling images after updates ([#221](https://github.com/damien-robotsix/robotsix-central-deploy/issues/221)) ([f03f0cd](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f03f0cdf61f9dc40532376ef71809be88a58de83))
+* publish image to GHCR and harden Dockerfile per docker standard ([#211](https://github.com/damien-robotsix/robotsix-central-deploy/issues/211)) ([55ab705](https://github.com/damien-robotsix/robotsix-central-deploy/commit/55ab7051efcf9f2ca05964bb82aa8cf7a782007e))
+* register github chat component for GitHub Actions workflow status ([#376](https://github.com/damien-robotsix/robotsix-central-deploy/issues/376)) ([64c9c2c](https://github.com/damien-robotsix/robotsix-central-deploy/commit/64c9c2cb9a1272a4aeacb4853e83d79580c9d16a))
+* **release:** adopt release-please, retire towncrier ([#713](https://github.com/damien-robotsix/robotsix-central-deploy/issues/713)) ([d765651](https://github.com/damien-robotsix/robotsix-central-deploy/commit/d765651c41c0faaafccfe20aaad5a24be2d6506c))
+* remove path-prefix gateway routing, redirect legacy URLs to subdomains ([#203](https://github.com/damien-robotsix/robotsix-central-deploy/issues/203)) ([51a28d0](https://github.com/damien-robotsix/robotsix-central-deploy/commit/51a28d0184a1a02b76092cb4243541070e2fd7cc))
+* **ui:** remove component-config modal from deploy dashboard (slice 1/5) ([#622](https://github.com/damien-robotsix/robotsix-central-deploy/issues/622)) ([d5b7036](https://github.com/damien-robotsix/robotsix-central-deploy/commit/d5b703620eec0d95f334a99d17ad8fe61dc6da72))
+
+
+### Bug Fixes
+
+* address CI failures — type annotations, formatting, unused imports ([5679957](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5679957eadb88db99e7f60e1d168bc52cbfc2af7))
+* allow inline script handlers in CSP so dashboard buttons work ([#438](https://github.com/damien-robotsix/robotsix-central-deploy/issues/438)) ([4649df7](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4649df7ea79272b50792868872272fe4bd876d78))
+* backfill is_virtual on already-persisted virtual component configs ([#342](https://github.com/damien-robotsix/robotsix-central-deploy/issues/342)) ([e4527e5](https://github.com/damien-robotsix/robotsix-central-deploy/commit/e4527e5e8bd981252ade861a8025a1b00d2de583))
+* caretaker auto-update drops EnvStore-provisioned env vars ([#407](https://github.com/damien-robotsix/robotsix-central-deploy/issues/407)) ([dc2f41e](https://github.com/damien-robotsix/robotsix-central-deploy/commit/dc2f41e8337ccb00c02d8cbcdcd2c29ae0ccae79))
+* caretaker auto-update must deploy repo@digest, not a bare digest ([#250](https://github.com/damien-robotsix/robotsix-central-deploy/issues/250)) ([ae71d3b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/ae71d3b0aa51673499fd4b58fc5d96ea09ef61d6))
+* caretaker reaches the mill over the proxy network, not localhost ([#230](https://github.com/damien-robotsix/robotsix-central-deploy/issues/230)) ([c42c7de](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c42c7de54fa261614e9cb9a7ae309424b8e88ca8))
+* **caretaker:** put the container's logs in the health finding ([#647](https://github.com/damien-robotsix/robotsix-central-deploy/issues/647)) ([85a3a89](https://github.com/damien-robotsix/robotsix-central-deploy/commit/85a3a89a2b01483aa96fad7c9d8c3bdc802dc507))
+* **caretaker:** stop a transient self-lookup failure from deploying over the management plane ([#638](https://github.com/damien-robotsix/robotsix-central-deploy/issues/638)) ([0762fe2](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0762fe27cc00e7cabd235a3aaf256bcc7b588de9))
+* chat agent self-restart/update used the wrong allowlisted service name ([#377](https://github.com/damien-robotsix/robotsix-central-deploy/issues/377)) ([0f84d6c](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0f84d6cdc6d4a27a23a36eebcec5481397b97b68))
+* **ci:** grant contents:read to the docs reusable-workflow caller job ([#332](https://github.com/damien-robotsix/robotsix-central-deploy/issues/332)) ([ce6eccf](https://github.com/damien-robotsix/robotsix-central-deploy/commit/ce6eccf642a62c550d1e938dd385d8edabc8a95a))
+* **ci:** unblock main — openapi drift, cryptography CVE, trufflehog false positive ([#677](https://github.com/damien-robotsix/robotsix-central-deploy/issues/677)) ([093af22](https://github.com/damien-robotsix/robotsix-central-deploy/commit/093af2240988ad010e95e8b0273ec74e05449a50))
+* **claude-auth:** request a refresh-capable scope set, and stop failing silently ([#663](https://github.com/damien-robotsix/robotsix-central-deploy/issues/663)) ([8b6eb99](https://github.com/damien-robotsix/robotsix-central-deploy/commit/8b6eb998f16ebdc4a7f6f2515c187bdc93e6985b))
+* compose must point ROBOTSIX_CONFIG_FILE at /data/config.json ([#226](https://github.com/damien-robotsix/robotsix-central-deploy/issues/226)) ([be62909](https://github.com/damien-robotsix/robotsix-central-deploy/commit/be62909aa3c8c7ddbd3d6feb2921542f85568b8e))
+* **config:** deliver the deploy API key by config, not by env ([#717](https://github.com/damien-robotsix/robotsix-central-deploy/issues/717)) ([390c32b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/390c32b1c458916bd8ca5cd669fa940a68e8f33c))
+* **config:** validate a config against the component's schema before writing ([#710](https://github.com/damien-robotsix/robotsix-central-deploy/issues/710)) ([0bc8f5b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0bc8f5b2d5805bf5e376902c747ffe43e9ba8b7f))
+* **config:** walk map-typed schema fields instead of emptying them ([#690](https://github.com/damien-robotsix/robotsix-central-deploy/issues/690)) ([1e61e5a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/1e61e5aa46bc00399ac4ad8f88c3ce8443814cdf))
+* contradictory placeholder on unset secret config fields ([#233](https://github.com/damien-robotsix/robotsix-central-deploy/issues/233)) ([2111e30](https://github.com/damien-robotsix/robotsix-central-deploy/commit/2111e30cf127a8a49bcb508b094a980c0dccddfd))
+* **deploy:** never write the stored config over a component's own ([#682](https://github.com/damien-robotsix/robotsix-central-deploy/issues/682)) ([f19b0a6](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f19b0a63af68d6cbc5c328358195677135ef3f41))
+* **deps:** bump pymdown-extensions past the ReDoS advisory ([#680](https://github.com/damien-robotsix/robotsix-central-deploy/issues/680)) ([7625c7f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7625c7f71b064043a9a30a1afa64575c5027a3a6))
+* **deps:** drop the archived robotsix-board-agent dependency ([#692](https://github.com/damien-robotsix/robotsix-central-deploy/issues/692)) ([46db82c](https://github.com/damien-robotsix/robotsix-central-deploy/commit/46db82cb36853deee81d0dc55bca923558b2b1be))
+* **docker:** raise the healthcheck timeout to 10s ([#691](https://github.com/damien-robotsix/robotsix-central-deploy/issues/691)) ([2381bb5](https://github.com/damien-robotsix/robotsix-central-deploy/commit/2381bb5459e587795e334ad6286ed9e52819a117))
+* **fleet-langfuse:** honour operator-configured Langfuse projects ([#658](https://github.com/damien-robotsix/robotsix-central-deploy/issues/658)) ([5dcbb71](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5dcbb7193bdfa8372b3ce28c79bab17475841175))
+* GatewayAwareDocsMiddleware — return JSONResponse instead of raising HTTPException ([b74b558](https://github.com/damien-robotsix/robotsix-central-deploy/commit/b74b558063250266c28d6a03a67f41b807e4e0bf))
+* **github:** correct .requester accessor + clamp Actions run-list pagination (both were 500ing) ([#577](https://github.com/damien-robotsix/robotsix-central-deploy/issues/577)) ([9520124](https://github.com/damien-robotsix/robotsix-central-deploy/commit/95201247c9f179ef6a8f13a31fbd7cd4a68a63a6))
+* **github:** re-mint installation token per request so cached client can't serve an expired token ([#576](https://github.com/damien-robotsix/robotsix-central-deploy/issues/576)) ([97b85cc](https://github.com/damien-robotsix/robotsix-central-deploy/commit/97b85ccb5169a2cbffe1143dead4093d58685918))
+* keep image default user for host_docker_sock containers ([#311](https://github.com/damien-robotsix/robotsix-central-deploy/issues/311)) ([92e3026](https://github.com/damien-robotsix/robotsix-central-deploy/commit/92e30266c483f890606ccbaabc06e4092319bc9f))
+* keep Update button deploy progress visible across dashboard refreshes ([#433](https://github.com/damien-robotsix/robotsix-central-deploy/issues/433)) ([b297b91](https://github.com/damien-robotsix/robotsix-central-deploy/commit/b297b911c2edea1c25e61199cee304a51e7b7fca))
+* **langfuse:** read one canonical component-owned credential block ([#657](https://github.com/damien-robotsix/robotsix-central-deploy/issues/657)) ([8eceaf4](https://github.com/damien-robotsix/robotsix-central-deploy/commit/8eceaf4cebdbc4623676350e35f589b9d5df4240))
+* **langfuse:** stop forwarding the upstream Content-Encoding header ([#711](https://github.com/damien-robotsix/robotsix-central-deploy/issues/711)) ([5eb728e](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5eb728eac9c08318cd839957c646bdeac0d00495))
+* **lifecycle:** self-heal the proxy-network service alias at startup ([#700](https://github.com/damien-robotsix/robotsix-central-deploy/issues/700)) ([bbc4121](https://github.com/damien-robotsix/robotsix-central-deploy/commit/bbc412194805c556157fb92600e712a50fbeab45))
+* **lifecycle:** write lifecycle_state.yaml atomically to prevent gateway crash-loop ([#596](https://github.com/damien-robotsix/robotsix-central-deploy/issues/596)) ([4020e60](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4020e60f6cdd696595cf6520e36885a181f0005e))
+* make claude-auth volume bind path configurable per component ([#465](https://github.com/damien-robotsix/robotsix-central-deploy/issues/465)) ([7217afc](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7217afce2ca07e1da07dde65de1d8e5c6fd08487))
+* POST /chat/github/repos always 401'd with Bad credentials ([#380](https://github.com/damien-robotsix/robotsix-central-deploy/issues/380)) ([4e659f1](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4e659f189c10c34f085e3193d6341433ddfc0e50))
+* prune dangling images unconditionally in caretaker + from /disk/reclaim ([#476](https://github.com/damien-robotsix/robotsix-central-deploy/issues/476)) ([36ae413](https://github.com/damien-robotsix/robotsix-central-deploy/commit/36ae41330ce069c3551c2f0548c2d7a8131d590e))
+* raise duplicated SystemSettings rate_limit_api_per_hour default to 20000 ([#334](https://github.com/damien-robotsix/robotsix-central-deploy/issues/334)) ([281ea91](https://github.com/damien-robotsix/robotsix-central-deploy/commit/281ea91df0542bc1e3fd02e5586eaef380e3782d))
+* **rate-limiter:** exempt gateway traffic, raise API budget for dashboard polling ([#331](https://github.com/damien-robotsix/robotsix-central-deploy/issues/331)) ([17f1248](https://github.com/damien-robotsix/robotsix-central-deploy/commit/17f12489e57863e42dbd1821955aca29a09b9023))
+* **refresh-contract:** preserve operator-set fields and assigned host ports ([#642](https://github.com/damien-robotsix/robotsix-central-deploy/issues/642)) ([b66d549](https://github.com/damien-robotsix/robotsix-central-deploy/commit/b66d549b2bc33340de6c9b948669880183ce405a))
+* **registry-check:** authenticate the GHCR update check ([#714](https://github.com/damien-robotsix/robotsix-central-deploy/issues/714)) ([a469fc2](https://github.com/damien-robotsix/robotsix-central-deploy/commit/a469fc218bd6eb6d7cfbde969ff9cf4fc816ee69))
+* render legacy config templates in the typed config UI ([#227](https://github.com/damien-robotsix/robotsix-central-deploy/issues/227)) ([cfdd211](https://github.com/damien-robotsix/robotsix-central-deploy/commit/cfdd21125120df49e48edafa9635c9bd70fe9527))
+* resolve own container after watchtower recreate in inspect_self ([#217](https://github.com/damien-robotsix/robotsix-central-deploy/issues/217)) ([89a6b01](https://github.com/damien-robotsix/robotsix-central-deploy/commit/89a6b01c30b5a1981c76ff49995792e97c58e297))
+* scope strict CSP to base domain, not proxied component subdomains ([#485](https://github.com/damien-robotsix/robotsix-central-deploy/issues/485)) ([93421c2](https://github.com/damien-robotsix/robotsix-central-deploy/commit/93421c2c01c3ef4b477bf18403e06eb54a9c4d3f))
+* self-update watchtower needs DOCKER_API_VERSION and networks scope ([#216](https://github.com/damien-robotsix/robotsix-central-deploy/issues/216)) ([159594d](https://github.com/damien-robotsix/robotsix-central-deploy/commit/159594dfc865a944ef0be22bb53262fd97e2ce95))
+* serve stale chat skill when probe fails instead of dropping component ([#313](https://github.com/damien-robotsix/robotsix-central-deploy/issues/313)) ([c3961fa](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c3961fa3056f046f96e496c5449ca94680ba4396))
+* **services:** refresh the stored config schema in refresh-contract ([#707](https://github.com/damien-robotsix/robotsix-central-deploy/issues/707)) ([227ded1](https://github.com/damien-robotsix/robotsix-central-deploy/commit/227ded1a41e634df071aa9b1630c4fa64a655a8f))
+* skip CSRF enforcement for gateway-proxied component subdomains ([#432](https://github.com/damien-robotsix/robotsix-central-deploy/issues/432)) ([f6b8ec2](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f6b8ec2e958693c8bec7a37cc4dcd76377a31013))
+* stop virtual (non-Docker) components from leaking into dashboard ServiceRecords ([#340](https://github.com/damien-robotsix/robotsix-central-deploy/issues/340)) ([b26fe57](https://github.com/damien-robotsix/robotsix-central-deploy/commit/b26fe57d814a9e69e18622756888fd12d6bdcef3))
+* structlog processor chain used dotted-path strings instead of callables ([#385](https://github.com/damien-robotsix/robotsix-central-deploy/issues/385)) ([530890a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/530890a2cb99a98e21e10c98b59a76d2da9e5d01))
+* treat submitted null config values as unset instead of 422ing ([#439](https://github.com/damien-robotsix/robotsix-central-deploy/issues/439)) ([8110726](https://github.com/damien-robotsix/robotsix-central-deploy/commit/8110726a83695022fa619d22762c6642ce56d14c))
+* **ui:** stop config-form key clipping and input overflow in modals ([#204](https://github.com/damien-robotsix/robotsix-central-deploy/issues/204)) ([93f7da8](https://github.com/damien-robotsix/robotsix-central-deploy/commit/93f7da866b8b5eef207a05eacce475fcc165b526))
+* **volumes:** browse the volume, not the helper container's root ([#715](https://github.com/damien-robotsix/robotsix-central-deploy/issues/715)) ([f864aab](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f864aab875ee900616a3e1cbe63283236997050d))
+
+
+### Reverts
+
+* **ci:** drop auto-release.yml — superseded by release-please ([#698](https://github.com/damien-robotsix/robotsix-central-deploy/issues/698)) ([42dbbb2](https://github.com/damien-robotsix/robotsix-central-deploy/commit/42dbbb294c4601309e9e01ab82e0bc161d4167a3))
+
+
+### Documentation
+
+* add deployment reference page, sync nginx reference with live server ([#200](https://github.com/damien-robotsix/robotsix-central-deploy/issues/200)) ([7574f4d](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7574f4de50b42ce222a71e8d0679bce2f1694134))
+* caution the github skill against exploring beyond its own endpoints ([#378](https://github.com/damien-robotsix/robotsix-central-deploy/issues/378)) ([4c04611](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4c046111765ea52a83b83a391a06336c264c17cb))
+* **gateway:** document the gateway_ws WebSocket catch-all handler ([#696](https://github.com/damien-robotsix/robotsix-central-deploy/issues/696)) ([185cc67](https://github.com/damien-robotsix/robotsix-central-deploy/commit/185cc67e6a1efc84d97e60f8aaeb69a88b15ba8d))
+* **schemas:** add class docstrings to all undocumented API models ([#697](https://github.com/damien-robotsix/robotsix-central-deploy/issues/697)) ([5a68222](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5a68222a9b1ec7b259a536f9372d67924eb4000e))
+
 ## 0.2.0 (2026-08-09)
 
 ### Features
