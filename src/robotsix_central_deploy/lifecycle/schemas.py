@@ -654,7 +654,7 @@ class ChatAgentRegisterRequest(BaseModel):
         description="Container image reference (e.g. ghcr.io/org/repo:tag)",
     )
     owner_repo: str = Field(
-        default="",
+        min_length=1,
         description="Git clone URL of the repository owning the deploy contract",
     )
 
