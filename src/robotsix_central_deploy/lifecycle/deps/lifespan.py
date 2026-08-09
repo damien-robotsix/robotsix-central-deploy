@@ -384,6 +384,9 @@ async def _init_background_tasks(app: FastAPI) -> None:
     registry_checker = RegistryChecker(
         http_client,
         ttl_seconds=_config.registry_check_ttl,
+        # Share the pull path's credential so private GHCR packages resolve a
+        # digest instead of reporting "unknown" forever.
+        ghcr_credentials=getattr(_backend, "ghcr_credentials", None),
     )
     app.state.registry_checker = registry_checker
     _http_client = http_client
