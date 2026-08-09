@@ -183,6 +183,23 @@ A browser gets `302` to the SSO login. A plain `curl` gets `401` — tinyauth
 distinguishes the two, so **`401` is a healthy answer**, not a failure. `404`
 means no router exists.
 
+## Redeploying a component briefly 404s it
+
+Routes live on the container, so changing one means recreating the container.
+Between the old container going away and Traefik seeing the new one, that
+hostname has no router and the edge answers **404** — a few seconds, once per
+redeploy.
+
+This is inherent to label-based routing, not a fault, and it is worth knowing
+because a 404 immediately after a deploy looks identical to a route that failed
+to register. Retry before diagnosing: if it is still 404 after ten seconds or
+so, the labels really are missing, and
+`docker inspect <container> --format '{{json .Config.Labels}}'` will say so.
+
+It also means the relabel pass that follows an edge change — redeploying every
+component so it picks up new labels — takes each component offline for a moment
+in turn. Nothing else is affected while it happens.
+
 ## Operating it
 
 | Task | Where |
