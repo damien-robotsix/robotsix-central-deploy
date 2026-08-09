@@ -9891,7 +9891,7 @@
           "size_bytes": {
             "type": "integer",
             "title": "Size Bytes",
-            "description": "Entry size in bytes"
+            "description": "Entry size in bytes; for a directory, its recursive size"
           }
         },
         "type": "object",

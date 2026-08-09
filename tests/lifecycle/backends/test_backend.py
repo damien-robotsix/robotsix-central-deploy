@@ -964,6 +964,41 @@ class TestDockerSdkBackendVolumeBrowser:
         # $0="sh", $1="subdir/logs"
         assert command[4] == "subdir/logs"
 
+    async def test_list_volume_dir_is_anchored_at_the_volume(self, backend):
+        """Root listings must not glob the helper container's filesystem.
+
+        The old script globbed "$1"/* — with an empty rel_path that is /*,
+        so every volume's browser showed bin, dev, etc, home, … (2026-08-08).
+        """
+        b, client = backend
+        client.containers.run.return_value = b""
+        await b.list_volume_dir("test-vol", "")
+        script = client.containers.run.call_args[1]["command"][2]
+        assert '"$1"/*' not in script
+        assert "dir=/vol" in script
+        assert 'cd "$dir"' in script
+
+    async def test_list_volume_dir_reports_recursive_dir_sizes(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b"dir\t710000\tdata\n"
+        result = await b.list_volume_dir("test-vol", "")
+        assert result == [{"name": "data", "type": "dir", "size_bytes": 710000}]
+        script = client.containers.run.call_args[1]["command"][2]
+        assert "du_bytes" in script, "dir sizes must reuse the volume measure"
+
+    async def test_list_volume_dir_raises_when_path_is_not_a_directory(self, backend):
+        b, client = backend
+        client.containers.run.return_value = b"\x01robotsix-not-a-dir\n"
+        with pytest.raises(NotADirectoryError):
+            await b.list_volume_dir("test-vol", "notes.txt")
+
+    async def test_read_volume_file_raises_on_a_directory(self, backend):
+        """Used to return the directory inode as an empty 4096-byte file."""
+        b, client = backend
+        client.containers.run.return_value = b"\x01robotsix-is-a-dir\n"
+        with pytest.raises(IsADirectoryError):
+            await b.read_volume_file("test-vol", "sub", 1_048_576)
+
     async def test_list_volume_dir_read_only_mount(self, backend):
         b, client = backend
         client.containers.run.return_value = b""

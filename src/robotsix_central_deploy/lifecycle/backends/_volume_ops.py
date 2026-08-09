@@ -17,6 +17,22 @@ from robotsix_central_deploy.lifecycle._yaml_utils import (
 
 logger = logging.getLogger(__name__)
 
+#: Markers the busybox helpers print instead of output, mapped back to
+#: exceptions by the callers.  A plain empty result cannot say *why*.
+_NOT_A_DIR = "\x01robotsix-not-a-dir"
+_IS_A_DIR = "\x01robotsix-is-a-dir"
+
+#: Shell function printing the apparent-bytes recursive size of its argument,
+#: excluding SQLite transient sidecars.  Shared by the whole-volume measure and
+#: the per-directory browser sizes so the two always agree.
+_DU_BYTES_FN = (
+    "du_bytes() {\n"
+    '  find "$1" -type f '
+    "! -name '*.db-wal' ! -name '*.db-shm' ! -name '*.db-journal' "
+    "-exec du -b {} + 2>/dev/null | awk '{s+=$1}END{print s+0}'\n"
+    "}\n"
+)
+
 
 class VolumeOps:
     """Stateful helper for Docker named-volume operations.
@@ -191,12 +207,7 @@ class VolumeOps:
         Returns 0 on error or when the volume is inaccessible.
         """
         loop = asyncio.get_running_loop()
-        cmd = (
-            "find /vol -type f "
-            "! -name '*.db-wal' ! -name '*.db-shm' ! -name '*.db-journal' "
-            "-exec du -b {} + 2>/dev/null "
-            "| awk '{s+=$1}END{print s+0}'"
-        )
+        cmd = _DU_BYTES_FN + "du_bytes /vol\n"
         try:
             raw: bytes = await loop.run_in_executor(
                 None,
@@ -217,22 +228,39 @@ class VolumeOps:
     ) -> list[dict[str, Any]]:
         """List immediate children of /vol/<rel_path> via busybox.
 
-        Uses a shell script for consistent stat-based listing.
+        Directory entries carry their **recursive** size, measured the same
+        way as :meth:`measure_volume_bytes` so the browser and the Disk Usage
+        table agree.
+
+        Raises ``NotADirectoryError`` when the path is not a directory in the
+        volume (including a path that does not exist).
         """
         loop = asyncio.get_running_loop()
+        # $1 = rel_path ("" for the volume root).  Anchor every glob at the
+        # resolved directory: globbing "$1"/* with an empty $1 expands to /*,
+        # which listed the *helper container's* root filesystem for every
+        # volume (2026-08-08).
         script = (
-            'cd /vol && for f in "$1"/* "$1"/.*; do\n'
+            _DU_BYTES_FN + "dir=/vol\n"
+            '[ -n "$1" ] && dir="/vol/$1"\n'
+            'if [ ! -d "$dir" ]; then\n'
+            f"  printf '{_NOT_A_DIR}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            'cd "$dir" || exit 0\n'
+            "for f in * .*; do\n"
             '  [ -e "$f" ] || continue\n'
-            '  bn="${f##*/}"\n'
-            '  [ "$bn" = . ] && continue\n'
-            '  [ "$bn" = .. ] && continue\n'
+            '  [ "$f" = . ] && continue\n'
+            '  [ "$f" = .. ] && continue\n'
             '  if [ -d "$f" ]; then\n'
-            '    printf "dir\\t0\\t%s\\n" "$bn"\n'
+            '    sz=$(du_bytes "$f")\n'
+            '    printf "dir\\t%s\\t%s\\n" "${sz:-0}" "$f"\n'
             "  else\n"
             '    sz=$(stat -c "%s" "$f" 2>/dev/null || echo 0)\n'
-            '    printf "file\\t%s\\t%s\\n" "$sz" "$bn"\n'
+            '    printf "file\\t%s\\t%s\\n" "$sz" "$f"\n'
             "  fi\n"
             "done\n"
+            "exit 0\n"
         )
         raw: bytes = await loop.run_in_executor(
             None,
@@ -248,6 +276,8 @@ class VolumeOps:
             line = line.strip()
             if not line:
                 continue
+            if line == _NOT_A_DIR:
+                raise NotADirectoryError(rel_path)
             parts = line.split("\t", 2)
             if len(parts) != 3:
                 continue
@@ -265,12 +295,20 @@ class VolumeOps:
         """Read ``/vol/<rel_path>`` via a one-shot busybox container.
 
         Returns size, content (or None for binary), binary flag, truncated flag.
+
+        Raises ``IsADirectoryError`` when the path is a directory — reading one
+        used to return its 4096-byte inode as an empty file, which read as a
+        successful (but blank) file fetch.
         """
         loop = asyncio.get_running_loop()
         # $1 = rel_path, $2 = max_bytes+1 (head limit)
         script = (
             'target="/vol/$1"\n'
             "maxp1=$2\n"
+            'if [ -d "$target" ]; then\n'
+            f"  printf '{_IS_A_DIR}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
             'stat -c "%s" "$target" 2>/dev/null || echo 0\n'
             'head -c "$maxp1" "$target" 2>/dev/null || true\n'
         )
@@ -283,6 +321,9 @@ class VolumeOps:
                 remove=True,
             ),
         )
+        if raw.startswith(_IS_A_DIR.encode()):
+            raise IsADirectoryError(rel_path)
+
         # First line is the file size; the rest is the file content.
         lines = raw.split(b"\n", 1)
         try:

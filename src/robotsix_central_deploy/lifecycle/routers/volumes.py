@@ -142,6 +142,11 @@ async def list_volume_files(
             status_code=501,
             detail="Volume browsing not supported by this backend",
         )
+    except NotADirectoryError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{rel or '/'}' is not a directory in volume '{name}'",
+        )
     return VolumeListResponse(entries=[VolumeEntry(**e) for e in entries_raw])
 
 
@@ -170,5 +175,13 @@ async def cat_volume_file(
         raise HTTPException(
             status_code=501,
             detail="Volume browsing not supported by this backend",
+        )
+    except IsADirectoryError:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{rel or '/'}' is a directory — list it with "
+                f"GET /volumes/{name}/ls?path={rel}"
+            ),
         )
     return VolumeFileResponse(**result)

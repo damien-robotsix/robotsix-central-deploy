@@ -147,8 +147,9 @@ class ExecutionBackend(ABC):
     ) -> list[dict[str, Any]]:
         """Return one entry per immediate child of ``/vol/<rel_path>``.
 
-        Each entry is ``{"name": str, "type": 'file'|'dir', "size_bytes": int}``
-        (dirs report size_bytes 0).
+        Each entry is ``{"name": str, "type": 'file'|'dir', "size_bytes": int}``;
+        a dir reports its recursive size.  Raises ``NotADirectoryError`` when
+        the path is not a directory in the volume.
         """
         pass
 
@@ -161,7 +162,8 @@ class ExecutionBackend(ABC):
 
         *content* is None when the file is binary (NUL byte or UTF-8
         decode failure).  *truncated* is True when the file exceeded
-        *max_bytes*.
+        *max_bytes*.  Raises ``IsADirectoryError`` when the path is a
+        directory.
         """
         pass
 
