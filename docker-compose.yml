@@ -215,10 +215,14 @@ services:
         format: raw
     environment:
       TINYAUTH_APP_URL: "https://auth.${GATEWAY_BASE_DOMAIN}"
-      # Trust X-Forwarded-For only from the edge network, so a client cannot
-      # spoof its own IP past the rate limiter. Must match the pinned subnet
-      # of central-deploy-proxy below.
-      TINYAUTH_AUTH_TRUSTEDPROXIES: "172.24.0.0/16"
+      # Trust X-Forwarded-For from Docker's private range rather than from one
+      # pinned subnet: pinning the subnet would mean declaring it on the
+      # network below, which makes compose recreate that network.
+      #
+      # Wide is safe here. tinyauth publishes no host port and is reachable
+      # only on central-deploy-proxy, so the sole client that can set this
+      # header is Traefik.
+      TINYAUTH_AUTH_TRUSTEDPROXIES: "172.16.0.0/12"
     volumes:
       - tinyauth_data:/data
     labels:
@@ -242,15 +246,14 @@ networks:
   internal:
     driver: bridge
   central-deploy-proxy:
+    # Declared with nothing but a driver and a name, deliberately.
+    #
+    # This network outlives any single `up`: every managed container joins it,
+    # and central-deploy attaches new ones to it as it deploys them. Compose
+    # compares the declaration here against the live network and tries to
+    # RECREATE it on any difference — including merely adding an `ipam` block
+    # to a network that was created without one, even with an identical subnet.
+    # That recreation detaches every container attached to it. Keep this block
+    # minimal; do not add configuration to make some other value derivable.
     driver: bridge
     name: central-deploy-proxy
-    # Pinned so TINYAUTH_AUTH_TRUSTEDPROXIES can name it. Docker would
-    # otherwise pick a subnet from its pool and the value would drift.
-    #
-    # This value must match the network as it already exists on the host —
-    # changing it makes compose try to recreate the network, which means
-    # disconnecting every managed container attached to it. Check with:
-    #   docker network inspect central-deploy-proxy --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
-    ipam:
-      config:
-        - subnet: 172.24.0.0/16
