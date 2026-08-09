@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 from ..lifecycle.deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
-from ..lifecycle._config_utils import inject_deploy_api_key
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
@@ -40,7 +39,6 @@ async def phase_update(
     env_store: EnvStore,
     self_container_name: str = "",
     self_identity_known: bool = True,
-    lifecycle_config: LifecycleConfig | None = None,
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -155,13 +153,6 @@ async def phase_update(
                 )
                 if cred_env:
                     merged_env = {**cred_env, **merged_env}
-            # Inject the deploy API key when chat access is enabled.
-            if lifecycle_config is not None:
-                merged_env = inject_deploy_api_key(
-                    merged_env,
-                    allow_chat_access=config.allow_chat_access,
-                    api_key=lifecycle_config.api_key.get_secret_value(),
-                )
             deploy_config = config.model_copy(update={"env": merged_env})
             outcome = await backend.deploy(record, deploy_config, image_ref)
             record.state = outcome.state

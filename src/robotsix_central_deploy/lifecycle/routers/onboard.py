@@ -27,7 +27,7 @@ from ..deps import (
     _build_component_config_from_spec,
     JobRegistry,
 )
-from .._config_utils import _merge_config, _strip_secret_values, inject_deploy_api_key
+from .._config_utils import _merge_config, _strip_secret_values
 from ..config import LifecycleConfig
 from ..models import (
     DeployHistoryEntry,
@@ -67,9 +67,6 @@ async def _deploy_onboard_siblings(
     store: ServiceStore,
     backend: ExecutionBackend,
     out_records: list[ServiceRecord],
-    *,
-    allow_chat_access: bool = False,
-    api_key: str = "",
 ) -> None:
     """Deploy all siblings from *spec* (best-effort).
 
@@ -81,12 +78,7 @@ async def _deploy_onboard_siblings(
     failures: list[str] = []
     for sib in spec.siblings:
         sib_name = f"{spec.name}-{sib.service_key}"
-        # Siblings inherit the parent's deploy API key when chat access is enabled.
-        sib_env = inject_deploy_api_key(
-            sib.env,
-            allow_chat_access=allow_chat_access,
-            api_key=api_key,
-        )
+        sib_env = sib.env
         sib_component_config = ComponentConfig(
             id=sib_name,
             image=sib.image,
@@ -373,7 +365,6 @@ async def _run_onboard_deploy_job(
     http_client: Any = None,
     settings_store: Any = None,
     port_shifts: list[PortShift] | None = None,
-    api_key: str = "",
 ) -> None:
     """Background task that runs the primary deploy → siblings sequence.
 
@@ -454,8 +445,6 @@ async def _run_onboard_deploy_job(
                 store,
                 backend,
                 sibling_records_created,
-                allow_chat_access=config.allow_chat_access,
-                api_key=api_key,
             )
         except Exception as exc:
             logger.exception("onboard sibling deploy failed for '%s'", spec_name)
@@ -750,20 +739,6 @@ async def onboard_confirm(
     )
     await store.put(record)
 
-    # Inject the deploy API key into the primary config when chat access
-    # is enabled — the component can call back to the deploy API immediately.
-    api_key = lifecycle_config.api_key.get_secret_value()
-    if config.allow_chat_access and api_key:
-        config = config.model_copy(
-            update={
-                "env": inject_deploy_api_key(
-                    config.env,
-                    allow_chat_access=True,
-                    api_key=api_key,
-                )
-            }
-        )
-
     # Schedule the deploy sequence as a background task.
     asyncio.create_task(
         _run_onboard_deploy_job(
@@ -787,7 +762,6 @@ async def onboard_confirm(
             else None,
             settings_store=request.app.state.settings_store,
             port_shifts=req.port_shifts,
-            api_key=api_key,
         )
     )
 

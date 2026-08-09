@@ -1,1 +1,0 @@
-Update-checker: authenticate to `ghcr.io` with the same fleet-wide credential the image pull uses, so private packages report a real up-to-date status instead of `unknown`; registry auth failures (401/403) now log a `registry auth failed` warning naming the fix.

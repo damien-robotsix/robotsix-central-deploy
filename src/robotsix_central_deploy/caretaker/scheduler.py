@@ -170,7 +170,6 @@ class CaretakerScheduler:
                 self._env_store,
                 self_container_name,
                 self_identity_known,
-                lifecycle_config=self._config,
             )
             findings.extend(update_findings)
             phases_run.append("update")

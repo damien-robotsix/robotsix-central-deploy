@@ -15,7 +15,6 @@ from ..backends import ExecutionBackend, collect_protected_image_refs
 from .._config_utils import (
     _sanitize_log,
     _write_llmio_tier_config,
-    inject_deploy_api_key,
 )
 from ..deps import (
     JobRegistry,
@@ -108,8 +107,6 @@ async def _fanout_sibling_action(
     ],
     action_label: str,
     consumed_scopes: list[str] | None = None,
-    allow_chat_access: bool = False,
-    api_key: str = "",
 ) -> None:
     """Fan out an action to all siblings of *name* (best-effort per sibling).
 
@@ -131,12 +128,6 @@ async def _fanout_sibling_action(
             )
             if cred_env:
                 merged_env = {**cred_env, **merged_env}
-        # Siblings inherit the parent's deploy API key when chat access is enabled.
-        merged_env = inject_deploy_api_key(
-            merged_env,
-            allow_chat_access=allow_chat_access,
-            api_key=api_key,
-        )
         effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
             await action(sib_config, sib_record, sib_name, effective_sib)
@@ -232,11 +223,6 @@ async def deploy_service(
             merged_env = {**cred_env, **merged_env}
     # Inject the deploy API key when chat access is enabled so the
     # component can call back to the deploy API without manual setup.
-    merged_env = inject_deploy_api_key(
-        merged_env,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
-    )
     config = config.model_copy(update={"env": merged_env})
 
     image_ref = body.image or config.image
@@ -297,7 +283,6 @@ async def deploy_service(
             config_yaml_store=config_yaml_store,
             job_registry=job_registry,
             settings_store=settings_store,
-            api_key=request.app.state.config.api_key.get_secret_value(),
         )
     )
 
@@ -323,7 +308,6 @@ async def _run_deploy_job(
     config_yaml_store: ConfigYamlStore,
     job_registry: JobRegistry,
     settings_store: Any = None,
-    api_key: str = "",
 ) -> None:
     """Background task that runs the full deploy sequence and updates the job.
 
@@ -460,8 +444,6 @@ async def _run_deploy_job(
             action=_do_deploy_sibling,
             action_label="deploy",
             consumed_scopes=config.consumed_scopes,
-            allow_chat_access=config.allow_chat_access,
-            api_key=api_key,
         )
 
         # Auto-prune dangling images left behind by the update (opt-in setting);
@@ -624,11 +606,6 @@ async def rollback_service(
         if cred_env:
             merged_env = {**cred_env, **merged_env}
     # Inject the deploy API key when chat access is enabled.
-    merged_env = inject_deploy_api_key(
-        merged_env,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
-    )
     config = config.model_copy(update={"env": merged_env})
 
     if body is None:
@@ -726,8 +703,6 @@ async def rollback_service(
             action=_do_rollback_sibling,
             action_label="rollback",
             consumed_scopes=config.consumed_scopes,
-            allow_chat_access=config.allow_chat_access,
-            api_key=request.app.state.config.api_key.get_secret_value(),
         )
 
         return RollbackResponse(
@@ -777,8 +752,6 @@ async def rollback_service(
         action=_do_rollback_sibling,
         action_label="rollback",
         consumed_scopes=config.consumed_scopes,
-        allow_chat_access=config.allow_chat_access,
-        api_key=request.app.state.config.api_key.get_secret_value(),
     )
 
     return RollbackResponse(
