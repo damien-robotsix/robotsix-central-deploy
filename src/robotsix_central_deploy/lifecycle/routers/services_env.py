@@ -11,6 +11,7 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.settings_store import SystemSettingsStore
+from .._deploy_credential import reconcile_deploy_credential
 from .._fleet_auth import reconcile_fleet_auth_hosts
 from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
@@ -29,7 +30,6 @@ from ..deps import (
 from ..models import ErrorDetail
 from ..schemas import EnvResponse, EnvSyncResponse, EnvUpdate
 from ..store import ServiceStore
-
 
 logger = logging.getLogger(__name__)
 

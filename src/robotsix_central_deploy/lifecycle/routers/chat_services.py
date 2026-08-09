@@ -25,7 +25,8 @@ from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
-from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._config_utils import _sanitize_log
+from .._deploy_credential import reconcile_deploy_credential
 from .._fleet_auth import reconcile_fleet_auth_hosts
 from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
@@ -43,7 +44,6 @@ from ..deps import (
     _get_registry,
     _get_store,
 )
-
 from ..models import ActionType, ServiceRecord, ServiceState, can_transition
 from ..schemas import (
     ChatAgentDeployRequest,

@@ -17,7 +17,7 @@ from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
-from .._config_utils import _merge_config, _strip_secret_values, inject_deploy_api_key
+from .._config_utils import _merge_config, _strip_secret_values
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig

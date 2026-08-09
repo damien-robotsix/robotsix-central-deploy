@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from ..._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
 from ._util import (
     PruneImagesResult,
@@ -20,7 +21,6 @@ from ._util import (
 )
 from ._volume_ops import VolumeOps
 from .base import ExecutionBackend
-from ..._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
 
 try:
     from robotsix_github_auth import mint_installation_token
@@ -42,16 +42,6 @@ from ..models import (
     ServiceState,
     VolumeStat,
 )
-from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
-from ._util import (
-    PruneImagesResult,
-    docker_status_to_service_state,
-    inflight_image_refs,
-    register_inflight_image_refs,
-    release_inflight_image_refs,
-)
-from ._volume_ops import VolumeOps
-from .base import ExecutionBackend
 
 if TYPE_CHECKING:
     from ...registry.models import ComponentConfig

@@ -11,7 +11,7 @@ from typing import Literal
 
 from ...registry.env_store import EnvStore
 from ...registry.models import ComponentConfig
-from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._config_utils import _sanitize_log
 from ..backends import ExecutionBackend
 from ..deps import _get_sibling_pairs
 from ..store import ServiceStore
