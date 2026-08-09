@@ -165,3 +165,9 @@ CVE-2026-66035
 # Not exploitable in this container's attack surface.
 CVE-2026-56391
 CVE-2026-56392
+
+# CVEs in Debian base-image system packages libp11-kit0, tar
+# (python:3.14-slim). Not exploitable in this container's attack surface.
+CVE-2026-18477
+CVE-2026-18508
+CVE-2026-18938
