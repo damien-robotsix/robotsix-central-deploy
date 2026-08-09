@@ -4,6 +4,17 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.4.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.3.0...v0.4.0) (2026-08-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* components are no longer proxied by central-deploy and are served by Traefik at <id>.<gateway_base_domain>. Deployment now requires the traefik, traefik-socket-proxy and tinyauth containers, an OVH API credential for the ACME DNS-01 wildcard (the same one certbot used), and a relabel pass redeploying each component so it receives its routing labels. The rate_limit_login_per_minute, rate_limit_login_max_attempts and rate_limit_login_lockout_seconds settings are removed.
+
+### Features
+
+* replace the in-app gateway with a Traefik edge and tinyauth SSO ([#722](https://github.com/damien-robotsix/robotsix-central-deploy/issues/722)) ([0c26711](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0c267119710277a5c7c689aaac8e386a89516c0d))
+
 ## [0.3.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.2.0...v0.3.0) (2026-08-09)
 
 
