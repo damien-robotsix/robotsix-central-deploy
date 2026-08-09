@@ -338,6 +338,19 @@ function renderDiskPanel(data) {
       `⚠ Low disk space — free space is below ${data.warn_threshold_pct}%!`;
     document.getElementById('disk-warning').classList.toggle('hidden', !warn);
     const barClass = warn ? 'disk-bar-fill warn' : 'disk-bar-fill';
+
+    // Per-disk rows — primary view; each disk gets its own used/total/bar.
+    const diskRows = (data.disks || []).map(d => {
+        const dpct = d.total_bytes > 0 ? Math.round(d.used_bytes / d.total_bytes * 100) : 0;
+        const dfreePct = d.total_bytes > 0 ? d.free_bytes / d.total_bytes * 100 : 100;
+        const dwarn = dfreePct < data.warn_threshold_pct;
+        const dbarClass = dwarn ? 'disk-bar-fill warn' : 'disk-bar-fill';
+        const label = d.mount_point === '/' ? 'Root disk' : d.mount_point;
+        return `<tr><th>${escHtml(label)} <span class="text-subtle">(${escHtml(d.device)}, ${escHtml(d.fs_type)})</span></th><td>${fmt_bytes(d.used_bytes)} / ${fmt_bytes(d.total_bytes)}
+          <span class="disk-bar-wrap"><span class="${dbarClass}" style="width:${dpct}%"></span></span>
+          ${dpct}%</td></tr>`;
+    }).join('');
+
     const vols = (data.docker.volumes || []).slice().sort((a, b) => b.size_bytes - a.size_bytes);
     const volRows = vols.map(v =>
         `<tr><th class="th-vol"><span class="volume-name-cell" data-action="openVolumeBrowser" data-arg-0="${escAttr(v.name)}">${escHtml(v.name)}</span>${v.in_use ? '' : ' <span class="text-subtle">(unused)</span>'}</th><td>${fmt_bytes(v.size_bytes)}</td></tr>`
@@ -347,9 +360,13 @@ function renderDiskPanel(data) {
         : '';
     document.getElementById('disk-content').innerHTML = `
         <table>
+          <tr><th colspan="2" class="th-sub">Disks</th></tr>
+          ${diskRows}
+          <tr><th colspan="2" class="th-sub">Aggregate</th></tr>
           <tr><th>Host used</th><td>${fmt_bytes(data.used_bytes)}
             <span class="disk-bar-wrap"><span class="${barClass}" style="width:${usedPct}%"></span></span>
             ${usedPct}%</td></tr>
+          <tr><th colspan="2" class="th-sub">Docker storage</th></tr>
           <tr><th>Docker images (host total)</th><td>${fmt_bytes(data.docker.images_size_bytes)}</td></tr>
           <tr><th>Dangling images</th><td>${fmt_bytes(data.docker.dangling_images_bytes || 0)}</td></tr>
           <tr><th>Docker build cache</th><td>${fmt_bytes(data.docker.build_cache_size_bytes)}</td></tr>
