@@ -200,13 +200,21 @@ services:
   tinyauth:
     image: ghcr.io/tinyauthapp/tinyauth:v5
     restart: unless-stopped
+    # The SSO credentials come from their own file, read verbatim.
+    #
+    # They must NOT go through .env and `environment: "${VAR}"`: that path
+    # interpolates twice — once reading .env, once resolving the compose file —
+    # so a bcrypt hash like `$2y$05$abc` has `$05` and `$abc` eaten as unset
+    # variables and tinyauth receives a truncated hash that can never match a
+    # password. `format: raw` disables interpolation entirely, so the hash is
+    # written plainly here with no `$`-doubling and no way to get it wrong.
+    #
+    # Git-ignored: this repo is public and the file holds a password hash.
+    env_file:
+      - path: ./deploy/traefik/tinyauth.env
+        format: raw
     environment:
       TINYAUTH_APP_URL: "https://auth.${GATEWAY_BASE_DOMAIN}"
-      TINYAUTH_SECRET: "${TINYAUTH_SECRET:?set TINYAUTH_SECRET in .env (32 chars)}"
-      # user:bcrypt-hash — generate with `htpasswd -nbB <user> '<password>'`.
-      # Compose eats a single `$`, so every `$` in the hash must be doubled
-      # when the value is written inline rather than supplied via .env.
-      TINYAUTH_AUTH_USERS: "${TINYAUTH_AUTH_USERS:?set TINYAUTH_AUTH_USERS in .env}"
       # Trust X-Forwarded-For only from the edge network, so a client cannot
       # spoof its own IP past the rate limiter. Must match the pinned subnet
       # of central-deploy-proxy below.

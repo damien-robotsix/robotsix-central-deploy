@@ -103,6 +103,21 @@ Credentials come from the environment (`OVH_*`, see `.env.example`), never from
 a committed file. There is no certbot, no renewal cron, and no per-component
 certificate.
 
+### Secrets and the two credential files
+
+Three values never enter git, because this repo is public: the machine
+credential (`deploy/traefik/fleet-users`), the SSO secret and operator login
+(`deploy/traefik/tinyauth.env`), and the OVH API credentials (`.env`).
+
+The SSO file is read with compose's `format: raw`, which disables interpolation.
+That is not a stylistic choice. Routing a bcrypt hash through `.env` and
+`environment: "${VAR}"` interpolates it **twice** — once reading `.env`, once
+resolving the compose file — so `$2y$05$abc` loses `$05` and `$abc` to unset
+variables and tinyauth silently receives a truncated hash that no password can
+match. With `format: raw` the hash is written exactly as `htpasswd` emits it.
+
+### The base domain
+
 The domain itself comes from `GATEWAY_BASE_DOMAIN` in `.env`. It **must** match
 central-deploy's own `gateway_base_domain` setting, since that is what the
 routing labels are derived from — if the two disagree, components get routes for
@@ -125,7 +140,7 @@ provider reads them directly, not through the config parser.
 | Change the auth gates | `deploy/traefik/dynamic.yml` — watched, applies live |
 | Change entrypoints, TLS, or providers | the `command:` block in `docker-compose.yml` — needs a Traefik restart |
 | Rotate the machine credential | `htpasswd -B deploy/traefik/fleet-users fleet` (Traefik re-reads it live) |
-| Add an operator login | `htpasswd -nbB <user> '<password>'` → `TINYAUTH_AUTH_USERS` |
+| Add an operator login | `htpasswd -nbB <user> '<password>'` → `deploy/traefik/tinyauth.env` |
 | See why a route is missing | `docker inspect <container> --format '{{json .Config.Labels}}'` |
 
 Traefik reads the Docker API through its own read-only socket proxy
