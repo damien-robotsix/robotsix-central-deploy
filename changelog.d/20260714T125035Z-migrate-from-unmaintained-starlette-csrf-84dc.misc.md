@@ -1,1 +1,0 @@
-Migrate from unmaintained starlette-csrf to maintained CSRF library

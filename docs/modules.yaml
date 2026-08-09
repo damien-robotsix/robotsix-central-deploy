@@ -33,6 +33,8 @@ modules:
       - .robotsix-mill/**/*
       - AGENT.md
       - CHANGELOG.md
+      - release-please-config.json
+      - .release-please-manifest.json
       - CODE_OF_CONDUCT.md
       - CONTRIBUTING.md
       - Dockerfile
@@ -42,7 +44,6 @@ modules:
       - SECURITY.md
       - _gen_openapi.py
       - _mill_build.py
-      - changelog.d/**/*
       - config/**/*
       - docker-compose.yml
       - deploy/docker-compose.yml

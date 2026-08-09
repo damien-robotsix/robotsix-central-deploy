@@ -1,1 +1,0 @@
-config UI: suggest peer-component URLs for *_url config fields

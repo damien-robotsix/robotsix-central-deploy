@@ -1,1 +1,0 @@
-Add unit tests for lifecycle/cli.py (CLI argument parsing and config-override logic)

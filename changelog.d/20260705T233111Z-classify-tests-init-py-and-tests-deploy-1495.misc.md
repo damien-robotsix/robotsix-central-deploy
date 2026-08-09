@@ -1,1 +1,0 @@
-Classify tests/__init__.py and tests/deploy_lock/__init__.py: assign to existing module lifecycle

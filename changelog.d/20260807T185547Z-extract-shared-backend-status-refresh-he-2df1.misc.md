@@ -1,1 +1,0 @@
-Extract the shared backend-status-refresh sequence from `GET /services/{name}` and `GET /chat/services/{name}/status` into `lifecycle/routers/_status_refresh.refresh_record_status`, removing the ~46-line jscpd clone between `services.py` and `chat_observability.py`.

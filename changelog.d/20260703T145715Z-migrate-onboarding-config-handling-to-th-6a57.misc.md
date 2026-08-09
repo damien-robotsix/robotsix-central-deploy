@@ -1,1 +1,0 @@
-Migrate onboarding config-handling to the JSON config-standard (config.json, not config.yaml)

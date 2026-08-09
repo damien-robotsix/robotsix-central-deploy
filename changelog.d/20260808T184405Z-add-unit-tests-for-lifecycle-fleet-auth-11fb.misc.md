@@ -1,1 +1,0 @@
-Add unit tests for `lifecycle/_fleet_auth.py` covering host construction, manual-entry preservation, idempotency, and the graceful-degradation paths (missing volume, unreadable config, schema rejection).

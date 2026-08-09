@@ -1,1 +1,0 @@
-Dependabot: adopt monthly cadence with groups + cooldown across all ecosystems

@@ -1,1 +1,0 @@
-Add SecureASGIMiddleware to app.py for security headers (follow-up to force-closed ticket 20260709T120612Z)

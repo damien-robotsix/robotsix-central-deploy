@@ -1,1 +1,0 @@
-Removed the towncrier `auto-release.yml` added earlier today. It implements a **superseded** convention: `changelog-driven-releases.md` is marked superseded by `release-please.md`, which is the fleet-wide release automation. Left in place it would have fired on Monday and pushed a version bump and `v*` tag that release-please is meant to own.

@@ -1,1 +1,0 @@
-Add starlette-csrf middleware and hidden CSRF token fields to form-based login and settings UI

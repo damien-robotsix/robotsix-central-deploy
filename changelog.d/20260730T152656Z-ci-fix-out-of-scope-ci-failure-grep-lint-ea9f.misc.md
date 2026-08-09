@@ -1,1 +1,0 @@
-ci_fix: out-of-scope CI failure — grep-lint / hadolint-docker (DL3025, DL3066) in Dockerfile (lines 61, 65-66) — either switch USER to numeric UID (1000) and convert HEALTHCHECK CMD to JSON exec form, or add inline hadolint ignore comments.

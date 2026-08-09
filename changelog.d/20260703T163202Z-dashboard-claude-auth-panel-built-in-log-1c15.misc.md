@@ -1,1 +1,0 @@
-Dashboard 'Claude auth' panel: built-in login flow + helper image + operator docs

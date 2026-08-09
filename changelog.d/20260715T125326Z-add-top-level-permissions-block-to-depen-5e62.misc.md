@@ -1,1 +1,0 @@
-Add top-level `permissions:` block to dependabot-auto-merge.yml

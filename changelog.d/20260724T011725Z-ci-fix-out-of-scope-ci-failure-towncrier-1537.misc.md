@@ -1,1 +1,0 @@
-ci_fix: out-of-scope CI failure — towncrier check (tests job) in Either rename changelog.d/20260716T030500Z-claude-mount-path-configurable.fix.md to .bugfix.md or .misc.md, add a 'fix' type to [tool.towncrier.type] in pyproject.toml, or add the filename to an 'ignore' list in pyproject.toml.

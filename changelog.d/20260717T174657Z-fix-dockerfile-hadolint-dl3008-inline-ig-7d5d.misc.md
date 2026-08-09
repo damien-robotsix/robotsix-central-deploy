@@ -1,1 +1,0 @@
-Fix Dockerfile hadolint DL3008 inline ignore comments so they're recognized by hadolint v2.9.2

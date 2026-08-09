@@ -1,1 +1,0 @@
-caretaker: mill ingest of auto-update failure findings returns 422

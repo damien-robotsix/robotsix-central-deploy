@@ -1,1 +1,0 @@
-Add structured JSON logging via structlog for production log-aggregator ingestion

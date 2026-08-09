@@ -1,1 +1,0 @@
-Classify config settings as `advanced` per new schema flag

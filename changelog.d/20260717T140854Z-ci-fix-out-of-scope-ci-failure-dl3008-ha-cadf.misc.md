@@ -1,1 +1,0 @@
-ci_fix: out-of-scope CI failure — DL3008 (hadolint: Pin versions in apt-get install) in Dockerfile (lines 13 and 41 — add version pins to apt-get install commands)

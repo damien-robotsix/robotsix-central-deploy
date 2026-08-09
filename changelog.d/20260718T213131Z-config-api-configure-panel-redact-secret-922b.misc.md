@@ -1,1 +1,0 @@
-Config API + Configure panel: redact SecretStr (writeOnly) fields on read, merge on write, masked set/unset inputs in UI

@@ -1,1 +1,0 @@
-Classify tests/ui/*: assign to existing module ui

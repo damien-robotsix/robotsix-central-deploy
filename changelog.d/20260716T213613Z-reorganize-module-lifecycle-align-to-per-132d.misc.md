@@ -1,1 +1,0 @@
-Reorganize module lifecycle: align to per-module layout (src/docs/tests)

@@ -1,1 +1,0 @@
-Refactor deep nesting in deps.py: _claude_auth_refresh_loop and _seed_for_detect

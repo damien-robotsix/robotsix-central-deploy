@@ -1,1 +1,0 @@
-Grant chat agent scoped WRITE access to deploy config + container lifecycle (restart/update)
