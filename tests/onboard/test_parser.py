@@ -12,6 +12,8 @@ from robotsix_central_deploy.onboard.parser import (
     _normalize_labels,
     _parse_chat_access,
     _parse_chat_agent_mutatable,
+    _parse_chat_skill,
+    _parse_chat_skill_endpoint,
     _parse_claude_mount,
     _parse_config_assist,
     _parse_config_target,
@@ -332,6 +334,50 @@ class TestParseChatAgentMutatable:
         assert _parse_chat_agent_mutatable({}) is False
 
 
+class TestParseChatSkill:
+    def test_static_skill_body(self):
+        assert (
+            _parse_chat_skill(
+                {"robotsix.deploy.chat-skill": "# My Service\n\nDoes things."}
+            )
+            == "# My Service\n\nDoes things."
+        )
+
+    def test_empty_string(self):
+        assert _parse_chat_skill({"robotsix.deploy.chat-skill": ""}) == ""
+
+    def test_no_label(self):
+        assert _parse_chat_skill({}) == ""
+
+    def test_not_a_string(self):
+        assert _parse_chat_skill({"robotsix.deploy.chat-skill": 123}) == ""
+
+
+class TestParseChatSkillEndpoint:
+    def test_custom_endpoint(self):
+        assert (
+            _parse_chat_skill_endpoint(
+                {"robotsix.deploy.chat-skill-endpoint": "/custom-skill"}
+            )
+            == "/custom-skill"
+        )
+
+    def test_default_when_empty(self):
+        assert (
+            _parse_chat_skill_endpoint({"robotsix.deploy.chat-skill-endpoint": ""})
+            == "/chat-skill"
+        )
+
+    def test_default_when_missing(self):
+        assert _parse_chat_skill_endpoint({}) == "/chat-skill"
+
+    def test_not_a_string(self):
+        assert (
+            _parse_chat_skill_endpoint({"robotsix.deploy.chat-skill-endpoint": 456})
+            == "/chat-skill"
+        )
+
+
 # ---------------------------------------------------------------------------
 # parse_compose — valid
 # ---------------------------------------------------------------------------
@@ -365,6 +411,55 @@ class TestParseComposeValid:
         assert spec.health_check.timeout_seconds == 10
         assert spec.health_check.retries == 3
         assert spec.health_check.start_period_seconds == 15
+
+    def test_advisories_when_chat_access_missing(self):
+        """When chat-access is not set, an advisory is generated."""
+        spec = parse_compose(
+            _bytes(VALID_COMPOSE_YAML),
+            name="cost-monitor",
+            git_url="https://github.com/example/repo.git",
+        )
+        assert len(spec.advisories) >= 1
+        assert any("chat-access" in a for a in spec.advisories)
+
+    def test_advisories_when_chat_access_true_but_no_skill(self):
+        """When chat-access is true but no static skill body, advisory warns."""
+        compose = """
+# central-deploy-contract-version: 1
+services:
+  svc:
+    image: ghcr.io/org/svc:main
+    labels:
+      robotsix.deploy.chat-access: "true"
+    ports:
+      - "8300:8300"
+"""
+        spec = parse_compose(
+            _bytes(compose),
+            name="svc",
+            git_url="https://github.com/org/svc",
+        )
+        assert any("chat-skill" in a for a in spec.advisories)
+
+    def test_no_advisories_when_fully_compliant(self):
+        """When chat-access is true and a static skill body is set, no advisories."""
+        compose = """
+# central-deploy-contract-version: 1
+services:
+  svc:
+    image: ghcr.io/org/svc:main
+    labels:
+      robotsix.deploy.chat-access: "true"
+      robotsix.deploy.chat-skill: "# My Service\\n\\nDoes things."
+    ports:
+      - "8300:8300"
+"""
+        spec = parse_compose(
+            _bytes(compose),
+            name="svc",
+            git_url="https://github.com/org/svc",
+        )
+        assert spec.advisories == []
 
 
 # ---------------------------------------------------------------------------

@@ -101,6 +101,8 @@ def _build_component_config_from_spec(
         "llmio_tier_level": spec.llmio_tier_level,
         "allow_chat_access": spec.allow_chat_access,
         "chat_agent_mutatable": spec.chat_agent_mutatable,
+        "chat_skill": spec.chat_skill,
+        "chat_skill_endpoint": spec.chat_skill_endpoint,
         "user": spec.user,
         "target_disk": spec.target_disk,
     }
