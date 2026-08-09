@@ -653,27 +653,6 @@ async def _init_component_registry(app: FastAPI) -> None:
     else:
         logger.debug("No auto-discovered Langfuse projects on startup")
 
-    # -- Fleet-auth host reconciliation ---------------------------------------
-    # Rebuild fleet_auth.auth_hosts on chat-agent components at startup so
-    # the allowlist is correct even when the server was restarted while a
-    # toggle was pending.
-    from .._fleet_auth import _rebuild_fleet_auth_hosts
-
-    try:
-        await _rebuild_fleet_auth_hosts(
-            component_config_store,
-            app.state.backend,
-            _config.gateway_base_domain,
-            app.state.config_yaml_store,
-        )
-        logger.debug("Startup fleet-auth host reconciliation complete")
-    except Exception:
-        logger.warning(
-            "Startup fleet-auth host reconciliation failed — "
-            "auth_hosts will remain as-is until the next toggle",
-            exc_info=True,
-        )
-
     # -- Deploy-credential provisioning ---------------------------------------
     # Put the deploy API key in the chat agent's own config, where the
     # config standard requires first-party credentials to live.

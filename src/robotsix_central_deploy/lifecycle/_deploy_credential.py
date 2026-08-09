@@ -6,8 +6,8 @@ standard puts it in the component's config file, not in ``environment:``
 (config-standard §5 — first-party secrets never travel as env vars).
 
 This writes ``central_deploy.api_token`` into the config volume of every
-chat-agent component, the same way ``_fleet_auth`` maintains
-``fleet_auth.auth_hosts``: read the volume, set the key, write it back
+chat-agent component, the same way ``_langfuse_config`` maintains the
+canonical Langfuse block: read the volume, set the key, write it back
 through the schema guard.  A component whose schema does not declare the
 key is skipped, so the engine stays generic — it fills the block for
 components that ask for it and leaves everyone else alone.
