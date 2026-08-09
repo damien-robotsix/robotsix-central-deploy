@@ -93,10 +93,10 @@ _.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/back
 # ===========================================================================
 # FastAPI route handlers — registered via decorator, called by the framework.
 # ===========================================================================
-exchange_token  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:62)
-validate_token  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:119)
-revoke_token  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:145)
-revoke_user_tokens  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:171)
+_ = exchange_token  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:62)
+_ = validate_token  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:119)
+_ = revoke_token  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:145)
+_ = revoke_user_tokens  # unused function (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:171)
 _.revoked_count  # unused method (src/robotsix_central_deploy/lifecycle/token_store.py:204)
 
 # ===========================================================================

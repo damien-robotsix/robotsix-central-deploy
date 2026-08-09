@@ -470,6 +470,20 @@
       "title": "Chat Agent Registration Enabled",
       "type": "boolean"
     },
+    "mobile_token_ttl_days": {
+      "advanced": true,
+      "default": 90,
+      "description": "Lifetime (days) of mobile bearer tokens issued by the /auth/token endpoint.",
+      "title": "Mobile Token Ttl Days",
+      "type": "integer"
+    },
+    "mobile_token_revocation_path": {
+      "advanced": true,
+      "default": "data/mobile_token_revocations.json",
+      "description": "Path of the mobile-token revocation list.",
+      "title": "Mobile Token Revocation Path",
+      "type": "string"
+    },
     "chat_agent_deployable_components": {
       "description": "Component names the chat agent is allowed to deploy via the generic POST /chat/deploy endpoint. Each entry must match ^[a-z0-9][a-z0-9-]*$. Distinct from chat_agent_mutatable (per-component flag) \u2014 this is a server-level allowlist for components that may not have a persisted ComponentConfig yet.",
       "items": {
@@ -491,3 +505,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+

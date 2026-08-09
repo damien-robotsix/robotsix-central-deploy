@@ -5741,6 +5741,327 @@
           }
         }
       }
+    },
+    "/auth/token": {
+      "get": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Exchange Token",
+        "description": "Exchange the current SSO session for a long-lived mobile bearer token.\n\nThis endpoint is **only** reachable through the tinyauth SSO gate.\nThe ``Remote-User`` header (set by tinyauth after successful SSO\nauthentication) identifies the authenticated user.  The endpoint\nissues a self-contained Fernet-signed bearer token that the mobile\napp stores and sends as ``Authorization: Bearer <token>`` on\nsubsequent API calls.\n\nThe token is scoped to ``chat`` access only and expires after the\nconfigured TTL (default 90 days).",
+        "operationId": "exchange_token_auth_token_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/validate": {
+      "get": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Validate Token",
+        "description": "Validate a mobile bearer token for the Traefik ForwardAuth middleware.\n\nCalled by Traefik's ``mobile-token`` ForwardAuth on every request that\ncarries an ``Authorization: Bearer`` header.  Traefik ForwardAuth\npreserves the original request method, so this endpoint accepts *any*\nHTTP method \u2014 a ``POST /chat`` from the mobile app arrives here as\n``POST /auth/validate``.\n\nReturns 200 with a ``Remote-User`` response header (copied upstream by\nTraefik) when the token is valid.  Returns 401 when the token is\nmissing, expired, or revoked.  No JSON body is returned \u2014 the\nForwardAuth hot path returns only the status and header.\n\nThis endpoint is **not** protected by ``verify_auth`` \u2014 it is an\ninternal endpoint reachable only by Traefik on the Docker network.",
+        "operationId": "validate_token_auth_validate_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/token/{token_id}": {
+      "delete": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Revoke Token",
+        "description": "Revoke a single mobile token by its ``jti`` (token id).\n\nThe token id is embedded in the token payload and can be extracted\nby decoding the bearer token.  Revoked tokens are rejected by the\nForwardAuth gate on the next request.",
+        "operationId": "revoke_token_auth_token__token_id__delete",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/revoke-user": {
+      "post": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Revoke User Tokens",
+        "description": "Revoke every mobile token issued for *user* before this moment.\n\nTokens issued *after* this call are unaffected \u2014 only tokens with an\n``iat`` (issued-at) timestamp earlier than now are rejected.",
+        "operationId": "revoke_user_tokens_auth_revoke_user_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8681,6 +9002,21 @@
         "title": "RelaxMergeGateRequest",
         "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/relax-merge-gate``.\n\n*branch* is optional; when omitted the repo's default branch is used."
       },
+      "RevokeUserRequest": {
+        "properties": {
+          "user": {
+            "type": "string",
+            "title": "User",
+            "description": "User identity (email) whose tokens to revoke."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "title": "RevokeUserRequest",
+        "description": "Body for the per-user revocation endpoint."
+      },
       "RollbackRequest": {
         "properties": {
           "digest": {
@@ -9159,6 +9495,39 @@
         ],
         "title": "SiblingUpdateSummary",
         "description": "Per-sibling update-state snapshot so the UI can aggregate the group badge."
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token",
+            "description": "Bearer token for mobile API calls."
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "description": "Always 'Bearer'.",
+            "default": "Bearer"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "description": "Token scope \u2014 chat access only.",
+            "default": "chat"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "Seconds until expiry (approximate)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "TokenResponse",
+        "description": "Bearer token returned to the mobile app after SSO exchange."
       },
       "UpdateRepoRequest": {
         "properties": {
