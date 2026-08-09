@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from ..auth import verify_auth
@@ -36,16 +36,6 @@ class TokenResponse(BaseModel):
         ...,
         description="Seconds until expiry (approximate).",
     )
-
-
-class TokenInfo(BaseModel):
-    """Decoded token metadata (returned by the validate endpoint)."""
-
-    sub: str
-    scope: str
-    exp: float
-    iat: float
-    jti: str
 
 
 class RevokeUserRequest(BaseModel):
@@ -116,17 +106,25 @@ async def exchange_token(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/auth/validate", response_model=TokenInfo)
+@router.api_route(
+    "/auth/validate",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+)
 async def validate_token(
     request: Request,
-) -> TokenInfo:
+) -> Response:
     """Validate a mobile bearer token for the Traefik ForwardAuth middleware.
 
     Called by Traefik's ``mobile-token`` ForwardAuth on every request that
-    carries an ``Authorization: Bearer`` header.  Returns 200 with the
-    decoded token metadata when valid; Traefik forwards the ``Remote-User``
-    response header (set below) to the upstream service.  Returns 401 when
-    the token is missing, expired, or revoked.
+    carries an ``Authorization: Bearer`` header.  Traefik ForwardAuth
+    preserves the original request method, so this endpoint accepts *any*
+    HTTP method — a ``POST /chat`` from the mobile app arrives here as
+    ``POST /auth/validate``.
+
+    Returns 200 with a ``Remote-User`` response header (copied upstream by
+    Traefik) when the token is valid.  Returns 401 when the token is
+    missing, expired, or revoked.  No JSON body is returned — the
+    ForwardAuth hot path returns only the status and header.
 
     This endpoint is **not** protected by ``verify_auth`` — it is an
     internal endpoint reachable only by Traefik on the Docker network.
@@ -134,7 +132,10 @@ async def validate_token(
     from ..auth import verify_bearer_token
 
     payload = verify_bearer_token(request)
-    return TokenInfo(**payload)
+    return Response(
+        status_code=status.HTTP_200_OK,
+        headers={"Remote-User": payload["sub"]},
+    )
 
 
 # ---------------------------------------------------------------------------

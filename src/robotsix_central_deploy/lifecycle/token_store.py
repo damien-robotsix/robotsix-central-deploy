@@ -180,26 +180,21 @@ class TokenStore:
             await self._save_locked()
             return True
 
-    async def revoke_user(self, sub: str) -> int:
+    async def revoke_user(self, sub: str) -> None:
         """Revoke every token issued for *sub* before this moment.
 
         Sets the user's revocation timestamp to the current time, which
-        invalidates all tokens with an earlier ``iat``.  Returns the
-        number of individually revoked tokens that were also cleaned up
-        (tokens whose ``jti`` was in the revoked set but whose ``iat``
-        predates the new cutoff).
+        invalidates all tokens with an earlier ``iat``.  The per-token
+        revocation set is not pruned (``jti → user`` mapping is not
+        stored), but stale per-token entries are harmless and age out
+        naturally as the tokens expire.
 
         Tokens issued *after* this call are unaffected.
         """
         async with self._lock:
             now = time.time()
             self._user_revoke_before[sub] = now
-            # Individual revocations for this user could be pruned here
-            # but we cannot map jti → user without storing that metadata.
-            # Existing per-token revocations are harmless and will age out
-            # naturally as the tokens expire.
             await self._save_locked()
-            return 0  # caller-facing count is informational
 
     async def revoked_count(self) -> int:
         """Return the number of individually revoked token ids."""
