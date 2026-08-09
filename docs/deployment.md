@@ -102,7 +102,7 @@ route onto the container and Traefik picks it up. See
 The edge containers come up with the rest of the stack:
 
 ```bash
-cp .env.example .env      # ACME email, OVH API credentials, tinyauth secret + users
+cp .env.example .env      # base domain, ACME email, OVH credentials, tinyauth secret + users
 docker compose up -d
 ```
 

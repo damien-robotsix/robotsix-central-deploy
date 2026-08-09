@@ -63,16 +63,16 @@ services:
       # subdomains of it. Same three-router shape central-deploy stamps on
       # every component (registry/traefik_labels.py) — kept literal here
       # because central-deploy cannot label its own container.
-      traefik.http.routers.central-deploy-health.rule: "Host(`deploy.robotsix.net`) && Path(`/health`)"
+      traefik.http.routers.central-deploy-health.rule: "Host(`${GATEWAY_BASE_DOMAIN}`) && Path(`/health`)"
       traefik.http.routers.central-deploy-health.priority: "30"
       traefik.http.routers.central-deploy-health.entrypoints: websecure
       traefik.http.routers.central-deploy-health.service: central-deploy
-      traefik.http.routers.central-deploy-machine.rule: "Host(`deploy.robotsix.net`) && HeaderRegexp(`Authorization`, `^Basic `)"
+      traefik.http.routers.central-deploy-machine.rule: "Host(`${GATEWAY_BASE_DOMAIN}`) && HeaderRegexp(`Authorization`, `^Basic `)"
       traefik.http.routers.central-deploy-machine.priority: "20"
       traefik.http.routers.central-deploy-machine.entrypoints: websecure
       traefik.http.routers.central-deploy-machine.middlewares: fleet-basicauth@file
       traefik.http.routers.central-deploy-machine.service: central-deploy
-      traefik.http.routers.central-deploy.rule: "Host(`deploy.robotsix.net`)"
+      traefik.http.routers.central-deploy.rule: "Host(`${GATEWAY_BASE_DOMAIN}`)"
       traefik.http.routers.central-deploy.priority: "10"
       traefik.http.routers.central-deploy.entrypoints: websecure
       traefik.http.routers.central-deploy.middlewares: tinyauth@file
@@ -91,10 +91,53 @@ services:
   traefik:
     image: traefik:v3.3
     restart: unless-stopped
+    # Static configuration lives here rather than in a traefik.yml, because
+    # Traefik does not merge static-config sources — the docs are explicit that
+    # mixing a file with TRAEFIK_* env vars "is not supported and can lead to
+    # unexpected behavior". Compose interpolates ${...} in this block, so the
+    # deployment-specific values come from .env and no domain is committed.
+    command:
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"
+      # One wildcard for the whole fleet, requested at the entrypoint rather
+      # than per-router: per-router would mean an ACME order per component and
+      # a rate-limit problem on any day with several onboardings.
+      - "--entrypoints.websecure.http.tls.certresolver=ovh"
+      - "--entrypoints.websecure.http.tls.domains[0].main=${GATEWAY_BASE_DOMAIN:?set GATEWAY_BASE_DOMAIN in .env}"
+      - "--entrypoints.websecure.http.tls.domains[0].sans=*.${GATEWAY_BASE_DOMAIN}"
+      # Routes come from container labels. Nothing is published unless it
+      # carries traefik.enable=true, or every managed container would be
+      # exposed the moment it started.
+      - "--providers.docker=true"
+      - "--providers.docker.endpoint=tcp://traefik-socket-proxy:2375"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=central-deploy-proxy"
+      # Fleet-wide middleware (the auth gates). Dynamic config is a separate
+      # source from static config, so a file here is fine.
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--providers.file.watch=true"
+      # Wildcards are only obtainable via DNS-01. The OVH credentials are read
+      # by the ACME provider from OVH_* in the environment, not by the config
+      # parser, so they do not count as a second static-config source.
+      - "--certificatesresolvers.ovh.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.ovh.acme.dnschallenge=true"
+      - "--certificatesresolvers.ovh.acme.dnschallenge.provider=ovh"
+      # OVH's nameservers are slow to converge; without a delay the first order
+      # fails its self-check and Traefik retries with backoff.
+      - "--certificatesresolvers.ovh.acme.dnschallenge.delaybeforecheck=10"
+      - "--certificatesresolvers.ovh.acme.email=${ACME_EMAIL:?set ACME_EMAIL in .env}"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      # No dashboard: it would need its own hostname and its own auth rule, and
+      # `docker logs traefik` plus the access log answer the same questions.
+      - "--api.dashboard=false"
     environment:
-      # ACME account address — kept out of the committed static config.
-      TRAEFIK_CERTIFICATESRESOLVERS_OVH_ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL in .env}"
-      # OVH API credentials for the DNS-01 wildcard challenge.
+      # OVH API credentials for the DNS-01 wildcard challenge. These are read
+      # by the ACME provider, not by Traefik's config parser, so they are not a
+      # second static-configuration source.
       OVH_ENDPOINT: "${OVH_ENDPOINT:-ovh-eu}"
       OVH_APPLICATION_KEY: "${OVH_APPLICATION_KEY:?set OVH_APPLICATION_KEY in .env}"
       OVH_APPLICATION_SECRET: "${OVH_APPLICATION_SECRET:?set OVH_APPLICATION_SECRET in .env}"
@@ -103,12 +146,11 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       # The fleet machine credential. Git-ignored — this repo is public, so the
       # hash must never be committed. Seed it by copying the existing nginx
       # htpasswd across; the current password then keeps working unchanged:
-      #   cp /etc/nginx/htpasswd/deploy.robotsix.net ./deploy/traefik/fleet-users
+      #   cp /etc/nginx/htpasswd/<your-vhost> ./deploy/traefik/fleet-users
       - ./deploy/traefik/fleet-users:/etc/traefik/fleet-users:ro
       - traefik_letsencrypt:/letsencrypt
     depends_on:
@@ -159,7 +201,7 @@ services:
     image: ghcr.io/tinyauthapp/tinyauth:v5
     restart: unless-stopped
     environment:
-      TINYAUTH_APP_URL: "https://auth.deploy.robotsix.net"
+      TINYAUTH_APP_URL: "https://auth.${GATEWAY_BASE_DOMAIN}"
       TINYAUTH_SECRET: "${TINYAUTH_SECRET:?set TINYAUTH_SECRET in .env (32 chars)}"
       # user:bcrypt-hash — generate with `htpasswd -nbB <user> '<password>'`.
       # Compose eats a single `$`, so every `$` in the hash must be doubled
@@ -177,7 +219,7 @@ services:
       # middleware or the redirect would loop.
       traefik.enable: "true"
       traefik.docker.network: central-deploy-proxy
-      traefik.http.routers.tinyauth.rule: "Host(`auth.deploy.robotsix.net`)"
+      traefik.http.routers.tinyauth.rule: "Host(`auth.${GATEWAY_BASE_DOMAIN}`)"
       traefik.http.routers.tinyauth.entrypoints: websecure
       traefik.http.services.tinyauth.loadbalancer.server.port: "3000"
     networks:
