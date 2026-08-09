@@ -100,5 +100,5 @@ _.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:28)
 # (runtime path) and its test suite.
 # ===========================================================================
 _ = _canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:27)
-_is_key_secret  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:619)
-_restore_secrets_from_current  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:666)
+_ = _is_key_secret  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:619)
+_ = _restore_secrets_from_current  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:666)

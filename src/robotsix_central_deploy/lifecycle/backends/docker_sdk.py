@@ -11,25 +11,6 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from ..._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
-from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
-from ._util import (
-    PruneImagesResult,
-    docker_status_to_service_state,
-    inflight_image_refs,
-    register_inflight_image_refs,
-    release_inflight_image_refs,
-)
-from ._volume_ops import VolumeOps
-from .base import ExecutionBackend
-
-try:
-    from robotsix_github_auth import mint_installation_token
-
-    _HAS_GITHUB_AUTH = True
-except ImportError:  # pragma: no cover
-    mint_installation_token = None
-    _HAS_GITHUB_AUTH = False
-
 from ...gateway.proxy import PROXY_NETWORK
 from ..models import (
     ComponentInspect,
@@ -42,6 +23,16 @@ from ..models import (
     ServiceState,
     VolumeStat,
 )
+from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
+from ._util import (
+    PruneImagesResult,
+    docker_status_to_service_state,
+    inflight_image_refs,
+    register_inflight_image_refs,
+    release_inflight_image_refs,
+)
+from ._volume_ops import VolumeOps
+from .base import ExecutionBackend
 
 if TYPE_CHECKING:
     from ...registry.models import ComponentConfig

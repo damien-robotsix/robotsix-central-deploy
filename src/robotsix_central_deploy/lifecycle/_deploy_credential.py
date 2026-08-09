@@ -33,7 +33,7 @@ _KEY = "api_token"
 
 
 async def _rebuild_deploy_credential(
-    component_config_store: "ComponentConfigStore",
+    component_config_store: ComponentConfigStore,
     backend: Any,
     api_key: str,
     config_yaml_store: Any = None,
@@ -55,7 +55,7 @@ async def _rebuild_deploy_credential(
         volume_config: dict[str, Any] = {}
         try:
             volume_config = await backend.read_config_from_volume(cfg.config_volume)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort read; default to empty dict on any failure
             volume_config = {}
         if not isinstance(volume_config, dict):
             volume_config = {}
@@ -104,8 +104,8 @@ async def _rebuild_deploy_credential(
 
 
 async def reconcile_deploy_credential(
-    component_config_store: "ComponentConfigStore",
-    request: "Request",
+    component_config_store: ComponentConfigStore,
+    request: Request,
 ) -> None:
     """Route-handler wrapper: extract state from *request* and delegate.
 

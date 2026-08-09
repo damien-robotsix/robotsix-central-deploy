@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
 from ...registry.loader import ComponentRegistry
-from .._config_utils import _sanitize_log, inject_deploy_api_key
+from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deploy_lock import release_deploy_lock, try_acquire_deploy_lock

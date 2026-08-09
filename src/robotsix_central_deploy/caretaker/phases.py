@@ -11,7 +11,6 @@ import shutil
 import time
 from typing import TYPE_CHECKING
 
-from ..lifecycle._config_utils import inject_deploy_api_key
 from ..lifecycle.deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
 from .models import CaretakerFinding, FindingKind
