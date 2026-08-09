@@ -33,6 +33,7 @@ modules:
       - .robotsix-mill/**/*
       - AGENT.md
       - CHANGELOG.md
+      - changelog.d/**/*
       - release-please-config.json
       - .release-please-manifest.json
       - CODE_OF_CONDUCT.md
