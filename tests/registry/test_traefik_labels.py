@@ -7,6 +7,7 @@ import pytest
 from robotsix_central_deploy.registry.constants import PROXY_NETWORK
 from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
 from robotsix_central_deploy.registry.traefik_labels import (
+    BEARER_MIDDLEWARE,
     BROWSER_MIDDLEWARE,
     traefik_labels,
 )
@@ -50,16 +51,16 @@ def test_forwards_to_the_container_port_not_the_host_port() -> None:
     assert labels["traefik.docker.network"] == PROXY_NETWORK
 
 
-def test_both_routers_share_one_upstream_service() -> None:
+def test_all_routers_share_one_upstream_service() -> None:
     # Without an explicit service, Traefik invents one per router and 404s the
     # one that has no matching service definition.
     labels = _labels()
-    for router in ("board", "board-health"):
+    for router in ("board", "board-bearer", "board-health"):
         assert labels[f"traefik.http.routers.{router}.service"] == "board"
 
 
 # ---------------------------------------------------------------------------
-# Authentication — the point of the redesign
+# Authentication
 # ---------------------------------------------------------------------------
 
 
@@ -67,19 +68,26 @@ def test_browser_traffic_goes_through_sso() -> None:
     assert _labels()["traefik.http.routers.board.middlewares"] == BROWSER_MIDDLEWARE
 
 
-def test_no_router_bypasses_sso_except_health() -> None:
-    """Only /health may answer without the SSO gate.
+def test_bearer_traffic_uses_mobile_token_auth() -> None:
+    """Requests with Authorization: Bearer use the mobile-token ForwardAuth."""
+    labels = _labels()
+    assert labels["traefik.http.routers.board-bearer.middlewares"] == BEARER_MIDDLEWARE
+    assert (
+        "HeadersRegexp(`Authorization`, `^Bearer .+`)"
+        in labels["traefik.http.routers.board-bearer.rule"]
+    )
 
-    A second, weaker door existed here: an HTTP Basic router matched on the
-    Authorization header. Keyed with the fleet's existing htpasswd, it meant
-    every browser holding the old credential was served without ever seeing a
-    login page. Nothing may reintroduce a route that skips tinyauth.
+
+def test_three_routers_per_component() -> None:
+    """Every routable component gets health, bearer, and browser routers.
+
+    The bearer router (priority 20) sits between health (30) and browser
+    (10), so bearer-token requests skip tinyauth entirely while browser
+    sessions fall through to the SSO gate.
     """
     labels = _labels()
     routers = {k.split(".")[3] for k in labels if k.startswith("traefik.http.routers.")}
-    assert routers == {"board", "board-health"}
-    assert labels["traefik.http.routers.board.middlewares"] == BROWSER_MIDDLEWARE
-    assert not any("Authorization" in v for v in labels.values())
+    assert routers == {"board", "board-bearer", "board-health"}
 
 
 def test_health_probe_is_auth_exempt() -> None:
@@ -89,10 +97,11 @@ def test_health_probe_is_auth_exempt() -> None:
     assert "traefik.http.routers.board-health.middlewares" not in labels
 
 
-def test_health_router_outranks_the_catch_all() -> None:
+def test_router_priority_order() -> None:
+    """Health (30) > bearer (20) > browser (10)."""
     labels = _labels()
     priority = lambda r: int(labels[f"traefik.http.routers.{r}.priority"])
-    assert priority("board-health") > priority("board")
+    assert priority("board-health") > priority("board-bearer") > priority("board")
 
 
 # ---------------------------------------------------------------------------
@@ -141,4 +150,9 @@ def test_labels_are_derived_never_special_cased() -> None:
     assert (
         labels["traefik.http.services.brand-new-thing.loadbalancer.server.port"]
         == "3000"
+    )
+    # Bearer router exists and has the expected rule.
+    assert (
+        "HeadersRegexp(`Authorization`, `^Bearer .+`)"
+        in labels["traefik.http.routers.brand-new-thing-bearer.rule"]
     )

@@ -30,6 +30,7 @@ from ..backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBa
 from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntry
 from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
 from ..store import FileStore, InMemoryStore, ServiceStore
+from ..token_store import TokenStore
 from .background import _claude_auth_refresh_loop, _registry_check_loop
 from .jobs import JobRegistry
 
@@ -253,6 +254,16 @@ async def _init_config(app: FastAPI) -> None:
     app.state.deploy_history_store = _deploy_history_store
     app.state.chat_agent_audit_store = _chat_agent_audit_store
     app.state.chat_agent_rate_limits = {}
+
+    # -- Mobile token store --------------------------------------------------
+    _token_revocation_path = Path(_config.mobile_token_revocation_path)
+    _token_store = TokenStore(
+        key_manager=_key_manager,
+        revocation_path=_token_revocation_path,
+        ttl_days=_config.mobile_token_ttl_days,
+    )
+    await _token_store.start()
+    app.state.token_store = _token_store
 
 
 async def _init_settings(app: FastAPI) -> None:

@@ -65,6 +65,9 @@ class SystemSettings(BaseModel):
     chat_agent_registration_enabled: bool = SETTINGS_DEFAULTS[
         "chat_agent_registration_enabled"
     ]  # allow chat agent to register components via POST /chat/services
+    mobile_token_ttl_days: int = SETTINGS_DEFAULTS[
+        "mobile_token_ttl_days"
+    ]  # mobile bearer-token lifetime in days
 
     @field_validator("volume_audit_interval_seconds")
     @classmethod

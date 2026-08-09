@@ -51,9 +51,57 @@ Three routers are emitted, ordered by priority so the most specific wins:
 | Priority | Router | Matches | Authenticated by |
 |---|---|---|---|
 | 30 | `<id>-health` | `GET /health` | nothing — the [health-endpoint standard](https://damien-robotsix.github.io/robotsix-standards/health-endpoints/) requires an uncredentialed probe |
+| 20 | `<id>-bearer` | `Host(...) && Authorization: Bearer ...` | `mobile-token` ForwardAuth — validates a mobile bearer token issued by `GET /auth/token` on central-deploy |
 | 10 | `<id>` | everything else | tinyauth SSO via `forwardAuth` |
 
-### Why there is no machine door
+### Mobile bearer-token authentication
+
+Mobile native apps (e.g. `robotsix-chat-mobile`) cannot use the browser SSO
+session-cookie flow.  The fleet supports a **token-exchange flow** where the app
+opens a browser (WebView) to authenticate through tinyauth once and receives a
+long-lived Bearer token for subsequent API calls.
+
+**Exchange endpoint** — `GET /auth/token` on central-deploy (must be routed
+through the tinyauth SSO gate by the operator; see below):
+
+1. The mobile app opens a browser to `https://<deploy-host>/auth/token`.
+2. tinyauth (no session cookie) redirects to the SSO login page.
+3. The user logs in via SSO; tinyauth sets a session cookie and redirects back
+   to `/auth/token`.
+4. central-deploy receives the request with a `Remote-User` header (set by
+   tinyauth), issues a Fernet-signed bearer token, and returns it as JSON:
+   `{"access_token": "...", "token_type": "Bearer", "scope": "chat", "expires_in": 7776000}`.
+5. The mobile app stores the token in secure storage and sends it as
+   `Authorization: Bearer <token>` on every API request.
+
+**Token lifecycle:**
+
+| Property | Value |
+|---|---|
+| Scope | `chat` — chat backend access only |
+| Lifetime | 90 days (configurable via `mobile_token_ttl_days`) |
+| Revocation | Single-token (`DELETE /auth/token/{jti}`) or per-user (`POST /auth/revoke-user`) |
+| Renewal | Re-authenticate through the SSO flow to obtain a new token |
+
+**Edge validation** — requests with `Authorization: Bearer` match the
+higher-priority `-bearer` router (20 vs 10) and are validated by the
+`mobile-token` ForwardAuth, which calls central-deploy's `GET /auth/validate`.
+Valid tokens are forwarded with `Remote-User`; invalid, expired, or revoked
+tokens are rejected with `401` at the edge.  Browser sessions without a Bearer
+header fall through to the tinyauth gate at priority 10 — the existing SSO path
+is unchanged.
+
+**Operator provisioning required:**
+
+- central-deploy must be reachable through the Traefik edge with the tinyauth
+  middleware so the `/auth/token` exchange endpoint is behind the SSO gate.
+  Add Traefik labels to central-deploy's own `docker-compose.yml` (or onboard it
+  as a routable component) with the `tinyauth@file` middleware.
+- The `mobile-token` ForwardAuth (in `deploy/traefik/dynamic.yml`) calls
+  `http://central-deploy:8100/auth/validate` — no additional provisioning needed
+  as long as central-deploy is on the same Docker network as Traefik.
+
+### Why there is no machine door (updated)
 
 There was one, briefly: a higher-priority router matching `Authorization: Basic`
 and validated against an htpasswd file, so that scripts and fleet services could
@@ -70,6 +118,12 @@ already has is not defence in depth.
 Machine callers reach components over the internal Docker network
 (`http://<container>:<port>`), which never passes through the edge and therefore
 needs no edge credential at all.
+
+The mobile bearer-token router (`-bearer`, priority 20) is **not** a second door
+in that sense. It validates tokens that were obtained by authenticating through
+the SSO gate first (`GET /auth/token` is behind tinyauth). A bearer token is
+user-scoped, revocable, and time-limited — it is a *delegation* of an SSO
+session, not a bypass of it.
 
 ### What does not get routed
 

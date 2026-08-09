@@ -20,6 +20,7 @@ from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
 from ..models import HealthStatus, ServiceRecord
 from ..store import ServiceStore
+from ..token_store import TokenStore
 from .jobs import JobRegistry
 
 if TYPE_CHECKING:
@@ -137,3 +138,7 @@ def _compute_overall_health(
     if all(h == HealthStatus.HEALTHY for h in checked):
         return HealthStatus.HEALTHY
     return ""
+
+
+async def _get_token_store(request: Request) -> TokenStore:
+    return request.app.state.token_store  # type: ignore[no-any-return]

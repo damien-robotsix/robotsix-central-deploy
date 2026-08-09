@@ -31,6 +31,7 @@ class _SettingsDefaults(TypedDict):
     volume_audit_min_delta_bytes: int
     ghcr_pull_token: str
     chat_agent_registration_enabled: bool
+    mobile_token_ttl_days: int
 
 
 SETTINGS_DEFAULTS: _SettingsDefaults = {
@@ -53,4 +54,5 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "volume_audit_min_delta_bytes": 10_485_760,
     "ghcr_pull_token": "",
     "chat_agent_registration_enabled": True,
+    "mobile_token_ttl_days": 90,
 }
