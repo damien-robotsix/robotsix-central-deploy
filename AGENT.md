@@ -190,6 +190,8 @@ src/robotsix_central_deploy/
 
 **Rule:** When adding a new public `.py` module (not private, not `__init__.py`), add a corresponding `::: robotsix_central_deploy.<module_path>` mkdocstrings directive to `docs/lifecycle/api.md` under the appropriate section. The section headers in `docs/lifecycle/api.md` mirror the `src/robotsix_central_deploy/` directory structure — new modules should be listed alongside their sibling modules in the matching section.
 
+**Rule:** When adding, renaming, or deleting a public FastAPI route or Pydantic response model, regenerate `docs/lifecycle/openapi.json` in the SAME commit via `uv run python _gen_openapi.py` — never rely on the `openapi-drift` CI gate to catch the drift.
+
 ## Code Gotchas
 
 1. **Sibling fan-out is best-effort** — failures are logged but don't fail the primary operation.
