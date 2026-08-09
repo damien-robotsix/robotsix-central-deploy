@@ -19,7 +19,6 @@ from robotsix_central_deploy.registry.settings_store import (
     SystemSettingsStore,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper: build a LifecycleConfig from ROBOTSIX_LIFECYCLE_* env vars
 # ---------------------------------------------------------------------------
@@ -360,25 +359,27 @@ class TestSettingsFirstBoot:
         store = SystemSettingsStore(settings_path)
         await store.put(SystemSettings(gateway_base_domain="overlaid.example.com"))
 
+        from robotsix_central_deploy.lifecycle import deps
         from robotsix_central_deploy.lifecycle.app import app
         from robotsix_central_deploy.lifecycle.deps import lifespan
-        from robotsix_central_deploy.lifecycle import deps
 
         mock_rc = MagicMock()
         mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
 
-        with patch.object(
-            deps, "_build_backend", wraps=deps._build_backend
-        ) as mock_build:
-            with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
-                async with lifespan(app):
-                    # _build_backend must have been called at least once.
-                    mock_build.assert_called_once()
-                    # The config passed to _build_backend must carry the
-                    # overlaid gateway_base_domain, not the raw env-var
-                    # default.
-                    called_cfg = mock_build.call_args[0][0]
-                    assert called_cfg.gateway_base_domain == "overlaid.example.com"
+        with (
+            patch.object(
+                deps, "_build_backend", wraps=deps._build_backend
+            ) as mock_build,
+            patch.dict("sys.modules", {"robotsix_config": mock_rc}),
+        ):
+            async with lifespan(app):
+                # _build_backend must have been called at least once.
+                mock_build.assert_called_once()
+                # The config passed to _build_backend must carry the
+                # overlaid gateway_base_domain, not the raw env-var
+                # default.
+                called_cfg = mock_build.call_args[0][0]
+                assert called_cfg.gateway_base_domain == "overlaid.example.com"
 
 
 # ---------------------------------------------------------------------------

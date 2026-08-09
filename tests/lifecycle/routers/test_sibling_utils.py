@@ -23,7 +23,6 @@ from robotsix_central_deploy.lifecycle.routers._sibling_utils import (
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
 from robotsix_central_deploy.registry.models import ComponentConfig, ServiceConfig
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

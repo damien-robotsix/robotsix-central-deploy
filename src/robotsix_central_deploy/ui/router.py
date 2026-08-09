@@ -11,9 +11,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
-from ..lifecycle.auth import verify_session, _safe_next
+from ..lifecycle.auth import _safe_next, verify_session
 from ..lifecycle.session import SessionStore
-
 
 router = APIRouter()
 

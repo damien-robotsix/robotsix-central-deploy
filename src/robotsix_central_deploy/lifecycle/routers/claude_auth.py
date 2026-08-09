@@ -29,19 +29,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from robotsix_http import ExternalHTTPError
 
 from ..._http import retry_client_context
-
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import _get_backend, get_claude_auth_refresh_state
 from ..models import CLAUDE_AUTH_VOLUME
 from ..schemas import (
-    ClaudeAuthStatusResponse,
-    ClaudeAuthLoginResponse,
     ClaudeAuthCancelRequest,
     ClaudeAuthCompleteRequest,
     ClaudeAuthCompleteResponse,
     ClaudeAuthCredentialsRequest,
     ClaudeAuthCredentialsResponse,
+    ClaudeAuthLoginResponse,
+    ClaudeAuthStatusResponse,
 )
 
 router = APIRouter(tags=["claude-auth"])
@@ -100,7 +99,7 @@ def _prune_login_sessions() -> None:
 
 @router.get("/claude-auth/status", response_model=ClaudeAuthStatusResponse)
 async def get_claude_auth_status(
-    backend: ExecutionBackend = Depends(_get_backend),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ClaudeAuthStatusResponse:
     """Return the current Claude authentication status."""
@@ -206,7 +205,7 @@ async def _exchange_code(auth_code: str, state: str, verifier: str) -> dict[str,
                     if exc.response is not None
                     else detail
                 )
-            except Exception:  # noqa: S110 — non-JSON error body; keep raw text
+            except Exception:  # noqa: BLE001, S110
                 pass
             raise HTTPException(
                 status_code=400,
@@ -219,7 +218,7 @@ async def _exchange_code(auth_code: str, state: str, verifier: str) -> dict[str,
 @router.post("/claude-auth/login/complete", response_model=ClaudeAuthCompleteResponse)
 async def complete_claude_login(
     body: ClaudeAuthCompleteRequest,
-    backend: ExecutionBackend = Depends(_get_backend),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ClaudeAuthCompleteResponse:
     """Exchange the pasted authorization code for tokens and persist them.
@@ -330,7 +329,7 @@ async def cancel_claude_login(
 @router.post("/claude-auth/credentials", response_model=ClaudeAuthCredentialsResponse)
 async def write_claude_credentials(
     body: ClaudeAuthCredentialsRequest,
-    backend: ExecutionBackend = Depends(_get_backend),
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ClaudeAuthCredentialsResponse:
     """Write credentials JSON directly into the ``claude-auth`` volume.

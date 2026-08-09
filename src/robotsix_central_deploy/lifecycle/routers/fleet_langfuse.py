@@ -25,19 +25,19 @@ Exposes:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 
+from ...registry.loader import ComponentRegistry
 from .._config_utils import read_component_config
 from .._langfuse_config import extract_langfuse_block
 from .._openrouter_config import extract_openrouter_keys
 from ..auth import verify_auth
+from ..backends.base import ExecutionBackend
 from ..config import LifecycleConfig
 from ..deps import _get_backend, _get_config, _get_registry, _get_store
 from ..models import ServiceState
 from ..store import ServiceStore
-from ..backends.base import ExecutionBackend
-from ...registry.loader import ComponentRegistry
 
 router = APIRouter(tags=["fleet-langfuse"])
 
@@ -187,10 +187,10 @@ def _with_openrouter(
     summary="List components with Langfuse credentials",
 )
 async def fleet_langfuse_credentials(
-    store: ServiceStore = Depends(_get_store),
-    registry: ComponentRegistry = Depends(_get_registry),
-    backend: ExecutionBackend = Depends(_get_backend),
-    config: LifecycleConfig = Depends(_get_config),
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> FleetLangfuseResponse:
     """Return every registered component with its lifecycle status and,

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from robotsix_central_deploy._ghcr_auth import GhcrCredentials, GhcrCredentialResolver
+from robotsix_central_deploy._ghcr_auth import GhcrCredentialResolver, GhcrCredentials
 
 
 def _app_resolver(**kw: str) -> GhcrCredentialResolver:

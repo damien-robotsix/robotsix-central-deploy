@@ -48,8 +48,8 @@ class VolumeOps:
         """Resolve a Docker user string (``uid:gid``, ``uid``, or username)
         to numeric (uid, gid) using the host user/group database.
         """
-        import pwd
         import grp
+        import pwd
 
         if ":" in user_str:
             u_part, g_part = user_str.split(":", 1)
@@ -219,7 +219,7 @@ class VolumeOps:
                 ),
             )
             return int(raw.strip() or b"0")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
             return 0
 
@@ -369,5 +369,5 @@ class VolumeOps:
             await loop.run_in_executor(None, _remove)
         except docker.errors.NotFound:  # Volume already removed
             pass
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("remove_volume %s: %s", volume_name, exc)

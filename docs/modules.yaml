@@ -52,6 +52,7 @@ modules:
       - pyproject.toml
       - uv.lock
       - vulture_whitelist.py
+      - changelog.d/**/*
 
   - id: gateway
     description: >

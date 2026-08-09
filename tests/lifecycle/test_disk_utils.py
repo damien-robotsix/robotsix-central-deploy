@@ -210,7 +210,7 @@ class TestDiscoverMountedDisks:
         proc_mounts.write_text("/dev/sda1 / ext4 rw 0 0\n")
         monkeypatch.setattr(
             "builtins.open",
-            lambda path, mode="r": io.open(str(proc_mounts)),
+            lambda path, mode="r": io.open(str(proc_mounts)),  # noqa: UP020, SIM115
         )
         import shutil as shutil_mod
 
@@ -232,7 +232,7 @@ class TestDiscoverMountedDisks:
         proc_mounts.write_text("/dev/sda1 / ext4 rw 0 0\n")
         monkeypatch.setattr(
             "builtins.open",
-            lambda path, mode="r": io.open(str(proc_mounts)),
+            lambda path, mode="r": io.open(str(proc_mounts)),  # noqa: UP020, SIM115
         )
         import shutil as shutil_mod
 
@@ -255,7 +255,7 @@ class TestDiscoverMountedDisks:
         proc_mounts.write_text("/dev/sda1 / ext4 rw 0 0\n")
         monkeypatch.setattr(
             "builtins.open",
-            lambda path, mode="r": io.open(str(proc_mounts)),
+            lambda path, mode="r": io.open(str(proc_mounts)),  # noqa: UP020, SIM115
         )
         import shutil as shutil_mod
 
@@ -306,7 +306,7 @@ class TestDiscoverViaProcMounts:
         )
         monkeypatch.setattr(
             "builtins.open",
-            lambda path, mode="r": io.open(str(proc_mounts)),
+            lambda path, mode="r": io.open(str(proc_mounts)),  # noqa: UP020, SIM115
         )
         import shutil as shutil_mod
 
@@ -333,7 +333,7 @@ class TestDiscoverViaProcMounts:
         proc_mounts.write_text("/dev/sda1 / ext4 rw 0 0\n")
         monkeypatch.setattr(
             "builtins.open",
-            lambda path, mode="r": io.open(str(proc_mounts)),
+            lambda path, mode="r": io.open(str(proc_mounts)),  # noqa: UP020, SIM115
         )
         import shutil as shutil_mod
 

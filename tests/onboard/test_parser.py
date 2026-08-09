@@ -1167,7 +1167,7 @@ services:
     image: ghcr.io/damien-robotsix/foo:main
     labels:
       {label_key}: "{label_value}"
-""".encode("utf-8")
+""".encode()
 
 
 class TestParseComposeConfigAssistSeeds:

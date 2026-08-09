@@ -42,12 +42,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from .config import LifecycleConfig
-    from .backends.base import ExecutionBackend
     from fastapi import Request
 
     from ..registry.config_store import ComponentConfigStore
-    from .config import LangfuseProjectCreds
+    from .backends.base import ExecutionBackend
+    from .config import LangfuseProjectCreds, LifecycleConfig
 
 from ._config_utils import read_component_config
 
@@ -118,7 +117,7 @@ def extract_langfuse_block(
 
 def _extract_langfuse_project_creds(
     config_dict: dict[str, object],
-) -> dict[str, "LangfuseProjectCreds"]:
+) -> dict[str, LangfuseProjectCreds]:
     """Extract Langfuse project credentials from a component's config.
 
     Reads the canonical ``langfuse.projects.<alias>`` block via
@@ -139,8 +138,8 @@ def _extract_langfuse_project_creds(
 
 
 def build_central_deploy_langfuse_config(
-    config: "LifecycleConfig",
-    auto_langfuse: dict[str, "LangfuseProjectCreds"],
+    config: LifecycleConfig,
+    auto_langfuse: dict[str, LangfuseProjectCreds],
 ) -> dict[str, Any]:
     """Return central-deploy's own config view, computed rather than stored.
 
@@ -172,15 +171,15 @@ def build_central_deploy_langfuse_config(
 
 
 async def _reconcile_auto_langfuse_projects(
-    component_config_store: "ComponentConfigStore",
-    backend: "ExecutionBackend",
-) -> dict[str, "LangfuseProjectCreds"]:
+    component_config_store: ComponentConfigStore,
+    backend: ExecutionBackend,
+) -> dict[str, LangfuseProjectCreds]:
     """Scan every component with chat access enabled and extract Langfuse keys.
 
     Components are processed in registration order.  When two components
     declare the same project alias the first one wins (no overwrite).
     """
-    result: dict[str, "LangfuseProjectCreds"] = {}
+    result: dict[str, LangfuseProjectCreds] = {}
     for cfg in component_config_store.all():
         if not (cfg.allow_chat_access or cfg.chat_agent_mutatable):
             continue
@@ -195,8 +194,8 @@ async def _reconcile_auto_langfuse_projects(
 
 
 async def reconcile_langfuse_after_toggle(
-    component_config_store: "ComponentConfigStore",
-    request: "Request",
+    component_config_store: ComponentConfigStore,
+    request: Request,
 ) -> None:
     """Re-run Langfuse auto-discovery and update ``app.state``.
 

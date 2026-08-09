@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from ..models import (
     ComponentInspect,
@@ -38,7 +38,6 @@ class ExecutionBackend(ABC):
     @abstractmethod
     async def remove_container(self, service: ServiceRecord) -> None:
         """Remove the managed container for *service* (best-effort, already stopped)."""
-        pass
 
     @abstractmethod
     async def restart(self, service: ServiceRecord) -> ServiceState:
@@ -52,7 +51,7 @@ class ExecutionBackend(ABC):
     async def deploy(
         self,
         service: ServiceRecord,
-        config: "ComponentConfig",
+        config: ComponentConfig,
         image_ref: str,
     ) -> DeployOutcome:
         pass
@@ -61,7 +60,7 @@ class ExecutionBackend(ABC):
     async def rollback(
         self,
         service: ServiceRecord,
-        config: "ComponentConfig",
+        config: ComponentConfig,
     ) -> RollbackOutcome:
         pass
 
@@ -87,22 +86,19 @@ class ExecutionBackend(ABC):
         occurs.  This is used to capture startup/healthcheck logs when a
         deploy fails so the operator can diagnose the failure.
         """
-        pass
 
     @abstractmethod
     async def disk_df(self) -> DockerDfStats:
         """Return Docker storage breakdown (images, build cache, reclaimable)."""
-        pass
 
     @abstractmethod
     async def prune_builds(self) -> int:
         """Prune Docker build cache. Returns bytes reclaimed."""
-        pass
 
     @abstractmethod
     async def prune_images(
         self, protected_refs: set[str], *, force: bool = False
-    ) -> "PruneImagesResult":
+    ) -> PruneImagesResult:
         """Remove dangling images, skipping any whose image id or repo digest
         is in *protected_refs* (rollback targets must stay pullable-free —
         rollback recreates containers from a local image id, which Docker
@@ -113,26 +109,37 @@ class ExecutionBackend(ABC):
 
         Returns a ``PruneImagesResult`` with counts and error details.
         """
-        pass
 
     @abstractmethod
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
         """Write *config_dict* as YAML into a Docker named volume."""
-        pass
 
     @abstractmethod
     async def write_llmio_tier_config_to_volume(
         self, volume_name: str, tier_config: dict[str, Any]
     ) -> None:
         """Write *tier_config* as ``llmio_tier_config.json`` into a Docker named volume."""
-        pass
 
     @abstractmethod
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Read /config/config.json from a named volume; return parsed dict (empty if absent)."""
-        pass
+
+    @abstractmethod
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        """Run a one-shot container from *image* executing *command_str* with the config
+        volume mounted at *volume_mount_path*. Returns captured stdout+stderr.
+        Raises TimeoutError if the container does not exit within *timeout_seconds*.
+        Always removes the container on exit or timeout."""
 
     @abstractmethod
     async def measure_volume_bytes(self, volume_name: str) -> int:
@@ -151,7 +158,6 @@ class ExecutionBackend(ABC):
         a dir reports its recursive size.  Raises ``NotADirectoryError`` when
         the path is not a directory in the volume.
         """
-        pass
 
     @abstractmethod
     async def read_volume_file(
@@ -165,7 +171,6 @@ class ExecutionBackend(ABC):
         *max_bytes*.  Raises ``IsADirectoryError`` when the path is a
         directory.
         """
-        pass
 
     @abstractmethod
     async def remove_volume(self, volume_name: str) -> None:
@@ -176,18 +181,16 @@ class ExecutionBackend(ABC):
         is already gone, or a transient removal error, must not abort the
         caller) — they log and return instead.
         """
-        pass
 
     @abstractmethod
-    async def inspect_self(self) -> Optional[SelfInspect]:
+    async def inspect_self(self) -> SelfInspect | None:
         """Identify the container this server runs in.
 
         Returns ``None`` when the server is not containerised (or the
         backend cannot tell) — self-update is unsupported in that case.
         """
-        pass
 
-    async def heal_self_network_alias(self, network_name: str) -> Optional[str]:
+    async def heal_self_network_alias(self, network_name: str) -> str | None:
         """Repair this server's own service alias on *network_name*.
 
         Default implementation is a no-op returning ``None`` — only
@@ -214,7 +217,6 @@ class ExecutionBackend(ABC):
         without it. Returns the watchtower container id. Raises
         ``RuntimeError`` on failure to launch.
         """
-        pass
 
     @abstractmethod
     async def trigger_self_restart(self, target: SelfInspect) -> str:
@@ -226,7 +228,6 @@ class ExecutionBackend(ABC):
         killed. Returns the container id. Raises ``RuntimeError`` on
         failure.
         """
-        pass
 
     # -- claude-auth --------------------------------------------------------
 
@@ -238,7 +239,6 @@ class ExecutionBackend(ABC):
         ``"not-authenticated"``, ``"expiring"``, or ``"error"``, plus an
         optional ``detail`` string.
         """
-        pass
 
     @abstractmethod
     async def write_claude_credentials(
@@ -248,7 +248,6 @@ class ExecutionBackend(ABC):
         ``.credentials.json`` with ownership ``1000:1000`` and mode ``0600``.
         Returns a dict with ``status``.
         """
-        pass
 
     @abstractmethod
     async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
@@ -257,4 +256,3 @@ class ExecutionBackend(ABC):
         Returns the parsed JSON dict.  Raises ``ValueError`` when the file
         is missing or unparsable.
         """
-        pass

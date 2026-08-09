@@ -10,7 +10,6 @@ from robotsix_central_deploy.lifecycle import cli
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import ExecutionBackendType, StoreBackend
 
-
 # ---------------------------------------------------------------------------
 # ArgumentParser — flag parsing and choices enforcement
 # ---------------------------------------------------------------------------

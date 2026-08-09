@@ -6,7 +6,8 @@ import asyncio
 
 from httpx import AsyncClient
 
-
+# Import the server module itself (not just symbols) so we can set its globals.
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.models import (
     ServiceRecord,
     ServiceState,
@@ -15,10 +16,6 @@ from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.models import (
     ComponentConfig,
 )
-
-# Import the server module itself (not just symbols) so we can set its globals.
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -514,7 +511,7 @@ class TestEnvScopeEndpoints:
 
 
 async def _seed_config(
-    config_store: ComponentConfigStore, name: str, *, siblings: list = None
+    config_store: ComponentConfigStore, name: str, *, siblings: list | None = None
 ) -> ComponentConfig:
     """Create and persist a ComponentConfig in the config store, plus register it."""
     cfg = ComponentConfig(

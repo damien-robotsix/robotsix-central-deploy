@@ -80,3 +80,25 @@ _.__class__  # unused attribute (src/robotsix_central_deploy/lifecycle/deps/__in
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/gateway_docs_middleware.py:46)
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/rate_limiter.py:178)
 _.token_type  # PyGithub Auth.Token override (src/robotsix_central_deploy/lifecycle/github_app.py:70)
+
+# ===========================================================================
+# Backend interface methods — defined in abstract base, implemented in all
+# backends, called dynamically through the ExecutionBackend protocol.
+# ===========================================================================
+_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/base.py:129)
+_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/docker_cli.py:199)
+_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/docker_sdk.py:834)
+_.run_config_assist  # unused method (src/robotsix_central_deploy/lifecycle/backends/noop.py:99)
+
+# ===========================================================================
+# Factory / loader methods — called by external consumers or tests.
+# ===========================================================================
+_.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:28)
+
+# ===========================================================================
+# Hashing / serialisation utilities — called by config-drift detection
+# (runtime path) and its test suite.
+# ===========================================================================
+_ = _canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:27)
+_ = _is_key_secret  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:619)
+_ = _restore_secrets_from_current  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:666)

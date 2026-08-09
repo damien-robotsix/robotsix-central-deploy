@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .models import AuditFinding, VolumeGrowthRecord, VolumeSizeSnapshot
 
@@ -29,7 +29,7 @@ def compute_growth_records(
     """
     records: list[VolumeGrowthRecord] = []
     findings: list[AuditFinding] = []
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
 
     for vol_name, snap in current.items():
         prev_snap = previous.get(vol_name)

@@ -5,10 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
-from ._util import PruneImagesResult, docker_status_to_service_state
-from .base import ExecutionBackend
 from ..models import (
     ComponentInspect,
     DeployOutcome,
@@ -19,6 +17,8 @@ from ..models import (
     ServiceRecord,
     ServiceState,
 )
+from ._util import PruneImagesResult, docker_status_to_service_state
+from .base import ExecutionBackend
 
 if TYPE_CHECKING:
     from ...registry.models import ComponentConfig
@@ -43,7 +43,7 @@ async def _run(*args: str, timeout: float = 30.0) -> tuple[int, str, str]:
             stdout_bytes.decode("utf-8", errors="replace"),
             stderr_bytes.decode("utf-8", errors="replace"),
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("Command timed out after %.1fs: %s", timeout, args)
         return (-1, "", f"timed out after {timeout}s")
     except FileNotFoundError:
@@ -113,7 +113,7 @@ class DockerBackend(ExecutionBackend):
                 return ServiceState.FAILED
             return await self.start(service)
 
-        rc, _, stderr = await _run(
+        rc, _, _stderr = await _run(
             ExecutionBackendType.DOCKER.value, "restart", service.name
         )
         if rc != 0:
@@ -130,14 +130,14 @@ class DockerBackend(ExecutionBackend):
         return ComponentInspect(state=state)
 
     async def deploy(
-        self, service: ServiceRecord, config: "ComponentConfig", image_ref: str
+        self, service: ServiceRecord, config: ComponentConfig, image_ref: str
     ) -> DeployOutcome:
         raise NotImplementedError(
             "deploy not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def rollback(
-        self, service: ServiceRecord, config: "ComponentConfig"
+        self, service: ServiceRecord, config: ComponentConfig
     ) -> RollbackOutcome:
         raise NotImplementedError(
             "rollback not supported for DockerBackend — use DockerSdkBackend"
@@ -198,6 +198,19 @@ class DockerBackend(ExecutionBackend):
             "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def run_config_assist(
+        self,
+        image: str,
+        command_str: str,
+        volume_name: str,
+        volume_mount_path: str,
+        env_dict: dict[str, str],
+        timeout_seconds: int = 60,
+    ) -> str:
+        raise NotImplementedError(
+            "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def measure_volume_bytes(self, volume_name: str) -> int:
         return 0  # CLI backend lacks volume-inspection support; placeholder.
 
@@ -220,7 +233,7 @@ class DockerBackend(ExecutionBackend):
             "remove_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
-    async def inspect_self(self) -> Optional[SelfInspect]:
+    async def inspect_self(self) -> SelfInspect | None:
         raise NotImplementedError(
             "inspect_self not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -260,7 +273,7 @@ class DockerBackend(ExecutionBackend):
             "read_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
         )
 
-    async def _inspect_state(self, container_name: str) -> Optional[ServiceState]:
+    async def _inspect_state(self, container_name: str) -> ServiceState | None:
         """Map ``docker inspect`` output to a ``ServiceState``."""
         rc, stdout, _stderr = await _run(
             ExecutionBackendType.DOCKER.value,

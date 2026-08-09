@@ -87,6 +87,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.deps import JobRegistry
@@ -102,8 +103,6 @@ from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 from robotsix_central_deploy.registry.settings_store import SystemSettingsStore
-
-import robotsix_central_deploy.lifecycle.app as server_mod
 
 
 @pytest.fixture(scope="session")
@@ -186,10 +185,10 @@ async def client(app):
 
 
 def pytest_ignore_collect(collection_path, config):
-    if (
-        hasattr(collection_path, "name")
-        and collection_path.name == "test_logging_config.py"
-    ):
-        if not _STRUCTLOG_REAL:
-            return True
-    return False
+    return bool(
+        (
+            hasattr(collection_path, "name")
+            and collection_path.name == "test_logging_config.py"
+        )
+        and not _STRUCTLOG_REAL
+    )

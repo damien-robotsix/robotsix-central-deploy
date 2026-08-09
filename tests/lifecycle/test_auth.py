@@ -7,14 +7,13 @@ import base64
 import pytest
 from httpx import AsyncClient
 
+import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.models import (
     ExecutionBackendType,
     ServiceRecord,
     ServiceState,
 )
-import robotsix_central_deploy.lifecycle.app as server_mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -35,7 +34,7 @@ async def _seed_store() -> None:
 class TestApiKeyAuth:
     """X-API-Key accepted when api_key is configured."""
 
-    MUTATING_PATHS = [
+    MUTATING_PATHS = [  # noqa: RUF012
         ("POST", "/services/svc/start"),
         ("POST", "/services/svc/stop"),
         ("POST", "/services/svc/restart"),
@@ -108,7 +107,9 @@ class TestBasicAuth:
         server_mod.app.state.config = cfg
         await _seed_store()
 
-    def _basic_header(self, username: str = "anyuser", password: str = None) -> dict:
+    def _basic_header(
+        self, username: str = "anyuser", password: str | None = None
+    ) -> dict:
         p = password if password is not None else self.API_KEY
         encoded = base64.b64encode(f"{username}:{p}".encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
@@ -208,7 +209,9 @@ class TestUsernamePasswordAuth:
         server_mod.app.state.config = cfg
         await _seed_store()
 
-    def _basic_header(self, username: str = None, password: str = None) -> dict:
+    def _basic_header(
+        self, username: str | None = None, password: str | None = None
+    ) -> dict:
         u = username if username is not None else self.USERNAME
         p = password if password is not None else self.PASSWORD
         encoded = base64.b64encode(f"{u}:{p}".encode()).decode()

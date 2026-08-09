@@ -15,12 +15,26 @@ from __future__ import annotations
 try:
     from hatchling.build import (  # type: ignore[import-not-found]
         build_editable as _real_build_editable,
+    )
+    from hatchling.build import (
         build_sdist as _real_build_sdist,
+    )
+    from hatchling.build import (
         build_wheel as _real_build_wheel,
+    )
+    from hatchling.build import (
         get_requires_for_build_editable as _real_get_requires_for_build_editable,
+    )
+    from hatchling.build import (
         get_requires_for_build_sdist as _real_get_requires_for_build_sdist,
+    )
+    from hatchling.build import (
         get_requires_for_build_wheel as _real_get_requires_for_build_wheel,
+    )
+    from hatchling.build import (
         prepare_metadata_for_build_editable as _real_prepare_metadata_for_build_editable,
+    )
+    from hatchling.build import (
         prepare_metadata_for_build_wheel as _real_prepare_metadata_for_build_wheel,
     )
 
@@ -53,7 +67,7 @@ if _tomllib is not None:
         _project = _data.get("project", {})
         _NAME = _project.get("name", _NAME)
         _VERSION = _project.get("version", _VERSION)
-    except Exception:  # noqa: S110 — best-effort; pyproject.toml may be absent/unparsable
+    except Exception:  # noqa: BLE001, S110
         pass
 
 _NAME_NORMALIZED = _NAME.replace("-", "_")

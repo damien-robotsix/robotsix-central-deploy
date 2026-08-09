@@ -903,7 +903,7 @@ class TestClaudeAuthCredentialCheck:
 
     def test_no_warning_when_credentials_present(self, backend):
         """Returns empty list when .credentials.json is readable."""
-        b, client = backend
+        b, _client = backend
         # containers.run succeeds (test -f exits 0)
         warnings = b._auth.check_claude_credentials()
         assert warnings == []

@@ -66,7 +66,7 @@ def _decode_basic_auth(header: str) -> tuple[str, str]:
         decoded = base64.b64decode(header[6:]).decode("utf-8")
         username, _, password = decoded.partition(":")
         return username, password
-    except Exception:
+    except Exception:  # noqa: BLE001
         return "", ""
 
 

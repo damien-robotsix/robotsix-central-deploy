@@ -1,3 +1,4 @@
+from .loader import ComponentRegistry, RegistryLoadError
 from .models import (
     ComponentConfig,
     ConfigAssistSeed,
@@ -6,14 +7,14 @@ from .models import (
     ServiceConfig,
     VolumeMount,
 )
-from .loader import ComponentRegistry
 
 __all__ = [
     "ComponentConfig",
+    "ComponentRegistry",
     "ConfigAssistSeed",
     "HealthCheck",
     "PortMapping",
+    "RegistryLoadError",
     "ServiceConfig",
     "VolumeMount",
-    "ComponentRegistry",
 ]

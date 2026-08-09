@@ -8,22 +8,22 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 
+from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
+from ...registry.config_store import ComponentConfigStore
+from ...registry.env_store import EnvStore
+from .._config_utils import _sanitize_log
 from ..auth import verify_auth
 from ..deps import (
     _get_chat_agent_audit_store,
     _get_component_config_store,
     _get_env_store,
 )
-from .._config_utils import _sanitize_log
+from ..schemas import ChatAgentEnvResponse, ChatAgentEnvUpdate
 from ._chat_common import (
     _check_rate_limit,
     _require_allowed_service,
     logger,
 )
-from ..schemas import ChatAgentEnvResponse, ChatAgentEnvUpdate
-from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
-from ...registry.config_store import ComponentConfigStore
-from ...registry.env_store import EnvStore
 
 router = APIRouter(tags=["chat"])
 
@@ -46,9 +46,9 @@ async def chat_upsert_env(
     name: str,
     body: ChatAgentEnvUpdate,
     request: Request,
-    env_store: EnvStore = Depends(_get_env_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentEnvResponse:
     """Upsert environment variables and secrets for an allowlisted service.

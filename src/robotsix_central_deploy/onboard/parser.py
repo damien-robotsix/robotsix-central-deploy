@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import shlex
-
 import re
+import shlex
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -171,12 +170,7 @@ def _parse_volumes(
         read_only = len(parts) == 3 and parts[2] == "ro"
 
         # Check for bind-mount patterns
-        if (
-            source.startswith("/")
-            or source.startswith("./")
-            or source.startswith("../")
-            or source.startswith("~")
-        ):
+        if source.startswith(("/", "./", "../", "~")):
             violations.append(f"host bind-mount not allowed: {entry!r}")
             continue
 
@@ -219,7 +213,7 @@ def _parse_env(raw_env: Any) -> tuple[dict[str, str], list[str]]:
     return env, violations
 
 
-def _parse_healthcheck(raw_hc: Any) -> tuple[Optional[HealthCheck], list[str]]:
+def _parse_healthcheck(raw_hc: Any) -> tuple[HealthCheck | None, list[str]]:
     """Parse compose ``healthcheck:`` block into HealthCheck + violations."""
     violations: list[str] = []
 
@@ -408,17 +402,13 @@ def _parse_llmio_tier_level(labels: dict[str, Any]) -> str | None:
 def _parse_chat_access(labels: dict[str, Any]) -> bool:
     """Parse ``robotsix.deploy.chat-access`` label."""
     val = labels.get(LABEL_CHAT_ACCESS)
-    if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
-        return True
-    return False
+    return bool(isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"))
 
 
 def _parse_chat_agent_mutatable(labels: dict[str, Any]) -> bool:
     """Parse ``robotsix.deploy.chat-agent-mutatable`` label."""
     val = labels.get(LABEL_CHAT_AGENT_MUTATABLE)
-    if isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"):
-        return True
-    return False
+    return bool(isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"))
 
 
 def _parse_one_service(
@@ -550,7 +540,7 @@ def _parse_one_service(
 
     raw_user = svc.get("user")
     if raw_user is None:
-        user: Optional[str] = None
+        user: str | None = None
     elif isinstance(raw_user, str):
         user = raw_user
     else:

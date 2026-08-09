@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _rebuild_fleet_auth_hosts(
-    component_config_store: "ComponentConfigStore",
+    component_config_store: ComponentConfigStore,
     backend: Any,
     gateway_base_domain: str,
     config_yaml_store: Any = None,
@@ -62,7 +62,7 @@ async def _rebuild_fleet_auth_hosts(
         if cfg.config_volume:
             try:
                 volume_config = await backend.read_config_from_volume(cfg.config_volume)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort read; any failure should degrade gracefully
                 volume_config = {}
         if not isinstance(volume_config, dict):
             volume_config = {}
@@ -135,8 +135,8 @@ async def _rebuild_fleet_auth_hosts(
 
 
 async def reconcile_fleet_auth_hosts(
-    component_config_store: "ComponentConfigStore",
-    request: "Request",
+    component_config_store: ComponentConfigStore,
+    request: Request,
 ) -> None:
     """Route-handler wrapper: extract config from *request* and delegate.
 

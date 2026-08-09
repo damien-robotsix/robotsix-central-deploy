@@ -12,7 +12,6 @@ from robotsix_central_deploy.lifecycle.models import SelfInspect
 from robotsix_central_deploy.registry.chat_agent_audit_store import ChatAgentAuditStore
 from robotsix_central_deploy.registry.models import ComponentConfig
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

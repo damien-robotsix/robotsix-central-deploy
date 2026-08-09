@@ -67,15 +67,17 @@ async def test_builds_client_via_mint_installation_token():
     )
     fake_client = MagicMock(name="fake-github-client")
 
-    with patch(
-        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
-        return_value=SimpleNamespace(token="ghs_test-token"),
-    ) as mock_mint:
-        with patch(
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
+            return_value=SimpleNamespace(token="ghs_test-token"),
+        ) as mock_mint,
+        patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
             return_value=fake_client,
-        ) as mock_bearer:
-            result = await get_github_client(cfg, "owner", "repo")
+        ) as mock_bearer,
+    ):
+        result = await get_github_client(cfg, "owner", "repo")
 
     assert result is fake_client
     mock_mint.assert_called_once_with("12345", "pem-data", "999")
@@ -96,16 +98,18 @@ async def test_client_reused_while_token_is_unchanged():
     )
     fake_client = MagicMock(name="fake-github-client")
 
-    with patch(
-        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
-        return_value=SimpleNamespace(token="ghs_test-token"),
-    ) as mock_mint:
-        with patch(
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
+            return_value=SimpleNamespace(token="ghs_test-token"),
+        ) as mock_mint,
+        patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
             return_value=fake_client,
-        ) as mock_bearer:
-            first = await get_github_client(cfg, "owner-a", "repo-a")
-            second = await get_github_client(cfg, "owner-b", "repo-b")
+        ) as mock_bearer,
+    ):
+        first = await get_github_client(cfg, "owner-a", "repo-a")
+        second = await get_github_client(cfg, "owner-b", "repo-b")
 
     assert first is second is fake_client
     # Token minted on every call (cheap TTL-cached lookup)...
@@ -130,19 +134,21 @@ async def test_client_rebuilt_when_token_rotates():
     old_client = MagicMock(name="old-client")
     new_client = MagicMock(name="new-client")
 
-    with patch(
-        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
-        side_effect=[
-            SimpleNamespace(token="ghs_old-token"),
-            SimpleNamespace(token="ghs_new-token"),
-        ],
-    ) as mock_mint:
-        with patch(
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
+            side_effect=[
+                SimpleNamespace(token="ghs_old-token"),
+                SimpleNamespace(token="ghs_new-token"),
+            ],
+        ) as mock_mint,
+        patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
             side_effect=[old_client, new_client],
-        ) as mock_bearer:
-            first = await get_github_client(cfg, "owner", "repo")
-            second = await get_github_client(cfg, "owner", "repo")
+        ) as mock_bearer,
+    ):
+        first = await get_github_client(cfg, "owner", "repo")
+        second = await get_github_client(cfg, "owner", "repo")
 
     assert first is old_client
     assert second is new_client
@@ -164,19 +170,21 @@ async def test_different_installation_ids_get_different_cache_entries():
     fake_client_a = MagicMock(name="client-a")
     fake_client_b = MagicMock(name="client-b")
 
-    with patch(
-        "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
-        side_effect=[
-            SimpleNamespace(token="token-a"),
-            SimpleNamespace(token="token-b"),
-        ],
-    ) as mock_mint:
-        with patch(
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.github_app._mint_installation_token",
+            side_effect=[
+                SimpleNamespace(token="token-a"),
+                SimpleNamespace(token="token-b"),
+            ],
+        ) as mock_mint,
+        patch(
             "robotsix_central_deploy.lifecycle.github_app._bearer_client",
             side_effect=[fake_client_a, fake_client_b],
-        ):
-            result_a = await get_github_client(cfg_a, "owner", "repo")
-            result_b = await get_github_client(cfg_b, "owner", "repo")
+        ),
+    ):
+        result_a = await get_github_client(cfg_a, "owner", "repo")
+        result_b = await get_github_client(cfg_b, "owner", "repo")
 
     assert result_a is fake_client_a
     assert result_b is fake_client_b

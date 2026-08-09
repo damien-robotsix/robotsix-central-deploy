@@ -14,6 +14,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
+from .._config_utils import (
+    _mask_secrets,
+    _merge_config,
+    read_component_config,
+)
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..deps import (
@@ -21,15 +28,8 @@ from ..deps import (
     _get_component_config_store,
     _get_config_yaml_store,
 )
-from .._config_utils import (
-    read_component_config,
-    _mask_secrets,
-    _merge_config,
-)
-from ._chat_common import _require_allowed_service
 from ..schemas import ChatAgentConfigRollbackResponse
-from ...registry.config_store import ComponentConfigStore
-from ...registry.config_yaml_store import ConfigYamlStore
+from ._chat_common import _require_allowed_service
 
 router = APIRouter(tags=["chat"])
 
@@ -59,9 +59,9 @@ _RETIRED_DETAIL = (
 )
 async def chat_get_config(
     name: str,
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
-    backend: ExecutionBackend = Depends(_get_backend),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Return the current config for an allowlisted service.

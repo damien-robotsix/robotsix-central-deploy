@@ -9,12 +9,12 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
+from ...registry.env_store import EnvStore
+from ...registry.models import ComponentConfig
 from .._config_utils import _sanitize_log
 from ..backends import ExecutionBackend
 from ..deps import _get_sibling_pairs
 from ..store import ServiceStore
-from ...registry.env_store import EnvStore
-from ...registry.models import ComponentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def _fanout_siblings_best_effort(
             final = await backend_method(sib_record)
             sib_record.state = final
             await store.put(sib_record)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "%s sibling '%s-%s' failed",
                 action,
@@ -102,7 +102,7 @@ async def _fanout_siblings_deploy_best_effort(
             sib_record.previous_image_digest = sib_outcome.previous_digest
             await store.put(sib_record)
             deployed.append(sib_name)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "%s: deploy sibling '%s' failed",
                 log_prefix,

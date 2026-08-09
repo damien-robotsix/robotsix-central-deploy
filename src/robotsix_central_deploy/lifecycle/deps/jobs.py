@@ -12,13 +12,13 @@ class Job:
     """In-memory record of one background job (onboard confirm or deploy)."""
 
     __slots__ = (
-        "job_id",
         "component",
-        "phase",
         "error",
+        "image",
+        "job_id",
         "logs",
         "name",
-        "image",
+        "phase",
         "state",
         "warnings",
     )
@@ -111,7 +111,7 @@ class JobRegistry:
         """Mark a job as failed with an error string and optional logs."""
         job = self._jobs.get(job_id)
         if job is not None:
-            job.phase = getattr(type(job).variant, "FAILED")
+            job.phase = type(job).variant.FAILED  # type: ignore[attr-defined]
             job.error = error
             if logs is not None:
                 job.logs = logs
@@ -127,7 +127,7 @@ class JobRegistry:
         """Mark a job as done with terminal fields."""
         job = self._jobs.get(job_id)
         if job is not None:
-            job.phase = getattr(type(job).variant, "DONE")
+            job.phase = type(job).variant.DONE  # type: ignore[attr-defined]
             job.name = name
             job.image = image
             job.state = state
