@@ -36,7 +36,7 @@ http:
     # The credential is NOT in this file: this repo is public, and a committed
     # bcrypt hash is an offline-crackable copy of the fleet password. It stays
     # in an htpasswd file on the host, mounted read-only — the same posture as
-    # the /etc/nginx/htpasswd/deploy.robotsix.net it replaces. Traefik reads
+    # the nginx htpasswd it replaces. Traefik reads
     # the standard htpasswd formats, so the existing file can be copied across
     # unchanged and the current password keeps working.
     fleet-basicauth:

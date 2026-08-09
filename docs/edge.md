@@ -9,7 +9,7 @@ runs and stamps the routing rules onto containers as Docker labels. Traefik
 watches the Docker API and picks them up. The two never share a process.
 
 ```
-DNS *.deploy.robotsix.net ─▶ :443 Traefik ── TLS: ACME DNS-01 / OVH, one wildcard
+DNS *.<base-domain> ──────▶ :443 Traefik ── TLS: ACME DNS-01 / OVH, one wildcard
                                    │       ── routes: container labels, live
                                    │
                      ┌─────────────┼──────────────┐
@@ -44,7 +44,7 @@ Nothing is configured per component — not here, not in DNS, not in Traefik.
 When central-deploy creates a container it calls
 [`traefik_labels()`][robotsix_central_deploy.registry.traefik_labels.traefik_labels],
 which derives the labels from the component's `id` and its first container port.
-Onboard a component and it is live at `<id>.deploy.robotsix.net`.
+Onboard a component and it is live at `<id>.<base-domain>`.
 
 Three routers are emitted, ordered by priority so the most specific wins:
 
@@ -68,7 +68,7 @@ higher-priority router. That router is **not** a bypass — it carries Traefik's
 The credential lives in `deploy/traefik/fleet-users`, which is **git-ignored**:
 this repo is public, and a committed bcrypt hash is an offline-crackable copy of
 the fleet password. Traefik reads the standard htpasswd formats, so the existing
-`/etc/nginx/htpasswd/deploy.robotsix.net` can be copied across unchanged and the
+existing nginx htpasswd can be copied across unchanged and the
 current password keeps working.
 
 ### What does not get routed
@@ -76,7 +76,7 @@ current password keeps working.
 `traefik_labels()` returns no labels at all — so Traefik ignores the container —
 when the component has no port, when no base domain is configured, or when
 `routable` is false. Sibling services set `routable=False`: publishing a
-component's database at `<component>-db.deploy.robotsix.net` would put it on the
+component's database at `<component>-db.<base-domain>` would put it on the
 public internet behind nothing but the SSO gate.
 
 ## Components ship no auth of their own
@@ -103,12 +103,27 @@ Credentials come from the environment (`OVH_*`, see `.env.example`), never from
 a committed file. There is no certbot, no renewal cron, and no per-component
 certificate.
 
+The domain itself comes from `GATEWAY_BASE_DOMAIN` in `.env`. It **must** match
+central-deploy's own `gateway_base_domain` setting, since that is what the
+routing labels are derived from — if the two disagree, components get routes for
+a hostname the certificate does not cover. Compose fails the `up` outright when
+the variable is unset rather than starting a certless edge.
+
+Traefik's static configuration lives in the `command:` block of
+`docker-compose.yml`, not in a `traefik.yml`. Traefik does not merge
+static-config sources — the docs are explicit that mixing a file with `TRAEFIK_*`
+environment variables "is not supported and can lead to unexpected behavior" — so
+a file would have meant hard-coding the domain in the repo. As `command:` args,
+compose interpolates them from `.env` and nothing deployment-specific is
+committed. The `OVH_*` credentials remain environment variables because the ACME
+provider reads them directly, not through the config parser.
+
 ## Operating it
 
 | Task | Where |
 |---|---|
 | Change the auth gates | `deploy/traefik/dynamic.yml` — watched, applies live |
-| Change entrypoints, TLS, or providers | `deploy/traefik/traefik.yml` — needs a Traefik restart |
+| Change entrypoints, TLS, or providers | the `command:` block in `docker-compose.yml` — needs a Traefik restart |
 | Rotate the machine credential | `htpasswd -B deploy/traefik/fleet-users fleet` (Traefik re-reads it live) |
 | Add an operator login | `htpasswd -nbB <user> '<password>'` → `TINYAUTH_AUTH_USERS` |
 | See why a route is missing | `docker inspect <container> --format '{{json .Config.Labels}}'` |
