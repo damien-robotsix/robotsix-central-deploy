@@ -106,6 +106,17 @@ class TestUiRouter:
         assert "text/html" in resp.headers.get("content-type", "")
         assert "Robotsix Deploy" in resp.text
 
+    async def test_bare_root_redirects_to_the_dashboard(self, client: AsyncClient):
+        """``GET /`` must not 404.
+
+        The retired nginx vhost redirected the bare domain to /ui. Dropping it
+        during the Traefik cutover left the fleet's front door returning "not
+        found" to anyone typing the hostname without a path.
+        """
+        resp = await client.get("/", follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/ui"
+
     async def test_no_login_or_logout_routes_remain(self, client: AsyncClient):
         """The old session endpoints are gone, not merely unlinked."""
         assert (await client.get("/login", follow_redirects=False)).status_code == 404
