@@ -6387,15 +6387,16 @@
           },
           "owner_repo": {
             "type": "string",
+            "minLength": 1,
             "title": "Owner Repo",
-            "description": "Git clone URL of the repository owning the deploy contract",
-            "default": ""
+            "description": "Git clone URL of the repository owning the deploy contract"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "image"
+          "image",
+          "owner_repo"
         ],
         "title": "ChatAgentRegisterRequest",
         "description": "Request body for POST /chat/services \u2014 register a new managed component.\n\nRegisters a component with minimal metadata so it appears in the\nservice inventory.  Registration does NOT auto-start or auto-deploy\nthe component \u2014 those remain separate gated actions."
