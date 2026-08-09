@@ -26,6 +26,13 @@ Service definitions belong in **declarative data**, never in engine code:
 | Chat-agent mutation permissions | `ComponentConfig.chat_agent_mutatable` — set per-component via the `robotsix.deploy.chat-agent-mutatable` compose label at onboard time |
 | Edge routes / TLS | Derived automatically from onboarded component ids + `gateway_base_domain` by `registry/traefik_labels.py`, emitted as Docker labels — no per-service routing rules exist |
 
+The rule covers the **edge configuration** too, not only Python. `deploy/traefik/*.yml`
+must contain no component name and no per-component hostname: routes come from the
+labels `registry/traefik_labels.py` derives, and a middleware or router naming a
+specific service is the same violation as a hard-coded branch in the engine. If a
+component needs edge behaviour nothing else needs, that belongs in the component's
+own deploy contract, not here.
+
 **When adding a new managed service:** onboard it via the self-service API
 (or declarative manifest), never by editing `central-deploy` engine code.
 
