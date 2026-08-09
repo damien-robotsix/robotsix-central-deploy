@@ -140,6 +140,15 @@ async def chat_register_component(
             existed=True,
         )
 
+    # Validate the deploy contract — fetch the repo, parse compose,
+    # and enforce the central-deploy-contract-version header.
+    # This mirrors the manual /onboard/preflight path so the agent
+    # register endpoint cannot bypass the supply-chain gate.
+    loop = asyncio.get_running_loop()
+    from ..deps._compose_resolver import _resolve_compose_backbone
+
+    await _resolve_compose_backbone(body.owner_repo, body.name, lifecycle_config, loop)
+
     # Derive a container_name from the component id.
     container_name = body.name
     # If the image includes a tag, use it; otherwise default to ':latest'.

@@ -1060,12 +1060,54 @@ async def test_chat_deploy_missing_config_target_returns_422(
 
 
 @pytest.mark.asyncio
+def _mock_parse_compose_for_register(
+    compose_bytes: bytes, name: str, git_url: str
+) -> DerivedSpec:
+    """Return a minimal DerivedSpec suitable for the register endpoint tests."""
+    return DerivedSpec.model_construct(
+        name=name,
+        git_url=git_url,
+        image="ghcr.io/damien-robotsix/hexarchy:main",
+        ports=[],
+        volume_mounts=[],
+        env={},
+        claude_mount=False,
+        siblings=[],
+        config_volume="test-config-vol",
+    )
+
+
+_COMPOSE_WITH_HEADER = (
+    b"# central-deploy-contract-version: 1\n"
+    b"services:\n"
+    b"  app:\n"
+    b"    image: ghcr.io/damien-robotsix/hexarchy:main\n"
+)
+
+
+@pytest.mark.asyncio
 async def test_chat_register_happy_path(
     client: AsyncClient,
     auth_headers: dict[str, str],
     component_config_store: ComponentConfigStore,
+    monkeypatch,
 ):
     """POST /chat/services registers a new component and it appears in GET /chat/components."""
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+    from robotsix_central_deploy.onboard import parser as parser_mod
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=_COMPOSE_WITH_HEADER,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    monkeypatch.setattr(parser_mod, "parse_compose", _mock_parse_compose_for_register)
+
     # Enable registration in the server config.
     from robotsix_central_deploy.lifecycle import app as server_mod
 
@@ -1104,8 +1146,24 @@ async def test_chat_register_idempotent(
     client: AsyncClient,
     auth_headers: dict[str, str],
     component_config_store: ComponentConfigStore,
+    monkeypatch,
 ):
     """Re-registering the same component id returns the existing entry."""
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+    from robotsix_central_deploy.onboard import parser as parser_mod
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=_COMPOSE_WITH_HEADER,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    monkeypatch.setattr(parser_mod, "parse_compose", _mock_parse_compose_for_register)
+
     from robotsix_central_deploy.lifecycle import app as server_mod
 
     server_mod.app.state.config.chat_agent_registration_enabled = True
@@ -1156,6 +1214,7 @@ async def test_chat_register_not_enabled_returns_403(
         json={
             "name": "hexarchy",
             "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
         },
         headers=auth_headers,
     )
@@ -1178,6 +1237,7 @@ async def test_chat_register_invalid_name_returns_422(
         json={
             "name": "INVALID_NAME",
             "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
         },
         headers=auth_headers,
     )
@@ -1188,8 +1248,24 @@ async def test_chat_register_invalid_name_returns_422(
 async def test_chat_register_appears_in_service_list(
     client: AsyncClient,
     auth_headers: dict[str, str],
+    monkeypatch,
 ):
     """Registered component appears in the GET /services inventory."""
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+    from robotsix_central_deploy.onboard import parser as parser_mod
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=_COMPOSE_WITH_HEADER,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    monkeypatch.setattr(parser_mod, "parse_compose", _mock_parse_compose_for_register)
+
     from robotsix_central_deploy.lifecycle import app as server_mod
 
     server_mod.app.state.config.chat_agent_registration_enabled = True
@@ -1199,6 +1275,7 @@ async def test_chat_register_appears_in_service_list(
         json={
             "name": "hexarchy",
             "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
         },
         headers=auth_headers,
     )
@@ -1216,8 +1293,24 @@ async def test_chat_register_audit_entry(
     client: AsyncClient,
     auth_headers: dict[str, str],
     audit_store: ChatAgentAuditStore,
+    monkeypatch,
 ):
     """Registration writes an audit entry."""
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+    from robotsix_central_deploy.onboard import parser as parser_mod
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=_COMPOSE_WITH_HEADER,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    monkeypatch.setattr(parser_mod, "parse_compose", _mock_parse_compose_for_register)
+
     from robotsix_central_deploy.lifecycle import app as server_mod
 
     server_mod.app.state.config.chat_agent_registration_enabled = True
@@ -1246,8 +1339,24 @@ async def test_chat_register_applies_default_image_tag_when_missing(
     client: AsyncClient,
     auth_headers: dict[str, str],
     component_config_store: ComponentConfigStore,
+    monkeypatch,
 ):
     """When image has no tag, ':latest' is appended."""
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+    from robotsix_central_deploy.onboard import parser as parser_mod
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=_COMPOSE_WITH_HEADER,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    monkeypatch.setattr(parser_mod, "parse_compose", _mock_parse_compose_for_register)
+
     from robotsix_central_deploy.lifecycle import app as server_mod
 
     server_mod.app.state.config.chat_agent_registration_enabled = True
@@ -1257,6 +1366,7 @@ async def test_chat_register_applies_default_image_tag_when_missing(
         json={
             "name": "no-tag-svc",
             "image": "ghcr.io/damien-robotsix/no-tag-svc",
+            "owner_repo": "https://github.com/damien-robotsix/no-tag-svc",
         },
         headers=auth_headers,
     )
@@ -1267,6 +1377,55 @@ async def test_chat_register_applies_default_image_tag_when_missing(
     stored = component_config_store.get("no-tag-svc")
     assert stored is not None
     assert stored.image == "ghcr.io/damien-robotsix/no-tag-svc:latest"
+
+
+@pytest.mark.asyncio
+async def test_chat_register_rejects_missing_contract_header(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+):
+    """Agent register of a repo without the contract-version header is refused (422)."""
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+
+    # Compose bytes WITHOUT the required contract-version header.
+    compose_no_header = (
+        b"services:\n  app:\n    image: ghcr.io/damien-robotsix/hexarchy:main\n"
+    )
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=compose_no_header,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    # Do NOT mock parse_compose — the real function must reject the
+    # missing header so we have parity with the manual /onboard/preflight path.
+
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    resp = await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert "compose validation failed" in body["error"]
+    violations = body["violations"]
+    assert any("central-deploy-contract-version" in v for v in violations), (
+        f"Expected contract-version violation in: {violations}"
+    )
 
 
 # ---------------------------------------------------------------------------
