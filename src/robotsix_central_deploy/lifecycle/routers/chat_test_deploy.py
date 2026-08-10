@@ -35,7 +35,7 @@ from ..models import ServiceRecord, ServiceState
 from ..schemas import ChatAgentTestDeployRequest, ChatAgentTestDeployResponse
 from ..store import ServiceStore
 from ._chat_common import _check_rate_limit, logger
-from .chat_services import _resolve_deploy_contract
+from .chat_deploy import _resolve_deploy_contract
 
 # Hostnames that must never be probed, even if they resolve to a
 # non-private address.
