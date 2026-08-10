@@ -9,7 +9,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from ...caretaker.volume_audit.models import VolumeAuditResponse
 from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
 from ...registry.config_store import ComponentConfigStore
-from ...registry.loader import ComponentRegistry
 from .._config_utils import _sanitize_log
 from .._disk_utils import resolve_target_disk
 from ..auth import verify_auth
@@ -22,7 +21,6 @@ from ..deps import (
     _get_backend,
     _get_component_config_store,
     _get_config,
-    _get_registry,
     _get_store,
     _validate_volume_path,
 )
@@ -210,7 +208,6 @@ async def relocate_volume(
     name: str,
     body: RelocateVolumeRequest = Body(...),  # noqa: B008
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     store: ServiceStore = Depends(_get_store),  # noqa: B008
     backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     _auth: None = Depends(verify_auth),
@@ -278,7 +275,8 @@ async def relocate_volume(
     # 5. Migrate the volume data.
     outcome = await backend.relocate_volume(name, target_disk_path)
     if outcome.get("status") != "ok":
-        # Re-start the component on failure.
+        # Re-start the component *and* its siblings on failure — both were
+        # stopped before the migration attempt.
         if was_running and svc_record is not None:
             try:
                 await backend.start(svc_record)
@@ -287,6 +285,10 @@ async def relocate_volume(
                     "relocate: failed to restart %s after failed migration: %s",
                     _sanitize_log(component_id),
                     exc,
+                )
+            if config.siblings:
+                await _fanout_siblings_best_effort(
+                    component_id, config, store, backend, "start"
                 )
         raise HTTPException(
             status_code=500,

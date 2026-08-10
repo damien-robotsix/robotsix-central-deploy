@@ -497,22 +497,10 @@ class VolumeOps:
                 ),
             }
 
-        # 5. Remove old Docker volume.
-        def _remove_old() -> None:
-            try:
-                self._client.volumes.get(volume_name).remove(force=True)
-            except docker.errors.NotFound:
-                pass
-
-        try:
-            await loop.run_in_executor(None, _remove_old)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "relocate_volume %s: failed to remove old volume: %s", volume_name, exc
-            )
-            # Non-fatal — the new volume can still be created.
-
-        # 6. Create new volume pointing to target path.
+        # 5. Create new volume pointing to target path.  Try first — the
+        #    old volume still exists under the same name so we expect a 409
+        #    Conflict.  On 409 we remove the old volume and retry.  For any
+        #    other error the old volume is left intact (safe).
         def _create_new() -> None:
             self._client.volumes.create(
                 volume_name,
@@ -529,11 +517,11 @@ class VolumeOps:
         except docker.errors.APIError as exc:
             if exc.status_code == 409:
                 logger.info(
-                    "Volume %s already exists at new location, removing and recreating",
+                    "Volume %s already exists, removing old and recreating "
+                    "at new location %s",
                     volume_name,
+                    target_volume_path,
                 )
-                # Remove the leftover (possibly from a previous failed attempt)
-                # and retry.
                 try:
                     await loop.run_in_executor(
                         None,
@@ -545,7 +533,9 @@ class VolumeOps:
                 except Exception as retry_exc:  # noqa: BLE001
                     return {
                         "status": "failed",
-                        "detail": f"Failed to recreate volume after 409: {retry_exc}",
+                        "detail": (
+                            f"Failed to recreate volume {volume_name!r}: {retry_exc}"
+                        ),
                     }
             else:
                 return {
@@ -558,16 +548,17 @@ class VolumeOps:
                 "detail": f"Docker daemon unreachable: {exc}",
             }
 
-        # 7. Fix ownership on the new volume.
-        #    The volume was freshly created and needs proper ownership
-        #    so the container user can write.  We chown/chmod the root
-        #    via a one-shot busybox container.
+        # 6. Fix ownership on the new volume.  The volume root must be owned
+        #    by the container user (1000:1000, matching every fleet component)
+        #    so the container can write to it.  ``cp -a`` preserved ownership
+        #    of files *inside* the volume; this chown ensures the mount point
+        #    itself is also accessible.
         await loop.run_in_executor(
             None,
             self.ensure_volume_ownership,
             volume_name,
-            os.getuid(),
-            os.getgid(),
+            1000,
+            1000,
             0o755,
         )
 
