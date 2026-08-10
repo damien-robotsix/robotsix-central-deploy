@@ -473,15 +473,27 @@ class VolumeOps:
                 "detail": f"Data copy failed for volume {volume_name!r}",
             }
 
-        # 4. Verify: compare du_bytes on source and target.
-        src_bytes = _du_host_path(source_path)
-        dst_bytes = _du_host_path(target_volume_path)
-        if src_bytes != dst_bytes:
+        # 4. Verify content integrity with diff -rq in a busybox container.
+        #    This catches corruption that preserves file sizes, which a
+        #    byte-count-only check would miss.
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: self._client.containers.run(
+                    "busybox",
+                    command=["diff", "-rq", "/src", "/dst"],
+                    volumes={
+                        volume_name: {"bind": "/src", "mode": "ro"},
+                        target_volume_path: {"bind": "/dst", "mode": "ro"},
+                    },
+                    remove=True,
+                ),
+            )
+        except docker.errors.ContainerError as exc:
             logger.warning(
-                "relocate_volume %s: size mismatch — source=%d target=%d",
+                "relocate_volume %s: content verification failed — diff exit %s",
                 volume_name,
-                src_bytes,
-                dst_bytes,
+                exc.exit_status,
             )
             try:
                 import shutil
@@ -491,10 +503,7 @@ class VolumeOps:
                 pass
             return {
                 "status": "failed",
-                "detail": (
-                    f"Verification failed: source {src_bytes} bytes, "
-                    f"target {dst_bytes} bytes"
-                ),
+                "detail": (f"Content verification failed for volume {volume_name!r}"),
             }
 
         # 5. Create new volume pointing to target path.  Try first — the
@@ -522,6 +531,15 @@ class VolumeOps:
                     volume_name,
                     target_volume_path,
                 )
+                # Snapshot old volume attributes before removal so we can
+                # restore it at its original location if recreation fails.
+                # Without this, a failed recreation after removal leaves
+                # no volume at all — data is lost for non-bind-mount volumes.
+                old_volume = self._client.volumes.get(volume_name)
+                old_attrs: dict[str, Any] = dict(old_volume.attrs)
+                old_driver: str = old_attrs.get("Driver", "local")
+                old_driver_opts: dict[str, Any] = dict(old_attrs.get("Options") or {})
+                old_labels: dict[str, str] = dict(old_attrs.get("Labels") or {})
                 try:
                     await loop.run_in_executor(
                         None,
@@ -531,6 +549,25 @@ class VolumeOps:
                     )
                     await loop.run_in_executor(None, _create_new)
                 except Exception as retry_exc:  # noqa: BLE001
+                    # Attempt to restore the old volume at its original
+                    # location so the data is not orphaned.
+                    try:
+                        await loop.run_in_executor(
+                            None,
+                            lambda: self._client.volumes.create(
+                                volume_name,
+                                driver=old_driver,
+                                driver_opts=old_driver_opts,
+                                labels=old_labels,
+                            ),
+                        )
+                    except Exception as restore_exc:  # noqa: BLE001
+                        logger.warning(
+                            "relocate_volume %s: failed to restore old "
+                            "volume after failed recreation: %s",
+                            volume_name,
+                            restore_exc,
+                        )
                     return {
                         "status": "failed",
                         "detail": (
@@ -566,7 +603,7 @@ class VolumeOps:
             "status": "ok",
             "detail": (
                 f"Volume {volume_name!r} relocated to {target_volume_path!r} "
-                f"({dst_bytes} bytes verified)"
+                f"(content verified)"
             ),
         }
 

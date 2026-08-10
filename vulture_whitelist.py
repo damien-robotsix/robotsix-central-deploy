@@ -111,3 +111,9 @@ _.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:28)
 _ = _canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:27)
 _ = _is_key_secret  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:619)
 _ = _restore_secrets_from_current  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:666)
+
+# ===========================================================================
+# Volume utilities — retained for future ad-hoc inspection even though the
+# current relocate_volume path uses container-based content verification.
+# ===========================================================================
+_du_host_path  # unused function (src/robotsix_central_deploy/lifecycle/backends/_volume_ops.py:611)

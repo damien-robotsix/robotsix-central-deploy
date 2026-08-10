@@ -229,19 +229,20 @@ async def relocate_volume(
     # 2. Ensure the volume is browsable (owned by a registered component).
     _assert_volume_browsable(name, component_config_store)
 
-    # 3. Find the owning component.  The volume may belong to more than
-    #    one component — pick the first and update its target_disk.
-    component_id: str | None = None
-    for cfg in component_config_store.all():
-        if name in cfg.named_volumes:
-            component_id = cfg.id
-            break
-    if component_id is None:
+    # 3. Find all owning components.  The volume may belong to more than
+    #    one component — update the target_disk on every one of them so
+    #    no owner is left with a stale disk reference.
+    owning_ids: list[str] = [
+        cfg.id for cfg in component_config_store.all() if name in cfg.named_volumes
+    ]
+    if not owning_ids:
         raise HTTPException(
             status_code=404,
             detail=f"Volume '{name}' not owned by any registered component",
         )
 
+    # Use the first owner for lifecycle operations (stop/start).
+    component_id = owning_ids[0]
     config = component_config_store.get(component_id)
     if config is None:
         raise HTTPException(
@@ -251,6 +252,18 @@ async def relocate_volume(
 
     # Record the previous disk for the response.
     source_disk = config.target_disk or "default"
+
+    # Guard: skip the migration if the volume is already on the requested
+    # disk — avoids a wasteful (and potentially dangerous) copy-into-self.
+    if config.target_disk and target_disk_path == config.target_disk:
+        return RelocateVolumeResponse(
+            status="ok",
+            detail="Volume is already on the requested disk",
+            volume_name=name,
+            component_id=component_id,
+            source_disk=source_disk,
+            target_disk=target_disk_path,
+        )
 
     # 4. Stop the component (and siblings) if running.
     svc_record = await store.get(component_id)
@@ -272,9 +285,36 @@ async def relocate_volume(
                 component_id, config, store, backend, "stop"
             )
 
-    # 5. Migrate the volume data.
+    # 5. Persist the new target_disk on every owning component BEFORE
+    #    migration.  If the config write fails we never touch the volume;
+    #    if the migration fails we roll the config back.  This avoids the
+    #    data-loss scenario where the volume is physically relocated but
+    #    the config write raises — the component would restart pointing
+    #    at the old (now empty) location.
+    previous_target_disks: dict[str, str] = {}
+    for oid in owning_ids:
+        ocfg = component_config_store.get(oid)
+        if ocfg is not None:
+            previous_target_disks[oid] = ocfg.target_disk
+            ocfg.target_disk = target_disk_path
+            await component_config_store.put(ocfg)
+
+    # 6. Migrate the volume data.
     outcome = await backend.relocate_volume(name, target_disk_path)
     if outcome.get("status") != "ok":
+        # Rollback the config change on every owner.
+        for oid, prev in previous_target_disks.items():
+            ocfg = component_config_store.get(oid)
+            if ocfg is not None:
+                ocfg.target_disk = prev
+                try:
+                    await component_config_store.put(ocfg)
+                except Exception as rollback_exc:  # noqa: BLE001
+                    logger.warning(
+                        "relocate: failed to rollback target_disk for %s: %s",
+                        _sanitize_log(oid),
+                        rollback_exc,
+                    )
         # Re-start the component *and* its siblings on failure — both were
         # stopped before the migration attempt.
         if was_running and svc_record is not None:
@@ -294,10 +334,6 @@ async def relocate_volume(
             status_code=500,
             detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",
         )
-
-    # 6. Persist the new target_disk on the owning component.
-    config.target_disk = target_disk_path
-    await component_config_store.put(config)
 
     # 7. Restart the component.
     if was_running and svc_record is not None:

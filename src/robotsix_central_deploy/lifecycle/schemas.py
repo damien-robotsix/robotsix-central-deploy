@@ -366,7 +366,7 @@ class RelocateVolumeRequest(BaseModel):
 class RelocateVolumeResponse(BaseModel):
     """Outcome of a volume relocation operation."""
 
-    status: Literal["ok", "failed"] = Field(description="Relocation outcome")
+    status: Literal["ok"] = Field(description="Relocation outcome")
     detail: str = Field(description="Human-readable status detail")
     volume_name: str = Field(description="The relocated volume name")
     component_id: str = Field(description="The component that owns this volume")
