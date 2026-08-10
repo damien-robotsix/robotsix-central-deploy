@@ -384,6 +384,69 @@
         }
       }
     },
+    "/volumes/{name}/relocate": {
+      "post": {
+        "tags": [
+          "volumes"
+        ],
+        "summary": "Relocate a named data volume to a different physical disk",
+        "description": "Relocate *name*'s data to another physical disk.\n\nThe volume's contents are copied to the target disk, verified, and the\nowning component's ``target_disk`` is updated so the new location\npersists across redeploys.  The component is stopped during the\nmigration and restarted afterwards.  On failure the original volume\nand mount are left intact.",
+        "operationId": "relocate_volume_volumes__name__relocate_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelocateVolumeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelocateVolumeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services": {
       "get": {
         "tags": [
@@ -8825,6 +8888,68 @@
         "type": "object",
         "title": "RelaxMergeGateRequest",
         "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/relax-merge-gate``.\n\n*branch* is optional; when omitted the repo's default branch is used."
+      },
+      "RelocateVolumeRequest": {
+        "properties": {
+          "target_disk": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Target Disk",
+            "description": "Target disk identifier \u2014 a device path (e.g. /dev/sdb1), mount point (e.g. /mnt/data), or filesystem label."
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_disk"
+        ],
+        "title": "RelocateVolumeRequest",
+        "description": "Request body for POST /volumes/{name}/relocate."
+      },
+      "RelocateVolumeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "description": "Relocation outcome"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable status detail"
+          },
+          "volume_name": {
+            "type": "string",
+            "title": "Volume Name",
+            "description": "The relocated volume name"
+          },
+          "component_id": {
+            "type": "string",
+            "title": "Component Id",
+            "description": "The component that owns this volume"
+          },
+          "source_disk": {
+            "type": "string",
+            "title": "Source Disk",
+            "description": "Previous disk location (mount point or 'default')",
+            "default": ""
+          },
+          "target_disk": {
+            "type": "string",
+            "title": "Target Disk",
+            "description": "New disk mount point"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "detail",
+          "volume_name",
+          "component_id",
+          "target_disk"
+        ],
+        "title": "RelocateVolumeResponse",
+        "description": "Outcome of a volume relocation operation."
       },
       "RevokeUserRequest": {
         "properties": {

@@ -466,7 +466,7 @@ class VolumeOps:
                 import shutil
 
                 shutil.rmtree(target_volume_path)
-            except OSError:
+            except OSError:  # best-effort cleanup; ignore if dir is already gone
                 pass
             return {
                 "status": "failed",
@@ -499,7 +499,7 @@ class VolumeOps:
                 import shutil
 
                 shutil.rmtree(target_volume_path)
-            except OSError:
+            except OSError:  # best-effort cleanup; ignore if dir is already gone
                 pass
             return {
                 "status": "failed",
@@ -648,6 +648,6 @@ def _du_host_path(path: str) -> int:
         if parts:
             try:
                 total += int(parts[0])
-            except ValueError:
+            except ValueError:  # skip lines whose first token is not a number
                 pass
     return total

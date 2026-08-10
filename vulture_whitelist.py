@@ -116,4 +116,4 @@ _ = _restore_secrets_from_current  # unused function (src/robotsix_central_deplo
 # Volume utilities — retained for future ad-hoc inspection even though the
 # current relocate_volume path uses container-based content verification.
 # ===========================================================================
-_du_host_path  # unused function (src/robotsix_central_deploy/lifecycle/backends/_volume_ops.py:611)
+_ = _du_host_path  # unused function (src/robotsix_central_deploy/lifecycle/backends/_volume_ops.py:611)
