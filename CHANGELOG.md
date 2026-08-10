@@ -4,6 +4,15 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.5.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.5.0...v0.5.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* Add gateway vhost route: file-hub.deploy.robotsix.net → file-hub:8080 (20260809T104337Z-add-gateway-vhost-route-file-hub-deploy-59fb) ([#739](https://github.com/damien-robotsix/robotsix-central-deploy/issues/739)) ([7e20fba](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7e20fbad5ab897709a1dd62ada790af62c6e35b0))
+* Add mobile token-exchange auth endpoint for robotsix-chat-mobile (20260809T191531Z-add-mobile-token-exchange-auth-endpoint-5c8e) ([#744](https://github.com/damien-robotsix/robotsix-central-deploy/issues/744)) ([0e3af91](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0e3af912c73b8caf82a079574e9ed5dd828275b9))
+* Agent register/deploy endpoint under-gated: skips contract-version validation that manual Fetch Spec enforces (20260809T151014Z-agent-register-deploy-endpoint-under-gat-f297) ([#745](https://github.com/damien-robotsix/robotsix-central-deploy/issues/745)) ([4f89acf](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4f89acf1d81505db25ac76247286d4c42ecaadfa))
+
 ## [0.5.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.4.0...v0.5.0) (2026-08-09)
 
 
