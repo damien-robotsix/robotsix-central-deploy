@@ -123,6 +123,11 @@ class NoopBackend(ExecutionBackend):
     async def remove_volume(self, volume_name: str) -> None:
         pass
 
+    async def relocate_volume(
+        self, volume_name: str, target_disk_path: str
+    ) -> dict[str, Any]:
+        return {"status": "ok", "detail": "noop relocate"}
+
     async def inspect_self(self) -> SelfInspect | None:
         return None
 

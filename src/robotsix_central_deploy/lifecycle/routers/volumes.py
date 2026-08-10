@@ -1,12 +1,17 @@
-"""Volume browsing and audit endpoints for the lifecycle server."""
+"""Volume browsing, audit, and relocation endpoints for the lifecycle server."""
 
 from __future__ import annotations
+
+import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from ...caretaker.volume_audit.models import VolumeAuditResponse
 from ...caretaker.volume_audit.scheduler import VolumeAuditScheduler
 from ...registry.config_store import ComponentConfigStore
+from ...registry.loader import ComponentRegistry
+from .._config_utils import _sanitize_log
+from .._disk_utils import resolve_target_disk
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
@@ -17,17 +22,26 @@ from ..deps import (
     _get_backend,
     _get_component_config_store,
     _get_config,
+    _get_registry,
+    _get_store,
     _validate_volume_path,
 )
+from ..models import ServiceState
 from ..schemas import (
     OrphanVolume,
     OrphanVolumesResponse,
     PruneVolumesRequest,
     PruneVolumesResponse,
+    RelocateVolumeRequest,
+    RelocateVolumeResponse,
     VolumeEntry,
     VolumeFileResponse,
     VolumeListResponse,
 )
+from ..store import ServiceStore
+from ._sibling_utils import _fanout_siblings_best_effort
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["volumes"])
 
@@ -185,3 +199,124 @@ async def cat_volume_file(
             ),
         )
     return VolumeFileResponse(**result)
+
+
+@router.post(
+    "/volumes/{name}/relocate",
+    response_model=RelocateVolumeResponse,
+    summary="Relocate a named data volume to a different physical disk",
+)
+async def relocate_volume(
+    name: str,
+    body: RelocateVolumeRequest = Body(...),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    _auth: None = Depends(verify_auth),
+) -> RelocateVolumeResponse:
+    """Relocate *name*'s data to another physical disk.
+
+    The volume's contents are copied to the target disk, verified, and the
+    owning component's ``target_disk`` is updated so the new location
+    persists across redeploys.  The component is stopped during the
+    migration and restarted afterwards.  On failure the original volume
+    and mount are left intact.
+    """
+    # 1. Resolve the target disk identifier to a canonical mount point.
+    try:
+        target_disk_path = resolve_target_disk(body.target_disk)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # 2. Ensure the volume is browsable (owned by a registered component).
+    _assert_volume_browsable(name, component_config_store)
+
+    # 3. Find the owning component.  The volume may belong to more than
+    #    one component — pick the first and update its target_disk.
+    component_id: str | None = None
+    for cfg in component_config_store.all():
+        if name in cfg.named_volumes:
+            component_id = cfg.id
+            break
+    if component_id is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Volume '{name}' not owned by any registered component",
+        )
+
+    config = component_config_store.get(component_id)
+    if config is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Component '{component_id}' not found",
+        )
+
+    # Record the previous disk for the response.
+    source_disk = config.target_disk or "default"
+
+    # 4. Stop the component (and siblings) if running.
+    svc_record = await store.get(component_id)
+    was_running = svc_record is not None and svc_record.state in (
+        ServiceState.RUNNING,
+        ServiceState.STARTING,
+    )
+    if was_running and svc_record is not None:
+        try:
+            await backend.stop(svc_record)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "relocate: failed to stop %s before migration: %s",
+                _sanitize_log(component_id),
+                exc,
+            )
+        if config.siblings:
+            await _fanout_siblings_best_effort(
+                component_id, config, store, backend, "stop"
+            )
+
+    # 5. Migrate the volume data.
+    outcome = await backend.relocate_volume(name, target_disk_path)
+    if outcome.get("status") != "ok":
+        # Re-start the component on failure.
+        if was_running and svc_record is not None:
+            try:
+                await backend.start(svc_record)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "relocate: failed to restart %s after failed migration: %s",
+                    _sanitize_log(component_id),
+                    exc,
+                )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",
+        )
+
+    # 6. Persist the new target_disk on the owning component.
+    config.target_disk = target_disk_path
+    await component_config_store.put(config)
+
+    # 7. Restart the component.
+    if was_running and svc_record is not None:
+        try:
+            await backend.start(svc_record)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "relocate: failed to restart %s after migration: %s",
+                _sanitize_log(component_id),
+                exc,
+            )
+        if config.siblings:
+            await _fanout_siblings_best_effort(
+                component_id, config, store, backend, "start"
+            )
+
+    return RelocateVolumeResponse(
+        status="ok",
+        detail=outcome.get("detail", ""),
+        volume_name=name,
+        component_id=component_id,
+        source_disk=source_disk,
+        target_disk=target_disk_path,
+    )

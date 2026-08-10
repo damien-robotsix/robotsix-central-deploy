@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from robotsix_central_deploy.lifecycle._yaml_utils import (
@@ -371,3 +372,254 @@ class VolumeOps:
             pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("remove_volume %s: %s", volume_name, exc)
+
+    async def relocate_volume(
+        self, volume_name: str, target_disk_path: str
+    ) -> dict[str, Any]:
+        """Relocate *volume_name*'s data to *target_disk_path*.
+
+        Copies all data from the current volume backing store to
+        ``{target_disk_path}/robotsix-volumes/{volume_name}``, verifies
+        the copy, removes the old volume, and creates a new volume at
+        the target path using Docker's local driver with bind options.
+
+        Returns a dict ``{"status": "ok"|"failed", "detail": str}``.
+        On failure the source volume is left intact; the target
+        directory (if created) is removed.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
+        # 1. Inspect current volume to find source data path.
+        def _inspect_volume() -> dict[str, Any]:
+            try:
+                attrs: dict[str, Any] = dict(
+                    self._client.volumes.get(volume_name).attrs
+                )
+                return attrs
+            except docker.errors.NotFound:
+                raise RuntimeError(f"Volume {volume_name!r} not found") from None
+
+        try:
+            attrs = await loop.run_in_executor(None, _inspect_volume)
+        except RuntimeError:
+            return {"status": "failed", "detail": f"Volume {volume_name!r} not found"}
+
+        # For a bind-mount volume the data lives at Options.device;
+        # for a regular Docker volume it's at the Mountpoint.
+        options = attrs.get("Options") or {}
+        source_path = options.get("device") or attrs.get("Mountpoint", "")
+        if not source_path:
+            return {
+                "status": "failed",
+                "detail": f"Could not determine source path for volume {volume_name!r}",
+            }
+
+        # 2. Create target directory.
+        target_volume_path = os.path.join(
+            target_disk_path, "robotsix-volumes", volume_name
+        )
+        try:
+            os.makedirs(target_volume_path, mode=0o755, exist_ok=True)
+        except OSError as exc:
+            return {
+                "status": "failed",
+                "detail": f"Failed to create target directory {target_volume_path!r}: {exc}",
+            }
+
+        # 3. Copy data from source to target via a busybox container.
+        #    Mount source (the Docker volume, which Docker resolves to the
+        #    correct backing path) at /src ro, and target at /dst rw.
+        copy_ok = False
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        "cp -a /src/. /dst/ 2>&1 || { echo COPY_FAILED; exit 1; }",
+                    ],
+                    volumes={
+                        volume_name: {"bind": "/src", "mode": "ro"},
+                        target_volume_path: {"bind": "/dst", "mode": "rw"},
+                    },
+                    remove=True,
+                ),
+            )
+            copy_ok = True
+        except docker.errors.ContainerError as exc:
+            # Container exited non-zero — the copy failed.
+            logger.warning(
+                "relocate_volume %s: copy container failed: %s", volume_name, exc
+            )
+        except docker.errors.APIError as exc:
+            logger.warning(
+                "relocate_volume %s: Docker API error during copy: %s", volume_name, exc
+            )
+
+        if not copy_ok:
+            # Clean up the target directory on failure.
+            try:
+                import shutil
+
+                shutil.rmtree(target_volume_path)
+            except OSError:
+                pass
+            return {
+                "status": "failed",
+                "detail": f"Data copy failed for volume {volume_name!r}",
+            }
+
+        # 4. Verify: compare du_bytes on source and target.
+        src_bytes = _du_host_path(source_path)
+        dst_bytes = _du_host_path(target_volume_path)
+        if src_bytes != dst_bytes:
+            logger.warning(
+                "relocate_volume %s: size mismatch — source=%d target=%d",
+                volume_name,
+                src_bytes,
+                dst_bytes,
+            )
+            try:
+                import shutil
+
+                shutil.rmtree(target_volume_path)
+            except OSError:
+                pass
+            return {
+                "status": "failed",
+                "detail": (
+                    f"Verification failed: source {src_bytes} bytes, "
+                    f"target {dst_bytes} bytes"
+                ),
+            }
+
+        # 5. Remove old Docker volume.
+        def _remove_old() -> None:
+            try:
+                self._client.volumes.get(volume_name).remove(force=True)
+            except docker.errors.NotFound:
+                pass
+
+        try:
+            await loop.run_in_executor(None, _remove_old)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "relocate_volume %s: failed to remove old volume: %s", volume_name, exc
+            )
+            # Non-fatal — the new volume can still be created.
+
+        # 6. Create new volume pointing to target path.
+        def _create_new() -> None:
+            self._client.volumes.create(
+                volume_name,
+                driver="local",
+                driver_opts={
+                    "type": "none",
+                    "device": target_volume_path,
+                    "o": "bind",
+                },
+            )
+
+        try:
+            await loop.run_in_executor(None, _create_new)
+        except docker.errors.APIError as exc:
+            if exc.status_code == 409:
+                logger.info(
+                    "Volume %s already exists at new location, removing and recreating",
+                    volume_name,
+                )
+                # Remove the leftover (possibly from a previous failed attempt)
+                # and retry.
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        lambda: self._client.volumes.get(volume_name).remove(
+                            force=True
+                        ),
+                    )
+                    await loop.run_in_executor(None, _create_new)
+                except Exception as retry_exc:  # noqa: BLE001
+                    return {
+                        "status": "failed",
+                        "detail": f"Failed to recreate volume after 409: {retry_exc}",
+                    }
+            else:
+                return {
+                    "status": "failed",
+                    "detail": f"Failed to create new volume: {exc.explanation or exc}",
+                }
+        except docker.errors.DockerException as exc:
+            return {
+                "status": "failed",
+                "detail": f"Docker daemon unreachable: {exc}",
+            }
+
+        # 7. Fix ownership on the new volume.
+        #    The volume was freshly created and needs proper ownership
+        #    so the container user can write.  We chown/chmod the root
+        #    via a one-shot busybox container.
+        await loop.run_in_executor(
+            None,
+            self.ensure_volume_ownership,
+            volume_name,
+            os.getuid(),
+            os.getgid(),
+            0o755,
+        )
+
+        return {
+            "status": "ok",
+            "detail": (
+                f"Volume {volume_name!r} relocated to {target_volume_path!r} "
+                f"({dst_bytes} bytes verified)"
+            ),
+        }
+
+
+def _du_host_path(path: str) -> int:
+    """Return recursive byte count of *path* on the host, excluding SQLite
+    transient sidecars.  Returns 0 on error (including inaccessible paths)."""
+    import subprocess
+
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [
+                "/usr/bin/find",
+                path,
+                "-type",
+                "f",
+                "!",
+                "-name",
+                "*.db-wal",
+                "!",
+                "-name",
+                "*.db-shm",
+                "!",
+                "-name",
+                "*.db-journal",
+                "-exec",
+                "du",
+                "-b",
+                "{}",
+                "+",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        raw = proc.stdout
+    except (FileNotFoundError, OSError):
+        return 0
+    total = 0
+    for line in raw.splitlines():
+        parts = line.split()
+        if parts:
+            try:
+                total += int(parts[0])
+            except ValueError:
+                pass
+    return total
