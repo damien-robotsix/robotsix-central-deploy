@@ -2791,122 +2791,6 @@
         }
       }
     },
-    "/chat/services": {
-      "post": {
-        "tags": [
-          "chat"
-        ],
-        "summary": "Register a new managed component (idempotent)",
-        "description": "Register a new managed component in the service inventory.\n\nCreates a minimal ``ComponentConfig`` from the request body and\npersists it, alongside a ``ServiceRecord`` in STOPPED state.\nThe component is NOT auto-started \u2014 this endpoint only registers\nmetadata.\n\nIdempotent: re-registering an existing component id returns the\nexisting entry unchanged.\n\nRequires ``chat_agent_registration_enabled`` to be ``True`` in the\nserver config.",
-        "operationId": "chat_register_component_chat_services_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatAgentRegisterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatAgentRegisterResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Registration not enabled"
-          },
-          "409": {
-            "description": "Name conflict with an existing component"
-          },
-          "422": {
-            "description": "Invalid request body"
-          }
-        }
-      }
-    },
-    "/chat/services/{name}/restart": {
-      "post": {
-        "tags": [
-          "chat"
-        ],
-        "summary": "Restart an allowlisted service (idempotent)",
-        "description": "Restart an allowlisted service. Idempotent.\n\nRaises 403 if the service is not in the chat-agent allowlist.\nRate-limited to one restart per 60 seconds per service.",
-        "operationId": "chat_restart_service_chat_services__name__restart_post",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatAgentRestartResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized \u2014 invalid or missing credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Service not allowlisted"
-          },
-          "404": {
-            "description": "Service not found"
-          },
-          "409": {
-            "description": "Invalid state transition"
-          },
-          "429": {
-            "description": "Rate limited"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/chat/services/{name}/update": {
       "post": {
         "tags": [
@@ -3215,6 +3099,122 @@
           },
           "404": {
             "description": "Component not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Register a new managed component (idempotent)",
+        "description": "Register a new managed component in the service inventory.\n\nCreates a minimal ``ComponentConfig`` from the request body and\npersists it, alongside a ``ServiceRecord`` in STOPPED state.\nThe component is NOT auto-started \u2014 this endpoint only registers\nmetadata.\n\nIdempotent: re-registering an existing component id returns the\nexisting entry unchanged.\n\nRequires ``chat_agent_registration_enabled`` to be ``True`` in the\nserver config.",
+        "operationId": "chat_register_component_chat_services_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatAgentRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentRegisterResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Registration not enabled"
+          },
+          "409": {
+            "description": "Name conflict with an existing component"
+          },
+          "422": {
+            "description": "Invalid request body"
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/restart": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Restart an allowlisted service (idempotent)",
+        "description": "Restart an allowlisted service. Idempotent.\n\nRaises 403 if the service is not in the chat-agent allowlist.\nRate-limited to one restart per 60 seconds per service.",
+        "operationId": "chat_restart_service_chat_services__name__restart_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAgentRestartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service not found"
+          },
+          "409": {
+            "description": "Invalid state transition"
+          },
+          "429": {
+            "description": "Rate limited"
           },
           "422": {
             "description": "Validation Error",

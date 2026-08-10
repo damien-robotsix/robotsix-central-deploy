@@ -50,7 +50,13 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_self
 
-::: robotsix_central_deploy.lifecycle.routers.chat_services
+::: robotsix_central_deploy.lifecycle.routers.chat_deploy
+
+::: robotsix_central_deploy.lifecycle.routers.chat_mutation
+
+::: robotsix_central_deploy.lifecycle.routers.chat_register
+
+::: robotsix_central_deploy.lifecycle.routers.chat_restart
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_test_deploy
 
