@@ -33,6 +33,7 @@ from .dependencies import (
     _get_settings_store,
     _get_sibling_pairs,
     _get_store,
+    _get_token_store,
 )
 from .jobs import DeployJob, Job, JobRegistry, OnboardJob
 from .lifespan import _seed_component_registry, lifespan
@@ -136,6 +137,7 @@ __all__ = [
     "_get_settings_store",
     "_get_sibling_pairs",
     "_get_store",
+    "_get_token_store",
     "_namespace_spec_volumes",
     "_prune_unset",
     "_relocate_account_seed_values",

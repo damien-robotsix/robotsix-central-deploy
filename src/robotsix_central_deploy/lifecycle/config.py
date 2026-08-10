@@ -461,6 +461,23 @@ class LifecycleConfig(BaseModel):
         ),
     )
 
+    # Mobile token exchange — bearer tokens for native apps that cannot
+    # use the browser SSO session-cookie flow.
+    mobile_token_ttl_days: int = Field(
+        SETTINGS_DEFAULTS["mobile_token_ttl_days"],
+        description=(
+            "Lifetime (days) of mobile bearer tokens issued by the "
+            "/auth/token endpoint."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+
+    mobile_token_revocation_path: str = Field(
+        "data/mobile_token_revocations.json",
+        description="Path of the mobile-token revocation list.",
+        json_schema_extra={"advanced": True},
+    )
+
     # Generic deploy allowlist — component names the chat agent may deploy
     # via POST /chat/deploy even when no ComponentConfig exists yet.
     chat_agent_deployable_components: list[str] = Field(

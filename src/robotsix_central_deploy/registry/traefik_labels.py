@@ -14,21 +14,22 @@ config file.
 Three routers are emitted per component, distinguished by priority so the most
 specific rule wins:
 
-===========  ========  =================  =====================================
-Router       Priority  Matches            Authenticated by
-===========  ========  =================  =====================================
-``-health``  30        ``GET /health``    nothing — the health contract requires
-                                          an auth-exempt probe
-(base)       10        everything else    tinyauth SSO via ``forwardAuth``
-===========  ========  =================  =====================================
+===============  ========  ====================================  ======================================
+Router            Priority  Matches                              Authenticated by
+===============  ========  ====================================  ======================================
+``-health``       30        ``GET /health``                      nothing — the health contract requires
+                                                                 an auth-exempt probe
+``-bearer``       20        ``Host(...) && Authorization: Bearer``  ``mobile-token`` ForwardAuth — validates
+                                                                 a mobile bearer token issued by
+                                                                 ``GET /auth/token``
+(base)            10        everything else                      tinyauth SSO via ``forwardAuth``
+===============  ========  ====================================  ======================================
 
-There is deliberately no second door for machine callers. An HTTP Basic router
-existed here briefly; because its credential was the fleet's existing htpasswd,
-every browser that had ever authenticated against the old nginx replayed it
-automatically and never saw the SSO gate at all. A bypass that every client
-already holds the key to is not a second lock. Scripts and fleet services reach
-components over the internal Docker network instead, where the edge is not
-involved.
+Requests carrying an ``Authorization: Bearer <token>`` header match the
+higher-priority ``-bearer`` router and never reach tinyauth — the
+``mobile-token`` ForwardAuth validates the token directly.  All other
+requests (browser SSO sessions) fall through to the tinyauth gate at
+priority 10.
 
 TLS is **not** configured here. The ``websecure`` entrypoint carries the
 wildcard certificate for the whole base domain (see ``deploy/traefik/traefik.yml``),
@@ -43,10 +44,16 @@ from .models import ComponentConfig
 #: forward-auth. There is no second, weaker gate; see the module docstring.
 BROWSER_MIDDLEWARE: str = "tinyauth@file"
 
+#: Traefik middleware validating mobile bearer tokens — forwards to
+#: central-deploy's ``GET /auth/validate``.  Applied on a higher-priority
+#: router so bearer-token requests never reach the tinyauth gate.
+BEARER_MIDDLEWARE: str = "mobile-token@file"
+
 #: Entrypoint every component router binds to (TLS, port 443).
 ENTRYPOINT: str = "websecure"
 
 _HEALTH_PRIORITY = 30
+_BEARER_PRIORITY = 20
 _BROWSER_PRIORITY = 10
 
 
@@ -59,7 +66,7 @@ def traefik_labels(
 
     Returns an empty dict when the component must not be routed — no
     ``base_domain`` configured, no exposed port, or ``routable`` false (the
-    sibling case: a database published at ``<component>-db.<base_domain>``
+    sibling case: a database published at ``<component>-db.<base-domain>``
     would be internet-facing behind nothing but the SSO gate). All three are
     normal states, not errors: the container is simply created without Traefik
     labels and Traefik ignores it.
@@ -94,14 +101,20 @@ def traefik_labels(
 
     for router, priority, rule, middleware in (
         (f"{name}-health", _HEALTH_PRIORITY, f"{host_rule} && Path(`/health`)", None),
+        (
+            f"{name}-bearer",
+            _BEARER_PRIORITY,
+            f"{host_rule} && HeadersRegexp(`Authorization`, `^Bearer .+`)",
+            BEARER_MIDDLEWARE,
+        ),
         (name, _BROWSER_PRIORITY, host_rule, BROWSER_MIDDLEWARE),
     ):
         prefix = f"traefik.http.routers.{router}"
         labels[f"{prefix}.rule"] = rule
         labels[f"{prefix}.priority"] = str(priority)
         labels[f"{prefix}.entrypoints"] = ENTRYPOINT
-        # All three routers front the same upstream; without this Traefik would
-        # look for a service named after each router and 404 two of them.
+        # All routers front the same upstream; without this Traefik would
+        # look for a service named after each router and 404 them.
         labels[f"{prefix}.service"] = name
         if middleware is not None:
             labels[f"{prefix}.middlewares"] = middleware

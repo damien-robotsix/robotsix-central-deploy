@@ -6,7 +6,7 @@
 # repo-agnostic rule in AGENT.md, and it applies to this file exactly as it
 # applies to the engine. Component routes arrive as Docker labels derived by
 # registry/traefik_labels.py, which reference the middleware below by name
-# (`tinyauth@file`).
+# (`tinyauth@file`, `mobile-token@file`).
 #
 # One gate, deliberately. An HTTP Basic middleware for machine callers lived
 # here briefly. Because it was keyed with the fleet's existing nginx htpasswd,
@@ -16,6 +16,13 @@
 # router. A second door whose key every client already holds is not defence in
 # depth, so there is no longer one. Machine callers reach components over the
 # internal Docker network, which never passes through the edge.
+#
+# Mobile native apps (e.g. robotsix-chat-mobile) cannot use the browser SSO
+# session-cookie flow.  The `mobile-token` ForwardAuth below validates a
+# Bearer token issued by central-deploy's `GET /auth/token` endpoint (which
+# the user obtains once by authenticating through tinyauth in a WebView).
+# Requests carrying a valid `Authorization: Bearer <token>` header are
+# admitted directly; all other requests still pass through tinyauth.
 
 http:
   middlewares:
@@ -31,3 +38,15 @@ http:
           - Remote-Name
           - Remote-Email
           - Remote-Groups
+
+    # Mobile bearer-token validator.  Traefik calls central-deploy's
+    # /auth/validate endpoint for every request carrying an Authorization:
+    # Bearer header (routed at higher priority than tinyauth).  When the
+    # token is valid the endpoint returns 200 + Remote-User; when it is
+    # missing, expired, or revoked the endpoint returns 401 and the request
+    # is rejected at the edge.
+    mobile-token:
+      forwardAuth:
+        address: "http://central-deploy:8100/auth/validate"
+        authResponseHeaders:
+          - Remote-User

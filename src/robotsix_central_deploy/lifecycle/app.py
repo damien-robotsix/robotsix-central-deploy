@@ -37,6 +37,7 @@ from .deps import lifespan
 from .error_handlers import register_error_handlers
 from .models import ErrorDetail
 from .rate_limiter import RateLimitMiddleware
+from .routers.auth_token import router as auth_token_router
 from .routers.caretaker import router as caretaker_router
 from .routers.chat import router as chat_router
 from .routers.chat_github_actions import router as chat_github_actions_router
@@ -71,6 +72,7 @@ _CSRF_EXEMPT_URLS: list[re.Pattern[str]] = [
     re.compile(r"^/chat/"),
     re.compile(r"^/claude-auth/"),
     re.compile(r"^/components/"),
+    re.compile(r"^/auth/"),
 ]
 
 app = FastAPI(
@@ -137,6 +139,7 @@ app.include_router(chat_github_security_router)
 app.include_router(chat_preview_router)
 app.include_router(chat_langfuse_router)
 app.include_router(fleet_langfuse_router)
+app.include_router(auth_token_router)
 
 
 # ---------------------------------------------------------------------------
