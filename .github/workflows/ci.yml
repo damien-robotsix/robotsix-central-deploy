@@ -9,13 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ── Repository-specific gates (no shared-workflow equivalent) ──
 
   docs-dedup:
+    name: Docs Dedup
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -65,6 +66,7 @@ jobs:
   # ── Shared fleet workflows (lint, type-check, test, security, container scan) ──
 
   lint:
+    name: Lint
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -142,6 +144,7 @@ jobs:
         run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
 
   test:
+    name: Test
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -195,7 +198,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # Trivy SARIF upload to Code Scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -248,6 +251,7 @@ jobs:
         run: uv run vulture
 
   docs:
+    name: Docs
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -268,7 +272,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # Hadolint SARIF upload to Code Scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -288,6 +292,7 @@ jobs:
           category: hadolint
 
   grep-lint:
+    name: Grep Lint
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -396,6 +401,7 @@ jobs:
           echo "All grep-lint checks passed."
 
   lint-actions:
+    name: Lint Actions
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -414,6 +420,7 @@ jobs:
         run: uv tool run --from zizmor zizmor .github/workflows/
 
   module-taxonomy:
+    name: Module Taxonomy
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -433,6 +440,7 @@ jobs:
         run: uv run robotsix-modules-validate docs/modules.yaml
 
   config-schema-drift:
+    name: Config Schema Drift
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -496,6 +504,7 @@ jobs:
           EOF
 
   openapi-drift:
+    name: OpenAPI Drift
     needs: changes
     runs-on: ubuntu-latest
     permissions:
