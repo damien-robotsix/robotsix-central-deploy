@@ -80,6 +80,8 @@
 
 ::: robotsix_central_deploy.lifecycle.store
 
+::: robotsix_central_deploy.lifecycle.token_store
+
 ## Lifecycle Backends
 
 ::: robotsix_central_deploy.lifecycle.backends.base
@@ -143,6 +145,8 @@
 ::: robotsix_central_deploy.caretaker.volume_audit.scheduler
 
 ::: robotsix_central_deploy.caretaker.volume_audit.reporter
+
+::: robotsix_central_deploy.caretaker.volume_audit.board
 
 ## Onboarding
 
