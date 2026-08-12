@@ -40,10 +40,10 @@ modules:
       - CONTRIBUTING.md
       - Dockerfile
       - LICENSE
-      - package.json
       - README.md
       - SECURITY.md
       - _gen_openapi.py
+      - _gen_robotsix_ui_css.py
       - _mill_build.py
       - config/**/*
       - .env.example
