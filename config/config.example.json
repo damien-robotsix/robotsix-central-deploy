@@ -71,12 +71,6 @@
       "auth_header_name": "X-API-Key"
     }
   ],
-  "ovh_sftp": {
-    "host": "",
-    "port": 22,
-    "user": "",
-    "password": ""
-  },
   "llmio_tier_config": {
     "level1": {
       "provider": "openai",
