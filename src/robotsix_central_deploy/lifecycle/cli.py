@@ -15,6 +15,18 @@ from .models import ExecutionBackendType, StoreBackend
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Parse CLI arguments and start the lifecycle uvicorn server.
+
+    Loads configuration via :func:`robotsix_config.load_config`, then
+    overlays any CLI-provided values on top (CLI arguments always take
+    precedence over the config file).  Accepts six optional arguments:
+    ``--host``, ``--port``, ``--store-backend``, ``--execution-backend``,
+    ``--api-key``, and ``--target-disk``.
+
+    The :mod:`uvicorn` and :data:`LOGGING_CONFIG` imports are deferred
+    so that ``--help`` and argument-parsing failures respond quickly
+    without pulling in the full server runtime.
+    """
     parser = argparse.ArgumentParser(
         description="robotsix-central-deploy lifecycle server"
     )
