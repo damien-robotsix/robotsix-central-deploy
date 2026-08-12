@@ -58,6 +58,7 @@ class DockerBackend(ExecutionBackend):
     """Executes lifecycle actions via the local Docker daemon (``docker`` CLI)."""
 
     async def start(self, service: ServiceRecord) -> ServiceState:
+        """Start the container for *service* via ``docker start``, falling back to ``docker run``."""
         if not service.image:
             logger.warning(
                 "Service %r has no image — cannot start via Docker", service.name
@@ -88,6 +89,7 @@ class DockerBackend(ExecutionBackend):
         return ServiceState.RUNNING
 
     async def stop(self, service: ServiceRecord) -> ServiceState:
+        """Stop the container for *service* via ``docker stop``."""
         rc, _, stderr = await _run(
             ExecutionBackendType.DOCKER.value, "stop", service.name
         )
@@ -101,11 +103,13 @@ class DockerBackend(ExecutionBackend):
         return ServiceState.STOPPED
 
     async def remove_container(self, service: ServiceRecord) -> None:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "remove_container not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
+        """Restart the container for *service* via ``docker restart``, falling back to stop+start."""
         if not service.image:
             # Restart requires we can recreate; treat like stop+start.
             stop_state = await self.stop(service)
@@ -123,6 +127,7 @@ class DockerBackend(ExecutionBackend):
         return ServiceState.RUNNING
 
     async def status(self, service: ServiceRecord) -> ComponentInspect:
+        """Return a ComponentInspect for *service* via ``docker inspect``."""
         state = (
             await self._inspect_state(service.container_name or service.name)
             or ServiceState.UNKNOWN
@@ -132,6 +137,7 @@ class DockerBackend(ExecutionBackend):
     async def deploy(
         self, service: ServiceRecord, config: ComponentConfig, image_ref: str
     ) -> DeployOutcome:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "deploy not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -139,6 +145,7 @@ class DockerBackend(ExecutionBackend):
     async def rollback(
         self, service: ServiceRecord, config: ComponentConfig
     ) -> RollbackOutcome:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "rollback not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -150,6 +157,7 @@ class DockerBackend(ExecutionBackend):
         since: str | None = None,
         follow: bool = False,
     ) -> AsyncIterator[bytes]:
+        """Return a placeholder (log streaming requires the DockerSdkBackend)."""
         yield b"[docker-cli backend: use docker_sdk for log streaming]\n"
 
     async def get_container_logs(
@@ -166,22 +174,26 @@ class DockerBackend(ExecutionBackend):
         return combined
 
     async def disk_df(self) -> DockerDfStats:
+        """Return zeroed DockerDfStats (CLI backend does not support ``docker system df``)."""
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()
 
     async def prune_builds(self) -> int:
+        """Return 0 (CLI backend does not support build prune)."""
         # CLI backend does not support build prune.
         return 0
 
     async def prune_images(
         self, protected_refs: set[str], *, force: bool = False
     ) -> PruneImagesResult:
+        """Return empty PruneImagesResult (CLI backend does not support image prune)."""
         # CLI backend does not support image prune.
         return PruneImagesResult()
 
     async def write_config_to_volume(
         self, volume_name: str, config_dict: dict[str, Any]
     ) -> None:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -189,11 +201,13 @@ class DockerBackend(ExecutionBackend):
     async def write_llmio_tier_config_to_volume(
         self, volume_name: str, tier_config: dict[str, Any]
     ) -> None:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "write_llmio_tier_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -207,16 +221,19 @@ class DockerBackend(ExecutionBackend):
         env_dict: dict[str, str],
         timeout_seconds: int = 60,
     ) -> str:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "run_config_assist not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def measure_volume_bytes(self, volume_name: str) -> int:
+        """Return 0 (CLI backend lacks volume-inspection support)."""
         return 0  # CLI backend lacks volume-inspection support; placeholder.
 
     async def list_volume_dir(
         self, volume_name: str, rel_path: str
     ) -> list[dict[str, Any]]:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "list_volume_dir not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -224,16 +241,19 @@ class DockerBackend(ExecutionBackend):
     async def read_volume_file(
         self, volume_name: str, rel_path: str, max_bytes: int
     ) -> dict[str, Any]:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "read_volume_file not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def remove_volume(self, volume_name: str) -> None:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "remove_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def inspect_self(self) -> SelfInspect | None:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "inspect_self not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -245,11 +265,13 @@ class DockerBackend(ExecutionBackend):
         docker_host_url: str,
         docker_api_version: str,
     ) -> str:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "trigger_self_update not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def trigger_self_restart(self, target: SelfInspect) -> str:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "trigger_self_restart not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -257,6 +279,7 @@ class DockerBackend(ExecutionBackend):
     # -- claude-auth stubs --------------------------------------------------
 
     async def check_claude_auth(self, volume_name: str) -> dict[str, Any]:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "check_claude_auth not supported for DockerBackend — use DockerSdkBackend"
         )
@@ -264,11 +287,13 @@ class DockerBackend(ExecutionBackend):
     async def write_claude_credentials(
         self, volume_name: str, credentials_json: str
     ) -> dict[str, Any]:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "write_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
         )
 
     async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
+        """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
             "read_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
         )

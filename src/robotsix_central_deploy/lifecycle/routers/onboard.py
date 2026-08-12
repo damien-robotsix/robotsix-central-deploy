@@ -349,6 +349,72 @@ async def onboard_preflight(
 # ---------------------------------------------------------------------------
 
 
+async def _capture_logs_and_fail_onboard(
+    spec_name: str,
+    config: ComponentConfig,
+    record: ServiceRecord,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    config_yaml_store: ConfigYamlStore,
+    component_config_store: ComponentConfigStore,
+    registry: ComponentRegistry,
+    env_store: EnvStore,
+    env_was_seeded: bool,
+    job_registry: JobRegistry,
+    deploy_history_store: DeployHistoryStore,
+    spec_image: str,
+    job_id: str,
+    exc: Exception,
+    record_for_logs: ServiceRecord | None = None,
+    sibling_records: list[ServiceRecord] | None = None,
+) -> None:
+    """Capture logs, write deploy-history, rollback, and mark the onboard job as failed."""
+    captured_logs: str | None = None
+    if record_for_logs is not None:
+        try:
+            captured_logs = await backend.get_container_logs(record_for_logs, tail=200)
+        except Exception:
+            logger.warning(
+                "onboard %s: failed to capture container logs",
+                spec_name,
+                exc_info=True,
+            )
+    # Write a deploy-history entry before rollback so the failed
+    # attempt survives cleanup for post-mortem.
+    try:
+        await deploy_history_store.append(
+            spec_name,
+            DeployHistoryEntry(
+                digest=record.deployed_image_digest or "",
+                image_ref=spec_image,
+                timestamp=time.time(),
+                source=DeploySource.MANUAL,
+                previous_digest=record.previous_image_digest or "",
+            ),
+        )
+    except Exception:
+        logger.warning(
+            "onboard %s: failed to record history entry",
+            spec_name,
+            exc_info=True,
+        )
+    await _rollback_onboard(
+        spec_name,
+        config.id,
+        store,
+        config_yaml_store,
+        component_config_store,
+        registry,
+        backend=backend,
+        env_store=env_store,
+        primary_record=record,
+        env_was_seeded=env_was_seeded,
+        sibling_records=sibling_records,
+        named_volumes=config.named_volumes,
+    )
+    job_registry.mark_failed(job_id, str(exc), logs=captured_logs)
+
+
 async def _run_onboard_deploy_job(
     job_id: str,
     spec_name: str,
@@ -454,53 +520,27 @@ async def _run_onboard_deploy_job(
             )
         except Exception as exc:
             logger.exception("onboard sibling deploy failed for '%s'", spec_name)
-            # Capture sibling container logs before rollback.
-            sibling_logs: str | None = None
-            if sibling_records_created:
-                try:
-                    sibling_logs = await backend.get_container_logs(
-                        sibling_records_created[-1], tail=200
-                    )
-                except Exception:
-                    logger.warning(
-                        "onboard %s: failed to capture sibling container logs",
-                        spec_name,
-                        exc_info=True,
-                    )
-            # Write a deploy-history entry before rollback so the failed
-            # attempt survives cleanup for post-mortem.
-            try:
-                await deploy_history_store.append(
-                    spec_name,
-                    DeployHistoryEntry(
-                        digest=record.deployed_image_digest or "",
-                        image_ref=spec_image,
-                        timestamp=time.time(),
-                        source=DeploySource.MANUAL,
-                        previous_digest=record.previous_image_digest or "",
-                    ),
-                )
-            except Exception:
-                logger.warning(
-                    "onboard %s: failed to record history entry",
-                    spec_name,
-                    exc_info=True,
-                )
-            await _rollback_onboard(
-                spec_name,
-                config.id,
-                store,
-                config_yaml_store,
-                component_config_store,
-                registry,
+            await _capture_logs_and_fail_onboard(
+                spec_name=spec_name,
+                config=config,
+                record=record,
+                store=store,
                 backend=backend,
+                config_yaml_store=config_yaml_store,
+                component_config_store=component_config_store,
+                registry=registry,
                 env_store=env_store,
-                primary_record=record,
                 env_was_seeded=env_was_seeded,
+                job_registry=job_registry,
+                deploy_history_store=deploy_history_store,
+                spec_image=spec_image,
+                job_id=job_id,
+                exc=exc,
+                record_for_logs=sibling_records_created[-1]
+                if sibling_records_created
+                else None,
                 sibling_records=sibling_records_created,
-                named_volumes=config.named_volumes,
             )
-            job_registry.mark_failed(job_id, str(exc), logs=sibling_logs)
             return
 
         # Success
@@ -513,50 +553,24 @@ async def _run_onboard_deploy_job(
         )
     except Exception as exc:
         logger.exception("onboard deploy failed for '%s'", spec_name)
-        # Capture container logs before rollback removes the container,
-        # so the operator can diagnose startup/healthcheck failures.
-        captured_logs: str | None = None
-        try:
-            captured_logs = await backend.get_container_logs(record, tail=200)
-        except Exception:
-            logger.warning(
-                "onboard %s: failed to capture container logs",
-                spec_name,
-                exc_info=True,
-            )
-        # Write a deploy-history entry before rollback so the failed
-        # attempt survives cleanup for post-mortem.
-        try:
-            await deploy_history_store.append(
-                spec_name,
-                DeployHistoryEntry(
-                    digest=record.deployed_image_digest or "",
-                    image_ref=spec_image,
-                    timestamp=time.time(),
-                    source=DeploySource.MANUAL,
-                    previous_digest=record.previous_image_digest or "",
-                ),
-            )
-        except Exception:
-            logger.warning(
-                "onboard %s: failed to record history entry",
-                spec_name,
-                exc_info=True,
-            )
-        await _rollback_onboard(
-            spec_name,
-            config.id,
-            store,
-            config_yaml_store,
-            component_config_store,
-            registry,
+        await _capture_logs_and_fail_onboard(
+            spec_name=spec_name,
+            config=config,
+            record=record,
+            store=store,
             backend=backend,
+            config_yaml_store=config_yaml_store,
+            component_config_store=component_config_store,
+            registry=registry,
             env_store=env_store,
-            primary_record=record,
             env_was_seeded=env_was_seeded,
-            named_volumes=config.named_volumes,
+            job_registry=job_registry,
+            deploy_history_store=deploy_history_store,
+            spec_image=spec_image,
+            job_id=job_id,
+            exc=exc,
+            record_for_logs=record,
         )
-        job_registry.mark_failed(job_id, str(exc), logs=captured_logs)
 
 
 # ---------------------------------------------------------------------------
