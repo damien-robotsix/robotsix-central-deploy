@@ -109,6 +109,18 @@ class DerivedSpec(BaseModel):
         default=False,
         description="Whether the chat agent is permitted to mutate this component's configuration at runtime (from robotsix.deploy.chat-agent-mutatable label)",
     )
+    chat_skill: str = Field(
+        default="",
+        description="Static Markdown skill description for the chat assistant (from robotsix.deploy.chat-skill label)",
+    )
+    chat_skill_endpoint: str = Field(
+        default="/chat-skill",
+        description="HTTP path the roster probe hits for the skill body (from robotsix.deploy.chat-skill-endpoint label)",
+    )
+    advisories: list[str] = Field(
+        default=[],
+        description="Non-blocking advisory notes about deploy-contract compliance (e.g. missing chat-access label)",
+    )
     user: str | None = Field(
         default=None,
         description='Container user override from docker-compose (e.g. "1000:1000" for uid:gid, or "root")',

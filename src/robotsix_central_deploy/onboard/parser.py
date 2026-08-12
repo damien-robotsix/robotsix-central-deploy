@@ -42,6 +42,10 @@ LABEL_CONFIG_ASSIST_SEEDS = (
 LABEL_LLMIO_TIER_LEVEL = "robotsix.deploy.llmio-tier-level"  # "level1"–"level4"
 LABEL_CHAT_ACCESS = "robotsix.deploy.chat-access"  # "true" / "false"
 LABEL_CHAT_AGENT_MUTATABLE = "robotsix.deploy.chat-agent-mutatable"  # "true" / "false"
+LABEL_CHAT_SKILL = "robotsix.deploy.chat-skill"  # static Markdown skill body
+LABEL_CHAT_SKILL_ENDPOINT = (
+    "robotsix.deploy.chat-skill-endpoint"  # custom endpoint path
+)
 
 # Service-key validation pattern: must match ^[a-z0-9][a-z0-9-]*$
 _SERVICE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -411,6 +415,22 @@ def _parse_chat_agent_mutatable(labels: dict[str, Any]) -> bool:
     return bool(isinstance(val, str) and val.strip().lower() in ("true", "1", "yes"))
 
 
+def _parse_chat_skill(labels: dict[str, Any]) -> str:
+    """Parse ``robotsix.deploy.chat-skill`` label — static Markdown skill body."""
+    val = labels.get(LABEL_CHAT_SKILL)
+    if isinstance(val, str):
+        return val.strip()
+    return ""
+
+
+def _parse_chat_skill_endpoint(labels: dict[str, Any]) -> str:
+    """Parse ``robotsix.deploy.chat-skill-endpoint`` label — custom endpoint path."""
+    val = labels.get(LABEL_CHAT_SKILL_ENDPOINT)
+    if isinstance(val, str) and val.strip():
+        return val.strip()
+    return "/chat-skill"
+
+
 def _parse_one_service(
     svc: dict[str, Any],
     key: str,
@@ -467,6 +487,8 @@ def _parse_one_service(
     llmio_tier_level: str | None = None
     allow_chat_access = False
     chat_agent_mutatable = False
+    chat_skill = ""
+    chat_skill_endpoint = "/chat-skill"
 
     if isinstance(labels, dict):
         claude_mount, claude_mount_path, claude_violations = _parse_claude_mount(
@@ -489,6 +511,8 @@ def _parse_one_service(
         llmio_tier_level = _parse_llmio_tier_level(labels)
         allow_chat_access = _parse_chat_access(labels)
         chat_agent_mutatable = _parse_chat_agent_mutatable(labels)
+        chat_skill = _parse_chat_skill(labels)
+        chat_skill_endpoint = _parse_chat_skill_endpoint(labels)
 
     # container_name override
     container_name = svc.get("container_name", "")
@@ -575,6 +599,8 @@ def _parse_one_service(
         "llmio_tier_level": llmio_tier_level,
         "allow_chat_access": allow_chat_access,
         "chat_agent_mutatable": chat_agent_mutatable,
+        "chat_skill": chat_skill,
+        "chat_skill_endpoint": chat_skill_endpoint,
     }, violations
 
 
@@ -711,7 +737,22 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                     f"volume {vname!r}: driver must be 'local', got {driver!r}"
                 )
 
-    # 13. Raise if any violations
+    # 13. Generate chat-access compliance advisories
+    advisories: list[str] = []
+    if not primary_parsed["allow_chat_access"]:
+        advisories.append(
+            "robotsix.deploy.chat-access is not set to 'true' — "
+            "this component will be invisible to the chat assistant's roster"
+        )
+    elif not primary_parsed["chat_skill"]:
+        advisories.append(
+            "chat-access is enabled but no static chat-skill body was set "
+            "(robotsix.deploy.chat-skill label is empty or missing). "
+            "The component should expose a GET /chat-skill endpoint "
+            "or provide a static skill description via the label."
+        )
+
+    # 14. Raise if any violations
     if violations:
         raise ParseError(violations)
 
@@ -738,7 +779,10 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         llmio_tier_level=primary_parsed["llmio_tier_level"],
         allow_chat_access=primary_parsed["allow_chat_access"],
         chat_agent_mutatable=primary_parsed["chat_agent_mutatable"],
+        chat_skill=primary_parsed["chat_skill"],
+        chat_skill_endpoint=primary_parsed["chat_skill_endpoint"],
         user=primary_parsed["user"],
+        advisories=advisories,
     )
 
 

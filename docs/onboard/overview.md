@@ -38,6 +38,21 @@ The parser enforces a contract on the service's `deploy/docker-compose.yml`:
   volumes, and health checks.
 - Optional `config-target` and `config-assist` labels for settings integration.
 
+### Chat-Access Compliance Advisories
+
+During parsing, the parser generates **non-blocking advisories** about
+chat-access compliance — these are surfaced in `DerivedSpec.advisories` but
+do **not** cause a `ParseError`:
+
+| Condition | Advisory |
+|-----------|----------|
+| `robotsix.deploy.chat-access` is not set to `"true"` | Component will be invisible to the chat assistant's roster |
+| `chat-access` is enabled but `robotsix.deploy.chat-skill` is empty or missing | Component should expose a `GET /chat-skill` endpoint or provide a static skill description via the label |
+
+Both labels (`robotsix.deploy.chat-skill` and `robotsix.deploy.chat-skill-endpoint`)
+are parsed when present in the service labels, with `chat-skill-endpoint`
+defaulting to `/chat-skill` when absent.
+
 ## API
 
 | Method | Path | Auth | Description |
