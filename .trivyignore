@@ -171,3 +171,10 @@ CVE-2026-56392
 CVE-2026-18477
 CVE-2026-18508
 CVE-2026-18938
+
+# CVEs in Debian base-image system packages (python:3.14-slim).
+# Not exploitable in this container's attack surface.
+CVE-2026-72522
+CVE-2026-6791
+CVE-2026-6368
+CVE-2026-15534
