@@ -36,12 +36,31 @@ jobs:
           set -euo pipefail
           diff docs/ui/DEPLOY_CONTRACT.md src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md
 
+  # Detect whether the PR touches only documentation files (*.md, docs/**).
+  # Used downstream to skip the malware check on docs-only PRs.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.filter.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@0bc4621a3135347011ad047f9ecf449bf72ce2bd  # v3.0.0
+        id: filter
+        with:
+          filters: |
+            docs-only:
+              - '**/*.md'
+              - 'docs/**'
+
   # ── lint / typecheck / test: split from the old monolithic "tests" job
   # so that a failure in one (e.g. ruff) does not hide results from the
   # others (e.g. mypy, pytest).  Each runs in parallel with its own
   # status check (CI / lint, CI / typecheck, CI / test).
 
   lint:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,7 +78,7 @@ jobs:
         run: uv sync --frozen
         env:
           UV_PROJECT_ENVIRONMENT: system
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
       - name: Check lockfile freshness
         run: uv lock --check
@@ -88,6 +107,7 @@ jobs:
           uv run ruff format --check --diff .
 
   typecheck:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -104,7 +124,7 @@ jobs:
         run: uv sync --frozen
         env:
           UV_PROJECT_ENVIRONMENT: system
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
       - name: Mypy (static type check)
         env:
@@ -117,6 +137,7 @@ jobs:
         run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
 
   test:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -134,7 +155,7 @@ jobs:
         run: uv sync --frozen
         env:
           UV_PROJECT_ENVIRONMENT: system
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
       - name: Dead code detection (vulture)
         env:
