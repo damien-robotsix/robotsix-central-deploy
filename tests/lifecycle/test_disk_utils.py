@@ -10,9 +10,14 @@ from collections import namedtuple
 import pytest
 
 from robotsix_central_deploy.lifecycle._disk_utils import (
+    DiskInfo,
+    _deduplicate_disks,
     _discover_via_proc_mounts,
+    _is_container_bind_mount,
     _is_mount_point,
     _mount_point_of,
+    _pick_canonical,
+    _real_device,
     discover_mounted_disks,
     resolve_target_disk,
 )
@@ -288,6 +293,255 @@ class TestDiscoverMountedDisks:
         disks = discover_mounted_disks()
         assert len(disks) == 1
         assert disks[0].total_bytes == 0
+
+
+# ---------------------------------------------------------------------------
+# _real_device
+# ---------------------------------------------------------------------------
+
+
+class TestRealDevice:
+    def test_plain_device_unchanged(self):
+        assert _real_device("/dev/sdb1") == "/dev/sdb1"
+
+    def test_bind_mount_subpath_stripped(self):
+        assert (
+            _real_device("/dev/sdb1[/var/lib/docker/volumes/chat/_data]") == "/dev/sdb1"
+        )
+
+    def test_nested_brackets(self):
+        assert _real_device("/dev/sda1[/some/path[with]brackets]") == "/dev/sda1"
+
+
+# ---------------------------------------------------------------------------
+# _is_container_bind_mount
+# ---------------------------------------------------------------------------
+
+
+class TestIsContainerBindMount:
+    def test_resolv_conf_is_bind(self):
+        assert _is_container_bind_mount("/etc/resolv.conf") is True
+
+    def test_hostname_is_bind(self):
+        assert _is_container_bind_mount("/etc/hostname") is True
+
+    def test_hosts_is_bind(self):
+        assert _is_container_bind_mount("/etc/hosts") is True
+
+    def test_containers_subpath_is_bind(self):
+        assert (
+            _is_container_bind_mount("/var/lib/docker/containers/abc123/resolv.conf")
+            is True
+        )
+
+    def test_containers_subpath_with_host_root_prefix(self):
+        assert (
+            _is_container_bind_mount(
+                "/host_root/var/lib/docker/containers/abc123/resolv.conf"
+            )
+            is True
+        )
+
+    def test_real_mount_is_not_bind(self):
+        assert _is_container_bind_mount("/") is False
+        assert _is_container_bind_mount("/mnt/data") is False
+        assert _is_container_bind_mount("/host_root") is False
+
+    def test_volume_path_is_not_bind(self):
+        # Docker volume _data paths are NOT container-internal bind mounts
+        # — they are dealt with by device-level de-duplication.
+        assert (
+            _is_container_bind_mount("/var/lib/docker/volumes/chat-data/_data") is False
+        )
+
+
+# ---------------------------------------------------------------------------
+# _pick_canonical
+# ---------------------------------------------------------------------------
+
+
+class TestPickCanonical:
+    def test_single_entry_returned(self):
+        d = DiskInfo("/dev/sdb1", "/", "ext4", 1000, 500, 500)
+        assert _pick_canonical([d]) is d
+
+    def test_prefers_non_bind_mount(self):
+        bind = DiskInfo("/dev/sdb1[/data]", "/data", "ext4", 1000, 500, 500)
+        real = DiskInfo("/dev/sdb1", "/", "ext4", 1000, 500, 500)
+        assert _pick_canonical([bind, real]) is real
+
+    def test_shortest_path_when_all_non_bind(self):
+        long_mp = DiskInfo(
+            "/dev/sdb1", "/very/long/mount/point", "ext4", 1000, 500, 500
+        )
+        short_mp = DiskInfo("/dev/sdb1", "/", "ext4", 1000, 500, 500)
+        assert _pick_canonical([long_mp, short_mp]) is short_mp
+
+    def test_shortest_path_when_all_bind(self):
+        a = DiskInfo("/dev/sdb1[/long/path]", "/mnt/a", "ext4", 1000, 500, 500)
+        b = DiskInfo("/dev/sdb1[/sh]", "/b", "ext4", 1000, 500, 500)
+        assert _pick_canonical([a, b]) is b
+
+    def test_nonzero_total_beats_zero_when_same_path_length(self):
+        zero = DiskInfo("/dev/sdb1[/vol]", "/mnt/x", "ext4", 0, 0, 0)
+        nonzero = DiskInfo("/dev/sdb1[/vol]", "/mnt/y", "ext4", 2000, 1000, 1000)
+        assert _pick_canonical([zero, nonzero]) is nonzero
+
+
+# ---------------------------------------------------------------------------
+# _deduplicate_disks
+# ---------------------------------------------------------------------------
+
+
+class TestDeduplicateDisks:
+    def test_empty_list(self):
+        assert _deduplicate_disks([]) == []
+
+    def test_no_duplicates_unchanged(self):
+        disks = [
+            DiskInfo("/dev/sda1", "/", "ext4", 1000, 500, 500),
+            DiskInfo("/dev/sdb1", "/mnt/data", "ext4", 2000, 1000, 1000),
+        ]
+        result = _deduplicate_disks(disks)
+        assert len(result) == 2
+        assert {d.device for d in result} == {"/dev/sda1", "/dev/sdb1"}
+
+    def test_filters_resolv_conf(self):
+        disks = [
+            DiskInfo(
+                "/dev/sdb1[/etc/resolv.conf]",
+                "/etc/resolv.conf",
+                "ext4",
+                1000,
+                500,
+                500,
+            ),
+            DiskInfo("/dev/sdb1", "/host_root", "ext4", 1000, 500, 500),
+        ]
+        result = _deduplicate_disks(disks)
+        assert len(result) == 1
+        assert result[0].mount_point == "/host_root"
+
+    def test_filters_hostname_and_hosts(self):
+        disks = [
+            DiskInfo(
+                "/dev/sdb1[/etc/hostname]", "/etc/hostname", "ext4", 1000, 500, 500
+            ),
+            DiskInfo("/dev/sdb1[/etc/hosts]", "/etc/hosts", "ext4", 1000, 500, 500),
+            DiskInfo("/dev/sdb1", "/host_root", "ext4", 1000, 500, 500),
+        ]
+        result = _deduplicate_disks(disks)
+        assert len(result) == 1
+        assert result[0].mount_point == "/host_root"
+
+    def test_filters_docker_containers_paths(self):
+        disks = [
+            DiskInfo(
+                "/dev/sdb1[/containers/abc/hosts]",
+                "/var/lib/docker/containers/abc/hosts",
+                "ext4",
+                1000,
+                500,
+                500,
+            ),
+            DiskInfo("/dev/sdb1", "/host_root", "ext4", 1000, 500, 500),
+        ]
+        result = _deduplicate_disks(disks)
+        assert len(result) == 1
+        assert result[0].mount_point == "/host_root"
+
+    def test_deduplicates_by_backing_device(self):
+        # Simulate the ticket scenario: /dev/sdb1 has root mount + bind mounts
+        disks = [
+            DiskInfo(
+                "/dev/sdb1",
+                "/host_root",
+                "ext4",
+                78_600_000_000,
+                61_600_000_000,
+                17_000_000_000,
+            ),
+            DiskInfo(
+                "/dev/sdb1[/data]",
+                "/data",
+                "ext4",
+                78_600_000_000,
+                61_600_000_000,
+                17_000_000_000,
+            ),
+            DiskInfo(
+                "/dev/sdb1[/var/lib/docker/volumes/x/_data]",
+                "/host_root/var/lib/docker/volumes/x/_data",
+                "ext4",
+                0,
+                0,
+                0,
+            ),
+        ]
+        result = _deduplicate_disks(disks)
+        assert len(result) == 1
+        # Keeps the non-bind mount with the shortest path and real data.
+        assert result[0].mount_point == "/host_root"
+        assert result[0].total_bytes == 78_600_000_000
+
+    def test_multiple_devices_kept_separate(self):
+        disks = [
+            DiskInfo(
+                "/dev/sda1",
+                "/host_root/data2",
+                "ext4",
+                195_800_000_000,
+                30_000_000_000,
+                165_800_000_000,
+            ),
+            DiskInfo(
+                "/dev/sdb1",
+                "/host_root",
+                "ext4",
+                78_600_000_000,
+                61_600_000_000,
+                17_000_000_000,
+            ),
+            DiskInfo(
+                "/dev/sdb15",
+                "/host_root/boot/efi",
+                "vfat",
+                123_700_000,
+                11_800_000,
+                111_900_000,
+            ),
+            DiskInfo(
+                "/dev/sdb1[/data]",
+                "/data",
+                "ext4",
+                78_600_000_000,
+                61_600_000_000,
+                17_000_000_000,
+            ),
+            DiskInfo(
+                "/dev/sda1[/var/lib/docker/volumes/chat/_data]",
+                "/host_root/var/lib/docker/volumes/chat/_data",
+                "ext4",
+                0,
+                0,
+                0,
+            ),
+        ]
+        result = _deduplicate_disks(disks)
+        assert len(result) == 3
+        devices = {d.device for d in result}
+        assert devices == {"/dev/sda1", "/dev/sdb1", "/dev/sdb15"}
+        mount_points = {d.mount_point for d in result}
+        assert mount_points == {"/host_root", "/host_root/boot/efi", "/host_root/data2"}
+
+    def test_result_sorted_by_mount_point(self):
+        disks = [
+            DiskInfo("/dev/sdb1", "/mnt/z_last", "ext4", 1000, 500, 500),
+            DiskInfo("/dev/sda1", "/a_first", "ext4", 1000, 500, 500),
+        ]
+        result = _deduplicate_disks(disks)
+        assert result[0].mount_point == "/a_first"
+        assert result[1].mount_point == "/mnt/z_last"
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,23 @@ logger = logging.getLogger(__name__)
 # Canonical path to findmnt (avoid S607 partial-path warnings).
 _FINDMNT = "/usr/bin/findmnt"
 
+# Bind-mount paths to exclude from disk listing — these are
+# container-internal files that Docker bind-mounts into every
+# container; they are not real disks.
+_CONTAINER_BIND_PATHS: frozenset[str] = frozenset(
+    {
+        "/etc/resolv.conf",
+        "/etc/hostname",
+        "/etc/hosts",
+    }
+)
+
+# Substrings that identify per-container Docker bind paths.
+# Matching on a substring (rather than a prefix) handles the case
+# where the host root is mounted at e.g. ``/host_root`` inside the
+# central-deploy container.
+_CONTAINER_BIND_SUBSTRINGS: tuple[str, ...] = ("/docker/containers/",)
+
 # Pseudo and virtual filesystem types to exclude from disk discovery.
 #
 # ``findmnt --real`` already skips pseudo filesystems, but this list acts
@@ -117,6 +134,65 @@ def resolve_target_disk(identifier: str) -> str:
     )
 
 
+def _is_container_bind_mount(mount_point: str) -> bool:
+    """Return True when *mount_point* is a container-internal bind mount."""
+    if mount_point in _CONTAINER_BIND_PATHS:
+        return True
+    return any(sub in mount_point for sub in _CONTAINER_BIND_SUBSTRINGS)
+
+
+def _real_device(device: str) -> str:
+    """Strip any ``[subpath]`` suffix from a findmnt device string.
+
+    ``/dev/sdb1[/var/lib/docker/volumes/...]`` → ``/dev/sdb1``.
+    """
+    return device.split("[", 1)[0]
+
+
+def _deduplicate_disks(disks: list[DiskInfo]) -> list[DiskInfo]:
+    """De-duplicate *disks* by backing device, keeping one canonical row each.
+
+    1. Filter out container-internal bind mounts.
+    2. Group by real backing device (stripping ``[subpath]`` suffixes).
+    3. For each group pick the canonical mount — prefer non-bind mounts,
+       then the shortest mount-point path.
+    """
+    # Step 1 — filter.
+    kept = [d for d in disks if not _is_container_bind_mount(d.mount_point)]
+
+    # Step 2 — group by real backing device.
+    by_device: dict[str, list[DiskInfo]] = {}
+    for d in kept:
+        by_device.setdefault(_real_device(d.device), []).append(d)
+
+    # Step 3 — pick canonical row per device.
+    result: list[DiskInfo] = []
+    for entries in by_device.values():
+        result.append(_pick_canonical(entries))
+
+    # Stable output order.
+    result.sort(key=lambda d: d.mount_point)
+    return result
+
+
+def _pick_canonical(entries: list[DiskInfo]) -> DiskInfo:
+    """Pick the canonical ``DiskInfo`` from a group sharing the same device."""
+    if len(entries) == 1:
+        return entries[0]
+
+    # Prefer non-bind mounts: device field has no ``[...]`` suffix.
+    non_bind = [d for d in entries if "[" not in d.device]
+    candidates = non_bind if non_bind else entries
+
+    # Prefer the shortest mount-point path (closest to the real mount),
+    # tie-breaking on entries that report non-zero total size.
+    def _sort_key(d: DiskInfo) -> tuple[int, int]:
+        return (len(d.mount_point), 0 if d.total_bytes > 0 else 1)
+
+    candidates.sort(key=_sort_key)
+    return candidates[0]
+
+
 def discover_mounted_disks() -> list[DiskInfo]:
     """Return information for every mounted data disk on the host.
 
@@ -143,7 +219,7 @@ def discover_mounted_disks() -> list[DiskInfo]:
 
     if not raw.strip():
         # Fall back to /proc/mounts + shutil.disk_usage
-        return _discover_via_proc_mounts()
+        return _deduplicate_disks(_discover_via_proc_mounts())
 
     for line in raw.splitlines():
         parts = line.split(None, 5)
@@ -172,9 +248,9 @@ def discover_mounted_disks() -> list[DiskInfo]:
         )
 
     if not disks:
-        return _discover_via_proc_mounts()
+        return _deduplicate_disks(_discover_via_proc_mounts())
 
-    return disks
+    return _deduplicate_disks(disks)
 
 
 # ---------------------------------------------------------------------------
