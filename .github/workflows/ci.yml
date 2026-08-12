@@ -51,12 +51,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
 
       - name: Install dev deps
         run: uv sync --frozen
@@ -99,12 +96,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
 
       - name: Install dev deps
         run: uv sync --frozen
@@ -132,12 +126,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
 
       - name: Install dev deps
         run: uv sync --frozen
@@ -172,11 +163,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
       - name: Build docs (strict)
         run: uv run --group docs mkdocs build --strict
 
@@ -188,11 +177,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
       - name: Audit dependencies
         run: uv audit --frozen
 
@@ -284,11 +271,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
       - name: Install dependencies
         run: uv sync --frozen
         env:
@@ -397,8 +382,9 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Run actionlint
         run: '"$(go env GOPATH)/bin/actionlint"'
-      - name: Install uv
-        run: pip install uv
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        with:
+          enable-cache: true
       - name: Run zizmor
         run: uv tool run --from zizmor zizmor .github/workflows/
 
@@ -426,11 +412,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
       - name: Install dependencies
         run: uv sync --frozen
         env:
@@ -446,11 +430,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
       - name: Install dependencies
         run: uv sync --frozen
         env:
@@ -510,14 +492,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
+          enable-cache: true
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: "22"
-      - name: Install uv
-        run: pip install uv
       - name: Install dependencies
         run: uv sync --frozen
         env:
@@ -557,11 +537,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
         with:
-          python-version: "3.14"
-      - name: Install uv
-        run: pip install uv
+          enable-cache: true
       - name: Install dependencies
         run: uv sync --frozen
         env:
