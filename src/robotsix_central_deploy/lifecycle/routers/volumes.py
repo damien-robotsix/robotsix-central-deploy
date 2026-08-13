@@ -269,13 +269,16 @@ async def relocate_volume(
             target_disk=target_disk_path,
         )
 
-    # 4. Stop the component (and siblings) if running.
+    # 4. Stop every owning component (and their siblings) if running.
+    #    All owners that share this volume must be stopped so no one writes
+    #    during the copy or keeps an orphaned mount after the volume swap.
     svc_record = await store.get(component_id)
     was_running = svc_record is not None and svc_record.state in (
         ServiceState.RUNNING,
         ServiceState.STARTING,
     )
     if was_running and svc_record is not None:
+        # Stop the first owner (the one we selected for lifecycle ops).
         try:
             await backend.stop(svc_record)
         except Exception as exc:  # noqa: BLE001
@@ -288,6 +291,31 @@ async def relocate_volume(
             await _fanout_siblings_best_effort(
                 component_id, config, store, backend, "stop"
             )
+        # Also stop every OTHER owning component so they cannot write to
+        # the volume during migration (review issue #434-3).
+        for oid in owning_ids:
+            if oid == component_id:
+                continue
+            ocfg = component_config_store.get(oid)
+            if ocfg is None:
+                continue
+            o_svc = await store.get(oid)
+            if o_svc is not None and o_svc.state in (
+                ServiceState.RUNNING,
+                ServiceState.STARTING,
+            ):
+                try:
+                    await backend.stop(o_svc)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "relocate: failed to stop co-owner %s before migration: %s",
+                        _sanitize_log(oid),
+                        exc,
+                    )
+                if ocfg.siblings:
+                    await _fanout_siblings_best_effort(
+                        oid, ocfg, store, backend, "stop"
+                    )
 
     # 5. Persist the new target_disk on every owning component BEFORE
     #    migration.  If the config write fails we never touch the volume;
@@ -322,8 +350,8 @@ async def relocate_volume(
                         _sanitize_log(oid),
                         rollback_exc,
                     )
-        # Re-start the component *and* its siblings on failure — both were
-        # stopped before the migration attempt.
+        # Re-start ALL owning components (and their siblings) on failure —
+        # all were stopped before the migration attempt (review issue #434-3).
         if was_running and svc_record is not None:
             try:
                 await backend.start(svc_record)
@@ -337,12 +365,35 @@ async def relocate_volume(
                 await _fanout_siblings_best_effort(
                     component_id, config, store, backend, "start"
                 )
+            for oid in owning_ids:
+                if oid == component_id:
+                    continue
+                ocfg = component_config_store.get(oid)
+                if ocfg is None:
+                    continue
+                o_svc = await store.get(oid)
+                if o_svc is not None and o_svc.state in (
+                    ServiceState.RUNNING,
+                    ServiceState.STARTING,
+                ):
+                    try:
+                        await backend.start(o_svc)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "relocate: failed to restart co-owner %s after failed migration: %s",
+                            _sanitize_log(oid),
+                            exc,
+                        )
+                    if ocfg.siblings:
+                        await _fanout_siblings_best_effort(
+                            oid, ocfg, store, backend, "start"
+                        )
         raise HTTPException(
             status_code=500,
             detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",
         )
 
-    # 7. Restart the component.
+    # 7. Restart all owning components (and their siblings).
     if was_running and svc_record is not None:
         try:
             await backend.start(svc_record)
@@ -356,6 +407,29 @@ async def relocate_volume(
             await _fanout_siblings_best_effort(
                 component_id, config, store, backend, "start"
             )
+        for oid in owning_ids:
+            if oid == component_id:
+                continue
+            ocfg = component_config_store.get(oid)
+            if ocfg is None:
+                continue
+            o_svc = await store.get(oid)
+            if o_svc is not None and o_svc.state in (
+                ServiceState.RUNNING,
+                ServiceState.STARTING,
+            ):
+                try:
+                    await backend.start(o_svc)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "relocate: failed to restart co-owner %s after migration: %s",
+                        _sanitize_log(oid),
+                        exc,
+                    )
+                if ocfg.siblings:
+                    await _fanout_siblings_best_effort(
+                        oid, ocfg, store, backend, "start"
+                    )
 
     return RelocateVolumeResponse(
         status="ok",

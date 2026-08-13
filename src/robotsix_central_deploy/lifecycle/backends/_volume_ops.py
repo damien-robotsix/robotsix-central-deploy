@@ -436,12 +436,15 @@ class VolumeOps:
                 "detail": f"Could not determine source path for volume {volume_name!r}",
             }
 
-        # 2. Create target directory.
+        # 2. Create target directory (via executor — blocking I/O).
         target_volume_path = os.path.join(
             target_disk_path, "robotsix-volumes", volume_name
         )
         try:
-            os.makedirs(target_volume_path, mode=0o755, exist_ok=True)
+            await loop.run_in_executor(
+                None,
+                lambda: os.makedirs(target_volume_path, mode=0o755, exist_ok=True),
+            )
         except OSError as exc:
             return {
                 "status": "failed",
@@ -512,18 +515,22 @@ class VolumeOps:
             }
         finally:
             try:
-                os.remove(marker_path)
+                await loop.run_in_executor(None, os.remove, marker_path)
             except OSError:  # best-effort; never mask the probe result
                 pass
 
         # 3. Copy data from source to target via a busybox container.
         #    Mount source (the Docker volume, which Docker resolves to the
         #    correct backing path) at /src ro, and target at /dst rw.
+        #    ``containers.run()`` does NOT accept a ``timeout`` kwarg
+        #    (``timeout`` is forwarded to ``Container.stop()``), so we use
+        #    ``detach=True`` and ``container.wait(timeout=1800)`` for a
+        #    configurable deadline.
         copy_ok = False
         try:
-            await loop.run_in_executor(
-                None,
-                lambda: self._client.containers.run(
+
+            def _run_copy() -> bool:
+                container = self._client.containers.run(
                     "busybox",
                     command=[
                         "sh",
@@ -534,27 +541,31 @@ class VolumeOps:
                         volume_name: {"bind": "/src", "mode": "ro"},
                         target_volume_path: {"bind": "/dst", "mode": "rw"},
                     },
-                    remove=True,
-                    timeout=1800,
-                ),
-            )
-            copy_ok = True
-        except docker.errors.ContainerError as exc:
-            # Container exited non-zero — the copy failed.
+                    detach=True,
+                )
+                try:
+                    exit_info = container.wait(timeout=1800)
+                except Exception:
+                    try:
+                        container.remove(force=True)
+                    except Exception:  # noqa: BLE001,S110
+                        pass
+                    raise
+                container.remove()
+                return bool(exit_info.get("StatusCode", 1) == 0)
+
+            copy_ok = await loop.run_in_executor(None, _run_copy)
+        except Exception:
             logger.warning(
-                "relocate_volume %s: copy container failed: %s", volume_name, exc
-            )
-        except docker.errors.APIError as exc:
-            logger.warning(
-                "relocate_volume %s: Docker API error during copy: %s", volume_name, exc
+                "relocate_volume %s: copy container failed", volume_name, exc_info=True
             )
 
         if not copy_ok:
-            # Clean up the target directory on failure.
+            # Clean up the target directory on failure (via executor).
             try:
                 import shutil
 
-                shutil.rmtree(target_volume_path)
+                await loop.run_in_executor(None, shutil.rmtree, target_volume_path)
             except OSError:  # best-effort cleanup; ignore if dir is already gone
                 pass
             return {
@@ -565,30 +576,43 @@ class VolumeOps:
         # 4. Verify content integrity with diff -rq in a busybox container.
         #    This catches corruption that preserves file sizes, which a
         #    byte-count-only check would miss.
+        verify_ok = False
         try:
-            await loop.run_in_executor(
-                None,
-                lambda: self._client.containers.run(
+
+            def _run_verify() -> bool:
+                container = self._client.containers.run(
                     "busybox",
                     command=["diff", "-rq", "/src", "/dst"],
                     volumes={
                         volume_name: {"bind": "/src", "mode": "ro"},
                         target_volume_path: {"bind": "/dst", "mode": "ro"},
                     },
-                    remove=True,
-                    timeout=600,
-                ),
-            )
-        except docker.errors.ContainerError as exc:
+                    detach=True,
+                )
+                try:
+                    exit_info = container.wait(timeout=600)
+                except Exception:
+                    try:
+                        container.remove(force=True)
+                    except Exception:  # noqa: BLE001,S110
+                        pass
+                    raise
+                container.remove()
+                return bool(exit_info.get("StatusCode", 1) == 0)
+
+            verify_ok = await loop.run_in_executor(None, _run_verify)
+        except Exception:
             logger.warning(
-                "relocate_volume %s: content verification failed — diff exit %s",
+                "relocate_volume %s: content verification failed",
                 volume_name,
-                exc.exit_status,
+                exc_info=True,
             )
+
+        if not verify_ok:
             try:
                 import shutil
 
-                shutil.rmtree(target_volume_path)
+                await loop.run_in_executor(None, shutil.rmtree, target_volume_path)
             except OSError:  # best-effort cleanup; ignore if dir is already gone
                 pass
             return {
@@ -621,18 +645,30 @@ class VolumeOps:
                     volume_name,
                     target_volume_path,
                 )
+
+                # Guard: only bind-mount volumes can be safely relocated
+                # without data loss.  A regular (non-bind-mount) Docker
+                # volume has its backing data managed by the Docker storage
+                # driver — ``remove(force=True)`` destroys it, and a restore
+                # can only recreate an *empty* volume object.  Since this
+                # fleet uses bind-mount volumes exclusively, we fail fast
+                # for any volume whose Options.type is not "none".
+                vol_options = attrs.get("Options") or {}
+                if vol_options.get("type") != "none":
+                    return {
+                        "status": "failed",
+                        "detail": (
+                            f"Volume {volume_name!r} is not a bind-mount volume "
+                            "and cannot be relocated. Only bind-mount volumes "
+                            "(type=none) are supported."
+                        ),
+                    }
+
                 # Snapshot old volume attributes before removal so we can
                 # restore it at its original location if recreation fails.
-                # Without this, a failed recreation after removal leaves
-                # no volume at all — data is lost for non-bind-mount volumes.
-                #
-                # NOTE: for a regular (non-bind-mount) Docker volume,
-                # ``remove(force=True)`` destroys the backing data, so a
-                # restore can only recreate an *empty* volume object.  This
-                # fleet uses bind-mount volumes exclusively (data survives in
-                # the backing directory), which is the assumption this restore
-                # path relies on.
-                def _snapshot_old_volume() -> tuple[str, dict[str, Any], dict[str, str]]:
+                def _snapshot_old_volume() -> tuple[
+                    str, dict[str, Any], dict[str, str]
+                ]:
                     old_volume = self._client.volumes.get(volume_name)
                     old_attrs: dict[str, Any] = dict(old_volume.attrs)
                     old_driver: str = old_attrs.get("Driver", "local")

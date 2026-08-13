@@ -350,23 +350,40 @@ class TestVolumeOpsRelocate:
     async def test_happy_path(self, client, docker_mock, tmp_path):
         vo = VolumeOps(client)
         target = self._target_dir(tmp_path)
-        # probe, copy, verify all succeed (ownership is asserted separately).
-        client.containers.run.side_effect = [b"robotsix-probe", b"", b""]
+        # probe, copy, verify all succeed.
+        # The probe uses run() synchronously, so it returns bytes.
+        # The copy and verify use detach=True, so they return container objects.
+        probe_result = b"robotsix-probe"
+        copy_container = MagicMock()
+        copy_container.wait.return_value = {"StatusCode": 0}
+        copy_container.logs.return_value = b""
+        verify_container = MagicMock()
+        verify_container.wait.return_value = {"StatusCode": 0}
+        client.containers.run.side_effect = [
+            probe_result,
+            copy_container,
+            verify_container,
+        ]
+        # First create raises 409 (volume name exists), second succeeds.
+        conflict = docker_mock.errors.APIError("already exists", status_code=409)
+        client.volumes.create.side_effect = [conflict, None]
 
-        with patch.object(vo, "ensure_volume_ownership") as mock_owner, patch.dict(
-            sys.modules, {"docker": docker_mock}
+        with (
+            patch.object(vo, "ensure_volume_ownership") as mock_owner,
+            patch.dict(sys.modules, {"docker": docker_mock}),
         ):
             result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
 
         assert result["status"] == "ok"
         assert "relocated" in result["detail"]
-        client.volumes.create.assert_called_once_with(
-            "my-vol",
-            driver="local",
-            driver_opts={"type": "none", "device": target, "o": "bind"},
-        )
-        # create-first means the old volume is never removed on the happy path.
-        client.volumes.get.return_value.remove.assert_not_called()
+        # The old volume was removed (force=True) after the 409 so the
+        # retry create can succeed with the same name at the new location.
+        client.volumes.get.return_value.remove.assert_called_once_with(force=True)
+        assert client.volumes.create.call_count == 2
+        # Second call is the recreation at the target path.
+        second_create = client.volumes.create.call_args_list[1]
+        assert second_create.args == ("my-vol",)
+        assert second_create.kwargs["driver_opts"]["device"] == target
         mock_owner.assert_called_once_with("my-vol", 1000, 1000, 0o755)
 
     async def test_volume_not_found(self, client, docker_mock, tmp_path):
@@ -394,10 +411,14 @@ class TestVolumeOpsRelocate:
         client.volumes.create.assert_not_called()
         client.containers.run.assert_not_called()
 
-    async def test_copy_failure_leaves_source_intact(self, client, docker_mock, tmp_path):
+    async def test_copy_failure_leaves_source_intact(
+        self, client, docker_mock, tmp_path
+    ):
         vo = VolumeOps(client)
-        copy_err = docker_mock.errors.ContainerError("cp failed", exit_status=1)
-        client.containers.run.side_effect = [b"robotsix-probe", copy_err]
+        client.containers.run.side_effect = [
+            b"robotsix-probe",  # probe
+            MagicMock(wait=lambda **kw: {"StatusCode": 1}),  # copy fails
+        ]
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
             result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
@@ -411,8 +432,13 @@ class TestVolumeOpsRelocate:
         self, client, docker_mock, tmp_path
     ):
         vo = VolumeOps(client)
-        diff_err = docker_mock.errors.ContainerError("diff mismatch", exit_status=1)
-        client.containers.run.side_effect = [b"robotsix-probe", b"", diff_err]
+        client.containers.run.side_effect = [
+            b"robotsix-probe",  # probe
+            MagicMock(
+                wait=lambda **kw: {"StatusCode": 0}, logs=lambda **kw: b""
+            ),  # copy ok
+            MagicMock(wait=lambda **kw: {"StatusCode": 1}),  # verify fails
+        ]
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
             result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
@@ -426,7 +452,13 @@ class TestVolumeOpsRelocate:
         self, client, docker_mock, tmp_path
     ):
         vo = VolumeOps(client)
-        client.containers.run.side_effect = [b"robotsix-probe", b"", b""]
+        client.containers.run.side_effect = [
+            b"robotsix-probe",  # probe
+            MagicMock(
+                wait=lambda **kw: {"StatusCode": 0}, logs=lambda **kw: b""
+            ),  # copy ok
+            MagicMock(wait=lambda **kw: {"StatusCode": 0}),  # verify ok
+        ]
         conflict = docker_mock.errors.APIError("already exists", status_code=409)
         recreate_err = docker_mock.errors.APIError("daemon exploded", status_code=500)
         # 1st create -> 409 (old volume present), retry create -> 500, restore -> ok.
