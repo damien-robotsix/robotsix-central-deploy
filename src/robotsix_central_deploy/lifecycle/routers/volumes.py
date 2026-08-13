@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
@@ -255,7 +256,10 @@ async def relocate_volume(
 
     # Guard: skip the migration if the volume is already on the requested
     # disk — avoids a wasteful (and potentially dangerous) copy-into-self.
-    if config.target_disk and target_disk_path == config.target_disk:
+    # Compare realpaths so a symlinked mount-point spelling still short-circuits.
+    if config.target_disk and os.path.realpath(target_disk_path) == os.path.realpath(
+        config.target_disk
+    ):
         return RelocateVolumeResponse(
             status="ok",
             detail="Volume is already on the requested disk",
@@ -299,8 +303,11 @@ async def relocate_volume(
             ocfg.target_disk = target_disk_path
             await component_config_store.put(ocfg)
 
-    # 6. Migrate the volume data.
-    outcome = await backend.relocate_volume(name, target_disk_path)
+    # 6. Migrate the volume data.  Pass the owning component's ``user``
+    #    override so the relocated volume root is chowned to the uid/gid the
+    #    component actually runs as (defaults to the server's uid/gid inside
+    #    the backend when the component has no override).
+    outcome = await backend.relocate_volume(name, target_disk_path, config.user)
     if outcome.get("status") != "ok":
         # Rollback the config change on every owner.
         for oid, prev in previous_target_disks.items():

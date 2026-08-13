@@ -253,7 +253,10 @@ class DockerBackend(ExecutionBackend):
         )
 
     async def relocate_volume(
-        self, volume_name: str, target_disk_path: str
+        self,
+        volume_name: str,
+        target_disk_path: str,
+        container_user: str | None = None,
     ) -> dict[str, Any]:
         raise NotImplementedError(
             "relocate_volume not supported for DockerBackend — use DockerSdkBackend"

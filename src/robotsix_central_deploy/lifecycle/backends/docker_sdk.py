@@ -811,10 +811,15 @@ class DockerSdkBackend(ExecutionBackend):
         await self._volume.remove_volume(volume_name)
 
     async def relocate_volume(
-        self, volume_name: str, target_disk_path: str
+        self,
+        volume_name: str,
+        target_disk_path: str,
+        container_user: str | None = None,
     ) -> dict[str, Any]:
         """Relocate a named volume's data to *target_disk_path*."""
-        return await self._volume.relocate_volume(volume_name, target_disk_path)
+        return await self._volume.relocate_volume(
+            volume_name, target_disk_path, container_user
+        )
 
     async def run_config_assist(
         self,

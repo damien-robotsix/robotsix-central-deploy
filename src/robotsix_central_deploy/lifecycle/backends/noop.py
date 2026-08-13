@@ -124,7 +124,10 @@ class NoopBackend(ExecutionBackend):
         pass
 
     async def relocate_volume(
-        self, volume_name: str, target_disk_path: str
+        self,
+        volume_name: str,
+        target_disk_path: str,
+        container_user: str | None = None,
     ) -> dict[str, Any]:
         return {"status": "ok", "detail": "noop relocate"}
 

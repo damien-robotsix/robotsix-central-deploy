@@ -374,7 +374,10 @@ class VolumeOps:
             logger.warning("remove_volume %s: %s", volume_name, exc)
 
     async def relocate_volume(
-        self, volume_name: str, target_disk_path: str
+        self,
+        volume_name: str,
+        target_disk_path: str,
+        container_user: str | None = None,
     ) -> dict[str, Any]:
         """Relocate *volume_name*'s data to *target_disk_path*.
 
@@ -383,6 +386,10 @@ class VolumeOps:
         the copy, removes the old volume, and creates a new volume at
         the target path using Docker's local driver with bind options.
 
+        *container_user* is the owning component's Docker ``user`` string
+        (e.g. ``"1000:1000"``); it is used to resolve the uid/gid for the
+        post-relocation ownership fix, mirroring ``_prepare_volumes``.
+
         Returns a dict ``{"status": "ok"|"failed", "detail": str}``.
         On failure the source volume is left intact; the target
         directory (if created) is removed.
@@ -390,6 +397,12 @@ class VolumeOps:
         import docker
 
         loop = asyncio.get_running_loop()
+
+        # Resolve the owning component's uid/gid so a non-default ``user``
+        # keeps its volume root owned accordingly.  Defaults to the server's
+        # own uid/gid (as _prepare_volumes does) when no override is given.
+        user_str = container_user or f"{os.getuid()}:{os.getgid()}"
+        chown_uid, chown_gid = self.resolve_user_to_uid_gid(user_str)
 
         # 1. Inspect current volume to find source data path.
         def _inspect_volume() -> dict[str, Any]:
@@ -400,11 +413,18 @@ class VolumeOps:
                 return attrs
             except docker.errors.NotFound:
                 raise RuntimeError(f"Volume {volume_name!r} not found") from None
+            except docker.errors.APIError as exc:
+                # A daemon-unreachable APIError must not surface as a raw
+                # 500 — convert it to RuntimeError so the outer handler can
+                # return a graceful {"status": "failed", ...}.
+                raise RuntimeError(
+                    f"Failed to inspect volume {volume_name!r}: {exc}"
+                ) from exc
 
         try:
             attrs = await loop.run_in_executor(None, _inspect_volume)
-        except RuntimeError:
-            return {"status": "failed", "detail": f"Volume {volume_name!r} not found"}
+        except RuntimeError as exc:
+            return {"status": "failed", "detail": str(exc)}
 
         # For a bind-mount volume the data lives at Options.device;
         # for a regular Docker volume it's at the Mountpoint.
@@ -428,6 +448,74 @@ class VolumeOps:
                 "detail": f"Failed to create target directory {target_volume_path!r}: {exc}",
             }
 
+        # 2b. Fail-fast: verify the directory we just created is the SAME
+        #     directory the Docker daemon will bind into the copy container.
+        #     ``os.makedirs`` above runs inside the central-deploy container,
+        #     while the busybox ``/dst`` bind below resolves the path on the
+        #     Docker *host*.  They agree only when the target disk is
+        #     bind-mounted into central-deploy at the identical path.  A
+        #     mismatch would silently copy the data to a different (empty)
+        #     host directory and then remove the source — a data-loss shape —
+        #     so we probe with a sentinel file before touching any data.
+        import secrets
+
+        sentinel = f".robotsix-relocate-probe-{secrets.token_hex(8)}"
+        marker_path = os.path.join(target_volume_path, sentinel)
+
+        def _write_probe() -> None:
+            with open(marker_path, "w", encoding="utf-8") as fh:
+                fh.write("robotsix-probe")
+
+        try:
+            await loop.run_in_executor(None, _write_probe)
+        except OSError as exc:
+            return {
+                "status": "failed",
+                "detail": (
+                    f"Target directory {target_volume_path!r} is not writable: {exc}"
+                ),
+            }
+        try:
+            raw_probe: bytes = await loop.run_in_executor(
+                None,
+                lambda: self._client.containers.run(
+                    "busybox",
+                    command=[
+                        "sh",
+                        "-c",
+                        f'cat "/dst/{sentinel}" 2>/dev/null || echo MISSING',
+                    ],
+                    volumes={target_volume_path: {"bind": "/dst", "mode": "ro"}},
+                    remove=True,
+                ),
+            )
+            probe_text = (
+                raw_probe.decode(errors="replace").strip()
+                if isinstance(raw_probe, bytes)
+                else str(raw_probe).strip()
+            )
+            if probe_text != "robotsix-probe":
+                return {
+                    "status": "failed",
+                    "detail": (
+                        f"Target directory {target_volume_path!r} is not reachable "
+                        "at the same path on the Docker host. The target disk must "
+                        "be bind-mounted into central-deploy at an identical path."
+                    ),
+                }
+        except docker.errors.APIError as exc:
+            return {
+                "status": "failed",
+                "detail": (
+                    f"Failed to probe target directory {target_volume_path!r}: {exc}"
+                ),
+            }
+        finally:
+            try:
+                os.remove(marker_path)
+            except OSError:  # best-effort; never mask the probe result
+                pass
+
         # 3. Copy data from source to target via a busybox container.
         #    Mount source (the Docker volume, which Docker resolves to the
         #    correct backing path) at /src ro, and target at /dst rw.
@@ -447,6 +535,7 @@ class VolumeOps:
                         target_volume_path: {"bind": "/dst", "mode": "rw"},
                     },
                     remove=True,
+                    timeout=1800,
                 ),
             )
             copy_ok = True
@@ -487,6 +576,7 @@ class VolumeOps:
                         target_volume_path: {"bind": "/dst", "mode": "ro"},
                     },
                     remove=True,
+                    timeout=600,
                 ),
             )
         except docker.errors.ContainerError as exc:
@@ -535,11 +625,26 @@ class VolumeOps:
                 # restore it at its original location if recreation fails.
                 # Without this, a failed recreation after removal leaves
                 # no volume at all — data is lost for non-bind-mount volumes.
-                old_volume = self._client.volumes.get(volume_name)
-                old_attrs: dict[str, Any] = dict(old_volume.attrs)
-                old_driver: str = old_attrs.get("Driver", "local")
-                old_driver_opts: dict[str, Any] = dict(old_attrs.get("Options") or {})
-                old_labels: dict[str, str] = dict(old_attrs.get("Labels") or {})
+                #
+                # NOTE: for a regular (non-bind-mount) Docker volume,
+                # ``remove(force=True)`` destroys the backing data, so a
+                # restore can only recreate an *empty* volume object.  This
+                # fleet uses bind-mount volumes exclusively (data survives in
+                # the backing directory), which is the assumption this restore
+                # path relies on.
+                def _snapshot_old_volume() -> tuple[str, dict[str, Any], dict[str, str]]:
+                    old_volume = self._client.volumes.get(volume_name)
+                    old_attrs: dict[str, Any] = dict(old_volume.attrs)
+                    old_driver: str = old_attrs.get("Driver", "local")
+                    old_driver_opts: dict[str, Any] = dict(
+                        old_attrs.get("Options") or {}
+                    )
+                    old_labels: dict[str, str] = dict(old_attrs.get("Labels") or {})
+                    return old_driver, old_driver_opts, old_labels
+
+                old_driver, old_driver_opts, old_labels = await loop.run_in_executor(
+                    None, _snapshot_old_volume
+                )
                 try:
                     await loop.run_in_executor(
                         None,
@@ -586,16 +691,17 @@ class VolumeOps:
             }
 
         # 6. Fix ownership on the new volume.  The volume root must be owned
-        #    by the container user (1000:1000, matching every fleet component)
-        #    so the container can write to it.  ``cp -a`` preserved ownership
-        #    of files *inside* the volume; this chown ensures the mount point
-        #    itself is also accessible.
+        #    by the owning container's user so the container can write to it.
+        #    ``cp -a`` preserved ownership of files *inside* the volume; this
+        #    chown ensures the mount point itself is also accessible.  The
+        #    uid/gid are resolved from the component's ``user`` override (or
+        #    the server's own uid/gid as the default), not hardcoded 1000:1000.
         await loop.run_in_executor(
             None,
             self.ensure_volume_ownership,
             volume_name,
-            1000,
-            1000,
+            chown_uid,
+            chown_gid,
             0o755,
         )
 
@@ -606,48 +712,3 @@ class VolumeOps:
                 f"(content verified)"
             ),
         }
-
-
-def _du_host_path(path: str) -> int:
-    """Return recursive byte count of *path* on the host, excluding SQLite
-    transient sidecars.  Returns 0 on error (including inaccessible paths)."""
-    import subprocess
-
-    try:
-        proc = subprocess.run(  # noqa: S603
-            [
-                "/usr/bin/find",
-                path,
-                "-type",
-                "f",
-                "!",
-                "-name",
-                "*.db-wal",
-                "!",
-                "-name",
-                "*.db-shm",
-                "!",
-                "-name",
-                "*.db-journal",
-                "-exec",
-                "du",
-                "-b",
-                "{}",
-                "+",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        raw = proc.stdout
-    except (FileNotFoundError, OSError):
-        return 0
-    total = 0
-    for line in raw.splitlines():
-        parts = line.split()
-        if parts:
-            try:
-                total += int(parts[0])
-            except ValueError:  # skip lines whose first token is not a number
-                pass
-    return total

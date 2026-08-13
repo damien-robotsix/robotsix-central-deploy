@@ -285,3 +285,167 @@ class TestVolumeOpsMeasureVolumeBytes:
         result = await vo.measure_volume_bytes("data-vol")
 
         assert result == 0
+
+
+# ---------------------------------------------------------------------------
+# relocate_volume
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeOpsRelocate:
+    """Unit tests for the data-loss-sensitive relocation path.
+
+    The docker SDK client is fully faked so every failure branch can be
+    exercised without a real daemon.  The target directory is a real
+    ``tmp_path`` so the sentinel probe exercises genuine file I/O.
+    """
+
+    @pytest.fixture
+    def docker_mock(self) -> MagicMock:
+        m = MagicMock()
+
+        class _APIError(Exception):
+            def __init__(self, msg: str = "api error", status_code: int | None = None):
+                super().__init__(msg)
+                self.status_code = status_code
+                self.explanation = msg
+
+        class _NotFound(Exception):
+            pass
+
+        class _ContainerError(Exception):
+            def __init__(self, msg: str = "container error", exit_status: int = 1):
+                super().__init__(msg)
+                self.exit_status = exit_status
+
+        class _DockerException(Exception):
+            pass
+
+        m.errors.APIError = _APIError
+        m.errors.NotFound = _NotFound
+        m.errors.ContainerError = _ContainerError
+        m.errors.DockerException = _DockerException
+        return m
+
+    @pytest.fixture
+    def client(self, docker_mock: MagicMock) -> MagicMock:
+        c = MagicMock()
+        c.volumes.get.return_value.attrs = {
+            "Driver": "local",
+            "Mountpoint": "/var/lib/docker/volumes/my-vol/_data",
+            "Options": {
+                "device": "/old/disk/my-vol",
+                "o": "bind",
+                "type": "none",
+            },
+            "Labels": {"com.example": "kept"},
+        }
+        c.volumes.create.return_value = None
+        return c
+
+    @staticmethod
+    def _target_dir(tmp_path) -> str:
+        return str(tmp_path / "robotsix-volumes" / "my-vol")
+
+    async def test_happy_path(self, client, docker_mock, tmp_path):
+        vo = VolumeOps(client)
+        target = self._target_dir(tmp_path)
+        # probe, copy, verify all succeed (ownership is asserted separately).
+        client.containers.run.side_effect = [b"robotsix-probe", b"", b""]
+
+        with patch.object(vo, "ensure_volume_ownership") as mock_owner, patch.dict(
+            sys.modules, {"docker": docker_mock}
+        ):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == "ok"
+        assert "relocated" in result["detail"]
+        client.volumes.create.assert_called_once_with(
+            "my-vol",
+            driver="local",
+            driver_opts={"type": "none", "device": target, "o": "bind"},
+        )
+        # create-first means the old volume is never removed on the happy path.
+        client.volumes.get.return_value.remove.assert_not_called()
+        mock_owner.assert_called_once_with("my-vol", 1000, 1000, 0o755)
+
+    async def test_volume_not_found(self, client, docker_mock, tmp_path):
+        vo = VolumeOps(client)
+        client.volumes.get.side_effect = docker_mock.errors.NotFound("gone")
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result == {"status": "failed", "detail": "Volume 'my-vol' not found"}
+        client.volumes.create.assert_not_called()
+        client.containers.run.assert_not_called()
+
+    async def test_inspect_api_error_is_graceful(self, client, docker_mock, tmp_path):
+        vo = VolumeOps(client)
+        client.volumes.get.side_effect = docker_mock.errors.APIError(
+            "daemon unreachable", status_code=500
+        )
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == "failed"
+        assert "inspect" in result["detail"]
+        client.volumes.create.assert_not_called()
+        client.containers.run.assert_not_called()
+
+    async def test_copy_failure_leaves_source_intact(self, client, docker_mock, tmp_path):
+        vo = VolumeOps(client)
+        copy_err = docker_mock.errors.ContainerError("cp failed", exit_status=1)
+        client.containers.run.side_effect = [b"robotsix-probe", copy_err]
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == "failed"
+        assert "copy failed" in result["detail"]
+        client.volumes.create.assert_not_called()
+        client.volumes.get.return_value.remove.assert_not_called()
+
+    async def test_verification_failure_leaves_source_intact(
+        self, client, docker_mock, tmp_path
+    ):
+        vo = VolumeOps(client)
+        diff_err = docker_mock.errors.ContainerError("diff mismatch", exit_status=1)
+        client.containers.run.side_effect = [b"robotsix-probe", b"", diff_err]
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == "failed"
+        assert "verification failed" in result["detail"]
+        client.volumes.create.assert_not_called()
+        client.volumes.get.return_value.remove.assert_not_called()
+
+    async def test_recreate_failure_restores_old_volume(
+        self, client, docker_mock, tmp_path
+    ):
+        vo = VolumeOps(client)
+        client.containers.run.side_effect = [b"robotsix-probe", b"", b""]
+        conflict = docker_mock.errors.APIError("already exists", status_code=409)
+        recreate_err = docker_mock.errors.APIError("daemon exploded", status_code=500)
+        # 1st create -> 409 (old volume present), retry create -> 500, restore -> ok.
+        client.volumes.create.side_effect = [conflict, recreate_err, None]
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == "failed"
+        assert "recreate" in result["detail"]
+        # The old volume was removed once (force=True) before the retry.
+        client.volumes.get.return_value.remove.assert_called_once_with(force=True)
+        assert client.volumes.create.call_count == 3
+        restore_call = client.volumes.create.call_args_list[2]
+        assert restore_call.args == ("my-vol",)
+        assert restore_call.kwargs["driver"] == "local"
+        assert restore_call.kwargs["driver_opts"] == {
+            "device": "/old/disk/my-vol",
+            "o": "bind",
+            "type": "none",
+        }
+        assert restore_call.kwargs["labels"] == {"com.example": "kept"}
