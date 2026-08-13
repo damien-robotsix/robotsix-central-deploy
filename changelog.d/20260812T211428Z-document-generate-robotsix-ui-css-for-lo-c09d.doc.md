@@ -1,0 +1,1 @@
+Document running `python _gen_robotsix_ui_css.py` for local CSS generation in README.md (Development section) and CONTRIBUTING.md (setup), so developers running from source don't get a 404 for `/ui/static/robotsix-ui.css`.
