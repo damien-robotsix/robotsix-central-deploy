@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import _gen_robotsix_ui_css as robotsix_ui_css
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
@@ -197,6 +198,37 @@ class TestCspNoInlineScripts:
             f"dashboard.js template strings must not contain inline event "
             f"handlers; found '{match.group().strip()}'"
         )
+
+
+# ---------------------------------------------------------------------------
+# robotsix-ui stylesheet sourcing — build-time fetch, not a vendored copy
+# ---------------------------------------------------------------------------
+
+
+class TestRobotsixUiCssLink:
+    """The dashboard stylesheet must come from the build-time-fetched
+    ``robotsix-ui.css``, not the retired one-shot ``robotsix-ui-base.css``."""
+
+    _UI_DIR = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "robotsix_central_deploy"
+        / "ui"
+    )
+
+    def test_dashboard_links_build_fetched_stylesheet(self):
+        html = (self._UI_DIR / "dashboard.html").read_text(encoding="utf-8")
+        assert 'href="/ui/static/robotsix-ui.css"' in html
+        assert "robotsix-ui-base.css" not in html
+
+    def test_css_url_uses_release_download_path(self):
+        assert robotsix_ui_css.css_url("v0.1.30") == (
+            "https://github.com/damien-robotsix/robotsix-ui/"
+            "releases/download/v0.1.30/style.css"
+        )
+
+    def test_fetch_rejects_non_semver_version(self):
+        assert robotsix_ui_css.main(["latest"]) == 2
 
 
 # ---------------------------------------------------------------------------

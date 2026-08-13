@@ -19,7 +19,7 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock _mill_build.py ./
+COPY pyproject.toml uv.lock _mill_build.py _gen_robotsix_ui_css.py ./
 COPY src/ ./src/
 # src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md is a symlink to
 # ../../../docs/ui/DEPLOY_CONTRACT.md; the canonical file must exist in the
@@ -27,6 +27,7 @@ COPY src/ ./src/
 COPY docs/ui/DEPLOY_CONTRACT.md ./docs/ui/DEPLOY_CONTRACT.md
 
 RUN --mount=type=secret,id=github_token,required=false \
+    python _gen_robotsix_ui_css.py && \
     if [ -f /run/secrets/github_token ]; then \
       GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
       git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
