@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
@@ -91,40 +91,52 @@ def _update_pages_sync(
     """Enable, disable, or reconfigure GitHub Pages on *owner*/*repo*."""
     from github import GithubException
 
-    if body.enabled == "disabled":
-        # DELETE is idempotent-ish; if Pages isn't enabled, GitHub returns
-        # 404 which we treat as success (already disabled).
+    try:
+        if body.enabled == "disabled":
+            # DELETE is idempotent-ish; if Pages isn't enabled, GitHub returns
+            # 404 which we treat as success (already disabled).
+            try:
+                client.requester.requestJsonAndCheck(
+                    "DELETE", f"/repos/{owner}/{repo}/pages"
+                )
+            except GithubException as exc:
+                if exc.status != 404:
+                    raise
+            # After deletion, the GET returns 404 — return a synthetic
+            # "disabled" response instead of calling _get_pages_sync.
+            return {"full_name": f"{owner}/{repo}", "pages_enabled": False}
+
+        # Enabled or reconfiguring: try POST (create) first; fall back to PUT
+        # (update) on 409 (already exists).
+        pages_input = _build_pages_input(body)
         try:
             client.requester.requestJsonAndCheck(
-                "DELETE", f"/repos/{owner}/{repo}/pages"
+                "POST", f"/repos/{owner}/{repo}/pages", input=pages_input
             )
         except GithubException as exc:
-            if exc.status != 404:
+            if exc.status == 409:
+                client.requester.requestJsonAndCheck(
+                    "PUT", f"/repos/{owner}/{repo}/pages", input=pages_input
+                )
+            else:
                 raise
-        # After deletion, the GET returns 404 — return a synthetic
-        # "disabled" response instead of calling _get_pages_sync.
-        return {"full_name": f"{owner}/{repo}", "pages_enabled": False}
 
-    # Enabled or reconfiguring: try POST (create) first; fall back to PUT
-    # (update) on 409 (already exists).
-    pages_input = _build_pages_input(body)
-    try:
-        client.requester.requestJsonAndCheck(
-            "POST", f"/repos/{owner}/{repo}/pages", input=pages_input
-        )
+        # Return the current Pages state so the caller can verify.
+        pages_data = _get_pages_sync(client, owner, repo)
+        pages_data["full_name"] = f"{owner}/{repo}"
+        pages_data["pages_enabled"] = True
+        return pages_data
     except GithubException as exc:
-        if exc.status == 409:
-            client.requester.requestJsonAndCheck(
-                "PUT", f"/repos/{owner}/{repo}/pages", input=pages_input
-            )
-        else:
-            raise
-
-    # Return the current Pages state so the caller can verify.
-    pages_data = _get_pages_sync(client, owner, repo)
-    pages_data["full_name"] = f"{owner}/{repo}"
-    pages_data["pages_enabled"] = True
-    return pages_data
+        if exc.status == 403:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"GitHub App lacks the `pages: write` permission on "
+                    f"{owner}/{repo}. Grant the App 'Administration' or "
+                    "'Pages' repository permission and try again."
+                ),
+            ) from exc
+        raise
 
 
 @router.put(

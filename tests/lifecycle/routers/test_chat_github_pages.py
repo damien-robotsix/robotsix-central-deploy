@@ -362,6 +362,38 @@ class TestUpdatePages:
         assert entries[0].action == "update_pages"
         assert entries[0].key == "acme/widget"
 
+    async def test_permission_denied_returns_403(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+    ):
+        """GitHub 403 (missing `pages: write`) maps to a clear HTTP 403."""
+        from github import GithubException
+
+        requester = MagicMock(name="fake-requester")
+        requester.requestJsonAndCheck.side_effect = GithubException(
+            403, data={"message": "Resource not accessible by integration"}
+        )
+        fake_gh_client = _fake_client(requester)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_gh_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.put(
+            "/chat/github/repos/acme/widget/pages",
+            json={"enabled": "enabled"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 403
+        assert "pages: write" in resp.json()["error"]
+
     async def test_unknown_repo_returns_404(
         self,
         client: AsyncClient,
