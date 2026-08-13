@@ -325,6 +325,23 @@ async def export_service_config(
 # ---------------------------------------------------------------------------
 
 
+def _deprecated_gone(endpoint_path: str, *, extra_detail: str = "") -> JSONResponse:
+    detail = (
+        f"{endpoint_path} is deprecated. "
+        "Config is owned by the component, not the deploy plane."
+    )
+    if extra_detail:
+        detail += " " + extra_detail
+    return JSONResponse(
+        status_code=status.HTTP_410_GONE,
+        content={"detail": detail},
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
+        },
+    )
+
+
 @router.put(
     "/services/{name}/config",
     status_code=status.HTTP_410_GONE,
@@ -336,20 +353,11 @@ async def put_service_config(
     _auth: None = Depends(verify_auth),
 ) -> JSONResponse:
     """Deprecated: config is now component-owned, not deploy-plane."""
-    return JSONResponse(
-        status_code=status.HTTP_410_GONE,
-        content={
-            "detail": (
-                "PUT /services/{name}/config is deprecated. "
-                "Config is owned by the component, not the deploy plane. "
-                "Use GET /services/{name}/config/export to retrieve config "
-                "for migration."
-            )
-        },
-        headers={
-            "Deprecation": "true",
-            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
-        },
+    return _deprecated_gone(
+        "PUT /services/{name}/config",
+        extra_detail=(
+            "Use GET /services/{name}/config/export to retrieve config for migration."
+        ),
     )
 
 
@@ -364,19 +372,7 @@ async def config_import(
     _auth: None = Depends(verify_auth),
 ) -> JSONResponse:
     """Deprecated: config is now component-owned, not deploy-plane."""
-    return JSONResponse(
-        status_code=status.HTTP_410_GONE,
-        content={
-            "detail": (
-                "POST /services/{name}/config/import is deprecated. "
-                "Config is owned by the component, not the deploy plane."
-            )
-        },
-        headers={
-            "Deprecation": "true",
-            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
-        },
-    )
+    return _deprecated_gone("POST /services/{name}/config/import")
 
 
 @router.post(
@@ -390,19 +386,7 @@ async def config_refresh_schema(
     _auth: None = Depends(verify_auth),
 ) -> JSONResponse:
     """Deprecated: config is now component-owned, not deploy-plane."""
-    return JSONResponse(
-        status_code=status.HTTP_410_GONE,
-        content={
-            "detail": (
-                "POST /services/{name}/config/refresh-schema is deprecated. "
-                "Config is owned by the component, not the deploy plane."
-            )
-        },
-        headers={
-            "Deprecation": "true",
-            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
-        },
-    )
+    return _deprecated_gone("POST /services/{name}/config/refresh-schema")
 
 
 @router.post(
@@ -416,16 +400,4 @@ async def config_assist(
     _auth: None = Depends(verify_auth),
 ) -> JSONResponse:
     """Deprecated: config is now component-owned, not deploy-plane."""
-    return JSONResponse(
-        status_code=status.HTTP_410_GONE,
-        content={
-            "detail": (
-                "POST /services/{name}/config/assist is deprecated. "
-                "Config is owned by the component, not the deploy plane."
-            )
-        },
-        headers={
-            "Deprecation": "true",
-            "Sunset": "Sun, 01 Feb 2026 00:00:00 GMT",
-        },
-    )
+    return _deprecated_gone("POST /services/{name}/config/assist")
