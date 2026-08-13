@@ -177,6 +177,7 @@ jobs:
           path: htmlcov/
 
   docs:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -189,8 +190,11 @@ jobs:
           enable-cache: true
       - name: Build docs (strict)
         run: uv run --group docs mkdocs build --strict
+        env:
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
   audit:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -202,6 +206,7 @@ jobs:
         with:
           enable-cache: true
       - name: Audit dependencies
+        if: needs.changes.outputs.docs-only != 'true'
         run: uv audit --frozen
 
   trufflehog:
@@ -285,6 +290,7 @@ jobs:
           category: hadolint
 
   grep-lint:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -298,7 +304,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
         env:
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
       - name: Install pre-commit
         run: pip install pre-commit
       - name: Install TruffleHog
@@ -426,6 +432,7 @@ jobs:
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
 
   module-taxonomy:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -439,11 +446,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
         env:
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
       - name: Validate module taxonomy
         run: uv run robotsix-modules-validate docs/modules.yaml
 
   config-schema-drift:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -457,7 +465,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
         env:
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
       - name: Check config/config.schema.json drift
         run: |
           uv run python - <<'EOF'
@@ -506,6 +514,7 @@ jobs:
           EOF
 
   openapi-drift:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -522,7 +531,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
         env:
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
       - name: Regenerate OpenAPI spec
         run: uv run python _gen_openapi.py
       - name: Check for OpenAPI drift
@@ -551,6 +560,7 @@ jobs:
           fail-on-severity: high
 
   sbom:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -564,7 +574,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
         env:
-          UV_MALWARE_CHECK: '1'
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
       - name: Generate CycloneDX SBOM
         run: |
           uv tool run --from 'cyclonedx-bom>=4.0' cyclonedx-py environment \
