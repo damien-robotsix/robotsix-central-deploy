@@ -272,50 +272,59 @@ async def relocate_volume(
     # 4. Stop every owning component (and their siblings) if running.
     #    All owners that share this volume must be stopped so no one writes
     #    during the copy or keeps an orphaned mount after the volume swap.
+    #    We do NOT gate this on the first owner's state — a co-owner or sibling
+    #    may be RUNNING even when the primary is STOPPED (review #436-1).
     svc_record = await store.get(component_id)
     was_running = svc_record is not None and svc_record.state in (
         ServiceState.RUNNING,
         ServiceState.STARTING,
     )
-    if was_running and svc_record is not None:
-        # Stop the first owner (the one we selected for lifecycle ops).
+    # Stop the first owner (the one we selected for lifecycle ops).
+    if svc_record is not None and svc_record.state in (
+        ServiceState.RUNNING,
+        ServiceState.STARTING,
+    ):
         try:
-            await backend.stop(svc_record)
+            stop_result = await backend.stop(svc_record)
+            svc_record.state = stop_result
+            await store.put(svc_record)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "relocate: failed to stop %s before migration: %s",
                 _sanitize_log(component_id),
                 exc,
             )
-        if config.siblings:
-            await _fanout_siblings_best_effort(
-                component_id, config, store, backend, "stop"
-            )
-        # Also stop every OTHER owning component so they cannot write to
-        # the volume during migration (review issue #434-3).
-        for oid in owning_ids:
-            if oid == component_id:
-                continue
-            ocfg = component_config_store.get(oid)
-            if ocfg is None:
-                continue
-            o_svc = await store.get(oid)
-            if o_svc is not None and o_svc.state in (
-                ServiceState.RUNNING,
-                ServiceState.STARTING,
-            ):
-                try:
-                    await backend.stop(o_svc)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "relocate: failed to stop co-owner %s before migration: %s",
-                        _sanitize_log(oid),
-                        exc,
-                    )
-                if ocfg.siblings:
-                    await _fanout_siblings_best_effort(
-                        oid, ocfg, store, backend, "stop"
-                    )
+    if config.siblings:
+        await _fanout_siblings_best_effort(
+            component_id, config, store, backend, "stop"
+        )
+    # Also stop every OTHER owning component so they cannot write to
+    # the volume during migration (review issue #434-3).
+    for oid in owning_ids:
+        if oid == component_id:
+            continue
+        ocfg = component_config_store.get(oid)
+        if ocfg is None:
+            continue
+        o_svc = await store.get(oid)
+        if o_svc is not None and o_svc.state in (
+            ServiceState.RUNNING,
+            ServiceState.STARTING,
+        ):
+            try:
+                stop_result = await backend.stop(o_svc)
+                o_svc.state = stop_result
+                await store.put(o_svc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "relocate: failed to stop co-owner %s before migration: %s",
+                    _sanitize_log(oid),
+                    exc,
+                )
+            if ocfg.siblings:
+                await _fanout_siblings_best_effort(
+                    oid, ocfg, store, backend, "stop"
+                )
 
     # 5. Persist the new target_disk on every owning component BEFORE
     #    migration.  If the config write fails we never touch the volume;
@@ -335,7 +344,17 @@ async def relocate_volume(
     #    override so the relocated volume root is chowned to the uid/gid the
     #    component actually runs as (defaults to the server's uid/gid inside
     #    the backend when the component has no override).
-    outcome = await backend.relocate_volume(name, target_disk_path, config.user)
+    #    The call MUST be wrapped in try/except: an unexpected backend
+    #    exception (transport error, NotImplementedError, etc.) must still
+    #    trigger config rollback and component restart (review #436-2).
+    try:
+        outcome = await backend.relocate_volume(name, target_disk_path, config.user)
+    except NotImplementedError:
+        # The DockerBackend (docker-cli) does not support relocation.
+        outcome = {"status": "failed", "detail": "Not supported by this backend"}
+    except Exception as exc:  # noqa: BLE001
+        outcome = {"status": "failed", "detail": f"Backend error: {exc}"}
+
     if outcome.get("status") != "ok":
         # Rollback the config change on every owner.
         for oid, prev in previous_target_disks.items():
@@ -352,51 +371,62 @@ async def relocate_volume(
                     )
         # Re-start ALL owning components (and their siblings) on failure —
         # all were stopped before the migration attempt (review issue #434-3).
-        if was_running and svc_record is not None:
+        # Check each component's state individually rather than relying on
+        # the primary owner's was_running flag (review #436-1).
+        # Primary owner.
+        if svc_record is not None:
             try:
-                await backend.start(svc_record)
+                start_result = await backend.start(svc_record)
+                svc_record.state = start_result
+                await store.put(svc_record)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "relocate: failed to restart %s after failed migration: %s",
                     _sanitize_log(component_id),
                     exc,
                 )
-            if config.siblings:
-                await _fanout_siblings_best_effort(
-                    component_id, config, store, backend, "start"
-                )
-            for oid in owning_ids:
-                if oid == component_id:
-                    continue
-                ocfg = component_config_store.get(oid)
-                if ocfg is None:
-                    continue
-                o_svc = await store.get(oid)
-                if o_svc is not None and o_svc.state in (
-                    ServiceState.RUNNING,
-                    ServiceState.STARTING,
-                ):
-                    try:
-                        await backend.start(o_svc)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "relocate: failed to restart co-owner %s after failed migration: %s",
-                            _sanitize_log(oid),
-                            exc,
-                        )
-                    if ocfg.siblings:
-                        await _fanout_siblings_best_effort(
-                            oid, ocfg, store, backend, "start"
-                        )
+        if config.siblings:
+            await _fanout_siblings_best_effort(
+                component_id, config, store, backend, "start"
+            )
+        # Co-owners.
+        for oid in owning_ids:
+            if oid == component_id:
+                continue
+            ocfg = component_config_store.get(oid)
+            if ocfg is None:
+                continue
+            o_svc = await store.get(oid)
+            if o_svc is not None:
+                try:
+                    start_result = await backend.start(o_svc)
+                    o_svc.state = start_result
+                    await store.put(o_svc)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "relocate: failed to restart co-owner %s after failed migration: %s",
+                        _sanitize_log(oid),
+                        exc,
+                    )
+                if ocfg.siblings:
+                    await _fanout_siblings_best_effort(
+                        oid, ocfg, store, backend, "start"
+                    )
+
+        status_code = 501 if outcome.get("detail") == "Not supported by this backend" else 500
         raise HTTPException(
-            status_code=500,
+            status_code=status_code,
             detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",
         )
 
-    # 7. Restart all owning components (and their siblings).
+    # 7. Restart all owning components (and their siblings).  We use the
+    #    *pre-migration* running state so components that were STOPPED before
+    #    the migration stay stopped after it.
     if was_running and svc_record is not None:
         try:
-            await backend.start(svc_record)
+            start_result = await backend.start(svc_record)
+            svc_record.state = start_result
+            await store.put(svc_record)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "relocate: failed to restart %s after migration: %s",
@@ -414,12 +444,11 @@ async def relocate_volume(
             if ocfg is None:
                 continue
             o_svc = await store.get(oid)
-            if o_svc is not None and o_svc.state in (
-                ServiceState.RUNNING,
-                ServiceState.STARTING,
-            ):
+            if o_svc is not None:
                 try:
-                    await backend.start(o_svc)
+                    start_result = await backend.start(o_svc)
+                    o_svc.state = start_result
+                    await store.put(o_svc)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "relocate: failed to restart co-owner %s after migration: %s",

@@ -380,6 +380,9 @@ class TestVolumeOpsRelocate:
         # retry create can succeed with the same name at the new location.
         client.volumes.get.return_value.remove.assert_called_once_with(force=True)
         assert client.volumes.create.call_count == 2
+        # Both create calls should pass the old volume's labels.
+        for call in client.volumes.create.call_args_list:
+            assert call.kwargs.get("labels") == {"com.example": "kept"}
         # Second call is the recreation at the target path.
         second_create = client.volumes.create.call_args_list[1]
         assert second_create.args == ("my-vol",)
@@ -425,6 +428,26 @@ class TestVolumeOpsRelocate:
 
         assert result["status"] == "failed"
         assert "copy failed" in result["detail"]
+        client.volumes.create.assert_not_called()
+        client.volumes.get.return_value.remove.assert_not_called()
+
+    async def test_non_bind_mount_rejected_before_copy(
+        self, client, docker_mock, tmp_path
+    ):
+        """A regular (non-bind-mount) Docker volume is rejected before any
+        copy/verify work, avoiding a wasted full copy cycle (review #436)."""
+        vo = VolumeOps(client)
+        # Override the fixture: no bind-mount type.
+        del client.volumes.get.return_value.attrs["Options"]["type"]
+        client.volumes.get.return_value.attrs["Options"] = {"device": "/some/data"}
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == "failed"
+        assert "not a bind-mount volume" in result["detail"]
+        # No Docker operations beyond inspection should occur.
+        client.containers.run.assert_not_called()
         client.volumes.create.assert_not_called()
         client.volumes.get.return_value.remove.assert_not_called()
 
