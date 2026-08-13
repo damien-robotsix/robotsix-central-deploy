@@ -295,9 +295,7 @@ async def relocate_volume(
                 exc,
             )
     if config.siblings:
-        await _fanout_siblings_best_effort(
-            component_id, config, store, backend, "stop"
-        )
+        await _fanout_siblings_best_effort(component_id, config, store, backend, "stop")
     # Also stop every OTHER owning component so they cannot write to
     # the volume during migration (review issue #434-3).
     for oid in owning_ids:
@@ -322,9 +320,7 @@ async def relocate_volume(
                     exc,
                 )
             if ocfg.siblings:
-                await _fanout_siblings_best_effort(
-                    oid, ocfg, store, backend, "stop"
-                )
+                await _fanout_siblings_best_effort(oid, ocfg, store, backend, "stop")
 
     # 5. Persist the new target_disk on every owning component BEFORE
     #    migration.  If the config write fails we never touch the volume;
@@ -413,7 +409,9 @@ async def relocate_volume(
                         oid, ocfg, store, backend, "start"
                     )
 
-        status_code = 501 if outcome.get("detail") == "Not supported by this backend" else 500
+        status_code = (
+            501 if outcome.get("detail") == "Not supported by this backend" else 500
+        )
         raise HTTPException(
             status_code=status_code,
             detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",

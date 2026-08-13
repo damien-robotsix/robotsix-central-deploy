@@ -149,7 +149,9 @@ class TestRelocateHappyPath:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
         assert store.get("svc").target_disk == "/mnt/data"
-        backend.relocate_volume.assert_awaited_once_with("data", "/mnt/data", "1000:1000")
+        backend.relocate_volume.assert_awaited_once_with(
+            "data", "/mnt/data", "1000:1000"
+        )
         backend.stop.assert_awaited_once()
         backend.start.assert_awaited_once()
 
