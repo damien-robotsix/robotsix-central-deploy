@@ -32,19 +32,29 @@ class ServiceStore(ABC):
     """Abstract persistence for managed-service records."""
 
     @abstractmethod
-    async def get(self, name: str) -> ServiceRecord | None: ...
+    async def get(self, name: str) -> ServiceRecord | None:
+        """Return the record for *name*, or *None* if not found."""
+        ...
 
     @abstractmethod
-    async def put(self, record: ServiceRecord) -> None: ...
+    async def put(self, record: ServiceRecord) -> None:
+        """Store *record*, keyed by its name."""
+        ...
 
     @abstractmethod
-    async def delete(self, name: str) -> bool: ...
+    async def delete(self, name: str) -> bool:
+        """Remove the record for *name*. Returns True if it existed."""
+        ...
 
     @abstractmethod
-    async def list_all(self) -> list[ServiceRecord]: ...
+    async def list_all(self) -> list[ServiceRecord]:
+        """Return all stored records as a list."""
+        ...
 
     @abstractmethod
-    async def count(self) -> int: ...
+    async def count(self) -> int:
+        """Return the number of stored records."""
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -60,23 +70,28 @@ class InMemoryStore(ServiceStore):
         self._lock = asyncio.Lock()
 
     async def get(self, name: str) -> ServiceRecord | None:
+        """Return the record for *name*, or *None* if not found."""
         async with self._lock:
             return self._data.get(name)
 
     async def put(self, record: ServiceRecord) -> None:
+        """Store *record*, keyed by its name."""
         record.updated_at = time.time()
         async with self._lock:
             self._data[record.name] = record
 
     async def delete(self, name: str) -> bool:
+        """Remove the record for *name*. Returns True if it existed."""
         async with self._lock:
             return self._data.pop(name, None) is not None
 
     async def list_all(self) -> list[ServiceRecord]:
+        """Return all stored records as a list."""
         async with self._lock:
             return list(self._data.values())
 
     async def count(self) -> int:
+        """Return the number of stored records."""
         async with self._lock:
             return len(self._data)
 
@@ -94,6 +109,7 @@ class FileStore(ServiceStore):
         self._lock = asyncio.Lock()
 
     async def _load(self) -> dict[str, ServiceRecord]:
+        """Load and parse the YAML state file; returns empty dict on missing or invalid file."""
         if not self._path.exists():
             return {}
         try:
@@ -131,6 +147,7 @@ class FileStore(ServiceStore):
         return records
 
     async def _save(self, records: dict[str, ServiceRecord]) -> None:
+        """Atomically write *records* to the YAML state file via temp-file + os.replace."""
         raw: dict[str, dict[str, object]] = {}
         for name, r in records.items():
             raw[name] = {
@@ -177,10 +194,12 @@ class FileStore(ServiceStore):
                 os.close(dir_fd)
 
     async def get(self, name: str) -> ServiceRecord | None:
+        """Return the record for *name*, or *None* if not found."""
         records = await self._load()
         return records.get(name)
 
     async def put(self, record: ServiceRecord) -> None:
+        """Store *record* atomically under lock."""
         record.updated_at = time.time()
         async with self._lock:
             records = await self._load()
@@ -188,6 +207,7 @@ class FileStore(ServiceStore):
             await self._save(records)
 
     async def delete(self, name: str) -> bool:
+        """Remove *name* atomically under lock. Returns True if it existed."""
         async with self._lock:
             records = await self._load()
             if name not in records:
@@ -197,9 +217,11 @@ class FileStore(ServiceStore):
             return True
 
     async def list_all(self) -> list[ServiceRecord]:
+        """Return all stored records as a list."""
         records = await self._load()
         return list(records.values())
 
     async def count(self) -> int:
+        """Return the number of stored records."""
         records = await self._load()
         return len(records)
