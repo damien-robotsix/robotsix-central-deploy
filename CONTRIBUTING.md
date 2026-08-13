@@ -29,7 +29,7 @@ python _gen_robotsix_ui_css.py   # generate the gitignored robotsix-ui.css (dash
 > gitignored and only generated at Docker build time. Run
 > `python _gen_robotsix_ui_css.py` to generate it locally so the `/ui`
 > dashboard is not broken when running from source.
-
+>
 > **Note:** [uv](https://docs.astral.sh/uv/) is required — plain `pip install`
 > is not supported because some dependencies are resolved from git sources
 > pinned in `uv.lock`.
