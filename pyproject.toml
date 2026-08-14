@@ -1,6 +1,6 @@
 [project]
 name = "robotsix-central-deploy"
-version = "0.6.0"
+version = "0.7.0"
 description = "Central deployment & lifecycle server for the robotsix suite"
 license = "MIT"
 license-files = ["LICENSE"]
