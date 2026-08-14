@@ -32,6 +32,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_github
 
+::: robotsix_central_deploy.lifecycle.routers.chat_github_pages
+
 ::: robotsix_central_deploy.lifecycle.routers.chat_github_repos
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_github_security

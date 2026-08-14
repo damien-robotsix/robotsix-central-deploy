@@ -88,7 +88,7 @@ async def _get_client_or_503_with_pat_fallback(
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Neither GitHub App installation token nor repo-creation PAT "
-        "is configured. At least one must be set to use security-features.",
+        "is configured. At least one must be set for this operation.",
     )
 
 
