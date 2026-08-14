@@ -4,6 +4,14 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.7.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.6.0...v0.7.0) (2026-08-14)
+
+
+### Features
+
+* Add chat-agent endpoint to toggle GitHub Pages settings on installation-scope repos (20260809T221638Z-add-chat-agent-endpoint-to-toggle-github-de7d) ([#756](https://github.com/damien-robotsix/robotsix-central-deploy/issues/756)) ([c10a77a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c10a77aead27499a790307aea2f45adeb5bb3233))
+* CI: exempt docs-only PRs from the OSV malware-check gate (20260809T222212Z-ci-exempt-docs-only-prs-from-the-osv-mal-d3b8) ([#757](https://github.com/damien-robotsix/robotsix-central-deploy/issues/757)) ([0b8221f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0b8221fc16885118aed57dded11e9b5c208e35e7))
+
 ## [0.6.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.5.1...v0.6.0) (2026-08-13)
 
 
