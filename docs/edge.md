@@ -46,6 +46,22 @@ When central-deploy creates a container it calls
 which derives the labels from the component's `id` and its first container port.
 Onboard a component and it is live at `<id>.<base-domain>`.
 
+### Route regeneration is automatic — never add a static component route
+
+`traefik_labels()` runs inside every deploy path (onboard, redeploy, chat
+preview), so a component's hostname goes live the moment its container starts
+and is refreshed on every redeploy. There is no separate "gateway route table"
+to regenerate and no manual routing step for a first-boot deploy.
+
+This is also why `deploy/traefik/` must never contain a per-component route
+file. A temporary static route for a component running *outside* central-deploy
+is safe only until that component is onboarded: once the container carries its
+own labels, the static file's router and service names (`<id>`, `<id>-health`)
+collide with the Docker-label ones, Traefik drops the colliding routers, and
+the hostname returns the proxy 404. Remove any such bootstrap file (and its
+`docker-compose.yml` mount) when the component is onboarded — the file-hub
+bootstrap route was removed for exactly this reason.
+
 Three routers are emitted, ordered by priority so the most specific wins:
 
 | Priority | Router | Matches | Authenticated by |
