@@ -67,6 +67,15 @@
       "auth_type": "header",
       "auth_header_name": "X-API-Key",
       "auth_token_env": "DEPLOY_API_KEY"
+    },
+    {
+      "id": "cost-monitor",
+      "chat_base_url": "http://cost-monitor:8200",
+      "chat_skill_endpoint": "/chat-skill",
+      "chat_skill": "",
+      "auth_type": "",
+      "auth_username_env": "",
+      "auth_password_env": ""
     }
   ],
   "github_repo_create_token": "",

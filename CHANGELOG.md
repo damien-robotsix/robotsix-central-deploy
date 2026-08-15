@@ -300,6 +300,7 @@ All notable changes to robotsix-central-deploy.
   - The chat-Langfuse proxy project-alias config is now part of the standardized configuration system (`GET /services/central-deploy/config` returns a `langfuse_projects` schema with auto-discovered and operator-configured projects).
   - New helper `_reconcile_auto_langfuse_projects()` in `chat_langfuse.py` scans all chat-accessible components; hook points at startup, env toggle, mutation toggle, and onboard confirm.
 - Add `GET /fleet/langfuse` endpoint so authenticated fleet-internal consumers (cost-monitor, …) can enumerate registered components and obtain per-component Langfuse trace credentials read from each service's standardized config — no credential duplication needed.)
+- Register `cost-monitor` in the default virtual component roster so the chat agent can reach it via `component_request`. Base URL points to `http://cost-monitor:8200` with live skill probing at `/chat-skill`.
 - lifecycle: replace trailing ``#`` comments on ``BaseModel`` fields with ``Field(description=...)`` so descriptions appear in OpenAPI schema and Swagger UI.
 - Merge endpoint: add ``commit_title`` body field and default ``merge_method`` to ``"squash"``; document merge as confirmation-gated in the github skill re-export docstring.
 - Remove orphaned `_deep_merge` helper from `_config_utils.py` and its `TestDeepMerge` test class; all production config merging now flows through `_merge_config` and its variants.
