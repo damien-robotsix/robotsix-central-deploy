@@ -369,7 +369,7 @@ class TestUpdatePages:
         monkeypatch,
         enable_github_app,
     ):
-        """GitHub 403 (missing `pages: write`) maps to a clear HTTP 403."""
+        """GitHub 403 surfaces GitHub's own error message in the HTTP 403."""
         from github import GithubException
 
         requester = MagicMock(name="fake-requester")
@@ -392,7 +392,7 @@ class TestUpdatePages:
             headers=auth_headers,
         )
         assert resp.status_code == 403
-        assert "pages: write" in resp.json()["error"]
+        assert "Resource not accessible by integration" in resp.json()["error"]
 
     async def test_unknown_repo_returns_404(
         self,
