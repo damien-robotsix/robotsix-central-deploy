@@ -201,3 +201,4 @@ src/robotsix_central_deploy/
 5. **Siblings must stay unroutable** — `_sibling_utils.py` sets `routable=False` on the sibling config copy. Dropping it would publish a component's database at `<component>-db.<base-domain>`.
 6. **`NoopBackend` always reports `sha256:noop`** — never use in production.
 7. **No catch-all routes** — a `/{path:path}` route shadows every endpoint after it. `tests/lifecycle/test_app.py` guards this.
+8. **Never add a static per-component route file to `deploy/traefik/`** (e.g. `file-hub.yml`). Once a component is onboarded via the self-service API, its routing labels are stamped automatically by `traefik_labels()` at deploy time — a static file's router/service names collide with the Docker-label routes, causing Traefik to drop the colliding routers and return proxy 404. Remove any bootstrap route file (and its `docker-compose.yml` mount) as soon as the component is registered.
