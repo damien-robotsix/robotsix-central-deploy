@@ -5218,6 +5218,75 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/pages": {
+      "put": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Enable, disable, or reconfigure GitHub Pages",
+        "description": "Enable, disable, or reconfigure GitHub Pages on *owner*/*repo*.\n\n- Set ``enabled`` to ``\"enabled\"`` to create (or update) the Pages site.\n- Set ``enabled`` to ``\"disabled\"`` to delete it.\n- Omit ``enabled`` and provide ``build_type`` / ``source_branch`` /\n  ``source_path`` to reconfigure an already-enabled site.\n\n``build_type`` defaults to ``\"workflow\"`` (GitHub Actions), which is\nthe expected mode for repos whose docs CI uses\n``actions/configure-pages`` + ``actions/deploy-pages``.  Use\n``\"legacy\"`` with ``source_branch`` / ``source_path`` for\nbranch-based publishing.",
+        "operationId": "update_pages_chat_github_repos__owner___repo__pages_put",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePagesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Pages Chat Github Repos  Owner   Repo  Pages Put"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "GitHub App lacks required permissions"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "422": {
+            "description": "No fields provided, or GitHub rejected the request"
+          },
+          "503": {
+            "description": "Neither GitHub App nor PAT configured for this operation"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/vulnerability-alerts": {
       "put": {
         "tags": [
@@ -9352,6 +9421,64 @@
         ],
         "title": "TokenResponse",
         "description": "Bearer token returned to the mobile app after SSO exchange."
+      },
+      "UpdatePagesRequest": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(enabled|disabled)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled",
+            "description": "``enabled`` to create (or update) the Pages site, ``disabled`` to delete it."
+          },
+          "build_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(workflow|legacy)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Type",
+            "description": "Pages build source: ``workflow`` (GitHub Actions) or ``legacy`` (branch-based).  Defaults to ``workflow`` when omitted during creation."
+          },
+          "source_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Branch",
+            "description": "Branch to publish from (only for ``build_type=legacy``)."
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path",
+            "description": "Path within the branch (only for ``build_type=legacy``)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdatePagesRequest",
+        "description": "Body for ``PUT /chat/github/repos/{owner}/{repo}/pages``.\n\nAll fields are optional, but at least one must be provided.\nUnknown keys are rejected with 422."
       },
       "UpdateRepoRequest": {
         "properties": {
