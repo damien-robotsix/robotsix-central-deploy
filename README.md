@@ -54,11 +54,17 @@ for full details.
 ```bash
 uv sync                 # Install dev dependencies (pytest, ruff, mypy, …)
 pre-commit install      # Install git pre-commit hooks (lint, format, type-check)
+python _gen_robotsix_ui_css.py   # Generate the gitignored robotsix-ui.css for the /ui dashboard
 uv run pytest           # Run the test suite
 ruff check .            # Lint
 ruff format . --check   # Check formatting
 uv run mypy src/        # Type check
 ```
+
+> **Note:** `src/robotsix_central_deploy/ui/static/robotsix-ui.css` is
+> gitignored and only generated at Docker build time, so running from source
+> serves a 404 at `/ui/static/robotsix-ui.css` until you generate it with
+> `python _gen_robotsix_ui_css.py`.
 
 For a detailed walkthrough of the codebase, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
