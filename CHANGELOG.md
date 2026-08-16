@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.8.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.8.0...v0.8.1) (2026-08-16)
+
+
+### Bug Fixes
+
+* Central-deploy: relocate a component's data volume between disks without data loss (20260809T103425Z-central-deploy-relocate-a-component-s-da-290d) ([#750](https://github.com/damien-robotsix/robotsix-central-deploy/issues/750)) ([3465a6d](https://github.com/damien-robotsix/robotsix-central-deploy/commit/3465a6d1b287cf408fa1a8862fce3c67f9f2e801))
+
 ## [0.8.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.7.0...v0.8.0) (2026-08-16)
 
 
