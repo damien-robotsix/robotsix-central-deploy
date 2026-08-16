@@ -183,6 +183,25 @@ class ExecutionBackend(ABC):
         """
 
     @abstractmethod
+    async def relocate_volume(
+        self,
+        volume_name: str,
+        target_disk_path: str,
+        container_user: str | None = None,
+    ) -> dict[str, Any]:
+        """Relocate a named volume's data to *target_disk_path*.
+
+        Copies all data from the current volume backing store to
+        ``{target_disk_path}/robotsix-volumes/{volume_name}``, verifies
+        the copy, removes the old volume, and creates a new volume at the
+        target path.  *container_user* is the owning component's Docker
+        ``user`` string, used to resolve ownership of the relocated volume.
+
+        Returns ``{"status": "ok"|"failed", "detail": str}``.
+        On failure the source volume is left intact.
+        """
+
+    @abstractmethod
     async def inspect_self(self) -> SelfInspect | None:
         """Identify the container this server runs in.
 

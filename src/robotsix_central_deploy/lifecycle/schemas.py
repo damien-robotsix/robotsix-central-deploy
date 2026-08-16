@@ -346,6 +346,37 @@ class PruneVolumesResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Volume relocate models
+# ---------------------------------------------------------------------------
+
+
+class RelocateVolumeRequest(BaseModel):
+    """Request body for POST /volumes/{name}/relocate."""
+
+    target_disk: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Target disk identifier — a device path (e.g. /dev/sdb1), "
+            "mount point (e.g. /mnt/data), or filesystem label."
+        ),
+    )
+
+
+class RelocateVolumeResponse(BaseModel):
+    """Outcome of a volume relocation operation."""
+
+    status: Literal["ok"] = Field(description="Relocation outcome")
+    detail: str = Field(description="Human-readable status detail")
+    volume_name: str = Field(description="The relocated volume name")
+    component_id: str = Field(description="The component that owns this volume")
+    source_disk: str = Field(
+        default="", description="Previous disk location (mount point or 'default')"
+    )
+    target_disk: str = Field(description="New disk mount point")
+
+
+# ---------------------------------------------------------------------------
 # Config endpoint models
 # ---------------------------------------------------------------------------
 

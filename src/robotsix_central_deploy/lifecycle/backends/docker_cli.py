@@ -252,6 +252,16 @@ class DockerBackend(ExecutionBackend):
             "remove_volume not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def relocate_volume(
+        self,
+        volume_name: str,
+        target_disk_path: str,
+        container_user: str | None = None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError(
+            "relocate_volume not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def inspect_self(self) -> SelfInspect | None:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
