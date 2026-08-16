@@ -14,9 +14,10 @@ from fastapi import APIRouter, Depends, Request
 
 from ..._http import retry_client_context
 from ...registry.config_store import ComponentConfigStore
+from ...registry.traefik_labels import public_url
 from .._config_utils import _sanitize_log
 from ..auth import verify_auth
-from ..deps import _get_component_config_store
+from ..deps import _get_component_config_store, _get_config
 from ._chat_common import (
     _inject_auth,
     logger,
@@ -27,6 +28,18 @@ _skill_cache: dict[str, tuple[float, str]] = {}
 _SKILL_CACHE_TTL: float = 60.0
 
 router = APIRouter(tags=["chat"])
+
+
+def _excluded(component_id: str, reason: str) -> dict[str, Any]:
+    """A roster entry for a component the agent cannot use, and why.
+
+    Dropping such a component outright is what let file-hub sit unusable and
+    unmentioned: it had no ports, so it never reached the roster, and the only
+    trace was a log line nobody was reading. An entry with no ``skill`` is
+    still not callable — consumers already filter on ``_error`` — but the
+    reason is now in the payload rather than only in the logs.
+    """
+    return {"id": component_id, "base_url": "", "skill": "", "_error": reason}
 
 
 # ---------------------------------------------------------------------------
@@ -111,13 +124,23 @@ async def list_chat_components(
 ) -> list[dict[str, Any]]:
     """Return a roster of components the chat agent can interact with.
 
-    Each entry has ``id``, ``base_url``, and ``skill`` (the Markdown body
-    fetched live from the component's ``GET /chat-skill``).  Components
-    that do not have ``allow_chat_access`` enabled are omitted.  A
-    component whose skill probe fails is served from its last-known-good
-    cached skill when one exists (stale-while-error), so a transient
-    probe failure does not drop it from the roster; it is omitted only
-    when it has never been probed successfully.
+    Each usable entry has ``id``, ``base_url`` (the internal address),
+    ``public_url`` (the edge URL, or ``None`` when the component is not
+    routed) and ``skill`` (the Markdown body fetched live from the
+    component's ``GET /chat-skill``).  A component whose skill probe fails is
+    served from its last-known-good cached skill when one exists
+    (stale-while-error), so a transient probe failure does not drop it.
+
+    Components without ``allow_chat_access`` are omitted — that is the
+    operator declining, not a fault.  A component the operator *did* grant
+    access to but which cannot be used is reported instead of dropped: the
+    entry carries ``_error`` and an empty ``skill``, so it is still not
+    callable, but the reason travels with the roster rather than living only
+    in this server's logs.
+
+    ``base_url`` is internal and never passes through the edge, so a probe
+    against it says nothing about whether the component's public URL works.
+    That is what ``public_url`` is for.
 
     Skill bodies are cached for 60 seconds; a component whose cached
     entry has expired is re-probed on the next request.
@@ -125,24 +148,43 @@ async def list_chat_components(
     results: list[dict[str, Any]] = []
     now = time.monotonic()
 
+    # The public hostname is derived from the same data the edge routes on, so
+    # a component reported at a URL is a component the edge actually carries.
+    try:
+        base_domain = (await _get_config(request)).gateway_base_domain
+    except Exception:  # noqa: BLE001 — an unconfigured gateway is not an error here
+        base_domain = ""
+
     for comp_cfg in component_config_store.all():
         if not comp_cfg.allow_chat_access:
             continue
         # Virtual components (with chat_base_url set) don't need ports;
-        # Docker components do.
+        # Docker components do. A Docker component with none is not reachable
+        # at all — no internal address to call and no edge route — so say so
+        # instead of leaving it out of the roster entirely.
         if not comp_cfg.chat_base_url and not comp_cfg.ports:
+            results.append(
+                _excluded(
+                    comp_cfg.id,
+                    "no port in its deploy contract — the component has no "
+                    "address to call and the edge emits no route for it; "
+                    "refresh its contract (POST /services/{name}/refresh-contract)",
+                )
+            )
             continue
 
         base_url = comp_cfg.chat_base_url or (
             f"http://{comp_cfg.container_name}:{comp_cfg.ports[0].container}"
         )
         skill_endpoint = comp_cfg.chat_skill_endpoint
+        component_public_url = public_url(comp_cfg, base_domain)
 
         # Static skill body — no probing needed.
         if comp_cfg.chat_skill:
             entry: dict[str, Any] = {
                 "id": comp_cfg.id,
                 "base_url": base_url,
+                "public_url": component_public_url,
                 "skill": comp_cfg.chat_skill,
             }
             _inject_auth(entry, comp_cfg)
@@ -157,6 +199,7 @@ async def list_chat_components(
                 entry = {
                     "id": comp_cfg.id,
                     "base_url": base_url,
+                    "public_url": component_public_url,
                     "skill": cached_body,
                 }
                 _inject_auth(entry, comp_cfg)
@@ -196,9 +239,26 @@ async def list_chat_components(
             entry = {
                 "id": comp_cfg.id,
                 "base_url": base_url,
+                "public_url": component_public_url,
                 "skill": skill_body,
             }
             _inject_auth(entry, comp_cfg)
             results.append(entry)
+        else:
+            # Chat access is on, so the operator meant this component to be
+            # usable, but it serves no skill and has never been probed
+            # successfully. Reporting the reason distinguishes "the operator
+            # has not granted access" from "the component does not implement
+            # the endpoint", which the caller otherwise cannot tell apart
+            # from an absent entry.
+            results.append(
+                _excluded(
+                    comp_cfg.id,
+                    f"chat access is enabled but {base_url}{skill_endpoint} "
+                    "returned no skill; the component must serve that "
+                    "endpoint or declare a static robotsix.deploy.chat-skill "
+                    "label in its deploy contract",
+                )
+            )
 
     return results

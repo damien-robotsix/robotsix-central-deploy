@@ -57,6 +57,34 @@ _BEARER_PRIORITY = 20
 _BROWSER_PRIORITY = 10
 
 
+def is_routable(config: ComponentConfig, base_domain: str) -> bool:
+    """Whether the edge will carry traffic for *config*.
+
+    The single predicate behind both the labels stamped on the container and
+    the public URL reported for it. Kept in one place because the two must
+    agree: a component advertised at a URL the edge has no route for answers
+    404 while every other signal — container health, deploy status — says it
+    is fine.
+
+    False for all three of: no ``base_domain`` configured, no exposed port, or
+    ``routable`` unset. All are normal states, not errors.
+    """
+    return bool(base_domain and config.ports and config.routable)
+
+
+def public_url(config: ComponentConfig, base_domain: str) -> str | None:
+    """Return the URL the edge serves *config* at, or ``None`` if unrouted.
+
+    ``None`` is the honest answer for a component the edge will not carry:
+    handing out ``https://<id>.<domain>`` regardless produces a link that
+    404s, which is what made an unrouted component look healthy for as long
+    as nobody opened it.
+    """
+    if not is_routable(config, base_domain):
+        return None
+    return f"https://{config.id}.{base_domain}"
+
+
 def traefik_labels(
     config: ComponentConfig,
     base_domain: str,
@@ -84,7 +112,7 @@ def traefik_labels(
         A ``{label: value}`` mapping ready to pass to Docker's container-create
         API, or ``{}`` if the component is not routable.
     """
-    if not base_domain or not config.ports or not config.routable:
+    if not is_routable(config, base_domain):
         return {}
 
     name = config.id

@@ -51,6 +51,22 @@ async def _seed_store(*names: str, image: str = "", deployed_digest: str = "") -
 # ---------------------------------------------------------------------------
 
 
+def _assert_reported_unusable(payload: list[dict], component_id: str) -> None:
+    """The component is in the roster, carries a reason, and is not callable.
+
+    A component the operator granted chat access to but which cannot serve a
+    skill used to vanish from the roster entirely, leaving the agent unable to
+    tell "not granted" from "granted but broken" — the state file-hub sat in.
+    It is now reported with ``_error`` and no ``skill``, so consumers that
+    filter on ``_error`` still refuse to call it.
+    """
+    assert len(payload) == 1, payload
+    entry = payload[0]
+    assert entry["id"] == component_id
+    assert entry["_error"], "an unusable component must carry a reason"
+    assert not entry["skill"], "an unusable component must not look callable"
+
+
 class TestChatComponents:
     async def test_empty_when_no_components(
         self, client: AsyncClient, auth_headers: dict
@@ -119,7 +135,7 @@ class TestChatComponents:
         assert data[0]["base_url"] == "http://chatty:8080"
         assert data[0]["skill"] == "# Chatty Skill\nDo the thing."
 
-    async def test_skips_component_with_failed_probe(
+    async def test_reports_component_with_failed_probe(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         config_store = server_mod.app.state.component_config_store
@@ -147,7 +163,7 @@ class TestChatComponents:
 
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        _assert_reported_unusable(resp.json(), "flaky")
 
     async def test_serves_stale_skill_when_probe_fails(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -187,7 +203,7 @@ class TestChatComponents:
         # The stale timestamp is preserved so the next request re-probes.
         assert chat_mod._skill_cache["stale-ok"][0] == expired_at
 
-    async def test_skips_component_with_non_200_probe(
+    async def test_reports_component_with_non_200_probe(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         config_store = server_mod.app.state.component_config_store
@@ -217,9 +233,9 @@ class TestChatComponents:
 
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        _assert_reported_unusable(resp.json(), "bad-status")
 
-    async def test_skips_empty_skill_body(
+    async def test_reports_empty_skill_body(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
         config_store = server_mod.app.state.component_config_store
@@ -249,7 +265,7 @@ class TestChatComponents:
 
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        _assert_reported_unusable(resp.json(), "empty-skill")
 
     async def test_caches_skill_bodies(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -300,7 +316,7 @@ class TestChatComponents:
         assert data2[0]["skill"] == "Skill v1"
         assert call_count == 1  # still 1 — cache hit
 
-    async def test_skips_component_without_ports(
+    async def test_reports_component_without_ports(
         self, client: AsyncClient, auth_headers: dict
     ):
         config_store = server_mod.app.state.component_config_store
@@ -316,7 +332,7 @@ class TestChatComponents:
 
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        _assert_reported_unusable(resp.json(), "noport")
 
     async def test_multiple_components_mixed(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -334,7 +350,7 @@ class TestChatComponents:
         await config_store.put(cfg1)
         server_mod.app.state.registry.register(cfg1)
 
-        # Component without chat access — should be skipped.
+        # Component without chat access — omitted entirely.
         cfg2 = ComponentConfig(
             id="beta",
             image="beta:latest",
@@ -345,7 +361,7 @@ class TestChatComponents:
         await config_store.put(cfg2)
         server_mod.app.state.registry.register(cfg2)
 
-        # Component with chat access but probe fails — should be skipped.
+        # Component with chat access but a failing probe — reported, not dropped.
         cfg3 = ComponentConfig(
             id="gamma",
             image="gamma:latest",
@@ -381,8 +397,22 @@ class TestChatComponents:
         resp = await client.get("/chat/components", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["id"] == "alpha"
+        by_id = {e["id"]: e for e in data}
+
+        # alpha serves a skill and is callable.
+        assert by_id["alpha"]["skill"] == "# Alpha Skill"
+        assert not by_id["alpha"].get("_error")
+
+        # beta was never granted chat access — the operator declining is not a
+        # fault, so it is simply absent.
+        assert "beta" not in by_id
+
+        # gamma was granted access but cannot serve a skill. It is reported
+        # with the reason rather than dropped, and stays uncallable.
+        assert by_id["gamma"]["_error"]
+        assert not by_id["gamma"]["skill"]
+
+        assert set(by_id) == {"alpha", "gamma"}
 
     async def test_virtual_component_with_static_skill(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -612,3 +642,69 @@ class TestChatComponents:
         assert dp_entry["auth"] == {"type": "header", "header_name": "X-API-Key"}
 
         mock_client.get.assert_not_called()
+
+
+class TestRosterPublicUrl:
+    """The roster must tell the agent where a component is reachable publicly."""
+
+    async def test_routed_component_carries_its_public_url(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """Without this the agent only ever sees the internal address.
+
+        An internal probe never traverses the edge, so it cannot distinguish a
+        correctly-routed component from one whose public URL 404s.
+        """
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="widget",
+            image="widget:latest",
+            container_name="widget",
+            ports=[PortMapping(host=8300, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        cfg.chat_skill = "# Widget"
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        monkeypatch.setattr(
+            server_mod.app.state.config,
+            "gateway_base_domain",
+            "deploy.robotsix.net",
+            raising=False,
+        )
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        entry = next(e for e in resp.json() if e["id"] == "widget")
+        assert entry["base_url"] == "http://widget:8080"
+        assert entry["public_url"] == "https://widget.deploy.robotsix.net"
+
+    async def test_unrouted_component_reports_no_public_url(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A virtual component has no edge route, so it must not claim one."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="langfuse-ext",
+            image="",
+            container_name="langfuse-ext",
+            ports=[],
+        )
+        cfg.allow_chat_access = True
+        cfg.chat_base_url = "https://langfuse.robotsix.net"
+        cfg.chat_skill = "# Langfuse"
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        monkeypatch.setattr(
+            server_mod.app.state.config,
+            "gateway_base_domain",
+            "deploy.robotsix.net",
+            raising=False,
+        )
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        entry = next(e for e in resp.json() if e["id"] == "langfuse-ext")
+        assert entry["public_url"] is None

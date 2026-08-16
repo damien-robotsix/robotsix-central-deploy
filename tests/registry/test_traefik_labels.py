@@ -156,3 +156,65 @@ def test_labels_are_derived_never_special_cased() -> None:
         "HeaderRegexp(`Authorization`, `^Bearer .+`)"
         in labels["traefik.http.routers.brand-new-thing-bearer.rule"]
     )
+
+
+class TestPublicUrl:
+    """The URL reported for a component must match what the edge actually serves."""
+
+    def _config(self, **overrides):
+        from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
+
+        fields = {
+            "id": "widget",
+            "image": "widget:latest",
+            "container_name": "widget",
+            "ports": [PortMapping(host=8300, container=8080, protocol="tcp")],
+        }
+        fields.update(overrides)
+        return ComponentConfig(**fields)
+
+    def test_routed_component_reports_its_url(self):
+        from robotsix_central_deploy.registry.traefik_labels import public_url
+
+        assert (
+            public_url(self._config(), "deploy.robotsix.net")
+            == "https://widget.deploy.robotsix.net"
+        )
+
+    def test_component_without_a_port_has_no_url(self):
+        """Regression: the case that 404'd.
+
+        A component with no port gets no Traefik labels, so reporting a public
+        URL for it hands out a link that cannot work — which is precisely how
+        an unrouted component passed for healthy.
+        """
+        from robotsix_central_deploy.registry.traefik_labels import public_url
+
+        assert public_url(self._config(ports=[]), "deploy.robotsix.net") is None
+
+    def test_non_routable_component_has_no_url(self):
+        from robotsix_central_deploy.registry.traefik_labels import public_url
+
+        assert public_url(self._config(routable=False), "deploy.robotsix.net") is None
+
+    def test_no_gateway_configured_means_no_url(self):
+        from robotsix_central_deploy.registry.traefik_labels import public_url
+
+        assert public_url(self._config(), "") is None
+
+    def test_url_is_reported_exactly_when_labels_are_emitted(self):
+        """The predicate behind the URL and the predicate behind the route are one."""
+        from robotsix_central_deploy.registry.traefik_labels import (
+            public_url,
+            traefik_labels,
+        )
+
+        for cfg, domain in (
+            (self._config(), "deploy.robotsix.net"),
+            (self._config(ports=[]), "deploy.robotsix.net"),
+            (self._config(routable=False), "deploy.robotsix.net"),
+            (self._config(), ""),
+        ):
+            has_labels = bool(traefik_labels(cfg, domain, "central-deploy-proxy"))
+            has_url = public_url(cfg, domain) is not None
+            assert has_labels == has_url
