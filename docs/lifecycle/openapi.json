@@ -3119,7 +3119,7 @@
           "chat"
         ],
         "summary": "Register a new managed component (idempotent)",
-        "description": "Register a new managed component in the service inventory.\n\nCreates a minimal ``ComponentConfig`` from the request body and\npersists it, alongside a ``ServiceRecord`` in STOPPED state.\nThe component is NOT auto-started \u2014 this endpoint only registers\nmetadata.\n\nIdempotent: re-registering an existing component id returns the\nexisting entry unchanged.\n\nRequires ``chat_agent_registration_enabled`` to be ``True`` in the\nserver config.",
+        "description": "Register a new managed component in the service inventory.\n\nBuilds the ``ComponentConfig`` from the repo's parsed\n``deploy/docker-compose.yml`` \u2014 ports, mounts, named volumes, config\nvolume, health check and siblings all included \u2014 and persists it\nalongside a ``ServiceRecord`` in STOPPED state. The component is NOT\nauto-started; this endpoint only registers it.\n\nHost ports are shifted off any this machine has already claimed, exactly\nas ``/onboard/preflight`` does.\n\nIdempotent: re-registering an existing component id returns the\nexisting entry unchanged.\n\nRequires ``chat_agent_registration_enabled`` to be ``True`` in the\nserver config.",
         "operationId": "chat_register_component_chat_services_post",
         "requestBody": {
           "content": {
