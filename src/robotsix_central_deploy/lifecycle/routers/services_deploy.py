@@ -8,6 +8,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.params import Body
 
@@ -17,6 +18,7 @@ from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.deploy_history_store import DeployHistoryStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
+from ...registry.traefik_labels import public_url
 from .._config_utils import (
     _sanitize_log,
     _write_llmio_tier_config,
@@ -34,6 +36,7 @@ from ..deps import (
     JobRegistry,
     _get_backend,
     _get_component_config_store,
+    _get_config,
     _get_config_yaml_store,
     _get_deploy_history_store,
     _get_env_store,
@@ -65,6 +68,69 @@ logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["services"])
+
+
+#: Attempts and spacing for the post-deploy edge probe. Recreating a container
+#: takes its route with it until Traefik observes the replacement, so the first
+#: probe of a perfectly healthy component can legitimately 404 for a few
+#: seconds — see "Redeploying a component briefly 404s it" in docs/edge.md.
+_EDGE_PROBE_ATTEMPTS = 6
+_EDGE_PROBE_INTERVAL_SECONDS = 5.0
+
+
+async def _verify_edge_route(config: ComponentConfig, base_domain: str) -> str | None:
+    """Check that the edge actually serves *config*; return a warning or None.
+
+    Container health says the process is up. It says nothing about whether the
+    edge will carry a request to it, and the two failed independently: a
+    component whose registry entry had lost its port deployed healthy for days
+    behind a public URL that answered 404, because nothing in the deploy path
+    ever looked at that URL.
+
+    ``/health`` is the auth-exempt router, so this needs no credentials. A 404
+    is the specific signature of "no router exists"; 401 and 302 both mean the
+    edge routed the request and the gate answered, which is success here.
+
+    Advisory only — it returns a message, never raises, and never fails a
+    deploy that otherwise succeeded.
+    """
+    url = public_url(config, base_domain)
+    if url is None:
+        # No gateway configured, no port, or deliberately not routable. All
+        # normal; there is no public URL to hold to account.
+        return None
+
+    probe_url = f"{url}/health"
+    detail = "no response"
+    for attempt in range(_EDGE_PROBE_ATTEMPTS):
+        if attempt:
+            await asyncio.sleep(_EDGE_PROBE_INTERVAL_SECONDS)
+        try:
+            # A plain client, not the shared RetryClient: that one calls
+            # raise_for_status, and the status codes this check exists to read
+            # are exactly the ones it turns into exceptions.
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(probe_url)
+        except Exception as exc:  # noqa: BLE001 — advisory probe, any failure is a warning
+            detail = f"{type(exc).__name__}: {exc}"
+            continue
+        code = response.status_code
+        if code != 404 and code < 500:
+            return None
+        detail = (
+            "404 — the edge has no router for this hostname"
+            if code == 404
+            else f"HTTP {code} — the edge routed the request but got no healthy answer"
+        )
+
+    return (
+        f"Edge route not verified: GET {probe_url} answered {detail} after "
+        f"{_EDGE_PROBE_ATTEMPTS} attempts over "
+        f"{int((_EDGE_PROBE_ATTEMPTS - 1) * _EDGE_PROBE_INTERVAL_SECONDS)}s. "
+        "The container is healthy, so this is a routing fault, not a component "
+        "fault — check that it has a port in its deploy contract and that "
+        "Traefik accepted its labels."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +337,7 @@ async def deploy_service(
 
     # Schedule the deploy sequence as a background task.
     settings_store = getattr(request.app.state, "settings_store", None)
+    lifecycle_config = await _get_config(request)
     asyncio.create_task(
         _run_deploy_job(
             job_id=job_id,
@@ -286,6 +353,7 @@ async def deploy_service(
             config_yaml_store=config_yaml_store,
             job_registry=job_registry,
             settings_store=settings_store,
+            gateway_base_domain=lifecycle_config.gateway_base_domain,
         )
     )
 
@@ -311,6 +379,7 @@ async def _run_deploy_job(
     config_yaml_store: ConfigYamlStore,
     job_registry: JobRegistry,
     settings_store: Any = None,
+    gateway_base_domain: str = "",
 ) -> None:
     """Background task that runs the full deploy sequence and updates the job.
 
@@ -478,12 +547,31 @@ async def _run_deploy_job(
                 exc_info=True,
             )
 
+        # Verify the edge before calling the deploy done. This is the last
+        # step because it needs the replacement container to be up and its
+        # labels observed; running it earlier would only measure the recreate
+        # window.
+        deploy_warnings = list(outcome.warnings)
+        try:
+            edge_warning = await _verify_edge_route(config, gateway_base_domain)
+        except Exception:
+            # Never fail a deploy on the check itself.
+            logger.warning(
+                "deploy %s: edge route check could not run",
+                _sanitize_log(name),
+                exc_info=True,
+            )
+            edge_warning = None
+        if edge_warning:
+            logger.warning("deploy %s: %s", _sanitize_log(name), edge_warning)
+            deploy_warnings.append(edge_warning)
+
         job_registry.mark_done(
             job_id,
             name=name,
             image=image_ref,
             state=record.state.value,
-            warnings=outcome.warnings,
+            warnings=deploy_warnings,
         )
     except Exception as exc:
         logger.exception("deploy %s failed", _sanitize_log(name))

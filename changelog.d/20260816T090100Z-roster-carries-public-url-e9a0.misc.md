@@ -1,0 +1,1 @@
+chat: the component roster now carries public_url alongside the internal base_url, so a consumer can tell where a component is reachable from outside and whether the edge routes it at all. It is null for a component the edge does not carry.
