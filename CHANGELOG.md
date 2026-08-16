@@ -4,6 +4,32 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.7.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.6.0...v0.7.0) (2026-08-14)
+
+
+### Features
+
+* Add chat-agent endpoint to toggle GitHub Pages settings on installation-scope repos (20260809T221638Z-add-chat-agent-endpoint-to-toggle-github-de7d) ([#756](https://github.com/damien-robotsix/robotsix-central-deploy/issues/756)) ([c10a77a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c10a77aead27499a790307aea2f45adeb5bb3233))
+* CI: exempt docs-only PRs from the OSV malware-check gate (20260809T222212Z-ci-exempt-docs-only-prs-from-the-osv-mal-d3b8) ([#757](https://github.com/damien-robotsix/robotsix-central-deploy/issues/757)) ([0b8221f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0b8221fc16885118aed57dded11e9b5c208e35e7))
+
+## [0.6.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.5.1...v0.6.0) (2026-08-13)
+
+
+### Features
+
+* Add auto-mail chat-access contract to central-deploy whitelist or onboarding docs (20260803T080036Z-add-auto-mail-chat-access-contract-to-ce-13ca) ([#742](https://github.com/damien-robotsix/robotsix-central-deploy/issues/742)) ([d271b07](https://github.com/damien-robotsix/robotsix-central-deploy/commit/d271b074c3a17ce591b511409f56570df7764ccd))
+
+
+### Bug Fixes
+
+* Disk Usage panel: collapse bind-mount noise, show real physical disks clearly (20260809T102458Z-disk-usage-panel-collapse-bind-mount-noi-d2e0) ([#749](https://github.com/damien-robotsix/robotsix-central-deploy/issues/749)) ([dd90dc0](https://github.com/damien-robotsix/robotsix-central-deploy/commit/dd90dc067cc90cc9a61e9c1c66d2f53ab1d8e499))
+
+
+### Documentation
+
+* Add missing mkdocstrings directives for token_store.py and volume_audit/board.py to docs/lifecycle/api.md (20260811T123514Z-add-missing-mkdocstrings-directives-for-26b9) ([#760](https://github.com/damien-robotsix/robotsix-central-deploy/issues/760)) ([9f46431](https://github.com/damien-robotsix/robotsix-central-deploy/commit/9f464312ecc75cca51af08db03cef3414783fe03))
+* AGENT.md: Documentation — When adding, renaming, or deleting a public FastAPI route or Pydantic response… (20260802T020922Z-agent-md-documentation-when-adding-renam-4b27) ([#720](https://github.com/damien-robotsix/robotsix-central-deploy/issues/720)) ([0d66042](https://github.com/damien-robotsix/robotsix-central-deploy/commit/0d6604241496331ad06a9735a3b4282a9b04460d))
+
 ## [0.5.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.5.0...v0.5.1) (2026-08-10)
 
 
