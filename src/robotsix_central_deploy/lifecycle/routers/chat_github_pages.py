@@ -7,6 +7,7 @@ Exposes:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +20,8 @@ from ..deps import _get_chat_agent_audit_store, _get_config
 from ._github_common import _call_github_endpoint_with_pat_fallback
 
 router = APIRouter(tags=["chat-github"])
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -128,12 +131,26 @@ def _update_pages_sync(
         return pages_data
     except GithubException as exc:
         if exc.status == 403:
+            data = exc.data
+            if isinstance(data, dict):
+                github_message = str(data.get("message") or data.get("error") or data)
+            else:
+                github_message = str(data) if data else str(exc)
+            logger.warning(
+                "GitHub Pages update for %s/%s was forbidden: %s (data=%r)",
+                owner,
+                repo,
+                exc,
+                data,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
-                    f"GitHub App lacks the `pages: write` permission on "
-                    f"{owner}/{repo}. Grant the App 'Administration' or "
-                    "'Pages' repository permission and try again."
+                    f"GitHub rejected the Pages request for {owner}/{repo} "
+                    f"(403): {github_message}. This may be a missing Pages "
+                    "permission or a repo-level Pages restriction — check the "
+                    "App installation's accepted permissions and the "
+                    "repository's Pages settings."
                 ),
             ) from exc
         raise
