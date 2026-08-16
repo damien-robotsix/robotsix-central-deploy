@@ -4,6 +4,24 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.8.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.7.0...v0.8.0) (2026-08-16)
+
+
+### Features
+
+* config.json and config.example.json carry stale VirtualComponentEntry fields and ovh_sftp block that are silently ignored by the Pydantic model (20260809T145114Z-config-json-and-config-example-json-carr-0cb9) ([#754](https://github.com/damien-robotsix/robotsix-central-deploy/issues/754)) ([f41ce49](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f41ce4950429502fe04d20aaa89a88fc3221c321))
+
+
+### Bug Fixes
+
+* Pages endpoint swallows GitHub's real 403 body and substitutes a misleading hardcoded 'pages: write' message (20260815T145235Z-pages-endpoint-swallows-github-s-real-40-cc4c) ([#766](https://github.com/damien-robotsix/robotsix-central-deploy/issues/766)) ([d6ac116](https://github.com/damien-robotsix/robotsix-central-deploy/commit/d6ac11669dc3bdc3045110d0e38dfc826802e34f))
+
+
+### Documentation
+
+* AGENT.md: Code Gotchas — Never add a static per-component route file to `deploy/traefik/` (e.g. `file-hu… (20260815T221423Z-agent-md-code-gotchas-never-add-a-static-18a7) ([#769](https://github.com/damien-robotsix/robotsix-central-deploy/issues/769)) ([2b10403](https://github.com/damien-robotsix/robotsix-central-deploy/commit/2b10403328f128c690fcd7716ae1249f689feaf5))
+* document/generate robotsix-ui.css for local development (20260812T211428Z-document-generate-robotsix-ui-css-for-lo-c09d) ([#764](https://github.com/damien-robotsix/robotsix-central-deploy/issues/764)) ([13139f7](https://github.com/damien-robotsix/robotsix-central-deploy/commit/13139f73ac2944723c7095a5958af008dd26f819))
+
 ## [0.7.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.6.0...v0.7.0) (2026-08-14)
 
 
