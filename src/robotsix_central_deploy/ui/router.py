@@ -83,6 +83,9 @@ async def dashboard(request: Request) -> Response:
         csrf_token = csrf_helper.generate()
         set_cookie = True
     page = _HTML.replace("{{csrf_token}}", _html.escape(csrf_token))
+    page = page.replace(
+        "{{gateway_base_domain}}", _html.escape(cfg.gateway_base_domain)
+    )
     response: Response = HTMLResponse(content=page)
     if set_cookie:
         response.set_cookie(

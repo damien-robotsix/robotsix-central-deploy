@@ -1061,491 +1061,6 @@ function hideEnvModalError() {
   document.getElementById('env-modal-error').style.display = 'none';
 }
 
-let _componentSuggestions = [];    // [{id, container_name, container_port}]
-
-function generateConfigForm(schema, current, containerOrId) {
-  const container = typeof containerOrId === 'string'
-    ? document.getElementById(containerOrId)
-    : (containerOrId || document.getElementById('config-form-body'));
-  container.innerHTML = '';
-  _renderConfigNode(_ensureJsonSchema(schema), current, '', container);
-  _updateAdvancedToggle();
-}
-
-function _updateAdvancedToggle() {
-  const bar = document.getElementById('config-advanced-bar');
-  const checkbox = document.getElementById('config-advanced-checkbox');
-  const formBody = document.getElementById('config-form-body');
-  if (!bar || !checkbox || !formBody) return;
-  const hasAdvanced = formBody.querySelector('.advanced-setting') !== null;
-  if (hasAdvanced) {
-    bar.classList.remove('hidden');
-    const show = checkbox.checked;
-    formBody.querySelectorAll('.advanced-setting').forEach(function(el) {
-      if (show) { el.classList.remove('hidden'); }
-      else { el.classList.add('hidden'); }
-    });
-  } else {
-    bar.classList.add('hidden');
-    checkbox.checked = false;
-    formBody.querySelectorAll('.advanced-setting').forEach(function(el) {
-      el.classList.remove('hidden');
-    });
-  }
-}
-
-function toggleAdvancedSettings() {
-  _updateAdvancedToggle();
-}
-
-// ── Legacy template support ─────────────────────────────────────────
-// Components onboarded before the schema-driven config store a raw YAML
-// template (plain values, "SECRET" sentinel) instead of a JSON Schema.
-// Convert on the fly so the typed renderer and collector work for both.
-
-function _ensureJsonSchema(schema) {
-  if (schema && typeof schema === 'object' && schema.properties) return schema;
-  return _legacyTemplateToSchema(schema || {});
-}
-
-function _legacyTemplateToSchema(template) {
-  const properties = {};
-  for (const [key, val] of Object.entries(template)) {
-    properties[key] = _legacyValueToProp(val);
-  }
-  return { type: 'object', properties: properties };
-}
-
-function _legacyValueToProp(val) {
-  if (val === 'SECRET') {
-    return { type: 'string', format: 'password', writeOnly: true };
-  }
-  if (typeof val === 'boolean') return { type: 'boolean', default: val };
-  if (typeof val === 'number') {
-    return Number.isInteger(val)
-      ? { type: 'integer', default: val }
-      : { type: 'number', default: val };
-  }
-  if (Array.isArray(val)) return { type: 'array', default: val };
-  if (val !== null && typeof val === 'object') return _legacyTemplateToSchema(val);
-  return { type: 'string', default: val == null ? '' : val };
-}
-
-function _resolveRef(propSchema, defs) {
-  if (!propSchema) return propSchema;
-
-  // Wrapper extras that belong to the *field* (set via json_schema_extra on
-  // the pydantic Field) rather than the *type definition*.  When the field
-  // uses a $ref or a nullable union, these annotations sit on the wrapper
-  // schema — not on the $defs entry — so we must propagate them down.
-  var FIELD_EXTRAS = ['advanced', 'description', 'default', 'title', 'ui_hidden', 'x-deploy-plane'];
-
-  function _propagateExtras(source, target) {
-    var clone = Object.assign({}, target);
-    for (var i = 0; i < FIELD_EXTRAS.length; i++) {
-      var key = FIELD_EXTRAS[i];
-      if (source[key] !== undefined && clone[key] === undefined) {
-        clone[key] = source[key];
-      }
-    }
-    return clone;
-  }
-
-  // Unwrap a nullable union: anyOf/oneOf with exactly one non-null branch
-  // (e.g. Optional[RepoConfig] → {anyOf: [{$ref}, {type: 'null'}]}). Without
-  // this the field falls through to a text leaf and emits an invalid "" that
-  // fails the schema's anyOf[object, null] on deploy. Recurse so a $ref branch
-  // still resolves; propagate the wrapper's extras. Non-nullable or
-  // multi-branch unions are left unchanged.
-  const union = propSchema.anyOf || propSchema.oneOf;
-  if (Array.isArray(union)) {
-    const nonNull = union.filter((b) => b && b.type !== 'null');
-    if (nonNull.length === 1) {
-      return _propagateExtras(propSchema, _resolveRef(nonNull[0], defs));
-    }
-    return propSchema;
-  }
-  if (!propSchema.$ref || !defs) return propSchema;
-  const refPath = propSchema.$ref;
-  if (refPath.startsWith('#/$defs/')) {
-    const defName = refPath.slice('#/$defs/'.length);
-    if (defs[defName]) {
-      return _propagateExtras(propSchema, defs[defName]);
-    }
-  }
-  return propSchema;
-}
-
-function _renderSectionDesc(description) {
-  const rendered = renderInlineMarkdown(description);
-  const isLong = description.length > 140 || description.indexOf('\n') !== -1;
-  if (!isLong) {
-    return '<p class="config-desc">' + rendered + '</p>';
-  }
-  var firstLine = description.split('\n')[0];
-  if (firstLine.length > 120) firstLine = firstLine.substring(0, 120) + '\u2026';
-  const shortRendered = renderInlineMarkdown(firstLine);
-  return '<div class="config-desc config-desc--collapsed">' +
-    '<span class="config-desc-short">' + shortRendered + '</span>' +
-    '<span class="config-desc-full">' + rendered + '</span>' +
-    '<button type="button" class="config-desc-toggle">more\u2026</button>' +
-    '</div>';
-}
-
-function _renderConfigNode(schema, current, prefix, container) {
-  const properties = schema.properties;
-  if (!properties) return;
-
-  const required = schema.required || [];
-  const defs = schema.$defs || {};
-
-  // At the top level, collect scalar keys and render them under "General"
-  // before named object sections so they don't float between sections.
-  var entries = Object.entries(properties);
-  if (prefix === '') {
-    const scalars = [];
-    const objects = [];
-    for (var i = 0; i < entries.length; i++) {
-      const key = entries[i][0];
-      const propSchema = entries[i][1];
-      const resolved = _resolveRef(propSchema, defs);
-      if (resolved.type === 'object') {
-        objects.push(entries[i]);
-      } else {
-        scalars.push(entries[i]);
-      }
-    }
-    if (scalars.length > 0) {
-      const generalSection = document.createElement('div');
-      generalSection.className = 'env-section';
-      generalSection.innerHTML = '<h3>General</h3>';
-      for (var s = 0; s < scalars.length; s++) {
-        const key = scalars[s][0];
-        const propSchema = scalars[s][1];
-        const fullKey = key;
-        const currentVal = (current != null) ? current[key] : undefined;
-        const resolvedSchema = _resolveRef(propSchema, defs);
-        const isRequired = required.includes(key);
-        const defaultVal = resolvedSchema.default ?? currentVal ?? '';
-        const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
-        if (resolvedSchema.ui_hidden) continue;
-        generalSection.appendChild(buildConfigRow(
-          fullKey, key, resolvedSchema, currentVal, isSecret, isRequired, defaultVal
-        ));
-      }
-      container.appendChild(generalSection);
-    }
-    entries = objects;
-  }
-
-  for (var i = 0; i < entries.length; i++) {
-    const key = entries[i][0];
-    const propSchema = entries[i][1];
-    const fullKey = prefix ? prefix + '.' + key : key;
-    const currentVal = (current != null) ? current[key] : undefined;
-
-    const resolvedSchema = _resolveRef(propSchema, defs);
-
-    const isRequired = required.includes(key);
-    const defaultVal = resolvedSchema.default ?? currentVal ?? '';
-    const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
-
-    if (resolvedSchema.ui_hidden) continue;
-
-    if (resolvedSchema.type === 'object') {
-      const section = document.createElement('div');
-      section.className = 'env-section';
-      if (resolvedSchema.advanced) {
-        section.classList.add('advanced-setting');
-      }
-      if ((resolvedSchema['x-deploy-plane'] || 'component') === 'component') {
-        section.classList.add('component-owned');
-      }
-      const sectionDesc = resolvedSchema.description
-        ? _renderSectionDesc(resolvedSchema.description)
-        : '';
-      section.innerHTML = '<h3>' + escHtml(key) + '</h3>' + sectionDesc;
-      const currentSub = (currentVal !== null && typeof currentVal === 'object'
-                          && !Array.isArray(currentVal)) ? currentVal : {};
-      _renderConfigNode(resolvedSchema, currentSub, fullKey, section);
-      // Hide section if all its fields are ui_hidden (zero operator-configurable fields).
-      if (section.querySelectorAll('.env-row').length === 0) continue;
-      container.appendChild(section);
-    } else {
-      container.appendChild(buildConfigRow(
-        fullKey, key, resolvedSchema, currentVal, isSecret, isRequired, defaultVal
-      ));
-    }
-  }
-}
-
-function _renderArraySection(key, prefix, schemaArray, currentArray, container) {
-  const itemTemplate = schemaArray[0] || {};
-  // If no current values, seed with one blank item so the user has something to fill in
-  const items = Array.isArray(currentArray) && currentArray.length > 0
-    ? currentArray
-    : [{}];
-
-  const section = document.createElement('div');
-  section.className = 'env-section array-section';
-  section.dataset.arrayKey = prefix;
-  section.innerHTML = `<h3>${escHtml(key)}</h3>`;
-
-  const itemsContainer = document.createElement('div');
-  itemsContainer.className = 'array-items-container';
-  section.appendChild(itemsContainer);
-
-  items.forEach((item, idx) => {
-    _renderArrayItem(prefix, idx, itemTemplate, item, itemsContainer);
-  });
-
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'btn-array-add';
-  addBtn.textContent = `+ Add ${key} item`;
-  addBtn.addEventListener('click', () => _addArrayItem(prefix, itemTemplate, itemsContainer));
-  section.appendChild(addBtn);
-
-  container.appendChild(section);
-}
-
-function _renderArrayItem(prefix, index, itemTemplate, itemCurrent, container) {
-  const itemDiv = document.createElement('div');
-  itemDiv.className = 'array-item';
-  itemDiv.dataset.arrayIndex = index;
-  itemDiv.dataset.arrayPrefix = prefix;  // e.g. "accounts"
-
-  const heading = (itemCurrent && (itemCurrent.email || itemCurrent.id || itemCurrent.name))
-                  || `[${index}]`;
-  const headerDiv = document.createElement('div');
-  headerDiv.className = 'array-item-header';
-  headerDiv.innerHTML = `<span>${escHtml(String(heading))}</span>`;
-
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'btn-array-remove';
-  removeBtn.textContent = 'Remove';
-  removeBtn.addEventListener('click', () => {
-    const itemsContainer = itemDiv.closest('.array-items-container');
-    itemDiv.remove();
-    if (itemsContainer) _reindexArrayItems(itemsContainer);
-  });
-  headerDiv.appendChild(removeBtn);
-  itemDiv.appendChild(headerDiv);
-
-  const body = document.createElement('div');
-  body.className = 'array-item-body';
-  _renderConfigNode(itemTemplate, itemCurrent || {}, `${prefix}.${index}`, body);
-  itemDiv.appendChild(body);
-
-  container.appendChild(itemDiv);
-}
-
-function _addArrayItem(prefix, itemTemplate, container) {
-  const count = container.querySelectorAll(':scope > .array-item').length;
-  _renderArrayItem(prefix, count, itemTemplate, {}, container);
-}
-
-function _reindexArrayItems(container) {
-  const items = container.querySelectorAll(':scope > .array-item');
-  items.forEach((itemDiv, newIdx) => {
-    const oldIdx = parseInt(itemDiv.dataset.arrayIndex, 10);
-    const prefix = itemDiv.dataset.arrayPrefix;
-    if (oldIdx !== newIdx) {
-      const oldSeg = `${prefix}.${oldIdx}.`;
-      const newSeg = `${prefix}.${newIdx}.`;
-      itemDiv.querySelectorAll('[data-key]').forEach(el => {
-        if (el.dataset.key.startsWith(oldSeg)) {
-          el.dataset.key = newSeg + el.dataset.key.slice(oldSeg.length);
-        }
-      });
-    }
-    itemDiv.dataset.arrayIndex = newIdx;
-  });
-}
-
-function buildConfigRow(fullKey, labelKey, propSchema, currentVal, isSecret, isRequired, defaultVal) {
-  const div = document.createElement('div');
-  div.className = 'env-row';
-  if (propSchema.advanced) {
-    div.classList.add('advanced-setting');
-  }
-  // Config-ownership: component-owned keys get a deprecation class.
-  var isComponentOwned = (propSchema['x-deploy-plane'] || 'component') === 'component';
-  if (isComponentOwned) {
-    div.classList.add('component-owned');
-  }
-  const displayVal = (currentVal !== undefined && currentVal !== null)
-    ? currentVal
-    : (defaultVal !== undefined && defaultVal !== null ? defaultVal : '');
-  // Help bubble: the schema's field description when the model provides one,
-  // with the dotted key path appended for orientation.
-  const helpText = propSchema.description
-    ? `${propSchema.description}\n(${fullKey})`
-    : fullKey;
-  // Visible field help rendered as inline markdown under the input.
-  const fieldHelpHtml = propSchema.description
-    ? '<span class="env-help">' + renderInlineMarkdown(propSchema.description) + '</span>'
-    : '';
-
-  var inputHtml;
-  var urlSuggestHtml = '';
-  // Disabled attribute for component-owned keys (read-only, deprecation path).
-  var disabledAttr = isComponentOwned ? ' disabled' : '';
-  if (isSecret) {
-    const alreadySet = currentVal !== undefined && currentVal !== null && currentVal !== '';
-    const placeholder = alreadySet
-      ? '(already set — enter new value to change)'
-      : '(not set — can be saved later, needed to run)';
-    const badgeClass = alreadySet ? 'badge-secret-set' : 'badge-secret-unset';
-    const badgeText = alreadySet ? 'set' : 'not set';
-    inputHtml = `<input type="password" class="env-value" data-key="${escAttr(fullKey)}"
-      value="" placeholder="${escAttr(placeholder)}" autocomplete="off"${disabledAttr}>`;
-    div.innerHTML = `
-      <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
-      ${inputHtml}
-      <span class="${badgeClass}">${badgeText}</span>
-      ${fieldHelpHtml}
-    `;
-    return div;
-  }
-
-  if (propSchema.type === 'array' || Array.isArray(displayVal)) {
-    // Arrays are edited as raw JSON — an invalid value is skipped on save
-    // and the stored value is kept (prefer_existing_for_unset on the server).
-    const jsonVal = JSON.stringify(displayVal === '' ? [] : displayVal);
-    inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
-      data-json="1" value="${escAttr(jsonVal)}" spellcheck="false"${disabledAttr}>`;
-    div.innerHTML = `
-      <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
-      ${inputHtml}
-      <span class="hint-json">JSON list</span>
-      ${fieldHelpHtml}
-    `;
-    return div;
-  }
-
-  if (propSchema.enum && Array.isArray(propSchema.enum)) {
-    const selectedVal = (currentVal !== undefined && currentVal !== null)
-      ? String(currentVal)
-      : (defaultVal !== undefined && defaultVal !== null ? String(defaultVal) : '');
-    const options = propSchema.enum.map(v => {
-      const selected = String(v) === selectedVal;
-      return `<option value="${escAttr(String(v))}"${selected ? ' selected' : ''}>${escHtml(String(v))}</option>`;
-    }).join('');
-    inputHtml = `<select class="env-value" data-key="${escAttr(fullKey)}"${disabledAttr}>${options}</select>`;
-  } else if (propSchema.type === 'integer' || propSchema.type === 'number') {
-    const step = propSchema.type === 'integer' ? ' step="1"' : '';
-    inputHtml = `<input type="number" class="env-value" data-key="${escAttr(fullKey)}"
-      value="${escAttr(String(displayVal))}"${step}${disabledAttr}>`;
-  } else if (propSchema.type === 'boolean') {
-    const checked = displayVal === true || displayVal === 'true' || displayVal === 1 || displayVal === '1';
-    inputHtml = `<input type="checkbox" class="env-value" data-key="${escAttr(fullKey)}"
-      ${checked ? 'checked' : ''}${disabledAttr}>`;
-  } else {
-    if (/_url$/.test(labelKey) || /_base_url$/.test(labelKey)) {
-      const prefix = labelKey.replace(/(_base)?_url$/, '');
-      urlSuggestHtml = `<button type="button" class="btn-suggest" title="Suggest URL from peer components"
-        data-suggest-for="${escAttr(fullKey)}" data-suggest-prefix="${escAttr(prefix)}"${disabledAttr}>🔍</button>`;
-    }
-    inputHtml = `<input type="text" class="env-value" data-key="${escAttr(fullKey)}"
-      value="${escAttr(String(displayVal))}"${disabledAttr}>`;
-  }
-
-  div.innerHTML = `
-    <span class="env-key" title="${escAttr(helpText)}">${escHtml(labelKey)}${isRequired ? ' *' : ''}</span>
-    ${inputHtml}
-    ${urlSuggestHtml || ''}
-    ${fieldHelpHtml}
-  `;
-  return div;
-}
-
-/**
- * Set a value at a dotted path (e.g. "accounts.0.auth.username") inside obj,
- * creating intermediate objects/arrays as needed.
- */
-function setNestedValue(obj, dotPath, value) {
-  const parts = dotPath.split('.');
-  for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
-    const nextIsIndex = /^\d+$/.test(parts[i + 1]);
-    if (obj[part] === undefined || obj[part] === null) {
-      obj[part] = nextIsIndex ? [] : {};
-    }
-    obj = obj[part];
-  }
-  const last = parts[parts.length - 1];
-  obj[last] = value;
-}
-
-function _collectFromProperties(schema, result, container, prefix) {
-  const properties = schema.properties;
-  if (!properties) return;
-
-  const defs = schema.$defs || {};
-
-  for (const [key, propSchema] of Object.entries(properties)) {
-    const fullKey = prefix ? prefix + '.' + key : key;
-
-    const resolvedSchema = _resolveRef(propSchema, defs);
-
-    // Skip component-owned keys — they belong to the component's own
-    // config surface, not the deploy plane.
-    if ((resolvedSchema['x-deploy-plane'] || 'component') === 'component') {
-      continue;
-    }
-
-    if (resolvedSchema.type === 'object') {
-      const nestedResult = {};
-      _collectFromProperties(resolvedSchema, nestedResult, container, fullKey);
-      if (Object.keys(nestedResult).length > 0) {
-        result[key] = nestedResult;
-      }
-    } else {
-      const el = container.querySelector(`[data-key="${fullKey}"]`);
-      if (!el) continue;
-
-      const isSecret = resolvedSchema.format === 'password' && resolvedSchema.writeOnly === true;
-
-      if (el.dataset.json === '1') {
-        try {
-          result[key] = JSON.parse(el.value);
-        } catch (_) {
-          // invalid JSON → omit; the server keeps the stored value
-        }
-      } else if (el.type === 'checkbox') {
-        result[key] = el.checked;
-      } else if (el.type === 'number') {
-        result[key] = resolvedSchema.type === 'integer'
-          ? parseInt(el.value, 10)
-          : parseFloat(el.value);
-      } else if (el.type === 'password' || isSecret) {
-        // Only send secret keys the operator actually filled in —
-        // omitted/blank means "keep existing value" on the server.
-        if (el.value !== '') {
-          result[key] = el.value;
-        }
-      } else if (el.value === '') {
-        // Omit an empty optional text leaf rather than storing "" — mirrors the
-        // empty-nested-object omission above. Lets a nullable-object field whose
-        // sub-fields are all blank collapse to an empty (→ omitted) object so the
-        // assembled config validates (the field defaults to null).
-        continue;
-      } else {
-        result[key] = el.value;
-      }
-    }
-  }
-}
-
-function collectConfigValues(schema, containerEl) {
-  const result = {};
-  const root = containerEl || document.getElementById('config-form-body');
-  _collectFromProperties(_ensureJsonSchema(schema), result, root, '');
-  return result;
-}
-
 // ── History modal ──────────────────────────────────────────────
 
 let _historyModalName = null;
@@ -1663,45 +1178,6 @@ function escAttr(s) {
   return String(s).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
 }
 
-// ── Inline Markdown renderer ───────────────────────────────────
-// Renders only inline spans: `code`, **bold**, *italic*, [links](url).
-// Input is fully HTML-escaped first — never injects raw input.
-// Only http(s) link targets are kept; everything else dropped.
-function renderInlineMarkdown(text) {
-  if (!text) return '';
-  var s = escHtml(text);
-  // code (backticks) first — preserve literal content inside
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // bold: **text** or __text__
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-  // italic: *text* or _text_
-  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
-  // links: [label](url) — only allow http(s) targets
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, label, url) {
-    if (/^https?:\/\//i.test(url)) {
-      return '<a href="' + url + '" target="_blank" rel="noopener">' + label + '</a>';
-    }
-    return label; // drop non-http(s) links
-  });
-  return s;
-}
-
-// Toggle a collapsible config-desc block between collapsed / expanded.
-function _toggleConfigDesc(btn) {
-  var p = btn.parentElement;
-  if (p.classList.contains('config-desc--collapsed')) {
-    p.classList.remove('config-desc--collapsed');
-    p.classList.add('config-desc--expanded');
-    btn.textContent = 'less';
-  } else {
-    p.classList.remove('config-desc--expanded');
-    p.classList.add('config-desc--collapsed');
-    btn.textContent = 'more\u2026';
-  }
-}
-
 // ── Onboard modal ──────────────────────────────────────────────
 
 let _obSpec = null;
@@ -1768,12 +1244,6 @@ function setOnboardInputsDisabled(disabled) {
   document.querySelectorAll('.ob-env-val,.ob-port-host,#ob-claude-mount').forEach(function(el) {
     el.disabled = disabled;
   });
-  var cfgBody = document.getElementById('ob-config-form-body');
-  if (cfgBody) {
-    cfgBody.querySelectorAll('input,select,textarea,button').forEach(function(el) {
-      el.disabled = disabled;
-    });
-  }
 }
 
 function stopOnboardJobPoll() {
@@ -1930,17 +1400,31 @@ function populateStep2(spec, portShifts) {
   }).join('');
 
   // Env — show only for repos WITHOUT config.yaml
-  // (legacy raw templates are converted by _ensureJsonSchema)
   var hasConfig = spec.config_schema
-      && Object.keys(_ensureJsonSchema(spec.config_schema).properties).length > 0;
+      && spec.config_schema.properties
+      && Object.keys(spec.config_schema.properties).length > 0;
   var envTable = document.getElementById('ob-env-table');
   var configSection = document.getElementById('ob-config-section');
 
   if (hasConfig) {
-    // Hide env table; show the full config.yaml mirror
+    // Hide env table; show config-link notice
     envTable.style.display = 'none';
     configSection.classList.remove('hidden');
-    generateConfigForm(spec.config_schema, {}, 'ob-config-form-body');
+    // Show link to the component's own Settings panel
+    var linkEl = document.getElementById('ob-settings-link');
+    var urlEl = document.getElementById('ob-settings-url');
+    if (linkEl && urlEl) {
+      var name = document.getElementById('ob-name').value.trim();
+      if (name) {
+        var domain = window.GATEWAY_BASE_DOMAIN || window.location.hostname;
+        var settingsUrl = 'https://' + name + '.' + domain + '/';
+        urlEl.href = settingsUrl;
+        urlEl.textContent = settingsUrl;
+        linkEl.style.display = '';
+      } else {
+        linkEl.style.display = 'none';
+      }
+    }
   } else {
     // Show env table; hide config section
     envTable.style.display = '';
@@ -2037,13 +1521,6 @@ async function onboardDeploy() {
 
   // Echo port shifts from preflight
   body.port_shifts = _obPortShifts;
-
-  // When config.yaml schema is present, collect the filled-in values
-  if (finalSpec.config_schema
-      && Object.keys(_ensureJsonSchema(finalSpec.config_schema).properties).length > 0) {
-    var configFormContainer = document.getElementById('ob-config-form-body');
-    body.config_values = collectConfigValues(finalSpec.config_schema, configFormContainer);
-  }
 
   var btn = document.getElementById('ob-deploy-btn');
   setOnboardInputsDisabled(true);
@@ -2265,88 +1742,10 @@ function showVbError(msg) {
   el.classList.add('open');
 }
 
-// ── Config suggest dropdown ─────────────────────────────────────
-
-let _activeSuggestDropdown = null;
-
-function _closeSuggestDropdown() {
-  if (_activeSuggestDropdown) {
-    _activeSuggestDropdown.remove();
-    _activeSuggestDropdown = null;
-  }
-}
-
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.btn-suggest');
-  if (btn) {
-    e.stopPropagation();
-    _closeSuggestDropdown();
-    _showSuggestDropdown(btn);
-    return;
-  }
-  // Close dropdown when clicking outside
-  if (_activeSuggestDropdown && !_activeSuggestDropdown.contains(e.target)) {
-    _closeSuggestDropdown();
-  }
-});
-
-function _showSuggestDropdown(btn) {
-  const fullKey = btn.dataset.suggestFor;
-  const prefix = btn.dataset.suggestPrefix || '';
-  const input = document.querySelector(`.env-value[data-key="${CSS.escape(fullKey)}"]`);
-  if (!input || _componentSuggestions.length === 0) return;
-
-  // Build dropdown HTML
-  const dd = document.createElement('div');
-  dd.className = 'suggest-dropdown';
-
-  // Preselect: component id matching the field prefix
-  const preselectedId = prefix
-    ? _componentSuggestions.find(c => c.id === prefix)
-    : null;
-  const suggestions = preselectedId
-    ? [preselectedId, ..._componentSuggestions.filter(c => c.id !== prefix)]
-    : _componentSuggestions;
-
-  suggestions.forEach(c => {
-    const url = c.container_port != null
-      ? `http://${c.container_name}:${c.container_port}`
-      : null;
-    const item = document.createElement('div');
-    item.className = 'suggest-item' + (c === preselectedId ? ' preselected' : '');
-    item.innerHTML = `<strong>${escHtml(c.id)}</strong>` +
-      (url ? `<span class="suggest-url">${escHtml(url)}</span>` : '');
-    item.addEventListener('click', () => {
-      if (url) {
-        input.value = url;
-        // Trigger change so the value collector picks it up
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      _closeSuggestDropdown();
-    });
-    dd.appendChild(item);
-  });
-
-  if (suggestions.length === 0) {
-    dd.innerHTML = '<div class="suggest-none">No peer components registered.</div>';
-  }
-
-  // Position below the button
-  const btnRect = btn.getBoundingClientRect();
-  dd.style.position = 'fixed';
-  dd.style.top = (btnRect.bottom + 4) + 'px';
-  dd.style.left = btnRect.left + 'px';
-
-  document.body.appendChild(dd);
-  _activeSuggestDropdown = dd;
-}
-
 // Bootstrap
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (_activeSuggestDropdown) {
-      _closeSuggestDropdown();
-    } else if (document.getElementById('vb-modal').classList.contains('open')) {
+    if (document.getElementById('vb-modal').classList.contains('open')) {
       closeVolumeBrowser();
     } else if (document.getElementById('onboard-modal').classList.contains('open')) {
       closeOnboardModal();
@@ -2671,18 +2070,7 @@ async function pollSelfUpdateRecovery(startedAt) {
 }
 
 (async () => {
-  // Delegated click for collapsible config description toggle
-  document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('config-desc-toggle')) {
-      _toggleConfigDesc(e.target);
-    }
-  });
   wireClaudeAuthPanel();
-  // Advanced-settings toggle — wired directly to avoid the double-fire that
-  // the delegated click + change handlers would cause (both dispatch on
-  // the same checkbox click).
-  var advCheckbox = document.getElementById('config-advanced-checkbox');
-  if (advCheckbox) advCheckbox.addEventListener('change', toggleAdvancedSettings);
   loadDashboard();
   startAutoRefresh();
   checkSelfUpdate();

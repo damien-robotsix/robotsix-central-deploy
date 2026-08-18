@@ -321,20 +321,24 @@ at `POST /onboard/preflight` (alongside `deploy/docker-compose.yml`) and returns
 schema in the preflight response. The matching runtime config file `config/config.json`
 provides default values for the schema's properties.
 
+The deploy UI does **not** render typed inputs for component-owned config fields.
+Configuration is the component's responsibility — after onboarding, use the component's
+own Settings panel (at `https://<name>.<gateway_base_domain>/`) to view and edit runtime
+settings. The deploy UI only manages the deployment-plane allowlist (image, mounts,
+ports, resource limits, restart policy, and the config volume write).
+
 ### Schema format
 
 `config/config.schema.json` must be a valid JSON Schema document (draft-07 or later) with a
-top-level `"type": "object"` and a `"properties"` block. Nested objects become UI sections.
+top-level `"type": "object"` and a `"properties"` block. Nested objects are preserved as-is.
 Each property declares a `"type"` (`"string"`, `"integer"`, `"number"`, `"boolean"`,
-`"object"`, `"array"`). Values are coerced according to the declared type when the operator
-submits the config form via the dashboard.
+`"object"`, `"array"`).
 
 ### Secret-field convention
 
 A property with `"format": "password"` and `"writeOnly": true` is a **secret field**,
 mirroring pydantic's `SecretStr` convention:
 
-- Rendered as a masked password input in the configuration UI
 - Stored in central-deploy's data volume; never echoed back in GET responses
   (masked as `"***"` in the `current` dict)
 - Preserved on save if the submitted value is the sentinel `"***"` (unchanged)
