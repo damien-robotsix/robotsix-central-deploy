@@ -179,46 +179,6 @@
   }
   .history-table .current-row { background: rgba(56,189,248,0.06); }
   .history-table .current-row td { color: var(--blue); }
-  /* Array-of-objects rendering */
-  .array-item {
-    border: 1px solid #334155;
-    border-radius: 4px;
-    padding: 10px 12px;
-    margin-bottom: 10px;
-  }
-  .array-item-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .array-item-header span {
-    font-size: 0.85rem;
-    color: #94a3b8;
-    font-weight: 600;
-  }
-  .btn-array-remove {
-    background: none;
-    border: 1px solid var(--red);
-    color: var(--red);
-    border-radius: 3px;
-    padding: 2px 8px;
-    font-size: 0.75rem;
-    cursor: pointer;
-  }
-  .btn-array-remove:hover { opacity: 0.75; }
-  .btn-array-add {
-    background: none;
-    border: 1px dashed #475569;
-    color: #94a3b8;
-    border-radius: 4px;
-    padding: 4px 12px;
-    cursor: pointer;
-    font-size: 0.78rem;
-    margin-top: 6px;
-  }
-  .btn-array-add:hover { border-color: var(--blue); color: var(--blue); }
-
   /* OAuth2 collapsible group */
   .oauth2-collapsible {
     margin-bottom: 0.6rem;
@@ -269,30 +229,6 @@
     background: #243044; color: #e2e8f0; border: 1px solid #334155;
     border-radius: 4px; padding: 4px 8px; font-size: 0.82rem;
   }
-  .btn-suggest {
-    flex-shrink: 0; width: 28px; height: 28px; line-height: 28px;
-    background: rgba(59,130,246,0.18); border: 1px solid rgba(59,130,246,0.35);
-    border-radius: 4px; color: var(--blue); cursor: pointer;
-    font-size: 0.8rem; padding: 0; text-align: center;
-  }
-  .btn-suggest:hover { background: rgba(59,130,246,0.30); }
-  .suggest-dropdown {
-    position: absolute; z-index: 1000;
-    background: #1a2332; border: 1px solid #334155; border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4); min-width: 240px; max-height: 220px;
-    overflow-y: auto; padding: 4px 0;
-  }
-  .suggest-dropdown .suggest-item {
-    padding: 6px 12px; cursor: pointer; font-size: 0.82rem; color: #e2e8f0;
-  }
-  .suggest-dropdown .suggest-item:hover { background: rgba(59,130,246,0.18); }
-  .suggest-dropdown .suggest-item.preselected { color: var(--blue); font-weight: 600; }
-  .suggest-dropdown .suggest-item .suggest-url {
-    display: block; font-size: 0.72rem; color: #64748b;
-  }
-  .suggest-dropdown .suggest-none {
-    padding: 8px 12px; font-size: 0.78rem; color: #64748b;
-  }
   .env-row .env-new-key {
     width: 140px; flex-shrink: 0;
     background: #243044; color: #e2e8f0; border: 1px solid #334155;
@@ -338,24 +274,6 @@
   tr.sibling-row { background: rgba(0,0,0,0.02); }
   tr.sibling-row td:first-child { padding-left: 1.75rem; color: var(--text-muted, #888); font-size: 0.9em; }
   .seed-required { border-left: 3px solid #f90 !important; }
-  /* Config-ownership: component-owned keys get a muted, read-only look
-     with a deprecation indicator so operators know to use the component's
-     own Settings panel instead. */
-  .env-row.component-owned {
-    opacity: 0.65;
-  }
-  .env-row.component-owned .env-key::after {
-    content: " (component-owned)";
-    font-size: 0.7rem;
-    color: #fb923c;
-    font-style: italic;
-  }
-  .env-section.component-owned > h3::after {
-    content: " (component-owned)";
-    font-size: 0.7rem;
-    color: #fb923c;
-    font-style: italic;
-  }
   /* ── Extracted inline style classes ──────────────────────────── */
 
   /* Utility */
@@ -632,49 +550,6 @@
   .th-sub-pad { text-align: left; color: #94a3b8; padding: 4px 12px; }
   .table-vol { margin-top: 10px; }
   .table-compact { border-collapse: collapse; min-width: 400px; }
-
-  /* Secret/enum badges in config form */
-  .badge-secret,
-  .badge-secret-set {
-    display: inline-block; padding: 2px 8px; border-radius: 10px;
-    font-size: 0.75rem; background: rgba(251,146,60,0.18); color: var(--amber);
-  }
-  .badge-secret-unset {
-    display: inline-block; padding: 2px 8px; border-radius: 10px;
-    font-size: 0.75rem; background: rgba(148,163,184,0.15); color: var(--muted);
-  }
-  .hint-json { font-size: 0.75rem; color: var(--muted); margin-left: 4px; }
-
-  /* Config form helpers */
-  .config-empty { color: #94a3b8; padding: 1rem 0; }
-  .config-desc  { margin: 2px 0 8px; font-size: 0.78rem; color: var(--muted); }
-
-  /* Collapsible config descriptions */
-  .config-desc-toggle {
-    background: none; border: none; color: var(--blue);
-    cursor: pointer; font-size: 0.75rem; padding: 0; margin-left: 4px;
-    text-decoration: underline;
-  }
-  .config-desc-toggle:hover { color: #60a5fa; }
-  .config-desc--collapsed .config-desc-full { display: none; }
-  .config-desc--expanded .config-desc-short { display: none; }
-
-  /* Field-level help caption */
-  .env-help {
-    display: block; width: 100%; margin-top: 2px;
-    font-size: 0.72rem; color: var(--muted);
-  }
-
-  /* Inline code in descriptions and help */
-  .config-desc code, .env-help code {
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-    font-size: 0.85em; background: rgba(148,163,184,0.12);
-    border-radius: 3px; padding: 1px 4px;
-  }
-
-  /* Config assist */
-  .seed-label { font-size: 0.85rem; margin-left: 0.75rem; white-space: nowrap; }
-  .seed-input { width: 10rem; margin-left: 0.25rem; }
 
   /* Port onboard input */
   .port-host-input { width: 80px; }

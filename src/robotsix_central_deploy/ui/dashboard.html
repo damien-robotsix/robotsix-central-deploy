@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/ui/static/robotsix-ui.css">
 <link rel="stylesheet" href="/ui/static/dashboard.css">
 </head>
-<body>
+<body data-gateway-base-domain="{{gateway_base_domain}}">
 
 <header>
   <h1>Robotsix Deploy — Component Status</h1>
@@ -249,10 +249,13 @@
       <div id="ob-config-section" class="hidden">
         <h3>Configuration (config.json)</h3>
         <p class="ob-secrets-hint">
-          Secret fields may be left empty — the component deploys without them.
-          Fill them in afterwards via <strong>Configure&nbsp;→&nbsp;Save</strong>, which auto-restarts the component.
+          Runtime configuration is owned by the component. After the deploy
+          completes, use the component's own Settings panel to configure it.
         </p>
-        <div id="ob-config-form-body"></div>
+        <p class="ob-secrets-hint" id="ob-settings-link" style="display:none">
+          Settings:
+          <a id="ob-settings-url" href="#" target="_blank" rel="noopener" class="link-accent"></a>
+        </p>
       </div>
 
       <h3>Options</h3>
