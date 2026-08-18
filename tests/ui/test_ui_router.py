@@ -215,10 +215,10 @@ class TestCspNoInlineScripts:
 
     def test_dashboard_html_no_inline_script_blocks(self):
         html = (self._UI_DIR / "dashboard.html").read_text(encoding="utf-8")
-        tags = re.findall(r"<script\b[^>]*>", html)
+        tags = re.findall(r"<script\b[^>]*>", html, flags=re.IGNORECASE)
         assert tags, "dashboard.html must load at least one external script"
         for tag in tags:
-            assert re.search(r"\bsrc\s*=", tag), (
+            assert re.search(r"\bsrc\s*=", tag, flags=re.IGNORECASE), (
                 f"dashboard.html must not contain inline <script> blocks "
                 f"(script-src 'self' blocks them); found: {tag}"
             )
