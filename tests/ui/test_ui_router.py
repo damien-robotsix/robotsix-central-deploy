@@ -132,6 +132,20 @@ class TestUiRouter:
         resp = await client.get("/ui")
         assert "csrftoken=" in resp.headers.get("set-cookie", "")
 
+    async def test_dashboard_injects_gateway_base_domain_as_data_attribute(
+        self, client: AsyncClient
+    ):
+        """The gateway base domain must reach the UI without an inline <script>.
+
+        ``secure``'s ``Preset.BALANCED`` sets ``script-src 'self'``, so the
+        domain is delivered as a ``data-`` attribute on ``<body>`` and read by
+        ``dashboard.js`` rather than injected as an inline script block.
+        """
+        server_mod.app.state.config.gateway_base_domain = "deploy.example"
+        resp = await client.get("/ui")
+        assert 'data-gateway-base-domain="deploy.example"' in resp.text
+        assert "window.GATEWAY_BASE_DOMAIN" not in resp.text
+
     async def test_verify_auth_basic_ignores_username(self, client: AsyncClient):
         """verify_auth (JSON API) still accepts any username with correct password."""
         resp = await client.get(
@@ -198,6 +212,16 @@ class TestCspNoInlineScripts:
             f"dashboard.js template strings must not contain inline event "
             f"handlers; found '{match.group().strip()}'"
         )
+
+    def test_dashboard_html_no_inline_script_blocks(self):
+        html = (self._UI_DIR / "dashboard.html").read_text(encoding="utf-8")
+        tags = re.findall(r"<script\b[^>]*>", html)
+        assert tags, "dashboard.html must load at least one external script"
+        for tag in tags:
+            assert re.search(r"\bsrc\s*=", tag), (
+                f"dashboard.html must not contain inline <script> blocks "
+                f"(script-src 'self' blocks them); found: {tag}"
+            )
 
 
 # ---------------------------------------------------------------------------

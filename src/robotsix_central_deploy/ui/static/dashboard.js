@@ -3,6 +3,13 @@ let gatewayBaseDomain = '';
 const REFRESH_INTERVAL_MS = 30000;
 let refreshTimer = null;
 
+function initGatewayBaseDomain() {
+  const body = document.body;
+  if (body && body.dataset.gatewayBaseDomain) {
+    gatewayBaseDomain = body.dataset.gatewayBaseDomain;
+  }
+}
+
 function updateRefreshTime() {
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
@@ -1416,7 +1423,7 @@ function populateStep2(spec, portShifts) {
     if (linkEl && urlEl) {
       var name = document.getElementById('ob-name').value.trim();
       if (name) {
-        var domain = window.GATEWAY_BASE_DOMAIN || window.location.hostname;
+        var domain = gatewayBaseDomain || window.location.hostname;
         var settingsUrl = 'https://' + name + '.' + domain + '/';
         urlEl.href = settingsUrl;
         urlEl.textContent = settingsUrl;
@@ -2070,6 +2077,7 @@ async function pollSelfUpdateRecovery(startedAt) {
 }
 
 (async () => {
+  initGatewayBaseDomain();
   wireClaudeAuthPanel();
   loadDashboard();
   startAutoRefresh();

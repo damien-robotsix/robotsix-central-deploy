@@ -84,7 +84,7 @@ async def dashboard(request: Request) -> Response:
         set_cookie = True
     page = _HTML.replace("{{csrf_token}}", _html.escape(csrf_token))
     page = page.replace(
-        "{{gateway_base_domain}}", _html.escape(cfg.gateway_base_domain)
+        "{{gateway_base_domain}}", _html.escape(cfg.gateway_base_domain, quote=True)
     )
     response: Response = HTMLResponse(content=page)
     if set_cookie:
