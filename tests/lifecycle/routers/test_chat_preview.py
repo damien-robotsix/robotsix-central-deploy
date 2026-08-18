@@ -62,7 +62,6 @@ class TestResolveGatewayBaseDomain:
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend="noop",
-            api_key="test-key",
             gateway_base_domain="deploy.example.com",
         )
         assert _resolve_gateway_base_domain(cfg) == "deploy.example.com"
@@ -71,7 +70,6 @@ class TestResolveGatewayBaseDomain:
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend="noop",
-            api_key="test-key",
             gateway_base_domain="",
         )
         with pytest.raises(HTTPException) as exc_info:
@@ -561,7 +559,6 @@ class TestPreviewDeployEndpoint:
         server_mod._config = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend="noop",
-            api_key="test-key",
             gateway_base_domain="",
         )
         server_mod.app.state.config = server_mod._config
@@ -572,13 +569,6 @@ class TestPreviewDeployEndpoint:
             headers=auth_headers,
         )
         assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-
-    async def test_deploy_auth_required(self, client: AsyncClient):
-        resp = await client.post(
-            "/chat/preview/deploy",
-            json={"repo_url": "https://github.com/org/repo.git", "branch": "main"},
-        )
-        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
     async def test_deploy_full_pipeline(
         self, client: AsyncClient, auth_headers, tmp_path: Path, monkeypatch
@@ -592,7 +582,6 @@ class TestPreviewDeployEndpoint:
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend="noop",
-            api_key="test-key",
             gateway_base_domain="deploy.example.com",
         )
         server_mod._config = cfg
@@ -668,10 +657,6 @@ class TestPreviewDeployEndpoint:
 
 
 class TestPreviewTeardownEndpoint:
-    async def test_teardown_auth_required(self, client: AsyncClient):
-        resp = await client.post("/chat/preview/teardown")
-        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
-
     async def test_teardown_success(self, client: AsyncClient, auth_headers):
         dock = _FakeDockerModule
         container = MagicMock()

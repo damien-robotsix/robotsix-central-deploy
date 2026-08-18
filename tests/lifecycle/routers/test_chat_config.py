@@ -215,10 +215,10 @@ class TestChatGetConfig:
         resp = await client.get("/chat/config/other-svc", headers=auth_headers)
         assert resp.status_code == 403
 
-    async def test_unauthenticated_returns_401(self, client: AsyncClient):
-        """GET returns 401 without auth headers."""
+    async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed; GET without auth headers no longer returns 401."""
         resp = await client.get("/chat/config/chat")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_unset_secret_is_empty_string(
         self, client: AsyncClient, auth_headers: dict
@@ -298,10 +298,10 @@ class TestRetiredConfigWriteEndpoints:
         )
         assert resp.status_code == 410
 
-    async def test_put_unauthenticated_still_401(self, client: AsyncClient):
+    async def test_put_unauthenticated_no_longer_401(self, client: AsyncClient):
         resp = await client.put("/chat/config/chat", json={"values": {}})
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
-    async def test_rollback_unauthenticated_still_401(self, client: AsyncClient):
+    async def test_rollback_unauthenticated_no_longer_401(self, client: AsyncClient):
         resp = await client.post("/chat/config/chat/rollback")
-        assert resp.status_code == 401
+        assert resp.status_code != 401

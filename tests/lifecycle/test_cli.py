@@ -19,7 +19,7 @@ class TestArgumentParser:
     """Direct tests for the ArgumentParser built inside main()."""
 
     def test_each_flag_parses_correctly(self):
-        """All five CLI flags are accepted and reflected in config/uvicorn."""
+        """All four CLI flags are accepted and reflected in config/uvicorn."""
         fake_uvicorn = MagicMock()
         fake_robotsix_config = MagicMock()
         cfg = LifecycleConfig()
@@ -38,8 +38,6 @@ class TestArgumentParser:
                     "file",
                     "--execution-backend",
                     "noop",
-                    "--api-key",
-                    "secret",
                 ]
             )
         # uvicorn was launched.
@@ -50,7 +48,6 @@ class TestArgumentParser:
         # Config object mutated in-place.
         assert cfg.store_backend == StoreBackend.FILE
         assert cfg.execution_backend == ExecutionBackendType.NOOP
-        assert cfg.api_key.get_secret_value() == "secret"
 
     def test_invalid_store_backend_raises_system_exit(self):
         """argparse rejects values outside StoreBackend choices."""
@@ -115,19 +112,6 @@ class TestMainOverride:
         ):
             cli.main(["--execution-backend", "docker"])
         assert cfg.execution_backend == ExecutionBackendType.DOCKER
-
-    def test_override_api_key_mutates_config(self):
-        """--api-key mutates the LifecycleConfig in-place."""
-        fake_uvicorn = MagicMock()
-        cfg = LifecycleConfig()
-        fake_robotsix_config = MagicMock()
-        fake_robotsix_config.load_config = MagicMock(return_value=cfg)
-        with patch.dict(
-            "sys.modules",
-            {"uvicorn": fake_uvicorn, "robotsix_config": fake_robotsix_config},
-        ):
-            cli.main(["--api-key", "override-key"])
-        assert cfg.api_key.get_secret_value() == "override-key"
 
     def test_partial_override_preserves_defaults(self):
         """Unspecified flags leave config defaults intact."""

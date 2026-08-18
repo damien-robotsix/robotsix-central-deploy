@@ -19,9 +19,9 @@ def main(argv: list[str] | None = None) -> None:
 
     Loads configuration via :func:`robotsix_config.load_config`, then
     overlays any CLI-provided values on top (CLI arguments always take
-    precedence over the config file).  Accepts six optional arguments:
+    precedence over the config file).  Accepts five optional arguments:
     ``--host``, ``--port``, ``--store-backend``, ``--execution-backend``,
-    ``--api-key``, and ``--target-disk``.
+    and ``--target-disk``.
 
     The :mod:`uvicorn` and :data:`LOGGING_CONFIG` imports are deferred
     so that ``--help`` and argument-parsing failures respond quickly
@@ -37,9 +37,6 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--store-backend", default=None, choices=tuple(StoreBackend))
     parser.add_argument(
         "--execution-backend", default=None, choices=tuple(ExecutionBackendType)
-    )
-    parser.add_argument(
-        "--api-key", default=None, help="API key for mutating endpoints"
     )
     parser.add_argument(
         "--target-disk",
@@ -64,8 +61,6 @@ def main(argv: list[str] | None = None) -> None:
         cfg.store_backend = args.store_backend
     if args.execution_backend is not None:
         cfg.execution_backend = args.execution_backend
-    if args.api_key is not None:
-        cfg.api_key = args.api_key
     if args.target_disk is not None:
         cfg.target_disk = args.target_disk
 

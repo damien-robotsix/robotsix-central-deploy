@@ -67,11 +67,11 @@ AUTH = {"X-API-Key": "test-key"}
 
 
 class TestOrphanAuth:
-    async def test_orphans_requires_auth(self, client: AsyncClient):
-        assert (await client.get("/volumes/orphans")).status_code == 401
+    async def test_orphans_no_longer_401(self, client: AsyncClient):
+        assert (await client.get("/volumes/orphans")).status_code != 401
 
-    async def test_prune_requires_auth(self, client: AsyncClient):
-        assert (await client.post("/volumes/prune")).status_code == 401
+    async def test_prune_no_longer_401(self, client: AsyncClient):
+        assert (await client.post("/volumes/prune")).status_code != 401
 
 
 # ---------------------------------------------------------------------------

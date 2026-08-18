@@ -26,8 +26,6 @@ class SystemSettings(BaseModel):
 
     # All defaults sourced from SETTINGS_DEFAULTS — the single source of truth
     # shared with LifecycleConfig.  See lifecycle/_settings_defaults.py.
-    auth_username: str = SETTINGS_DEFAULTS["auth_username"]
-    auth_password: str = SETTINGS_DEFAULTS["auth_password"]
     disk_warn_pct: float = SETTINGS_DEFAULTS["disk_warn_pct"]  # % free
     registry_check_interval: int = SETTINGS_DEFAULTS[
         "registry_check_interval"

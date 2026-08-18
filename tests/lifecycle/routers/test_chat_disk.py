@@ -300,18 +300,18 @@ async def test_chat_disk_reclaim_images_alias(
 
 
 # ---------------------------------------------------------------------------
-# Unauthorized (401)
+# Unauthorized (no longer 401)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_chat_disk_reclaim_unauthorized(
+async def test_chat_disk_reclaim_unauthorized_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Disk reclaim without auth header returns 401."""
+    """Component-level auth was removed; disk reclaim without auth header no longer returns 401."""
     _register_central_deploy()
     resp = await client.post(
         "/chat/disk/reclaim",
         json={"build_cache": True},
     )
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text

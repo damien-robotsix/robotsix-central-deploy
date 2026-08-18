@@ -35,9 +35,6 @@ def _make_lifecycle_config_from_env() -> LifecycleConfig:
     env_map: dict[str, str] = {
         "ROBOTSIX_LIFECYCLE_HOST": "host",
         "ROBOTSIX_LIFECYCLE_PORT": "port",
-        "ROBOTSIX_LIFECYCLE_API_KEY": "api_key",
-        "ROBOTSIX_LIFECYCLE_AUTH_USERNAME": "auth_username",
-        "ROBOTSIX_LIFECYCLE_AUTH_PASSWORD": "auth_password",
         "ROBOTSIX_LIFECYCLE_STORE_BACKEND": "store_backend",
         "ROBOTSIX_LIFECYCLE_STORE_PATH": "store_path",
         "ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND": "execution_backend",
@@ -107,8 +104,6 @@ class TestSystemSettingsStore:
         path = tmp_path / "settings.json"
         store = SystemSettingsStore(path)
         original = SystemSettings(
-            auth_username="op",
-            auth_password="pw",
             disk_warn_pct=15.0,
             registry_check_interval=42,
             log_level="WARNING",
@@ -147,8 +142,6 @@ class TestSystemSettingsStore:
         store = SystemSettingsStore(path)
         await store.put(
             SystemSettings(
-                auth_username="stored-user",
-                auth_password="stored-pw",
                 disk_warn_pct=15.0,
                 registry_check_interval=60,
                 log_level="DEBUG",
@@ -166,8 +159,6 @@ class TestSystemSettingsStore:
 
         # A copy, not the original.
         assert result is not cfg
-        assert result.auth_username == "stored-user"
-        assert result.auth_password.get_secret_value() == "stored-pw"
         assert result.disk_warn_pct == 15.0
         assert result.registry_check_interval == 60
         assert result.log_level == "DEBUG"
@@ -184,57 +175,6 @@ class TestSystemSettingsStore:
 
 
 class TestSettingsFirstBoot:
-    async def test_lifespan_seeds_default_username_when_no_env_and_no_file(
-        self, tmp_path, monkeypatch
-    ):
-        """First-boot: lifespan writes auth_username='admin' when nothing is configured."""
-        settings_path = tmp_path / "settings.json"
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
-        )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
-        )
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_PASSWORD", raising=False)
-
-        from robotsix_central_deploy.lifecycle.app import app
-        from robotsix_central_deploy.lifecycle.deps import lifespan
-
-        mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
-        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
-            async with lifespan(app):
-                stored = await app.state.settings_store.get()
-                assert stored.auth_username == "admin"
-                assert stored.auth_password == ""
-                # Effective config should also reflect the seeded username.
-                assert app.state.config.auth_username == "admin"
-
-    async def test_lifespan_seeds_env_username_when_set(self, tmp_path, monkeypatch):
-        """First-boot: lifespan uses env-var username instead of 'admin' fallback."""
-        settings_path = tmp_path / "settings.json"
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
-        )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
-        )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", "operator")
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_PASSWORD", raising=False)
-
-        from robotsix_central_deploy.lifecycle.app import app
-        from robotsix_central_deploy.lifecycle.deps import lifespan
-
-        mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
-        with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
-            async with lifespan(app):
-                stored = await app.state.settings_store.get()
-                assert stored.auth_username == "operator"
-
     async def test_lifespan_does_not_overwrite_existing_settings_file(
         self, tmp_path, monkeypatch
     ):
@@ -247,8 +187,6 @@ class TestSettingsFirstBoot:
         monkeypatch.setenv(
             "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
         )
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
-
         from robotsix_central_deploy.registry.settings_store import (
             SystemSettings,
             SystemSettingsStore,
@@ -256,9 +194,7 @@ class TestSettingsFirstBoot:
 
         # Pre-write a file simulating a previous operator save.
         store = SystemSettingsStore(settings_path)
-        await store.put(
-            SystemSettings(auth_username="custom-op", auth_password="secret")
-        )
+        await store.put(SystemSettings(gateway_base_domain="custom-op.example.net"))
 
         from robotsix_central_deploy.lifecycle.app import app
         from robotsix_central_deploy.lifecycle.deps import lifespan
@@ -268,10 +204,8 @@ class TestSettingsFirstBoot:
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
-                assert (
-                    stored.auth_username == "custom-op"
-                )  # not overwritten with 'admin'
-                assert stored.auth_password == "secret"
+                # not overwritten with the default
+                assert stored.gateway_base_domain == "custom-op.example.net"
 
     async def test_lifespan_seeds_caretaker_defaults_when_no_env(
         self, tmp_path, monkeypatch
@@ -348,7 +282,6 @@ class TestSettingsFirstBoot:
         monkeypatch.setenv(
             "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN", "env-default.example.com"
         )
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_AUTH_USERNAME", raising=False)
 
         from robotsix_central_deploy.registry.settings_store import (
             SystemSettings,
@@ -421,8 +354,6 @@ class TestCli:
                     "file",
                     "--execution-backend",
                     "noop",
-                    "--api-key",
-                    "secret",
                 ]
             )
         fake_uvicorn.run.assert_called_once()

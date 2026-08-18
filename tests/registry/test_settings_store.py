@@ -20,7 +20,6 @@ class TestSystemSettingsModel:
     def test_defaults(self):
         s = SystemSettings()
         assert s.log_level == "INFO"
-        assert s.auth_username == ""
         assert s.registry_check_interval == 300
 
     def test_log_level_validation_valid(self):
@@ -66,30 +65,26 @@ class TestSystemSettingsStore:
         result = await store.get()
         assert isinstance(result, SystemSettings)
         assert result.log_level == "INFO"
-        assert result.auth_username == ""
 
     @pytest.mark.asyncio
     async def test_put_and_get_round_trip(self, tmp_path: Path):
         store = SystemSettingsStore(tmp_path / "settings.json")
         settings = SystemSettings(
             log_level="DEBUG",
-            auth_username="admin",
             registry_check_interval=120,
         )
         await store.put(settings)
         result = await store.get()
         assert result.log_level == "DEBUG"
-        assert result.auth_username == "admin"
         assert result.registry_check_interval == 120
 
     @pytest.mark.asyncio
     async def test_put_overwrites_existing(self, tmp_path: Path):
         store = SystemSettingsStore(tmp_path / "settings.json")
         await store.put(SystemSettings(log_level="DEBUG"))
-        await store.put(SystemSettings(log_level="WARNING", auth_username="admin"))
+        await store.put(SystemSettings(log_level="WARNING"))
         result = await store.get()
         assert result.log_level == "WARNING"
-        assert result.auth_username == "admin"
 
     @pytest.mark.asyncio
     async def test_put_persists_to_disk(self, tmp_path: Path):

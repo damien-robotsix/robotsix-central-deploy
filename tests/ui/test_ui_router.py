@@ -87,11 +87,9 @@ class TestUiRouter:
 
     @pytest.fixture(autouse=True)
     async def _setup(self, monkeypatch):
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_REQUIRED", "true")
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend=ExecutionBackendType.NOOP,
-            api_key=self.API_KEY,
         )
         _wire(cfg)
         await _seed_store()
@@ -140,18 +138,16 @@ class TestUiRouter:
         )
         assert resp.status_code == 200
 
-    async def test_api_endpoints_still_use_verify_auth(self, client: AsyncClient):
-        """JSON API endpoints continue to accept X-API-Key and Basic Auth."""
-        # Without auth → 401
+    async def test_api_endpoints_accept_requests_without_credentials(
+        self, client: AsyncClient
+    ):
+        """JSON API endpoints trust the fleet edge — no app-level auth remains."""
         resp = await client.get("/services", follow_redirects=False)
-        assert resp.status_code == 401
-        assert "www-authenticate" in resp.headers
-
-        # With valid X-API-Key → 200
-        resp = await client.get("/services", headers={"X-API-Key": self.API_KEY})
         assert resp.status_code == 200
 
-        # With valid Basic Auth → 200
+        # Previously accepted credentials are simply ignored.
+        resp = await client.get("/services", headers={"X-API-Key": self.API_KEY})
+        assert resp.status_code == 200
         resp = await client.get("/services", headers=_basic_header(self.API_KEY))
         assert resp.status_code == 200
 
@@ -241,11 +237,9 @@ class TestRateLimiting:
 
     @pytest.fixture(autouse=True)
     async def _setup(self, monkeypatch):
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_REQUIRED", "true")
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend=ExecutionBackendType.NOOP,
-            api_key=self.API_KEY,
             rate_limit_api_per_hour=3,
             gateway_base_domain="deploy.test",
         )

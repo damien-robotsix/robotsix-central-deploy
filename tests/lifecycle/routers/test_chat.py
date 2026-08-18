@@ -59,9 +59,9 @@ class TestChatComponents:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_unauthorized_returns_401(self, client: AsyncClient):
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/chat/components")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_skips_components_without_allow_chat_access(
         self, client: AsyncClient, auth_headers: dict

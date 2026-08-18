@@ -29,9 +29,9 @@ def _mock_backend(self_info: SelfInspect | None) -> MagicMock:
 
 
 class TestGetSelfUpdateStatus:
-    async def test_requires_auth(self, client):
+    async def test_no_longer_401(self, client):
         resp = await client.get("/system/update")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_unsupported_when_not_containerised(self, client, auth_headers):
         # Conftest wires the NoopBackend, whose inspect_self returns None.
@@ -99,9 +99,9 @@ class TestGetSelfUpdateStatus:
 
 
 class TestTriggerSelfUpdate:
-    async def test_requires_auth(self, client):
+    async def test_no_longer_401(self, client):
         resp = await client.post("/system/update")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_503_when_unsupported(self, client, auth_headers):
         # NoopBackend from conftest — inspect_self returns None.

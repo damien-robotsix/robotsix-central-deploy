@@ -137,8 +137,6 @@ class TestParseSelfContractSettings:
             "services": {
                 "srv": {
                     "labels": {
-                        "robotsix.deploy.settings.auth-username": "op",
-                        "robotsix.deploy.settings.auth-password": "secret",
                         "robotsix.deploy.settings.log-level": "DEBUG",
                         "robotsix.deploy.settings.gateway-base-domain": "deploy.example.com",
                         "robotsix.deploy.settings.mill-component-id": "mill-01",
@@ -149,8 +147,6 @@ class TestParseSelfContractSettings:
         path.write_text(yaml.dump(doc), encoding="utf-8")
         result = _parse_self_contract_settings(self._make_config(path))
         assert result is not None
-        assert result.auth_username == "op"
-        assert result.auth_password == "secret"
         assert result.log_level == "DEBUG"
         assert result.gateway_base_domain == "deploy.example.com"
         assert result.mill_component_id == "mill-01"
@@ -370,7 +366,6 @@ class TestParseSelfContractSettings:
         path.write_text(yaml.dump(doc), encoding="utf-8")
         result = _parse_self_contract_settings(self._make_config(path))
         assert result is not None
-        assert result.auth_username == "admin"
         assert result.log_level == "WARNING"
         assert result.gateway_base_domain == "deploy.example.com"
         assert result.registry_check_interval == 60

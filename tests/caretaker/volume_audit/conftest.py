@@ -10,10 +10,9 @@ from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 
 
 @pytest.fixture(autouse=True)
-def _setup_app(monkeypatch):
+def _setup_app():
     """Ensure app.state.config is set before each test."""
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
-    cfg = LifecycleConfig(api_key="test-key")
+    cfg = LifecycleConfig()
     server_mod.app.state.config = cfg
 
 

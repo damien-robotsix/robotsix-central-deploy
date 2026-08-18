@@ -2,7 +2,7 @@
 
 The committed ``config/config.json`` carries safe default values.
 Operators replace it with a deployment-specific file containing real
-secrets (``api_key``, ``auth_password``, ``board_api_token``, etc.).
+secrets (``board_api_token``, ``github_app_private_key``, etc.).
 
 Field descriptions are surfaced in ``config/config.schema.json`` (kept in
 sync by the CI drift check) and rendered as help bubbles by the deploy UI.
@@ -63,24 +63,6 @@ class LifecycleConfig(BaseModel):
         8100,
         description="Port the HTTP server listens on.",
         json_schema_extra={"advanced": True},
-    )
-    api_key: SecretStr = Field(
-        SecretStr(""),
-        description=(
-            "Legacy API credential accepted via the X-API-Key header or as a "
-            "Basic-auth password. Empty disables api-key auth."
-        ),
-    )
-    auth_username: str = Field(
-        SETTINGS_DEFAULTS["auth_username"],
-        description=(
-            "Basic-auth username for the dashboard and API. Auth is enforced "
-            "only when both username and password are set (or api_key is)."
-        ),
-    )
-    auth_password: SecretStr = Field(
-        SecretStr(SETTINGS_DEFAULTS["auth_password"]),
-        description="Basic-auth password paired with auth_username.",
     )
 
     # Persistence
@@ -520,15 +502,3 @@ class LifecycleConfig(BaseModel):
     @property
     def effective_chat_agent_audit_store_path(self) -> Path:
         return Path(self.chat_agent_audit_store_path)
-
-    @property
-    def auth_required(self) -> bool:
-        """True when any credential set is fully configured.
-
-        Enforced by either:
-        - a non-empty ``api_key``, OR
-        - a non-empty ``auth_username`` AND ``auth_password`` pair.
-        """
-        return bool(self.api_key.get_secret_value()) or (
-            bool(self.auth_username) and bool(self.auth_password.get_secret_value())
-        )

@@ -28,11 +28,9 @@ DiskUsage = namedtuple("DiskUsage", ["total", "used", "free"])
 @pytest.fixture(autouse=True)
 def _reset_globals(monkeypatch):
     """Wire a fresh store/backend/config into the server module before each test."""
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
-        api_key="test-key",
     )
     store = InMemoryStore()
     backend = NoopBackend()
@@ -63,9 +61,10 @@ async def client() -> AsyncClient:
 
 
 class TestDiskEndpoint:
-    async def test_requires_auth(self, client: AsyncClient):
+    async def test_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.get("/disk")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_returns_disk_fields(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
@@ -283,6 +282,7 @@ class TestDiskEndpoint:
         assert resp.status_code == 200
         assert seen and {"sha256:current", "sha256:rollback"} <= seen[0]
 
-    async def test_reclaim_requires_auth(self, client: AsyncClient):
+    async def test_reclaim_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.post("/disk/reclaim")
-        assert resp.status_code in (401, 403)
+        assert resp.status_code not in (401, 403)

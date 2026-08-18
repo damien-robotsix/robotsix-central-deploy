@@ -95,20 +95,20 @@ class TestEnvEndpoints:
         resp = await client.get("/services/nonexistent/env", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_unauthenticated_get_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_get_no_longer_401(self, client: AsyncClient):
         await _seed_store("chat")
         resp = await client.get("/services/chat/env")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
-    async def test_unauthenticated_put_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_put_no_longer_401(self, client: AsyncClient):
         await _seed_store("chat")
         resp = await client.put("/services/chat/env", json={"env": {"A": "1"}})
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
-    async def test_unauthenticated_delete_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_delete_no_longer_401(self, client: AsyncClient):
         await _seed_store("chat")
         resp = await client.delete("/services/chat/env/A")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_delete_key_removes_from_env(
         self, client: AsyncClient, auth_headers: dict

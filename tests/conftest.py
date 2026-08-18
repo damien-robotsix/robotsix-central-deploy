@@ -120,11 +120,9 @@ def _reset_globals(monkeypatch, tmp_path):
     is wired here so sub-package conftests and inline helpers can
     eventually delegate to this single source of truth.
     """
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
-        api_key="test-key",
     )
     store = InMemoryStore()
     backend = NoopBackend()

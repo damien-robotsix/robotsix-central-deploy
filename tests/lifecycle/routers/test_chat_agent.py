@@ -105,7 +105,6 @@ def cfg() -> LifecycleConfig:
     return LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
-        api_key="test-key",
         chat_agent_deployable_components=["chat", "auto-mail"],
     )
 
@@ -533,13 +532,13 @@ async def test_chat_audit_log_filtered(
 
 
 @pytest.mark.asyncio
-async def test_chat_endpoints_require_auth(
+async def test_chat_endpoints_no_longer_401(
     client: AsyncClient,
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
     backend: NoopBackend,
 ):
-    """All chat write endpoints return 401 without auth."""
+    """All chat write endpoints no longer return 401 — app-level auth was removed."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
@@ -562,7 +561,7 @@ async def test_chat_endpoints_require_auth(
             resp = await client.request(method, path, json=body)
         else:
             resp = await client.request(method, path)
-        assert resp.status_code == 401, f"{method} {path} should require auth"
+        assert resp.status_code != 401, f"{method} {path} returned 401"
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,6 @@ from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAud
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
 from .._config_utils import _sanitize_log
-from .._deploy_credential import reconcile_deploy_credential
 from .._langfuse_config import reconcile_langfuse_after_toggle
 from ..auth import verify_auth
 from ..deps import (
@@ -172,7 +171,6 @@ async def chat_enable_mutation(
     # Reconcile Langfuse auto-projects — enabling mutation may add
     # project aliases discoverable from this service's config.
     await reconcile_langfuse_after_toggle(component_config_store, request)
-    await reconcile_deploy_credential(component_config_store, request)
 
     return ChatAgentMutationEnableResponse(
         name=name,
@@ -251,7 +249,6 @@ async def chat_disable_mutation(
     # Reconcile Langfuse auto-projects — disabling mutation may remove
     # project aliases that were only discoverable from this service.
     await reconcile_langfuse_after_toggle(component_config_store, request)
-    await reconcile_deploy_credential(component_config_store, request)
 
     return ChatAgentMutationDisableResponse(
         name=name,
