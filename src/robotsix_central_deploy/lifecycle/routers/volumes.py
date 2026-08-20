@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
 
@@ -15,6 +16,10 @@ from .._disk_utils import resolve_target_disk
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
+from ..deploy_lock import (
+    release_deploy_lock,
+    try_acquire_deploy_lock,
+)
 from ..deps import (
     VOLUME_CAT_MAX_BYTES,
     _assert_volume_browsable,
@@ -25,7 +30,7 @@ from ..deps import (
     _get_store,
     _validate_volume_path,
 )
-from ..models import ServiceState
+from ..models import ServiceRecord, ServiceState
 from ..schemas import (
     OrphanVolume,
     OrphanVolumesResponse,
@@ -269,16 +274,40 @@ async def relocate_volume(
             target_disk=target_disk_path,
         )
 
-    # 4. Stop every owning component (and their siblings) if running.
+    # 4. Acquire the deploy lock for every owning component before
+    #    mutating shared state.  If any lock is held (another deploy or
+    #    caretaker update is in progress), reject the request.
+    locked_components: list[str] = []
+    for oid in owning_ids:
+        if not await try_acquire_deploy_lock(oid, source="relocate"):
+            # Release any locks already acquired before the failure.
+            for locked in locked_components:
+                release_deploy_lock(locked)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Component '{oid}' has a deploy in progress — "
+                    f"cannot relocate its volumes concurrently"
+                ),
+            )
+        locked_components.append(oid)
+
+    # 5. Stop every owning component (and their siblings) if running.
     #    All owners that share this volume must be stopped so no one writes
     #    during the copy or keeps an orphaned mount after the volume swap.
     #    We do NOT gate this on the first owner's state — a co-owner or sibling
     #    may be RUNNING even when the primary is STOPPED (review #436-1).
     svc_record = await store.get(component_id)
-    was_running = svc_record is not None and svc_record.state in (
-        ServiceState.RUNNING,
-        ServiceState.STARTING,
-    )
+    # Track every component's pre-migration state so step 9 (success
+    # restart) can restart each owner that was RUNNING/STARTING before
+    # the migration, regardless of what happens to the primary owner.
+    # Deep-copy each record to avoid aliasing — stop call later mutates
+    # svc_record.state on the same in-memory ServiceRecord instance.
+    pre_migration_records: dict[str, ServiceRecord | None] = {}
+    for oid in owning_ids:
+        rec = await store.get(oid)
+        pre_migration_records[oid] = copy.deepcopy(rec) if rec is not None else None
+
     # Stop the first owner (the one we selected for lifecycle ops).
     if svc_record is not None and svc_record.state in (
         ServiceState.RUNNING,
@@ -322,7 +351,7 @@ async def relocate_volume(
             if ocfg.siblings:
                 await _fanout_siblings_best_effort(oid, ocfg, store, backend, "stop")
 
-    # 5. Persist the new target_disk on every owning component BEFORE
+    # 6. Persist the new target_disk on every owning component BEFORE
     #    migration.  If the config write fails we never touch the volume;
     #    if the migration fails we roll the config back.  This avoids the
     #    data-loss scenario where the volume is physically relocated but
@@ -336,7 +365,7 @@ async def relocate_volume(
             ocfg.target_disk = target_disk_path
             await component_config_store.put(ocfg)
 
-    # 6. Migrate the volume data.  Pass the owning component's ``user``
+    # 7. Migrate the volume data.  Pass the owning component's ``user``
     #    override so the relocated volume root is chowned to the uid/gid the
     #    component actually runs as (defaults to the server's uid/gid inside
     #    the backend when the component has no override).
@@ -365,7 +394,7 @@ async def relocate_volume(
                         _sanitize_log(oid),
                         rollback_exc,
                     )
-        # Re-start ALL owning components (and their siblings) on failure —
+        # 8. Re-start ALL owning components (and their siblings) on failure —
         # all were stopped before the migration attempt (review issue #434-3).
         # Check each component's state individually rather than relying on
         # the primary owner's was_running flag (review #436-1).
@@ -409,6 +438,10 @@ async def relocate_volume(
                         oid, ocfg, store, backend, "start"
                     )
 
+        # Release deploy locks before exiting.
+        for locked in locked_components:
+            release_deploy_lock(locked)
+
         status_code = (
             501 if outcome.get("detail") == "Not supported by this backend" else 500
         )
@@ -417,10 +450,21 @@ async def relocate_volume(
             detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",
         )
 
-    # 7. Restart all owning components (and their siblings).  We use the
-    #    *pre-migration* running state so components that were STOPPED before
-    #    the migration stay stopped after it.
-    if was_running and svc_record is not None:
+    # 9. Restart all owning components (and their siblings).  Evaluate
+    #    each component's pre-migration state individually rather than
+    #    gating on the first owner only, mirroring the failure restart
+    #    path (step 8) — a co-owner that was RUNNING before migration
+    #    must be restarted even if the primary owner was STOPPED
+    #    (review #436-1).
+    def _was_running(oid: str) -> bool:
+        rec = pre_migration_records.get(oid)
+        return rec is not None and rec.state in (
+            ServiceState.RUNNING,
+            ServiceState.STARTING,
+        )
+
+    # Primary owner.
+    if _was_running(component_id) and svc_record is not None:
         try:
             start_result = await backend.start(svc_record)
             svc_record.state = start_result
@@ -431,32 +475,37 @@ async def relocate_volume(
                 _sanitize_log(component_id),
                 exc,
             )
-        if config.siblings:
-            await _fanout_siblings_best_effort(
-                component_id, config, store, backend, "start"
-            )
-        for oid in owning_ids:
-            if oid == component_id:
-                continue
-            ocfg = component_config_store.get(oid)
-            if ocfg is None:
-                continue
-            o_svc = await store.get(oid)
-            if o_svc is not None:
-                try:
-                    start_result = await backend.start(o_svc)
-                    o_svc.state = start_result
-                    await store.put(o_svc)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "relocate: failed to restart co-owner %s after migration: %s",
-                        _sanitize_log(oid),
-                        exc,
-                    )
-                if ocfg.siblings:
-                    await _fanout_siblings_best_effort(
-                        oid, ocfg, store, backend, "start"
-                    )
+    if config.siblings and _was_running(component_id):
+        await _fanout_siblings_best_effort(
+            component_id, config, store, backend, "start"
+        )
+    # Co-owners.
+    for oid in owning_ids:
+        if oid == component_id:
+            continue
+        ocfg = component_config_store.get(oid)
+        if ocfg is None:
+            continue
+        if not _was_running(oid):
+            continue
+        o_svc = pre_migration_records.get(oid)
+        if o_svc is not None:
+            try:
+                start_result = await backend.start(o_svc)
+                o_svc.state = start_result
+                await store.put(o_svc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "relocate: failed to restart co-owner %s after migration: %s",
+                    _sanitize_log(oid),
+                    exc,
+                )
+            if ocfg.siblings:
+                await _fanout_siblings_best_effort(oid, ocfg, store, backend, "start")
+
+    # Release deploy locks before returning.
+    for locked in locked_components:
+        release_deploy_lock(locked)
 
     return RelocateVolumeResponse(
         status="ok",
