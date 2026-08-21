@@ -191,12 +191,37 @@ jobs:
       trufflehog-pr-diff: true
       trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
 
-  docker-pr-scan:
-    name: Container image scan (Trivy)
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
+  trivy:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build Docker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: robotsix-central-deploy:ci
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: robotsix-central-deploy:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
 
   # ── Custom jobs (repository-specific checks not covered by shared workflows) ──
 
