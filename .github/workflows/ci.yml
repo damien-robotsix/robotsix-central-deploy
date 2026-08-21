@@ -8,9 +8,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # ── Repository-specific gates (no shared-workflow equivalent) ──
+
   docs-dedup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -54,10 +62,7 @@ jobs:
               - '**/*.md'
               - 'docs/**'
 
-  # ── lint / typecheck / test: split from the old monolithic "tests" job
-  # so that a failure in one (e.g. ruff) does not hide results from the
-  # others (e.g. mypy, pytest).  Each runs in parallel with its own
-  # status check (CI / lint, CI / typecheck, CI / test).
+  # ── Shared fleet workflows (lint, type-check, test, security, container scan) ──
 
   lint:
     needs: changes
@@ -176,63 +181,15 @@ jobs:
           name: coverage-html
           path: htmlcov/
 
-  docs:
-    needs: changes
-    runs-on: ubuntu-latest
+  python-security:
+    name: Security scan (shared)
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
-        with:
-          enable-cache: true
-      - name: Build docs (strict)
-        run: uv run --group docs mkdocs build --strict
-        env:
-          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
-
-  audit:
-    needs: changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
-        with:
-          enable-cache: true
-      - name: Audit dependencies
-        if: needs.changes.outputs.docs-only != 'true'
-        run: uv audit --frozen
-
-  trufflehog:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: TruffleHog secret scan
-        # Lob is excluded because its detector matches any `test_`-prefixed
-        # token (Lob's own test keys use that prefix) and then "verifies" it,
-        # so ordinary pytest function names are reported as verified secrets.
-        # It failed main on the *function name*
-        # `test_start_container_none_returns_failed`. This repo does not use
-        # Lob, so dropping the detector loses no real coverage — whereas
-        # leaving it left the scan permanently red, which is strictly worse
-        # for secret detection than a scan people trust.
-        run: |
-          docker run --rm \
-            -v "$PWD:/repo" \
-            trufflesecurity/trufflehog:3.95.9 \
-            git file:///repo --only-verified --fail \
-            --exclude-detectors=lob
+    with:
+      install-extras: ""
+      trufflehog-pr-diff: true
+      trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
 
   trivy:
     runs-on: ubuntu-latest
@@ -265,6 +222,47 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-results.sarif
+
+  # ── Custom jobs (repository-specific checks not covered by shared workflows) ──
+
+  vulture:
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        with:
+          enable-cache: true
+      - name: Install dev deps
+        run: uv sync --frozen
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
+      - name: Dead code detection (vulture)
+        env:
+          UV_PROJECT_ENVIRONMENT: system
+        run: uv run vulture
+
+  docs:
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+        with:
+          enable-cache: true
+      - name: Build docs (strict)
+        run: uv run --group docs mkdocs build --strict
+        env:
+          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
   hadolint:
     runs-on: ubuntu-latest
@@ -415,22 +413,6 @@ jobs:
       - name: Run zizmor
         run: uv tool run --from zizmor zizmor .github/workflows/
 
-  codeql:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
-        with:
-          languages: python
-          queries: security-extended,security-and-quality
-      - uses: github/codeql-action/autobuild@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
-      - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3  # v4.37.6
-
   module-taxonomy:
     needs: changes
     runs-on: ubuntu-latest
@@ -558,29 +540,3 @@ jobs:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v4
         with:
           fail-on-severity: high
-
-  sbom:
-    needs: changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
-        with:
-          enable-cache: true
-      - name: Install dependencies
-        run: uv sync --frozen
-        env:
-          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
-      - name: Generate CycloneDX SBOM
-        run: |
-          uv tool run --from 'cyclonedx-bom>=4.0' cyclonedx-py environment \
-            --output-file sbom.cyclonedx.json
-      - name: Upload SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: sbom
-          path: sbom.cyclonedx.json
