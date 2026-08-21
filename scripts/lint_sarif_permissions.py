@@ -29,7 +29,7 @@ def lint_workflow(path: Path) -> bool:
     """Return True if *path* has the required SARIF permission."""
     try:
         doc = yaml.safe_load(path.read_text())
-    except Exception as exc:
+    except (OSError, yaml.YAMLError) as exc:
         print(f"::error file={path}::Failed to parse YAML: {exc}")
         return False
 
@@ -44,7 +44,7 @@ def lint_workflow(path: Path) -> bool:
         # Check each job's permissions
         jobs = doc.get("jobs", {})
         if isinstance(jobs, dict):
-            for job_name, job in jobs.items():
+            for job in jobs.values():
                 if isinstance(job, dict) and has_security_events_write(
                     job.get("permissions")
                 ):

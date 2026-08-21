@@ -48,6 +48,7 @@ jobs:
   # Detect whether the PR touches only documentation files (*.md, docs/**).
   # Used downstream to skip the malware check on docs-only PRs.
   changes:
+    name: Changes
     runs-on: ubuntu-latest
     outputs:
       docs-only: ${{ steps.filter.outputs.docs-only }}
@@ -114,6 +115,7 @@ jobs:
           uv run ruff format --check --diff .
 
   typecheck:
+    name: Typecheck
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -195,6 +197,7 @@ jobs:
       trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
 
   trivy:
+    name: Trivy
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -229,6 +232,7 @@ jobs:
   # ── Custom jobs (repository-specific checks not covered by shared workflows) ──
 
   vulture:
+    name: Vulture
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -269,6 +273,7 @@ jobs:
           UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
   hadolint:
+    name: Hadolint
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -536,6 +541,7 @@ jobs:
         run: npx --yes @redocly/cli@1.27.0 lint docs/lifecycle/openapi.json
 
   dependency-review:
+    name: Dependency Review
     # dependency-review-action diffs base..head and only supports
     # pull_request events; on push to main it fails unconditionally.
     if: github.event_name == 'pull_request'
