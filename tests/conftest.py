@@ -88,6 +88,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle import deploy_lock
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.deps import JobRegistry
@@ -171,6 +172,10 @@ def _reset_globals(monkeypatch, tmp_path):
     server_mod.app.state.settings_store = settings_store
     server_mod.app.state.rate_limit_store = rate_limit_store
     server_mod.app.state.http_client = MagicMock(spec=AsyncClient)
+
+    # Clear per-component deploy locks so tests don't leak lock state.
+    deploy_lock._deploy_locks.clear()
+    deploy_lock._lock_info.clear()
 
 
 @pytest.fixture
