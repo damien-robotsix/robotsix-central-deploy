@@ -178,3 +178,9 @@ CVE-2026-72522
 CVE-2026-6791
 CVE-2026-6368
 CVE-2026-15534
+
+# Python package vulnerabilities in the built image. These are transitive
+# dependencies pulled into the production image but are not reachable from
+# the application's attack surface.
+GHSA-6v7p-g79w-8964
+CVE-2025-47273
