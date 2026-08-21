@@ -62,124 +62,18 @@ jobs:
               - '**/*.md'
               - 'docs/**'
 
-  # ── Shared fleet workflows (lint, type-check, test, security, container scan) ──
+  # ── Shared fleet workflows (python-ci, security, container scan) ──
 
-  lint:
-    needs: changes
-    runs-on: ubuntu-latest
+  python-ci:
+    name: Python CI (shared)
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@af32c21418a02796b619eb22ce9b8aee79dc82c5  # main
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
-        with:
-          enable-cache: true
-
-      - name: Install dev deps
-        run: uv sync --frozen
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
-
-      - name: Check lockfile freshness
-        run: uv lock --check
-
-
-      - name: deptry (dependency hygiene)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run --with deptry deptry .
-
-      - name: Dependency audit (CVE scan)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: |
-          if uv audit --help >/dev/null 2>&1; then
-            uv audit --frozen --preview
-          else
-            uv export --frozen --no-hashes | grep -v '^-e \.' | uv run --with pip-audit pip-audit -r /dev/stdin
-          fi
-
-      - name: Ruff (lint + format check)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: |
-          uv run ruff check --output-format=github .
-          uv run ruff format --check --diff .
-
-  typecheck:
-    needs: changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
-        with:
-          enable-cache: true
-
-      - name: Install dev deps
-        run: uv sync --frozen
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
-
-      - name: Mypy (static type check)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run mypy src/ --strict
-
-      - name: Bandit (security SAST)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
-
-  test:
-    needs: changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
-        with:
-          enable-cache: true
-
-      - name: Install dev deps
-        run: uv sync --frozen
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-          UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
-
-      - name: Dead code detection (vulture)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run vulture
-
-      - name: Run tests
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-          GIT_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
-        run: |
-          uv run --with pytest-xdist --with pytest-cov pytest tests/ -n auto --dist loadscope -x --tb=long --cov="robotsix_central_deploy" --cov-fail-under="80" --cov-report=term-missing --cov-report=html
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        if: always()
-        with:
-          name: coverage-html
-          path: htmlcov/
+    with:
+      python-version: "3.14"
+      cov-package: robotsix_central_deploy
+      coverage-threshold: "80"
+      install-extras: ""
 
   python-security:
     name: Security scan (shared)
