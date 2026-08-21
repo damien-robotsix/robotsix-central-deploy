@@ -6,6 +6,13 @@ hardest here is the write path: a UI renders a secret masked, the operator
 edits a neighbouring field, the form posts everything back, and a careless
 merge writes the mask over the live credential. These tests pin the behaviour
 that must not regress.
+
+There is deliberately no authentication coverage here. Component-level auth was
+removed with the ``api_key`` config field (PR #775): ``lifecycle/auth.py``'s
+``verify_auth`` is now a no-op stub and the fleet edge (Traefik + tinyauth) is
+the only gate, per robotsix-standards ``component-standard.md``. The secret used
+below is therefore an ordinary secret field, chosen only because it is one — not
+because it guards these routes.
 """
 
 from __future__ import annotations
@@ -17,8 +24,14 @@ from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
 
-API_KEY = "test-key"
-HEADERS = {"X-API-Key": API_KEY}
+#: A top-level ``SecretStr`` that still exists on ``LifecycleConfig``. These
+#: tests used ``api_key`` until PR #775 deleted it; nothing here depends on
+#: which field it is, only that it is a top-level secret.
+SECRET_FIELD = "board_api_token"
+SECRET_VALUE = "tok-live"
+#: A second top-level secret, left unset, for the "do not mask what is not
+#: there" case. Must be a different field from SECRET_FIELD.
+UNSET_SECRET_FIELD = "ghcr_pull_token"
 MASK = "**********"
 
 
@@ -31,7 +44,7 @@ def config_file(monkeypatch, tmp_path):
         json.dumps(
             {
                 "log_level": "INFO",
-                "api_key": API_KEY,
+                SECRET_FIELD: SECRET_VALUE,
                 "langfuse_projects": {
                     "prod": {"public_key": "pk-live", "secret_key": "sk-live"}
                 },
@@ -51,7 +64,7 @@ class TestGetConfig:
     async def test_returns_values_schema_and_version(
         self, client: AsyncClient, config_file
     ):
-        response = await client.get("/config", headers=HEADERS)
+        response = await client.get("/config")
         assert response.status_code == 200
         body = response.json()
         assert body["config"]["log_level"] == "INFO"
@@ -62,12 +75,12 @@ class TestGetConfig:
         self, client: AsyncClient, config_file
     ):
         """ "Effective" means the values in use, not the file's sparse contents."""
-        body = (await client.get("/config", headers=HEADERS)).json()
+        body = (await client.get("/config")).json()
         assert body["config"]["port"] == 8100
 
     async def test_top_level_secret_is_masked(self, client: AsyncClient, config_file):
-        body = (await client.get("/config", headers=HEADERS)).json()
-        assert body["config"]["api_key"] == MASK
+        body = (await client.get("/config")).json()
+        assert body["config"][SECRET_FIELD] == MASK
 
     async def test_secret_under_a_map_key_is_masked(
         self, client: AsyncClient, config_file
@@ -77,7 +90,7 @@ class TestGetConfig:
         A secret nested behind a data-named path must not ride out over HTTP
         just because the model cannot name its path statically.
         """
-        body = (await client.get("/config", headers=HEADERS)).json()
+        body = (await client.get("/config")).json()
         project = body["config"]["langfuse_projects"]["prod"]
         assert project["secret_key"] == MASK
         assert project["public_key"] == "pk-live"
@@ -85,45 +98,38 @@ class TestGetConfig:
     async def test_unset_secret_is_not_masked(self, client: AsyncClient, config_file):
         """Masking an unset secret would claim a credential exists, and the
         mask would then be posted back as 'unchanged' — inventing one."""
-        body = (await client.get("/config", headers=HEADERS)).json()
-        assert body["config"]["board_api_token"] == ""
-
-    async def test_requires_auth(self, client: AsyncClient, config_file):
-        assert (await client.get("/config")).status_code == 401
+        body = (await client.get("/config")).json()
+        assert body["config"][UNSET_SECRET_FIELD] == ""
 
 
 class TestPutConfig:
     async def test_partial_update_leaves_other_keys_alone(
         self, client: AsyncClient, config_file
     ):
-        response = await client.put(
-            "/config", json={"log_level": "DEBUG"}, headers=HEADERS
-        )
+        response = await client.put("/config", json={"log_level": "DEBUG"})
         assert response.status_code == 200
         assert response.json()["config"]["log_level"] == "DEBUG"
-        assert _on_disk(config_file)["api_key"] == API_KEY
+        assert _on_disk(config_file)[SECRET_FIELD] == SECRET_VALUE
 
     async def test_resubmitted_mask_preserves_the_stored_secret(
         self, client: AsyncClient, config_file
     ):
         """The mask means 'unchanged', never 'set it to literal asterisks'."""
-        await client.put(
-            "/config", json={"api_key": MASK, "port": 8200}, headers=HEADERS
-        )
-        assert _on_disk(config_file)["api_key"] == API_KEY
+        await client.put("/config", json={SECRET_FIELD: MASK, "port": 8200})
+        assert _on_disk(config_file)[SECRET_FIELD] == SECRET_VALUE
         assert _on_disk(config_file)["port"] == 8200
 
     async def test_blank_secret_preserves_the_stored_secret(
         self, client: AsyncClient, config_file
     ):
-        await client.put("/config", json={"api_key": ""}, headers=HEADERS)
-        assert _on_disk(config_file)["api_key"] == API_KEY
+        await client.put("/config", json={SECRET_FIELD: ""})
+        assert _on_disk(config_file)[SECRET_FIELD] == SECRET_VALUE
 
     async def test_a_real_secret_change_is_written(
         self, client: AsyncClient, config_file
     ):
-        await client.put("/config", json={"api_key": "rotated"}, headers=HEADERS)
-        assert _on_disk(config_file)["api_key"] == "rotated"
+        await client.put("/config", json={SECRET_FIELD: "rotated"})
+        assert _on_disk(config_file)[SECRET_FIELD] == "rotated"
 
     async def test_editing_beside_a_map_secret_preserves_the_credential(
         self, client: AsyncClient, config_file
@@ -137,7 +143,6 @@ class TestPutConfig:
                     "prod": {"public_key": "pk-new", "secret_key": MASK}
                 }
             },
-            headers=HEADERS,
         )
         stored = _on_disk(config_file)["langfuse_projects"]["prod"]
         assert stored["secret_key"] == "sk-live"
@@ -146,9 +151,7 @@ class TestPutConfig:
     async def test_invalid_update_is_rejected_and_nothing_is_written(
         self, client: AsyncClient, config_file
     ):
-        response = await client.put(
-            "/config", json={"port": "not-a-port"}, headers=HEADERS
-        )
+        response = await client.put("/config", json={"port": "not-a-port"})
         assert response.status_code == 422
         assert response.headers["content-type"].startswith("application/problem+json")
         assert "port" not in _on_disk(config_file)
@@ -159,15 +162,13 @@ class TestPutConfig:
         """The panel places a message inline only when the detail opens with
         '<key>: '. And the server's filesystem layout is not the client's
         business."""
-        body = (
-            await client.put("/config", json={"port": "nope"}, headers=HEADERS)
-        ).json()
+        body = (await client.put("/config", json={"port": "nope"})).json()
         assert body["detail"].startswith("port: ")
         assert str(config_file) not in body["detail"]
         assert body["type"] == "urn:robotsix:error:config-validation"
 
     async def test_non_object_body_is_rejected(self, client: AsyncClient, config_file):
-        response = await client.put("/config", json=["nope"], headers=HEADERS)
+        response = await client.put("/config", json=["nope"])
         assert response.status_code == 422
 
     async def test_malformed_json_is_rejected_not_a_500(
@@ -176,30 +177,23 @@ class TestPutConfig:
         response = await client.put(
             "/config",
             content=b"{not json",
-            headers={**HEADERS, "Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
         assert response.status_code == 422
 
     async def test_no_op_update_records_no_version(
         self, client: AsyncClient, config_file
     ):
-        response = await client.put(
-            "/config", json={"log_level": "INFO"}, headers=HEADERS
-        )
+        response = await client.put("/config", json={"log_level": "INFO"})
         assert response.status_code == 200
         assert response.json()["version"] == 0
-
-    async def test_requires_auth(self, client: AsyncClient, config_file):
-        assert (await client.put("/config", json={})).status_code == 401
 
 
 class TestConfigVersions:
     async def test_versions_are_newest_first(self, client: AsyncClient, config_file):
-        await client.put("/config", json={"log_level": "DEBUG"}, headers=HEADERS)
-        await client.put("/config", json={"port": 8200}, headers=HEADERS)
-        versions = (await client.get("/config/versions", headers=HEADERS)).json()[
-            "versions"
-        ]
+        await client.put("/config", json={"log_level": "DEBUG"})
+        await client.put("/config", json={"port": 8200})
+        versions = (await client.get("/config/versions")).json()["versions"]
         numbers = [entry["version"] for entry in versions]
         assert numbers == sorted(numbers, reverse=True)
         assert versions[0]["changed_keys"] == ["port"]
@@ -207,38 +201,29 @@ class TestConfigVersions:
     async def test_history_is_empty_before_the_first_write(
         self, client: AsyncClient, config_file
     ):
-        response = await client.get("/config/versions", headers=HEADERS)
+        response = await client.get("/config/versions")
         assert response.status_code == 200
         assert response.json()["versions"] == []
 
     async def test_a_secret_change_is_named_but_not_stored(
         self, client: AsyncClient, config_file
     ):
-        await client.put("/config", json={"api_key": "rotated"}, headers=HEADERS)
-        versions = (await client.get("/config/versions", headers=HEADERS)).json()[
-            "versions"
-        ]
-        assert versions[0]["changed_keys"] == ["api_key (secret)"]
+        await client.put("/config", json={SECRET_FIELD: "rotated"})
+        versions = (await client.get("/config/versions")).json()["versions"]
+        assert versions[0]["changed_keys"] == [f"{SECRET_FIELD} (secret)"]
         sidecar = config_file.with_suffix(".json.versions")
         assert "rotated" not in sidecar.read_text(encoding="utf-8")
-
-    async def test_requires_auth(self, client: AsyncClient, config_file):
-        assert (await client.get("/config/versions")).status_code == 401
 
 
 class TestConfigRollback:
     async def test_rollback_restores_values_as_a_new_version(
         self, client: AsyncClient, config_file
     ):
-        await client.put("/config", json={"log_level": "DEBUG"}, headers=HEADERS)
-        versions = (await client.get("/config/versions", headers=HEADERS)).json()[
-            "versions"
-        ]
+        await client.put("/config", json={"log_level": "DEBUG"})
+        versions = (await client.get("/config/versions")).json()["versions"]
         first = min(entry["version"] for entry in versions)
 
-        response = await client.post(
-            "/config/rollback", json={"version": first}, headers=HEADERS
-        )
+        response = await client.post("/config/rollback", json={"version": first})
         assert response.status_code == 200
         assert response.json()["config"]["log_level"] == "INFO"
         assert response.json()["version"] > max(e["version"] for e in versions)
@@ -246,18 +231,13 @@ class TestConfigRollback:
     async def test_rollback_does_not_truncate_the_history(
         self, client: AsyncClient, config_file
     ):
-        await client.put("/config", json={"log_level": "DEBUG"}, headers=HEADERS)
-        before = (await client.get("/config/versions", headers=HEADERS)).json()[
-            "versions"
-        ]
+        await client.put("/config", json={"log_level": "DEBUG"})
+        before = (await client.get("/config/versions")).json()["versions"]
         await client.post(
             "/config/rollback",
             json={"version": min(e["version"] for e in before)},
-            headers=HEADERS,
         )
-        after = (await client.get("/config/versions", headers=HEADERS)).json()[
-            "versions"
-        ]
+        after = (await client.get("/config/versions")).json()["versions"]
         assert len(after) == len(before) + 1
 
     async def test_rollback_carries_live_secrets_forward(
@@ -265,26 +245,54 @@ class TestConfigRollback:
     ):
         """The history stores no secrets, so a restored snapshot arrives with
         none. Writing it as-is would wipe the live credential."""
-        await client.put("/config", json={"log_level": "DEBUG"}, headers=HEADERS)
-        versions = (await client.get("/config/versions", headers=HEADERS)).json()[
-            "versions"
-        ]
+        await client.put("/config", json={"log_level": "DEBUG"})
+        versions = (await client.get("/config/versions")).json()["versions"]
         await client.post(
             "/config/rollback",
             json={"version": min(e["version"] for e in versions)},
-            headers=HEADERS,
         )
-        assert _on_disk(config_file)["api_key"] == API_KEY
+        assert _on_disk(config_file)[SECRET_FIELD] == SECRET_VALUE
 
     async def test_unknown_version_is_404(self, client: AsyncClient, config_file):
-        response = await client.post(
-            "/config/rollback", json={"version": 999}, headers=HEADERS
-        )
+        response = await client.post("/config/rollback", json={"version": 999})
         assert response.status_code == 404
 
-    async def test_requires_auth(self, client: AsyncClient, config_file):
-        response = await client.post("/config/rollback", json={"version": 1})
-        assert response.status_code == 401
+
+class TestNoComponentLevelAuth:
+    """These routes must stay edge-gated, never self-gated.
+
+    Until PR #775 each class here had a ``test_requires_auth`` asserting 401
+    without an ``X-API-Key``. That guard was deliberately removed:
+    ``lifecycle/auth.py``'s ``verify_auth`` is a no-op stub and the fleet edge
+    (Traefik + tinyauth) is the only gate, per robotsix-standards
+    ``component-standard.md`` ("Authentication is centralized — components ship
+    none").
+
+    This is the inverse of the old assertion, and it earns its place: it fails
+    if someone re-introduces a component-level guard, which would both violate
+    the standard and 401 a caller the edge had already authenticated. Asserting
+    a specific success code would be brittle for no gain, so it only asserts
+    that nothing answers 401/403.
+    """
+
+    @pytest.mark.parametrize(
+        ("method", "path", "payload"),
+        [
+            ("get", "/config", None),
+            ("put", "/config", {}),
+            ("get", "/config/versions", None),
+            ("post", "/config/rollback", {"version": 1}),
+        ],
+    )
+    async def test_route_does_not_gate_on_credentials(
+        self, client: AsyncClient, config_file, method, path, payload
+    ):
+        call = getattr(client, method)
+        response = await (call(path) if payload is None else call(path, json=payload))
+        assert response.status_code not in (401, 403), (
+            f"{method.upper()} {path} rejected an uncredentialed caller — "
+            "component-level auth must not come back; the edge is the gate."
+        )
 
 
 class TestRouteRegistration:
