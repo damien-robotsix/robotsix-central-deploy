@@ -92,11 +92,9 @@ def _reset_globals(monkeypatch, tmp_path):
     isolated under parallel (xdist) execution — a shared fixed path under
     /tmp leaks state across workers.
     """
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
-        api_key="test-key",
     )
     store = InMemoryStore()
     backend = NoopBackend()

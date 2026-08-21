@@ -35,13 +35,13 @@ async def _register_component_with_volume(
 
 
 class TestVolumeBrowserAuth:
-    async def test_ls_requires_auth(self, client: AsyncClient):
+    async def test_ls_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/volumes/myvol/ls?path=")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
-    async def test_cat_requires_auth(self, client: AsyncClient):
+    async def test_cat_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/volumes/myvol/cat?path=foo")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
 
 # ---------------------------------------------------------------------------

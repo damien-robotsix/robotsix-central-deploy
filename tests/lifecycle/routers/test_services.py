@@ -77,10 +77,10 @@ class TestGetServiceHealth:
         resp = await client.get("/services/nonexistent/health", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
         await _seed_store("svc-a")
         resp = await client.get("/services/svc-a/health")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_no_health_check_returns_unknown(
         self, client: AsyncClient, auth_headers: dict
@@ -295,9 +295,9 @@ class TestRestart:
 
 
 class TestLogsEndpoint:
-    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/services/svc-a/logs")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_unknown_service_returns_404(
         self, client: AsyncClient, auth_headers: dict
@@ -494,9 +494,9 @@ class TestDeleteService:
         resp = await client.delete("/services/nonexistent", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
         resp = await client.delete("/services/svc-a")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_delete_existing_returns_204(
         self, client: AsyncClient, auth_headers: dict

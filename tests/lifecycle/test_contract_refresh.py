@@ -419,8 +419,8 @@ async def test_refresh_assigns_free_port_to_new_container_port(
 
 
 @pytest.mark.asyncio
-async def test_refresh_requires_auth(
+async def test_refresh_no_longer_401(
     client: AsyncClient,
 ) -> None:
     resp = await client.post("/services/test-comp/refresh-contract")
-    assert resp.status_code == 401
+    assert resp.status_code != 401

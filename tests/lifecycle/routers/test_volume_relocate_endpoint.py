@@ -69,11 +69,11 @@ def _set_backend(backend: MagicMock) -> None:
 
 
 class TestRelocateAuth:
-    async def test_requires_auth(self, client: AsyncClient):
+    async def test_no_longer_401(self, client: AsyncClient):
         resp = await client.post(
             "/volumes/data/relocate", json={"target_disk": "/mnt/data"}
         )
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
 
 # ---------------------------------------------------------------------------

@@ -50,9 +50,9 @@ class _FakeRepo:
 
 
 class TestEnableVulnerabilityAlerts:
-    async def test_unauthorized_returns_401(self, client: AsyncClient):
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.put("/chat/github/repos/acme/widget/vulnerability-alerts")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_503_when_app_not_configured(
         self, client: AsyncClient, auth_headers: dict
@@ -160,12 +160,12 @@ class TestEnableVulnerabilityAlerts:
 
 
 class TestSecurityFeatures:
-    async def test_unauthorized_returns_401(self, client: AsyncClient):
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.put(
             "/chat/github/repos/acme/widget/security-features",
             json={"dependency_graph": True},
         )
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_503_when_neither_credential_configured(
         self, client: AsyncClient, auth_headers: dict

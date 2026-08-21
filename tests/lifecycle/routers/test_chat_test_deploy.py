@@ -318,21 +318,21 @@ async def test_deploy_rate_limited(
 
 
 # ---------------------------------------------------------------------------
-# Unauthorized (401)
+# Unauthorized (no longer 401)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_deploy_unauthorized(
+async def test_deploy_unauthorized_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Test-deploy without auth header returns 401."""
+    """Component-level auth was removed; test-deploy without auth header no longer returns 401."""
     _register_test_component()
     resp = await client.post(
         "/chat/deploy/test",
         json={"stub_name": "test-app", "website": "http://localhost:8080/health"},
     )
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text
 
 
 # ---------------------------------------------------------------------------

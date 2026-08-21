@@ -47,11 +47,11 @@ def _seed_component_config(component_id: str, config: dict) -> None:
 
 
 class TestLangfuseProxyAuth:
-    async def test_unauthorized_returns_401(self, client: AsyncClient):
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.get(
             "/chat/langfuse/robotsix-chat/traces",
         )
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
 
 class TestLangfuseProjectsEndpoint:

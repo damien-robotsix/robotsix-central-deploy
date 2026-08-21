@@ -9,9 +9,9 @@ from robotsix_central_deploy.registry.models import ComponentConfig
 
 
 class TestFleetLangfuseAuth:
-    async def test_unauthorized_returns_401(self, client: AsyncClient):
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/fleet/langfuse")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
 
 class _VolumeBackend:

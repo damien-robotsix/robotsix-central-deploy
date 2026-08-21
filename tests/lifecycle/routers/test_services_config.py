@@ -151,9 +151,9 @@ class TestGetServiceConfig:
         # Service not found takes priority
         assert "not found" in resp.json()["error"].lower()
 
-    async def test_unauthenticated_returns_401(self, client: AsyncClient):
+    async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/services/chat/config")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_nested_secrets_are_masked(
         self, client: AsyncClient, auth_headers: dict
@@ -523,10 +523,10 @@ class TestExportServiceConfig:
         assert resp.status_code == 404
         assert "No config schema" in resp.json()["error"]
 
-    async def test_unauthenticated_returns_401(self, client: AsyncClient):
-        """401 when the X-API-Key header is missing."""
+    async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed; a missing X-API-Key header no longer yields 401."""
         resp = await client.get("/services/chat/config/export")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
 
 # ---------------------------------------------------------------------------

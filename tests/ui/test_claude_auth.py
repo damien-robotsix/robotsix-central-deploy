@@ -85,11 +85,9 @@ class TestClaudeAuthRouter:
 
     @pytest.fixture(autouse=True)
     async def _setup(self, monkeypatch):
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_AUTH_REQUIRED", "true")
         cfg = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend=ExecutionBackendType.NOOP,
-            api_key=self.API_KEY,
         )
         _wire(cfg)
         await _seed_store()
@@ -97,9 +95,10 @@ class TestClaudeAuthRouter:
 
     # -- GET /claude-auth/status -------------------------------------------
 
-    async def test_get_claude_auth_status_requires_auth(self, client: AsyncClient):
+    async def test_get_claude_auth_status_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.get("/claude-auth/status")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_get_claude_auth_status_returns_status(self, client: AsyncClient):
         resp = await client.get(
@@ -117,9 +116,10 @@ class TestClaudeAuthRouter:
 
     # -- POST /claude-auth/login -------------------------------------------
 
-    async def test_start_claude_login_requires_auth(self, client: AsyncClient):
+    async def test_start_claude_login_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.post("/claude-auth/login")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_start_claude_login_returns_pkce_url(self, client: AsyncClient):
         resp = await client.post(
@@ -148,12 +148,13 @@ class TestClaudeAuthRouter:
 
     # -- POST /claude-auth/login/complete ----------------------------------
 
-    async def test_complete_claude_login_requires_auth(self, client: AsyncClient):
+    async def test_complete_claude_login_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.post(
             "/claude-auth/login/complete",
             json={"login_id": "some-state", "auth_code": "test-code"},
         )
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_complete_claude_login_unknown_session(self, client: AsyncClient):
         resp = await client.post(
@@ -295,12 +296,13 @@ class TestClaudeAuthRouter:
 
     # -- POST /claude-auth/login/cancel ------------------------------------
 
-    async def test_cancel_claude_login_requires_auth(self, client: AsyncClient):
+    async def test_cancel_claude_login_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.post(
             "/claude-auth/login/cancel",
             json={"login_id": "some-state"},
         )
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_cancel_claude_login_discards_session(self, client: AsyncClient):
         start = await client.post(
@@ -317,12 +319,13 @@ class TestClaudeAuthRouter:
 
     # -- POST /claude-auth/credentials -------------------------------------
 
-    async def test_write_credentials_requires_auth(self, client: AsyncClient):
+    async def test_write_credentials_no_longer_401(self, client: AsyncClient):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.post(
             "/claude-auth/credentials",
             json={"credentials_json": '{"test": true}'},
         )
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_write_credentials_returns_success(self, client: AsyncClient):
         resp = await client.post(

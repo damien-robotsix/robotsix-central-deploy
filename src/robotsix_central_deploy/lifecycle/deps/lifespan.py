@@ -156,8 +156,6 @@ def _parse_self_contract_settings(config: LifecycleConfig) -> SystemSettings | N
 
         # Map the string value to the expected type for each known field.
         if field_name in (
-            "auth_username",
-            "auth_password",
             "log_level",
             "gateway_base_domain",
             "mill_component_id",
@@ -302,9 +300,6 @@ async def _init_settings(app: FastAPI) -> None:
                     env_val = env_val.get_secret_value()
                 if env_val != default_val:
                     contract_dict[key] = env_val
-            # Special case: when auth_username is empty everywhere, fall back to "admin".
-            if not contract_dict.get("auth_username"):
-                contract_dict["auth_username"] = "admin"
             await settings_store.put(SystemSettings(**contract_dict))
             logger.info(
                 "Seeded system settings from self-contract (%s)",
@@ -313,8 +308,6 @@ async def _init_settings(app: FastAPI) -> None:
         else:
             await settings_store.put(
                 SystemSettings(
-                    auth_username=_config.auth_username or "admin",
-                    auth_password=_config.auth_password.get_secret_value(),
                     disk_warn_pct=_config.disk_warn_pct,
                     registry_check_interval=_config.registry_check_interval,
                     log_level=_config.log_level,
@@ -417,10 +410,9 @@ async def _init_background_tasks(app: FastAPI) -> None:
     app.state._claude_auth_task = claude_auth_task
 
     logger.info(
-        "lifecycle server starting — store=%s backend=%s auth=%s",
+        "lifecycle server starting — store=%s backend=%s",
         type(_store).__name__,
         type(_backend).__name__,
-        "on" if _config.auth_required else "off",
     )
 
 
@@ -623,24 +615,10 @@ async def _init_component_registry(app: FastAPI) -> None:
         logger.debug("No auto-discovered Langfuse projects on startup")
 
     # -- Deploy-credential provisioning ---------------------------------------
-    # Put the deploy API key in the chat agent's own config, where the
-    # config standard requires first-party credentials to live.
-    from .._deploy_credential import _rebuild_deploy_credential
-
-    try:
-        await _rebuild_deploy_credential(
-            component_config_store,
-            app.state.backend,
-            _config.api_key.get_secret_value(),
-            app.state.config_yaml_store,
-        )
-        logger.debug("Startup deploy-credential reconciliation complete")
-    except Exception:
-        logger.warning(
-            "Startup deploy-credential reconciliation failed — "
-            "chat-agent components keep their current token",
-            exc_info=True,
-        )
+    # Removed: the deploy-plane API key was the component-level auth
+    # credential, deleted along with component-level auth.  The fleet edge
+    # (Traefik + tinyauth) is the only auth gate, and any existing
+    # ``central_deploy.api_token`` values in component configs are inert.
 
     # -- Seed central-deploy's own config schema -----------------------------
     # So GET /services/central-deploy/config returns the langfuse_projects

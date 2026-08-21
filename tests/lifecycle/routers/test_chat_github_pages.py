@@ -42,9 +42,9 @@ def enable_github_app():
 
 
 class TestUpdatePages:
-    async def test_unauthorized_returns_401(self, client: AsyncClient):
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.put("/chat/github/repos/acme/widget/pages")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_503_when_neither_credential_configured(
         self, client: AsyncClient, auth_headers: dict

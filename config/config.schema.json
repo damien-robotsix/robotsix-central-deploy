@@ -100,28 +100,6 @@
       "title": "Port",
       "type": "integer"
     },
-    "api_key": {
-      "default": "",
-      "description": "Legacy API credential accepted via the X-API-Key header or as a Basic-auth password. Empty disables api-key auth.",
-      "format": "password",
-      "title": "Api Key",
-      "type": "string",
-      "writeOnly": true
-    },
-    "auth_username": {
-      "default": "",
-      "description": "Basic-auth username for the dashboard and API. Auth is enforced only when both username and password are set (or api_key is).",
-      "title": "Auth Username",
-      "type": "string"
-    },
-    "auth_password": {
-      "default": "",
-      "description": "Basic-auth password paired with auth_username.",
-      "format": "password",
-      "title": "Auth Password",
-      "type": "string",
-      "writeOnly": true
-    },
     "store_backend": {
       "$ref": "#/$defs/StoreBackend",
       "advanced": true,

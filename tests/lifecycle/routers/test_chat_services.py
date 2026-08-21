@@ -1011,17 +1011,17 @@ async def test_service_deploy_lock_contention(
 
 
 # ---------------------------------------------------------------------------
-# Service deploy — missing auth (401)
+# Service deploy — missing auth (no longer 401)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_service_deploy_missing_auth(
+async def test_service_deploy_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Deploy without auth headers returns 401."""
+    """Component-level auth was removed; deploy without auth headers no longer returns 401."""
     resp = await client.post("/chat/services/test-svc/deploy")
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -1062,52 +1062,52 @@ async def test_service_deploy_audit_entry(
 
 
 # ---------------------------------------------------------------------------
-# Authentication — missing auth (401)
+# Authentication — missing auth (no longer 401)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_restart_missing_auth(
+async def test_restart_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Restart without auth headers returns 401."""
+    """Component-level auth was removed; restart without auth headers no longer returns 401."""
     resp = await client.post("/chat/services/test-svc/restart")
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text
 
 
 @pytest.mark.asyncio
-async def test_update_missing_auth(
+async def test_update_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Update without auth headers returns 401."""
+    """Component-level auth was removed; update without auth headers no longer returns 401."""
     resp = await client.post("/chat/services/test-svc/update")
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text
 
 
 @pytest.mark.asyncio
-async def test_deploy_missing_auth(
+async def test_deploy_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Deploy without auth headers returns 401."""
+    """Component-level auth was removed; deploy without auth headers no longer returns 401."""
     resp = await client.post("/chat/deploy", json={"name": "x", "repo": "r"})
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text
 
 
 # ---------------------------------------------------------------------------
-# Authentication — invalid auth (401)
+# Authentication — invalid auth (no longer 401)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_restart_invalid_auth(
+async def test_restart_invalid_auth_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Restart with wrong API key returns 401."""
+    """Component-level auth was removed; a wrong API key no longer yields 401."""
     resp = await client.post(
         "/chat/services/test-svc/restart",
         headers={"X-API-Key": "wrong-key"},
     )
-    assert resp.status_code == 401, resp.text
+    assert resp.status_code != 401, resp.text
 
 
 # ---------------------------------------------------------------------------

@@ -10,10 +10,6 @@ import robotsix_central_deploy.lifecycle.app as server_mod
 
 
 class TestCaretakerStatus:
-    async def test_requires_auth(self, client: AsyncClient) -> None:
-        resp = await client.get("/caretaker/status")
-        assert resp.status_code == 401
-
     async def test_returns_500_when_scheduler_not_initialised(
         self, client: AsyncClient, auth_headers: dict[str, str]
     ) -> None:

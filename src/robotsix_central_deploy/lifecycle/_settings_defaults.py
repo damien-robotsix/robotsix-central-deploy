@@ -12,8 +12,6 @@ from typing import Any, TypedDict
 
 
 class _SettingsDefaults(TypedDict):
-    auth_username: str
-    auth_password: str
     disk_warn_pct: float
     registry_check_interval: int
     log_level: str
@@ -35,8 +33,6 @@ class _SettingsDefaults(TypedDict):
 
 
 SETTINGS_DEFAULTS: _SettingsDefaults = {
-    "auth_username": "",
-    "auth_password": "",
     "disk_warn_pct": 10.0,
     "registry_check_interval": 300,
     "log_level": "INFO",

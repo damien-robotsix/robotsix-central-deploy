@@ -79,11 +79,9 @@ def _ensure_registry(monkeypatch, registry):
     from robotsix_central_deploy.registry.env_store import EnvStore
     from robotsix_central_deploy.registry.secret_key import SecretKeyManager
 
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
     cfg = LifecycleConfig(  # type: ignore[call-arg]
         store_backend="memory",
         execution_backend=ExecutionBackendType.NOOP,
-        api_key="test-key",
     )
     store = InMemoryStore()
     backend = NoopBackend()
@@ -201,10 +199,11 @@ class TestDeployEndpoint:
         assert resp.status_code == 404
         assert "No component config" in resp.json()["error"]
 
-    async def test_deploy_requires_auth(self, client: AsyncClient, registry):
+    async def test_deploy_no_longer_401(self, client: AsyncClient, registry):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         await self._seed("svc-a")
         resp = await client.post("/services/svc-a/deploy")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_deploy_returns_409_when_lock_held_no_job(
         self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
@@ -276,9 +275,10 @@ class TestDeployEndpoint:
         )
         assert resp.status_code == 404
 
-    async def test_deploy_job_status_requires_auth(self, client: AsyncClient, registry):
+    async def test_deploy_job_status_no_longer_401(self, client: AsyncClient, registry):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         resp = await client.get("/services/deploy-jobs/svc-a-1")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     async def test_deploy_job_done_phase(
         self, client: AsyncClient, auth_headers: dict, registry
@@ -361,10 +361,11 @@ class TestDeployEndpoint:
         resp = await client.post("/services/nonexistent/rollback", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_rollback_requires_auth(self, client: AsyncClient, registry):
+    async def test_rollback_no_longer_401(self, client: AsyncClient, registry):
+        """Component-level auth was removed — unauthenticated requests now pass."""
         await self._seed("svc-a")
         resp = await client.post("/services/svc-a/rollback")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     # -- self-targeted deploy / rollback guards -------------------------------
 
