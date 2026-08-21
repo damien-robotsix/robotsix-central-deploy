@@ -66,7 +66,7 @@ jobs:
 
   python-ci:
     name: Python CI (shared)
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@ff5e7748be1809a80700464bcc92177e0d8d5a2a  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
     permissions:
       contents: read
     with:
@@ -76,7 +76,7 @@ jobs:
 
   python-security:
     name: Security scan (shared)
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@ff5e7748be1809a80700464bcc92177e0d8d5a2a  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
     permissions:
       contents: read
     with:
@@ -86,7 +86,7 @@ jobs:
 
   docker-pr-scan:
     name: Container image scan (Trivy)
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@ff5e7748be1809a80700464bcc92177e0d8d5a2a  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
     permissions:
       contents: read
       security-events: write

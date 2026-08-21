@@ -11,7 +11,7 @@ permissions:
   security-events: write
 jobs:
   codeql:
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@ff5e7748be1809a80700464bcc92177e0d8d5a2a  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
     with:
       languages: python
       queries: security-extended
