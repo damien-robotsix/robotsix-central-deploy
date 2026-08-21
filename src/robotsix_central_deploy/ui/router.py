@@ -25,6 +25,7 @@ router = APIRouter()
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _HTML = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")
+_SETTINGS_HTML = (Path(__file__).parent / "settings.html").read_text(encoding="utf-8")
 _CONTRACT = (Path(__file__).parent / "DEPLOY_CONTRACT.md").read_text(encoding="utf-8")
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -97,6 +98,38 @@ async def dashboard(request: Request) -> Response:
             secure=True,
         )
     return response
+
+
+def _csrf_token(request: Request) -> str:
+    """Return a CSRF token the middleware will accept on the next write.
+
+    ``asgi_csrf`` puts a callable on the scope that hands back the token bound
+    to this request's cookie, setting the cookie when there is not one yet.
+    Using it, rather than minting a token from the config secret as the
+    dashboard route does, keeps the page working when the two disagree: the
+    middleware signs with an auto-generated secret while the dashboard route
+    prefers ``config.csrf_secret``, and a token the middleware rejects would
+    fail every save with a 403 the operator cannot act on.
+    """
+    getter = request.scope.get("csrftoken")
+    return getter() if callable(getter) else ""
+
+
+@router.get("/ui/settings", response_class=HTMLResponse, include_in_schema=False)
+async def settings_page(request: Request) -> Response:
+    """Serve central-deploy's own Settings panel at ``GET /ui/settings``.
+
+    The page is a mount point: ``settings.js`` renders it with robotsix-ui's
+    ``mountConfigPanel`` against the ``/config`` surface in
+    ``lifecycle/routers/self_config.py``. Every component in the fleet is
+    required to offer this panel, and until now the deploy plane was the one
+    component whose own settings could only be changed by editing
+    ``config.json`` on the host.
+    """
+    page = _SETTINGS_HTML.replace(
+        "{{csrf_token}}", _html.escape(_csrf_token(request), quote=True)
+    )
+    return HTMLResponse(content=page)
 
 
 @router.get("/help/deploy-contract", include_in_schema=False)

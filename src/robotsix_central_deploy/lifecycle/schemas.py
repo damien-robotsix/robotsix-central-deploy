@@ -413,6 +413,64 @@ class ConfigResponse(BaseModel):
     )
 
 
+class SelfConfigResponse(BaseModel):
+    """Response body for ``GET /config`` — central-deploy's own settings.
+
+    Shape fixed by the robotsix-standards config-ownership standard, which is
+    also what ``@robotsix/ui``'s ``mountConfigPanel`` reads. Field names are
+    part of that contract; ``config_schema`` serialises as ``schema`` because
+    ``schema`` shadows a BaseModel attribute.
+    """
+
+    config: dict[str, Any] = Field(
+        description="Full effective config values; secrets masked"
+    )
+    config_schema: dict[str, Any] = Field(
+        serialization_alias="schema",
+        description="JSON Schema of LifecycleConfig, for rendering typed inputs",
+    )
+    version: int = Field(
+        description="Monotonic config version; 0 when nothing has been written yet"
+    )
+
+
+class SelfConfigWriteResponse(BaseModel):
+    """Response body for ``PUT /config`` and ``POST /config/rollback``."""
+
+    config: dict[str, Any] = Field(
+        description="Full effective config after the write; secrets masked"
+    )
+    version: int = Field(description="Version number the write produced")
+
+
+class SelfConfigVersion(BaseModel):
+    """One entry of central-deploy's own config history."""
+
+    version: int = Field(description="Monotonic version number")
+    timestamp: str = Field(description="ISO-8601 UTC timestamp of the write")
+    changed_keys: list[str] = Field(
+        description=(
+            "Top-level keys this version changed. A key whose change involved "
+            "a secret is reported as '<key> (secret)' — the name is recorded, "
+            "the value never is."
+        )
+    )
+
+
+class SelfConfigVersionsResponse(BaseModel):
+    """Response body for ``GET /config/versions``."""
+
+    versions: list[SelfConfigVersion] = Field(
+        description="Recorded versions, newest first"
+    )
+
+
+class SelfConfigRollbackRequest(BaseModel):
+    """Request body for ``POST /config/rollback``."""
+
+    version: int = Field(description="The version to restore")
+
+
 class ConfigExportResponse(BaseModel):
     """Response body for GET /services/{name}/config/export (migration-only).
 

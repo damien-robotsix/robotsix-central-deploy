@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-import _gen_robotsix_ui_css as robotsix_ui_css
+import _gen_robotsix_ui_assets as robotsix_ui_assets
 import robotsix_central_deploy.lifecycle.app as server_mod
 from robotsix_central_deploy.lifecycle.backends import NoopBackend
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
@@ -229,9 +229,9 @@ class TestCspNoInlineScripts:
 # ---------------------------------------------------------------------------
 
 
-class TestRobotsixUiCssLink:
-    """The dashboard stylesheet must come from the build-time-fetched
-    ``robotsix-ui.css``, not the retired one-shot ``robotsix-ui-base.css``."""
+class TestRobotsixUiAssets:
+    """The shared stylesheet and JS bundle must come from the build-time
+    fetch, not from a re-vendored one-shot copy."""
 
     _UI_DIR = (
         Path(__file__).resolve().parent.parent.parent
@@ -246,13 +246,29 @@ class TestRobotsixUiCssLink:
         assert "robotsix-ui-base.css" not in html
 
     def test_css_url_uses_release_download_path(self):
-        assert robotsix_ui_css.css_url("v0.1.30") == (
+        assert robotsix_ui_assets.css_url("v0.1.30") == (
             "https://github.com/damien-robotsix/robotsix-ui/"
             "releases/download/v0.1.30/style.css"
         )
 
     def test_fetch_rejects_non_semver_version(self):
-        assert robotsix_ui_css.main(["latest"]) == 2
+        assert robotsix_ui_assets.main(["latest"]) == 2
+
+    def test_both_assets_are_fetched(self):
+        """The stylesheet alone is half the panel.
+
+        ``vanilla.js`` exports ``mountConfigPanel``; without it the settings
+        page loads a stylesheet and mounts nothing.
+        """
+        assert robotsix_ui_assets._ASSETS == {
+            "style.css": "robotsix-ui.css",
+            "vanilla.js": "robotsix-ui-vanilla.js",
+        }
+
+    def test_pinned_version_is_a_release_tag(self):
+        assert robotsix_ui_assets._VERSION_RE.fullmatch(
+            robotsix_ui_assets.ROBOTSIX_UI_VERSION
+        )
 
 
 # ---------------------------------------------------------------------------

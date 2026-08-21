@@ -284,6 +284,10 @@
     padding: 6px 14px; font-size: 0.85rem; border: 1px solid #475569;
     border-radius: 4px; background: #1e293b; color: #cbd5e1; cursor: pointer;
   }
+  /* The Settings entry is an <a>, not a <button>: it navigates to
+     /ui/settings rather than toggling a section in place. */
+  .btn-header-link { display: inline-block; text-decoration: none; }
+
   /* Self-update button (green accent, initially hidden) */
   .btn-update-server {
     padding: 6px 14px; font-size: 0.85rem; border: 1px solid #16a34a;

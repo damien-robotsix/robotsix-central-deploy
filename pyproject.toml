@@ -18,7 +18,7 @@ dependencies = [
     "PyGithub>=2.9.0",
     "asgi-csrf>=0.11",
     "secure>=2.0",
-    "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@424f8ec5140e14e9699b92d5c3755d929625b570",
+    "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@45c0920d8c0ce49a7eec8ae36c4d6a36fcd6b821",
     "robotsix-github-auth @ git+https://github.com/damien-robotsix/robotsix-github-auth.git@e6214c41fd743120aa987bacb4e9b2bc88e73943",
     "robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@483eae9b02b0a78aa6734fb64c299d44a34c5411",
 ]
@@ -61,6 +61,16 @@ backend-path = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_central_deploy"]
+
+# The robotsix-ui assets are fetched at build time and are therefore
+# gitignored.  Hatchling honours VCS ignore rules when a .git directory is
+# present, so without this a wheel built from a checkout ships neither the
+# stylesheet nor the JS bundle and the Settings panel mounts nothing.  (The
+# Docker build has no .git and never hit this.)
+artifacts = [
+    "src/robotsix_central_deploy/ui/static/robotsix-ui.css",
+    "src/robotsix_central_deploy/ui/static/robotsix-ui-vanilla.js",
+]
 
 # The symlink src/robotsix_central_deploy/ui/DEPLOY_CONTRACT.md points
 # outside the packages directory (→ docs/ui/DEPLOY_CONTRACT.md).  Hatchling

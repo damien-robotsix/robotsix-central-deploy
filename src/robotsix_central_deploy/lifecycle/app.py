@@ -51,6 +51,7 @@ from .routers.claude_auth import router as claude_auth_router
 from .routers.fleet_langfuse import router as fleet_langfuse_router
 from .routers.health import router as health_router
 from .routers.onboard import router as onboard_router
+from .routers.self_config import router as self_config_router
 from .routers.services import router as services_router
 from .routers.services_config import router as services_config_router
 from .routers.services_deploy import router as services_deploy_router
@@ -121,6 +122,7 @@ if _HAS_SECURE:
 
 app.include_router(ui_router)
 app.include_router(health_router)
+app.include_router(self_config_router)
 app.include_router(system_router)
 app.include_router(volumes_router)
 app.include_router(services_router)

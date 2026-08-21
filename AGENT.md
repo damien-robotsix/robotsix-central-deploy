@@ -92,6 +92,7 @@ When a component has siblings, lifecycle actions (start/stop/restart/deploy/roll
 | POST | `/chat/services/central-deploy/restart` | Yes | Chat-agent allowlisted: restart central-deploy itself (returns 202, async restart via Docker daemon) |
 | POST | `/chat/services/central-deploy/update` | Yes | Chat-agent allowlisted: pull latest image + recreate central-deploy via watchtower (returns 202, async) |
 | GET | `/ui` | Yes | HTML monitoring dashboard |
+| GET | `/ui/settings` | Yes | central-deploy's own Settings panel (mounts robotsix-ui's shared config panel) |
 | GET | `/help/deploy-contract` | No | Rendered DEPLOY_CONTRACT.md |
 
 ### Service Management
@@ -120,6 +121,24 @@ Two-phase process:
 2. **`POST /onboard/confirm`** — persist `ComponentConfig`, deploy primary + siblings
 
 ### Config & Environment
+
+**central-deploy's own settings** — the standard component config surface every
+component owes (robotsix-standards config-ownership). Backed by
+`robotsix_config.history`; served to the browser by `/ui/settings`, which mounts
+robotsix-ui's shared panel over it.
+
+| Method | Path | Description |
+| -------- | ------ | ------------- |
+| GET | `/config` | Own effective config, JSON Schema and version (secrets masked) |
+| PUT | `/config` | Partial, versioned update; 422 in `application/problem+json` on rejection |
+| GET | `/config/versions` | Own config history, newest first |
+| POST | `/config/rollback` | Restore an earlier version as a new version |
+
+> Writes land in the config file. `app.state.config` is the snapshot taken at
+> startup, so **a change takes effect only after a restart** — the panel says so.
+
+**Other components' config** — read-only from here; writes belong to the
+component that owns the config.
 
 | Method | Path | Description |
 | -------- | ------ | ------------- |
@@ -179,7 +198,7 @@ src/robotsix_central_deploy/
 ├── onboard/          # Git clone + docker-compose parsing
 ├── registry/         # Component config, env/secrets, settings stores
 ├── registry_check/   # GHCR digest polling
-├── ui/               # Dashboard HTML + router
+├── ui/               # Dashboard + Settings HTML, static assets, router
 ├── caretaker/        # Background maintenance agent
 │   └── volume_audit/ # Named-volume growth scanner (caretaker sub-package)
 ```
@@ -202,3 +221,5 @@ src/robotsix_central_deploy/
 6. **`NoopBackend` always reports `sha256:noop`** — never use in production.
 7. **No catch-all routes** — a `/{path:path}` route shadows every endpoint after it. `tests/lifecycle/test_app.py` guards this.
 8. **Never add a static per-component route file to `deploy/traefik/`** (e.g. `file-hub.yml`). Once a component is onboarded via the self-service API, its routing labels are stamped automatically by `traefik_labels()` at deploy time — a static file's router/service names collide with the Docker-label routes, causing Traefik to drop the colliding routers and return proxy 404. Remove any bootstrap route file (and its `docker-compose.yml` mount) as soon as the component is registered.
+9. **The settings panel is not ours to reimplement** — `/ui/settings` mounts `mountConfigPanel` from robotsix-ui's `vanilla.js`, fetched at build time by `_gen_robotsix_ui_assets.py` alongside the stylesheet. A hand-rolled settings form re-creates the bug the shared panel prevents: a masked secret posted back over the real credential.
+10. **`/config` is deliberately not CSRF-exempt** — unlike the JSON API it is reached from the browser with only the SSO cookie, so the settings page passes the token in an `x-csrftoken` header.

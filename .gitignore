@@ -36,6 +36,7 @@ component_env.json
 _gen_openapi_tmp.py
 # Fetched from the robotsix-ui GitHub Release at build time
 src/robotsix_central_deploy/ui/static/robotsix-ui.css
+src/robotsix_central_deploy/ui/static/robotsix-ui-vanilla.js
 
 # local pip installs
 .local/
