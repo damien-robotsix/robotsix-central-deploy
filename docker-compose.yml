@@ -214,7 +214,18 @@ services:
   # One login for the dashboard and every component UI. Components ship no auth
   # of their own — see the component standard in robotsix-standards.
   tinyauth:
-    image: ghcr.io/tinyauthapp/tinyauth:v5
+    # Pinned to a patch version, not the floating `:v5`, because a security
+    # property the whole fleet depends on lives in this tag.
+    #
+    # The component standard says components ship no CSRF defence of their own
+    # because the edge provides it, and what the edge actually provides is the
+    # `SameSite=Lax` on the session cookie below. That attribute is set in
+    # tinyauth's own source (internal/service/auth_service.go, all three session
+    # paths) — but it is NOT present in v5.0.0, which emitted no SameSite at all
+    # and so left every component's mutating routes reachable by a cross-site
+    # POST. `:v5` spans both. Pinning keeps the guarantee from silently rolling
+    # backwards; bump deliberately, and re-check that SameSite is still set.
+    image: ghcr.io/tinyauthapp/tinyauth:v5.1.3
     restart: unless-stopped
     # The SSO credentials come from their own file, read verbatim.
     #
@@ -242,6 +253,16 @@ services:
       # only on central-deploy-proxy, so the sole client that can set this
       # header is Traefik.
       TINYAUTH_AUTH_TRUSTEDPROXIES: "172.16.0.0/12"
+      # Mark the SSO session cookie `Secure` so it is never sent over plain
+      # HTTP. tinyauth defaults this to false (the field has no default in
+      # NewDefaultConfiguration), so without this line the fleet's single
+      # session cookie is issued without the flag.
+      #
+      # Safe here because the edge is HTTPS-only: the `web` entrypoint does a
+      # permanent redirect to `websecure`, and every router in the fleet —
+      # tinyauth's own included — is bound to `websecure`. There is no
+      # plaintext path that would need to carry this cookie.
+      TINYAUTH_AUTH_SECURECOOKIE: "true"
     volumes:
       - tinyauth_data:/data
     labels:
