@@ -1,0 +1,53 @@
+/* Settings page chrome. The panel itself is styled entirely by
+   robotsix-ui.css — nothing here targets a shared panel class, so that
+   stylesheet stays the single source of truth for how a config panel looks
+   across the fleet. These rules only place it on the page and match the
+   dashboard's frame. */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--rsu-color-bg, #0f172a);
+  color: var(--rsu-color-text, #e2e8f0);
+  padding: 24px;
+  max-width: 900px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  color: var(--rsu-color-primary, #60a5fa);
+}
+
+.btn-header {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #cbd5e1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.settings-intro {
+  font-size: 0.85rem;
+  color: var(--rsu-color-text-muted, #94a3b8);
+  margin-bottom: 16px;
+}
+
+.settings-notice {
+  background: var(--rsu-color-warning-bg, rgba(251, 146, 60, 0.15));
+  color: var(--rsu-color-warning, #fb923c);
+  border: 1px solid var(--rsu-color-warning, #fb923c);
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+}

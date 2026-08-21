@@ -73,6 +73,151 @@
         }
       }
     },
+    "/config": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Read central-deploy's own settings (secrets masked)",
+        "description": "Return central-deploy's effective config, its JSON Schema and version.",
+        "operationId": "get_self_config_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Update central-deploy's own settings (partial, versioned)",
+        "description": "Apply a partial update to central-deploy's config file.\n\nOnly the keys the caller sends change. A secret submitted as the mask\nsentinel or blank means \"unchanged\" and keeps its stored value. Validation\nruns before the file is touched, so a rejected update leaves the running\nserver's config exactly as it was.",
+        "operationId": "put_self_config_config_put",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfConfigWriteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The update fails LifecycleConfig validation"
+          }
+        }
+      }
+    },
+    "/config/versions": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "List central-deploy's own config history",
+        "description": "Return recorded config versions, newest first.\n\nThe history sidecar stores no secret values \u2014 a version whose change\ntouched a credential names the key and nothing more.",
+        "operationId": "get_self_config_versions_config_versions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfConfigVersionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/rollback": {
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Restore an earlier version of central-deploy's own settings",
+        "description": "Restore *version*'s values as a new version.\n\nNothing is truncated: rolling back from 5 to 2 writes version 6. Secrets\nare **not** restored \u2014 the history never stored them \u2014 so current\ncredentials carry forward unchanged and a rollback meant to undo a\ncredential change must be followed by setting that credential explicitly.",
+        "operationId": "rollback_self_config_config_rollback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfConfigRollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfConfigWriteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such version in the history"
+          },
+          "422": {
+            "description": "That version no longer validates against the model"
+          }
+        }
+      }
+    },
     "/system/update": {
       "get": {
         "tags": [
@@ -9130,6 +9275,120 @@
         "type": "object",
         "title": "SecurityFeaturesRequest",
         "description": "Body for ``PUT /chat/github/repos/{owner}/{repo}/security-features``.\n\nAll three fields are optional; only the ones provided are changed.\n*dependency_graph* and *dependabot_alerts* share the same underlying\nGitHub API (``vulnerability-alerts``), so setting either to ``true``\nenables vulnerability alerts and setting either to ``false`` (without\nthe other being ``true``) disables them.  *dependabot_security_updates*\ncontrols automated security fixes independently."
+      },
+      "SelfConfigResponse": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config",
+            "description": "Full effective config values; secrets masked"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Schema",
+            "description": "JSON Schema of LifecycleConfig, for rendering typed inputs"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Monotonic config version; 0 when nothing has been written yet"
+          }
+        },
+        "type": "object",
+        "required": [
+          "config",
+          "schema",
+          "version"
+        ],
+        "title": "SelfConfigResponse",
+        "description": "Response body for ``GET /config`` \u2014 central-deploy's own settings.\n\nShape fixed by the robotsix-standards config-ownership standard, which is\nalso what ``@robotsix/ui``'s ``mountConfigPanel`` reads. Field names are\npart of that contract; ``config_schema`` serialises as ``schema`` because\n``schema`` shadows a BaseModel attribute."
+      },
+      "SelfConfigRollbackRequest": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "The version to restore"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "SelfConfigRollbackRequest",
+        "description": "Request body for ``POST /config/rollback``."
+      },
+      "SelfConfigVersion": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Monotonic version number"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "description": "ISO-8601 UTC timestamp of the write"
+          },
+          "changed_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Changed Keys",
+            "description": "Top-level keys this version changed. A key whose change involved a secret is reported as '<key> (secret)' \u2014 the name is recorded, the value never is."
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "timestamp",
+          "changed_keys"
+        ],
+        "title": "SelfConfigVersion",
+        "description": "One entry of central-deploy's own config history."
+      },
+      "SelfConfigVersionsResponse": {
+        "properties": {
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/SelfConfigVersion"
+            },
+            "type": "array",
+            "title": "Versions",
+            "description": "Recorded versions, newest first"
+          }
+        },
+        "type": "object",
+        "required": [
+          "versions"
+        ],
+        "title": "SelfConfigVersionsResponse",
+        "description": "Response body for ``GET /config/versions``."
+      },
+      "SelfConfigWriteResponse": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config",
+            "description": "Full effective config after the write; secrets masked"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Version number the write produced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "config",
+          "version"
+        ],
+        "title": "SelfConfigWriteResponse",
+        "description": "Response body for ``PUT /config`` and ``POST /config/rollback``."
       },
       "SelfUpdateStatus": {
         "properties": {

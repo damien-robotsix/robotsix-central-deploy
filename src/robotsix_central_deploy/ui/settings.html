@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robotsix Deploy — Settings</title>
+<link rel="stylesheet" href="/ui/static/robotsix-ui.css">
+<link rel="stylesheet" href="/ui/static/settings.css">
+</head>
+<body>
+
+<header>
+  <h1>Robotsix Deploy — Settings</h1>
+  <a href="/ui" class="btn-header">&larr; Back to dashboard</a>
+</header>
+
+<p class="settings-intro">
+  These are <strong>central-deploy's own</strong> settings, stored in its
+  config file and versioned on every write. A component's settings belong to
+  that component &mdash; open its own Settings panel, not this one.
+</p>
+
+<div id="restart-notice" class="settings-notice" hidden>
+  Saved to the config file. Central-deploy reads its config once at startup,
+  so <strong>the change takes effect after a restart</strong> &mdash; restart
+  it from the dashboard.
+</div>
+
+<!-- The token travels in a data attribute because the CSP is
+     script-src 'self', which blocks inline script blocks outright. -->
+<div id="settings-panel" data-csrf-token="{{csrf_token}}"></div>
+
+<script type="module" src="/ui/static/settings.js"></script>
+
+</body>
+</html>

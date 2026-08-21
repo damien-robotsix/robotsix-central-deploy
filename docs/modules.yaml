@@ -43,7 +43,7 @@ modules:
       - README.md
       - SECURITY.md
       - _gen_openapi.py
-      - _gen_robotsix_ui_css.py
+      - _gen_robotsix_ui_assets.py
       - _mill_build.py
       - config/**/*
       - .env.example
