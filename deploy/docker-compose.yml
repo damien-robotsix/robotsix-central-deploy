@@ -14,8 +14,6 @@ services:
     labels:
       robotsix.deploy.primary: "true"
       # ── System settings ──────────────────────────────────────────
-      robotsix.deploy.settings.auth-username: ""
-      robotsix.deploy.settings.auth-password: ""
       robotsix.deploy.settings.disk-warn-pct: "10.0"
       robotsix.deploy.settings.registry-check-interval: "300"
       robotsix.deploy.settings.log-level: "INFO"
