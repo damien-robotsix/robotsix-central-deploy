@@ -44,17 +44,20 @@
       "description": "Minimal spec for a virtual (non-Docker) chat-accessible component.",
       "properties": {
         "id": {
+          "description": "Stable slug of the virtual component (lowercase, digits, hyphens).",
           "pattern": "^[a-z0-9][a-z0-9-]*$",
           "title": "Id",
           "type": "string"
         },
         "chat_base_url": {
           "default": "",
+          "description": "Base URL the chat agent uses to reach the component (e.g. http://<component>:<port>).",
           "title": "Chat Base Url",
           "type": "string"
         },
         "chat_skill_endpoint": {
           "default": "/chat-skill",
+          "description": "HTTP path probed for the component's chat skill body.",
           "title": "Chat Skill Endpoint",
           "type": "string"
         },

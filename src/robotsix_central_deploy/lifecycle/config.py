@@ -22,9 +22,19 @@ from .models import ExecutionBackendType, StoreBackend
 class VirtualComponentEntry(BaseModel):
     """Minimal spec for a virtual (non-Docker) chat-accessible component."""
 
-    id: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]*$")
-    chat_base_url: str = ""
-    chat_skill_endpoint: str = "/chat-skill"
+    id: str = Field(
+        ...,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        description="Stable slug of the virtual component (lowercase, digits, hyphens).",
+    )
+    chat_base_url: str = Field(
+        "",
+        description="Base URL the chat agent uses to reach the component (e.g. http://<component>:<port>).",
+    )
+    chat_skill_endpoint: str = Field(
+        "/chat-skill",
+        description="HTTP path probed for the component's chat skill body.",
+    )
     chat_skill: str = Field(
         "", description="static skill body; when non-empty, used without probing"
     )
