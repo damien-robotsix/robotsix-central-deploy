@@ -27,12 +27,17 @@ thing this router changes and the panel says so.
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
+from copy import deepcopy
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, cast, get_args, get_origin
 
 import robotsix_config
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import SecretStr
 
 from ..auth import verify_auth
 from ..config import LifecycleConfig
@@ -53,6 +58,320 @@ router = APIRouter(tags=["config"])
 #: the message blames.
 _VALIDATION_ERROR_TYPE = "urn:robotsix:error:config-validation"
 
+# -- config version history helpers ------------------------------------------
+
+_MASK = "**********"
+_VERSIONS_SUFFIX = ".json.versions"
+
+
+def _versions_path() -> Path:
+    """Sidecar file that records every config version."""
+    return robotsix_config.resolve_config_path().with_suffix(_VERSIONS_SUFFIX)
+
+
+def _read_versions_file() -> list[dict[str, Any]]:
+    """Read the version-history sidecar, returning a list of entries."""
+    path = _versions_path()
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return []
+        return data
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _write_versions_file(entries: list[dict[str, Any]]) -> None:
+    """Atomically overwrite the version-history sidecar."""
+    path = _versions_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(_VERSIONS_SUFFIX + ".tmp")
+    tmp.write_text(json.dumps(entries, indent=2, default=str), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _raw_config() -> dict[str, Any]:
+    """Read the config file as a plain dict (no model validation)."""
+    path = robotsix_config.resolve_config_path()
+    if not path.exists():
+        return {}
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+
+
+def _write_raw_config(data: dict[str, Any]) -> None:
+    """Write *data* as JSON to the config file."""
+    path = robotsix_config.resolve_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _field_touches_secret(annotation: Any) -> bool:
+    """Return True when *annotation* is or contains a ``SecretStr``."""
+    if annotation is SecretStr:
+        return True
+    origin = get_origin(annotation)
+    if origin is dict:
+        args = get_args(annotation)
+        if len(args) == 2 and args[0] is str:
+            value_type = args[1]
+            if value_type is SecretStr:
+                return True
+            if hasattr(value_type, "model_fields"):
+                return any(
+                    _field_touches_secret(f.annotation)
+                    for f in value_type.model_fields.values()
+                )
+        return False
+    if hasattr(annotation, "model_fields"):
+        return any(
+            _field_touches_secret(f.annotation)
+            for f in annotation.model_fields.values()
+        )
+    return False
+
+
+def _deep_merge(
+    current: dict[str, Any],
+    update: dict[str, Any],
+    model_cls: type,
+) -> dict[str, Any]:
+    """Recursively merge *update* into *current*, preserving live secrets.
+
+    When *update* sends the mask sentinel or an empty string for a
+    ``SecretStr`` field the stored value is kept unchanged.
+    """
+    merged = dict(current)
+    for key, body_val in update.items():
+        field_info = model_cls.model_fields.get(key)  # type: ignore[attr-defined]
+        if field_info is None:
+            merged[key] = deepcopy(body_val)
+            continue
+
+        annotation = field_info.annotation
+
+        if annotation is SecretStr:
+            if body_val == _MASK or body_val == "":
+                continue
+            merged[key] = body_val
+            continue
+
+        if _is_dict_of(annotation, SecretStr):
+            if isinstance(body_val, dict) and isinstance(merged.get(key), dict):
+                sub = dict(merged[key])
+                for k, v in body_val.items():
+                    if v == _MASK or v == "":
+                        continue
+                    sub[k] = v
+                merged[key] = sub
+            else:
+                merged[key] = deepcopy(body_val)
+            continue
+
+        origin = get_origin(annotation)
+        if origin is dict:
+            args = get_args(annotation)
+            if len(args) == 2 and args[0] is str and hasattr(args[1], "model_fields"):
+                value_type = args[1]
+                if isinstance(body_val, dict):
+                    sub = dict(merged.get(key, {}))
+                    for k, v in body_val.items():
+                        if isinstance(v, dict):
+                            sub[k] = _deep_merge(sub.get(k, {}), v, value_type)
+                        else:
+                            sub[k] = v
+                    merged[key] = sub
+                else:
+                    merged[key] = deepcopy(body_val)
+                continue
+
+        if hasattr(annotation, "model_fields") and isinstance(body_val, dict):
+            existing = merged.get(key)
+            if isinstance(existing, dict):
+                merged[key] = _deep_merge(existing, body_val, annotation)
+            else:
+                merged[key] = body_val
+            continue
+
+        merged[key] = deepcopy(body_val)
+
+    return merged
+
+
+def _is_dict_of(annotation: Any, value_type: type) -> bool:
+    """Return True if *annotation* is ``dict[str, value_type]``."""
+    if get_origin(annotation) is not dict:
+        return False
+    args = get_args(annotation)
+    return len(args) == 2 and args[0] is str and args[1] is value_type
+
+
+def _changed_keys(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    model_cls: type,
+) -> list[str]:
+    """Return top-level keys whose values differ, annotating secret changes."""
+    all_keys = sorted(set(before) | set(after))
+    result: list[str] = []
+    for key in all_keys:
+        b_val = before.get(key)
+        a_val = after.get(key)
+        if b_val == a_val:
+            continue
+        suffix = ""
+        field_info = model_cls.model_fields.get(key)  # type: ignore[attr-defined]
+        if field_info is not None and _field_touches_secret(field_info.annotation):
+            suffix = " (secret)"
+        result.append(key + suffix)
+    return result
+
+
+# -- public API (replaces robotsix_config.history) ---------------------------
+
+
+def current_version() -> int:
+    """Return the latest config version, or 0 when none have been written."""
+    entries = _read_versions_file()
+    return entries[-1]["version"] if entries else 0
+
+
+def apply_update(
+    model_cls: type, body: dict[str, Any]
+) -> tuple[dict[str, Any], list[str], int]:
+    """Validate, merge, write and record an update to the config file.
+
+    Returns ``(effective_config, changed_keys, new_version)``.  A no-op
+    update (nothing changed) returns the current version unchanged.
+    """
+    before = _raw_config()
+    # Capture the masked pre-change config for the history sidecar
+    # (secrets must never land there).
+    current_validated: Any = robotsix_config.load_config(model_cls)
+    before_masked = current_validated.model_dump(mode="json")
+
+    merged = _deep_merge(before, body, model_cls)
+
+    # Write merged and validate it
+    _write_raw_config(merged)
+    try:
+        validated: Any = robotsix_config.load_config(model_cls)
+    except robotsix_config.InvalidConfigError:
+        # Restore the original before re-raising
+        _write_raw_config(before)
+        raise
+
+    # Write the validated model back via dump_config for proper permissions
+    robotsix_config.dump_config(validated)
+
+    changed = _changed_keys(before, merged, model_cls)
+    if not changed:
+        return (
+            validated.model_dump(mode="json"),
+            [],
+            current_version(),
+        )
+
+    entries = _read_versions_file()
+    new_ver = entries[-1]["version"] + 1 if entries else 1
+    now = datetime.now(UTC).isoformat()
+    version_entry: dict[str, Any] = {
+        "version": new_ver,
+        "timestamp": now,
+        "changed_keys": changed,
+        # Store the config BEFORE this change so rollback can restore it.
+        # Secrets are masked via model_dump(mode="json").
+        "data": before_masked,
+    }
+    entries.append(version_entry)
+    _write_versions_file(entries)
+
+    return (
+        validated.model_dump(mode="json"),
+        changed,
+        new_ver,
+    )
+
+
+def read_versions(
+    include_data: bool = False,
+) -> list[dict[str, Any]]:
+    """Return the version history, oldest first.
+
+    When *include_data* is False the ``data`` key is omitted from each entry.
+    """
+    entries = _read_versions_file()
+    if include_data:
+        return list(entries)
+    return [{k: v for k, v in entry.items() if k != "data"} for entry in entries]
+
+
+def rollback(
+    model_cls: type, target_version: int
+) -> tuple[dict[str, Any], list[str], int]:
+    """Restore *target_version* as a new version, carrying live secrets forward.
+
+    Returns ``(effective_config, changed_keys, new_version)``.
+    """
+    entries = _read_versions_file()
+    snapshot = None
+    for entry in entries:
+        if entry["version"] == target_version:
+            snapshot = entry.get("data")
+            break
+
+    if snapshot is None:
+        raise ValueError(f"Version {target_version} not found in history")
+
+    # Snapshot has masked secrets; capture current masked config for history.
+    current_raw = _raw_config()
+    current_validated: Any = robotsix_config.load_config(model_cls)
+    current_masked = current_validated.model_dump(mode="json")
+
+    # Merge snapshot into current: snapshot supplies the old non-secret values,
+    # _deep_merge treats MASK/"" for secret fields as "keep current".
+    merged = _deep_merge(current_raw, snapshot, model_cls)
+
+    _write_raw_config(merged)
+    try:
+        validated: Any = robotsix_config.load_config(model_cls)
+    except robotsix_config.InvalidConfigError:
+        _write_raw_config(current_raw)
+        raise
+
+    robotsix_config.dump_config(validated)
+
+    changed = _changed_keys(current_raw, merged, model_cls)
+    if not changed:
+        return (
+            validated.model_dump(mode="json"),
+            [],
+            current_version(),
+        )
+
+    new_ver = entries[-1]["version"] + 1 if entries else 1
+    now = datetime.now(UTC).isoformat()
+    version_entry: dict[str, Any] = {
+        "version": new_ver,
+        "timestamp": now,
+        "changed_keys": changed,
+        # Store the config BEFORE this rollback so it can itself be undone.
+        # Secrets are masked via model_dump(mode="json").
+        "data": current_masked,
+    }
+    entries.append(version_entry)
+    _write_versions_file(entries)
+
+    return (
+        validated.model_dump(mode="json"),
+        changed,
+        new_ver,
+    )
+
+
+# -- route helpers -----------------------------------------------------------
+
 
 def _effective_config() -> dict[str, Any]:
     """Return every setting's current value, secrets masked.
@@ -68,7 +387,7 @@ def _effective_config() -> dict[str, Any]:
     raw file carries that the model does not surface.
     """
     loaded = robotsix_config.load_config(LifecycleConfig)
-    return robotsix_config.mask_secrets(loaded.model_dump(mode="json"), LifecycleConfig)
+    return loaded.model_dump(mode="json")
 
 
 def _validation_detail(exc: Exception, fallback: str) -> str:
@@ -113,6 +432,9 @@ def _validation_problem(detail: str, instance: str) -> JSONResponse:
     )
 
 
+# -- routes ------------------------------------------------------------------
+
+
 @router.get(
     "/config",
     response_model=SelfConfigResponse,
@@ -123,7 +445,7 @@ async def get_self_config(_auth: None = Depends(verify_auth)) -> SelfConfigRespo
     return SelfConfigResponse(
         config=_effective_config(),
         config_schema=robotsix_config.config_schema(LifecycleConfig),
-        version=robotsix_config.current_version(),
+        version=current_version(),
     )
 
 
@@ -152,7 +474,7 @@ async def put_self_config(
         return _validation_problem("Request body must be a JSON object.", "/config")
 
     try:
-        _merged, changed, version = robotsix_config.apply_update(LifecycleConfig, body)
+        _merged, changed, version = apply_update(LifecycleConfig, body)
     except robotsix_config.InvalidConfigError as exc:
         logger.info("rejected self-config update: %s", exc)
         detail = _validation_detail(
@@ -182,7 +504,7 @@ async def get_self_config_versions(
     The history sidecar stores no secret values — a version whose change
     touched a credential names the key and nothing more.
     """
-    entries = robotsix_config.read_versions(include_data=False)
+    entries = read_versions(include_data=False)
     return SelfConfigVersionsResponse(
         versions=[
             SelfConfigVersion(
@@ -215,10 +537,7 @@ async def rollback_self_config(
     credentials carry forward unchanged and a rollback meant to undo a
     credential change must be followed by setting that credential explicitly.
     """
-    known = {
-        int(entry["version"])
-        for entry in robotsix_config.read_versions(include_data=False)
-    }
+    known = {int(entry["version"]) for entry in read_versions(include_data=False)}
     if body.version not in known:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -228,9 +547,7 @@ async def rollback_self_config(
         )
 
     try:
-        _restored, changed, version = robotsix_config.rollback(
-            LifecycleConfig, body.version
-        )
+        _restored, changed, version = rollback(LifecycleConfig, body.version)
     except robotsix_config.InvalidConfigError as exc:
         logger.info("rejected self-config rollback to %s: %s", body.version, exc)
         detail = _validation_detail(

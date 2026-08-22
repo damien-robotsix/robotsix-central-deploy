@@ -116,6 +116,11 @@ class TestSettingsWritesAreCsrfProtected:
     "no cookies, nothing to protect" path and hides the whole mechanism.
     """
 
+    @pytest.fixture(autouse=True)
+    def _require_csrf(self):
+        if not server_mod._HAS_CSRF:
+            pytest.skip("CSRF middleware not available (asgi-csrf not installed)")
+
     @pytest.fixture
     def config_file(self, monkeypatch, tmp_path):
         path = tmp_path / "csrf_settings" / "config.json"
