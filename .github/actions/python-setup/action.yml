@@ -1,0 +1,36 @@
+name: Python setup
+description: Install Python, uv, and project dependencies
+
+inputs:
+  python-version:
+    description: Python version to install
+    required: false
+    default: "3.14"
+  uv-version:
+    description: uv version to install
+    required: false
+    default: "0.8.15"
+  install-extras:
+    description: Optional extras to install
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@9bb555620d1e6e93cef3caa24aa7dee4aa9cef53  # v7.0.1
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
+      with:
+        version: ${{ inputs.uv-version }}
+        enable-cache: true
+
+    - name: Install dependencies
+      shell: bash
+      run: uv sync --frozen
+      env:
+        UV_PROJECT_ENVIRONMENT: system
