@@ -1,9 +1,6 @@
 {
   "host": "0.0.0.0",
   "port": 8100,
-  "api_key": "",
-  "auth_username": "",
-  "auth_password": "",
   "store_backend": "memory",
   "store_path": "lifecycle_state.yaml",
   "execution_backend": "docker_sdk",
