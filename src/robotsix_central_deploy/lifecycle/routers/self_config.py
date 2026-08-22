@@ -304,10 +304,7 @@ def read_versions(
     entries = _read_versions_file()
     if include_data:
         return list(entries)
-    return [
-        {k: v for k, v in entry.items() if k != "data"}
-        for entry in entries
-    ]
+    return [{k: v for k, v in entry.items() if k != "data"} for entry in entries]
 
 
 def rollback(
@@ -540,16 +537,12 @@ async def rollback_self_config(
     credentials carry forward unchanged and a rollback meant to undo a
     credential change must be followed by setting that credential explicitly.
     """
-    known = {
-        int(entry["version"])
-        for entry in read_versions(include_data=False)
-    }
+    known = {int(entry["version"]) for entry in read_versions(include_data=False)}
     if body.version not in known:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"No config version {body.version} in the history; "
-                f"have {sorted(known)}"
+                f"No config version {body.version} in the history; have {sorted(known)}"
             ),
         )
 
