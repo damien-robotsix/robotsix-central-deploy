@@ -184,3 +184,18 @@ CVE-2026-15534
 # the application's attack surface.
 GHSA-6v7p-g79w-8964
 CVE-2025-47273
+
+# CVEs in Debian base-image system packages (python:3.14-slim).
+# Not exploitable in this container's attack surface.
+CVE-2026-14456
+CVE-2026-15059
+CVE-2026-16742
+CVE-2026-19487
+CVE-2026-66046
+CVE-2026-75803
+CVE-2026-76956
+CVE-2026-76957
+
+# Python setuptools CVE in the built image — transitive dependency not
+# reachable from the application's attack surface.
+CVE-2026-59890
