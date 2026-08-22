@@ -906,3 +906,52 @@ class TestMapTypedFields:
         }
         masked = _mask_secrets(schema, {"extras": {"anything": "here"}})
         assert masked["extras"] == {}
+
+
+class TestConfigDocumentFromTemplate:
+    """Seeding an empty config volume must write settings, not a schema."""
+
+    def test_json_schema_template_becomes_a_config_document(self):
+        """Regression: the raw JSON Schema was written as the component's config.json.
+
+        A component then read a file whose only top-level keys were
+        ``properties``/``title``/``type``, found none of its settings, and fell
+        back to built-in defaults pointing at in-image paths instead of the
+        volumes its contract mounts — healthy, and losing its data on the next
+        redeploy.
+        """
+        from robotsix_central_deploy.lifecycle._config_utils import (
+            config_document_from_template,
+        )
+
+        schema = {
+            "type": "object",
+            "title": "Every setting the component reads.",
+            "properties": {
+                "database_url": {
+                    "type": "string",
+                    "default": "sqlite+aiosqlite:////data/app.db",
+                },
+                "max_file_size": {"type": "integer", "default": 104857600},
+            },
+        }
+
+        doc = config_document_from_template(schema)
+
+        assert doc == {
+            "database_url": "sqlite+aiosqlite:////data/app.db",
+            "max_file_size": 104857600,
+        }
+        # The schema's own vocabulary must not survive into the config file.
+        assert "properties" not in doc
+        assert "type" not in doc
+
+    def test_flat_dict_template_passes_through_unchanged(self):
+        """A legacy template is already config-shaped, so it is written as-is."""
+        from robotsix_central_deploy.lifecycle._config_utils import (
+            config_document_from_template,
+        )
+
+        template = {"log_level": "INFO", "nested": {"key": "value"}}
+
+        assert config_document_from_template(template) == template

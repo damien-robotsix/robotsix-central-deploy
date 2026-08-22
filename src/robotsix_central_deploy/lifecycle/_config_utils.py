@@ -425,6 +425,26 @@ def _mask_secrets_json_schema(
     return _SchemaWalker(schema, _Visitor()).walk(schema, current)
 
 
+def config_document_from_template(template: dict[str, Any]) -> dict[str, Any]:
+    """Return the config document to seed into a component's empty config volume.
+
+    The stored "template" is the component's JSON *Schema*, which is not a
+    config file: its top-level keys are ``properties``/``title``/``type``.
+    Writing it verbatim gives the component a file containing none of the keys
+    it reads, so it silently falls back to its built-in defaults — which point
+    at in-image paths rather than the volumes its deploy contract mounts. The
+    component then reports healthy while writing its data into the container's
+    writable layer, where the next redeploy erases it.
+
+    Materialising the schema's defaults yields what onboarding writes for a
+    component onboarded the manual way. A legacy flat-dict template is already
+    config-shaped and is returned unchanged.
+    """
+    if _is_json_schema(template):
+        return _merge_config(template, {}, {})
+    return template
+
+
 def _merge_config(
     schema: dict[str, Any],
     existing: dict[str, Any],

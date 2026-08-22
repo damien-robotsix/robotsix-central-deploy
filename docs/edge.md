@@ -301,10 +301,38 @@ whole story, as server blocks can live in the main config file too.
 
 | Task | Where |
 |---|---|
-| Change the auth gates | `deploy/traefik/dynamic.yml` — watched, applies live |
+| Change the auth gates | `deploy/traefik/dynamic.yml` — watched, but see *Updating the dynamic config* below |
 | Change entrypoints, TLS, or providers | the `command:` block in `docker-compose.yml` — needs a Traefik restart |
 | Add an operator login | `htpasswd -nbB <user> '<password>'` → `deploy/traefik/tinyauth.env` |
 | See why a route is missing | `docker inspect <container> --format '{{json .Config.Labels}}'` |
+
+### Updating the dynamic config
+
+`dynamic.yml` is bind-mounted as a **single file**, and a bind-mounted file is
+bound to its inode. `--providers.file.watch=true` picks up writes *into* that
+inode, so editing the file in place applies live — but `git pull`, `git
+checkout` and most editors do not write in place. They write a new file and
+rename it over the old one, which leaves the container holding the previous
+inode and reading the previous content, indefinitely and with nothing logged.
+
+`docker compose up -d` does not repair this: compose compares the *declared*
+config, and the mount path has not changed, so it reports the container as
+already up to date and moves on.
+
+After any git operation that touches `deploy/traefik/dynamic.yml`:
+
+```sh
+docker compose up -d --force-recreate --no-deps traefik
+docker exec <traefik> cat /etc/traefik/dynamic/fleet.yml   # verify it took
+```
+
+This bites hardest when the fleet's labels and the edge's middlewares are
+updated together: central-deploy ships first and starts stamping a middleware
+name onto every component, while Traefik is still reading a config that does
+not define it. Traefik then drops each affected router with `middleware "..."
+does not exist` and the routes it was serving 404. The per-directory host
+routes under `/etc/traefik-host/` are edited in place by the operator, so they
+do not have this problem.
 
 Traefik reads the Docker API through its own read-only socket proxy
 (`CONTAINERS` and `EVENTS` only). It never receives the write scopes

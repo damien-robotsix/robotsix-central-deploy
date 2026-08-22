@@ -20,6 +20,7 @@ from ...registry.loader import ComponentRegistry
 from .._config_utils import (
     _sanitize_log,
     _write_llmio_tier_config,
+    config_document_from_template,
 )
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
@@ -344,9 +345,13 @@ async def _run_deploy_job(
             if not live_dict:
                 template_cfg = await config_yaml_store.get_template(name)
                 if template_cfg:
+                    # The stored template is a JSON Schema, not a config
+                    # document — see config_document_from_template for what
+                    # writing it verbatim costs.
+                    seed_cfg = config_document_from_template(template_cfg)
                     try:
                         await backend.write_config_to_volume(
-                            config.config_volume, template_cfg
+                            config.config_volume, seed_cfg
                         )
                         logger.info(
                             "deploy %s: seeded config.json into empty volume %s",

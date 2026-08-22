@@ -99,12 +99,17 @@ def traefik_labels(
         f"traefik.http.services.{name}.loadbalancer.server.port": port,
     }
 
+    # ``HeaderRegexp`` is the Traefik **v3** spelling. v2 called it
+    # ``HeadersRegexp``; v3 rejects that name outright with "unsupported
+    # function" and drops the whole router, which silently sends every bearer
+    # request to the tinyauth gate instead. The edge has run v3 since the
+    # Traefik cutover, so the plural form is always wrong here.
     for router, priority, rule, middleware in (
         (f"{name}-health", _HEALTH_PRIORITY, f"{host_rule} && Path(`/health`)", None),
         (
             f"{name}-bearer",
             _BEARER_PRIORITY,
-            f"{host_rule} && HeadersRegexp(`Authorization`, `^Bearer .+`)",
+            f"{host_rule} && HeaderRegexp(`Authorization`, `^Bearer .+`)",
             BEARER_MIDDLEWARE,
         ),
         (name, _BROWSER_PRIORITY, host_rule, BROWSER_MIDDLEWARE),
