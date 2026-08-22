@@ -1,0 +1,37 @@
+name: Pin Bump Sweep
+
+# Fleet-wide coherent-set pin-bump sweep, scheduled from here.
+#
+# The mechanism — enumerating the fleet's repos, resolving each git-sourced
+# [tool.uv.sources] pin to its HEAD once, and opening the same SHA bump in
+# every affected repo — lives in the shared workflow. What stays here is what
+# only a caller can supply: when to run, and the fleet App credentials. The
+# shared workflow is workflow_call-only precisely because it holds no
+# credentials of its own.
+#
+# This repo is the caller because the sweep is fleet infrastructure and
+# central-deploy already owns the fleet App pair used by release-please.
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Monday 06:00 UTC
+  workflow_dispatch:
+
+# One sweep at a time. Not cancel-in-progress: a cancel partway through would
+# leave some repos bumped and others not, which is the opposite of coherent.
+concurrency:
+  group: pin-bump-sweep
+  cancel-in-progress: false
+
+# Job-scoped below, not here.
+permissions: {}
+
+jobs:
+  sweep:
+    name: Coherent-set sweep
+    permissions:
+      contents: read  # the cross-repo writes use the App token, not GITHUB_TOKEN
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/pin-bump-sweep.yml@07c25b89e01e61368f85958b41673fa193b9d058  # main
+    with:
+      app-id: ${{ vars.RELEASE_APP_ID }}
+    secrets:
+      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
