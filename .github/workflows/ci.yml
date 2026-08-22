@@ -9,13 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ── Repository-specific gates (no shared-workflow equivalent) ──
 
   docs-dedup:
+    name: Docs Dedup
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,6 +48,7 @@ jobs:
   # Detect whether the PR touches only documentation files (*.md, docs/**).
   # Used downstream to skip the malware check on docs-only PRs.
   changes:
+    name: Changes
     runs-on: ubuntu-latest
     outputs:
       docs-only: ${{ steps.filter.outputs.docs-only }}
@@ -65,6 +67,7 @@ jobs:
   # ── Shared fleet workflows (lint, type-check, test, security, container scan) ──
 
   lint:
+    name: Lint
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -112,6 +115,7 @@ jobs:
           uv run ruff format --check --diff .
 
   typecheck:
+    name: Typecheck
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -142,6 +146,7 @@ jobs:
         run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
 
   test:
+    name: Test
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -192,10 +197,11 @@ jobs:
       trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
 
   trivy:
+    name: Trivy
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # Trivy SARIF upload to Code Scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -226,6 +232,7 @@ jobs:
   # ── Custom jobs (repository-specific checks not covered by shared workflows) ──
 
   vulture:
+    name: Vulture
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -248,6 +255,7 @@ jobs:
         run: uv run vulture
 
   docs:
+    name: Docs
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -265,10 +273,11 @@ jobs:
           UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
   hadolint:
+    name: Hadolint
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # Hadolint SARIF upload to Code Scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -288,6 +297,7 @@ jobs:
           category: hadolint
 
   grep-lint:
+    name: Grep Lint
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -396,6 +406,7 @@ jobs:
           echo "All grep-lint checks passed."
 
   lint-actions:
+    name: Lint Actions
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -414,6 +425,7 @@ jobs:
         run: uv tool run --from zizmor zizmor .github/workflows/
 
   module-taxonomy:
+    name: Module Taxonomy
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -433,6 +445,7 @@ jobs:
         run: uv run robotsix-modules-validate docs/modules.yaml
 
   config-schema-drift:
+    name: Config Schema Drift
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -496,6 +509,7 @@ jobs:
           EOF
 
   openapi-drift:
+    name: OpenAPI Drift
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -527,6 +541,7 @@ jobs:
         run: npx --yes @redocly/cli@1.27.0 lint docs/lifecycle/openapi.json
 
   dependency-review:
+    name: Dependency Review
     # dependency-review-action diffs base..head and only supports
     # pull_request events; on push to main it fails unconditionally.
     if: github.event_name == 'pull_request'
