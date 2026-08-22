@@ -74,6 +74,7 @@ jobs:
       cov-package: robotsix_central_deploy
       coverage-threshold: "80"
       install-extras: ""
+      job_split: true
 
   python-security:
     name: Security scan (shared)
