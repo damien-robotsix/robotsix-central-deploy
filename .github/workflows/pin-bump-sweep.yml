@@ -30,7 +30,7 @@ jobs:
     name: Coherent-set sweep
     permissions:
       contents: read  # the cross-repo writes use the App token, not GITHUB_TOKEN
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/pin-bump-sweep.yml@6da79b160866c3efbd5d4b145ea30122064f017b  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/pin-bump-sweep.yml@a6ec1daaa6273505e3bf8f90830b3ce2bf0bfb59  # main
     with:
       app-id: ${{ vars.RELEASE_APP_ID }}
     secrets:
