@@ -1202,7 +1202,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pygithub", specifier = ">=2.9.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config.git?rev=45c0920d8c0ce49a7eec8ae36c4d6a36fcd6b821" },
+    { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config.git?rev=bed0a5b3a7b77f01bd4a16a4e6753dc92982e8f9" },
     { name = "robotsix-github-auth", git = "https://github.com/damien-robotsix/robotsix-github-auth.git?rev=e6214c41fd743120aa987bacb4e9b2bc88e73943" },
     { name = "robotsix-http", git = "https://github.com/damien-robotsix/robotsix-http.git?rev=483eae9b02b0a78aa6734fb64c299d44a34c5411" },
     { name = "secure", specifier = ">=2.0" },
@@ -1233,7 +1233,7 @@ docs = [
 [[package]]
 name = "robotsix-config"
 version = "0.4.0"
-source = { git = "https://github.com/damien-robotsix/robotsix-config.git?rev=45c0920d8c0ce49a7eec8ae36c4d6a36fcd6b821#45c0920d8c0ce49a7eec8ae36c4d6a36fcd6b821" }
+source = { git = "https://github.com/damien-robotsix/robotsix-config.git?rev=bed0a5b3a7b77f01bd4a16a4e6753dc92982e8f9#bed0a5b3a7b77f01bd4a16a4e6753dc92982e8f9" }
 dependencies = [
     { name = "pydantic" },
 ]
