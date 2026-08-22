@@ -4,6 +4,24 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.9.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.8.1...v0.9.0) (2026-08-22)
+
+
+### Features
+
+* **ci:** schedule the fleet-wide pin-bump sweep from central-deploy ([#790](https://github.com/damien-robotsix/robotsix-central-deploy/issues/790)) ([f59d7a5](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f59d7a553face19e9983193ddd3fe0b042acac1f))
+* Delete generateConfigForm — the deploy UI no longer renders component config (20260802T192015Z-delete-generateconfigform-the-deploy-ui-bdb5) ([#774](https://github.com/damien-robotsix/robotsix-central-deploy/issues/774)) ([7765606](https://github.com/damien-robotsix/robotsix-central-deploy/commit/776560611ff80b2f15354bd88df566eb2c35a052))
+* Remove auth config fields, settings-store fields, and settings-form UI (20260809T225800Z-remove-auth-config-fields-settings-store-6b5f) ([#775](https://github.com/damien-robotsix/robotsix-central-deploy/issues/775)) ([74fb842](https://github.com/damien-robotsix/robotsix-central-deploy/commit/74fb842b224ac3d970d535f51d57f9df8dd05351))
+* Remove stale auth-username/auth-password compose labels from deploy/docker-compose.yml (20260821T130622Z-remove-stale-auth-username-auth-password-b833) ([#787](https://github.com/damien-robotsix/robotsix-central-deploy/issues/787)) ([553a241](https://github.com/damien-robotsix/robotsix-central-deploy/commit/553a2411316a11be30d03e79f984e6a55db0549f))
+* **ui:** give central-deploy back a Settings panel, the fleet's shared one ([#781](https://github.com/damien-robotsix/robotsix-central-deploy/issues/781)) ([1e95c6b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/1e95c6bd6b09f2498f635ea4e62c34d303ea1dca))
+
+
+### Bug Fixes
+
+* **edge:** set Secure on the SSO cookie and pin tinyauth to v5.1.3 ([#782](https://github.com/damien-robotsix/robotsix-central-deploy/issues/782)) ([a342863](https://github.com/damien-robotsix/robotsix-central-deploy/commit/a342863ed3485cd1cf9b94f313bb1382607c8764))
+* Fix restart restoration asymmetry in POST /volumes/{name}/relocate success path (20260816T231652Z-fix-restart-restoration-asymmetry-in-pos-3a82) ([#777](https://github.com/damien-robotsix/robotsix-central-deploy/issues/777)) ([5550c51](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5550c5166e3c922a5dc8a4860c86e89d3ab2b103))
+* main CI is red: 13 stale tests in test_self_config.py still assert the removed api_key auth (20260821T103517Z-main-ci-is-red-13-stale-tests-in-test-se-9f11) ([#786](https://github.com/damien-robotsix/robotsix-central-deploy/issues/786)) ([6c6141a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/6c6141a290f559eee6f444123e9ff5adb77bb08a))
+
 ## [0.8.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.8.0...v0.8.1) (2026-08-16)
 
 
