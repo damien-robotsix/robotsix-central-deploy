@@ -185,17 +185,21 @@ CVE-2026-15534
 GHSA-6v7p-g79w-8964
 CVE-2025-47273
 
-# CVEs in Debian base-image system packages (python:3.14-slim).
-# Not exploitable in this container's attack surface.
-CVE-2026-14456
-CVE-2026-15059
-CVE-2026-16742
+# CVEs in Debian base-image system packages (python:3.14-slim)
+# with no available fix as of 2026-08-23.
+#
+# CVE-2026-19487 — not yet tracked on Debian security tracker.
+#   Review after 2026-11-23.
 CVE-2026-19487
+# CVE-2026-66046 — libexpat1, upstream fix in libexpat ≥2.8.4.
+#   No Debian upload yet (<no-dsa>, minor issue). Review after 2026-11-23.
 CVE-2026-66046
+# CVE-2026-75803 — openssl/libssl3t64, upstream commits exist for 3.5/3.6.
+#   No Debian upload yet. Review after 2026-11-23.
 CVE-2026-75803
+# CVE-2026-76956 — libexpat1, upstream fix PR exists.
+#   No Debian upload yet. Review after 2026-11-23.
 CVE-2026-76956
+# CVE-2026-76957 — libexpat1, same upstream PR as CVE-2026-76956.
+#   No Debian upload yet. Review after 2026-11-23.
 CVE-2026-76957
-
-# Python setuptools CVE in the built image — transitive dependency not
-# reachable from the application's attack surface.
-CVE-2026-59890
