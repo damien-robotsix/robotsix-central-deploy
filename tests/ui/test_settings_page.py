@@ -26,6 +26,7 @@ _UI_DIR = (
 _SETTINGS_HTML = (_UI_DIR / "settings.html").read_text(encoding="utf-8")
 _SETTINGS_JS = (_UI_DIR / "static" / "settings.js").read_text(encoding="utf-8")
 _DASHBOARD_HTML = (_UI_DIR / "dashboard.html").read_text(encoding="utf-8")
+_APPSHELL_JS = (_UI_DIR / "static" / "appshell.js").read_text(encoding="utf-8")
 
 
 class TestSettingsRoute:
@@ -50,7 +51,10 @@ class TestSettingsRoute:
         assert "/ui/static/settings.js" in body
 
     async def test_dashboard_links_to_settings(self):
-        assert 'href="/ui/settings"' in _DASHBOARD_HTML
+        """The settings link is rendered by the shared AppShell JS bundle,
+        not as a static <a> element in the dashboard markup."""
+        assert "/ui/static/appshell.js" in _DASHBOARD_HTML
+        assert 'settingsHref: "/ui/settings"' in _APPSHELL_JS
 
 
 class TestSettingsPageConstraints:

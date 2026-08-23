@@ -9,10 +9,7 @@
 </head>
 <body>
 
-<header>
-  <h1>Robotsix Deploy — Settings</h1>
-  <a href="/ui" class="btn-header">&larr; Back to dashboard</a>
-</header>
+<div id="appshell-container"></div>
 
 <p class="settings-intro">
   These are <strong>central-deploy's own</strong> settings, stored in its
@@ -30,6 +27,7 @@
      script-src 'self', which blocks inline script blocks outright. -->
 <div id="settings-panel" data-csrf-token="{{csrf_token}}"></div>
 
+<script type="module" src="/ui/static/appshell.js"></script>
 <script type="module" src="/ui/static/settings.js"></script>
 
 </body>

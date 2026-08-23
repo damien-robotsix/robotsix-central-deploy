@@ -15,7 +15,8 @@ function updateRefreshTime() {
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  document.getElementById('refresh-time').textContent = `Last refreshed: ${hh}:${mm}:${ss}`;
+  const el = document.getElementById('refresh-time');
+  if (el) el.textContent = `Last refreshed: ${hh}:${mm}:${ss}`;
 }
 
 function showError(msg) {
@@ -1577,7 +1578,7 @@ async function doLogout() {
 // ── Claude Auth section ───────────────────────────────────────────
 
 function showClaudeAuthSection() {
-  document.querySelector('header').style.display = 'none';
+  document.querySelector('.rsu-appshell').style.display = 'none';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = 'none');
   document.querySelector('table').style.display = 'none';
   document.getElementById('claude-auth-section').classList.remove('hidden');
@@ -1586,7 +1587,7 @@ function showClaudeAuthSection() {
 
 function hideClaudeAuthSection() {
   document.getElementById('claude-auth-section').classList.add('hidden');
-  document.querySelector('header').style.display = '';
+  document.querySelector('.rsu-appshell').style.display = '';
   document.querySelectorAll('body > .disk-panel').forEach(el => el.style.display = '');
   document.querySelector('table').style.display = '';
 }

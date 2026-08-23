@@ -1,0 +1,1 @@
+Adopt shared AppShell navigation shell across central-deploy dashboard and settings pages; bump ROBOTSIX_UI_VERSION to v0.1.40 and fetch the framework-free JS bundle alongside the stylesheet so `mountAppShell` can render the consistent top-level chrome.

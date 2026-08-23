@@ -7,8 +7,9 @@ stale, one-shot copy of either. The URL construction mirrors the
 in the robotsix-ui repository.
 
 Both files are needed, not just the stylesheet: ``vanilla.js`` exports
-``mountConfigPanel``, the fleet's only settings renderer, and the stylesheet
-is what styles the panel it mounts. Fetching one without the other yields
+``mountConfigPanel`` (the fleet's only settings renderer) and
+``mountAppShell`` (the shared top-level navigation chrome), and the
+stylesheet is what styles both. Fetching one without the other yields
 either an unstyled panel or a styled page with nothing to put in it.
 """
 
@@ -21,7 +22,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ROBOTSIX_UI_VERSION = "v0.1.34"
+ROBOTSIX_UI_VERSION = "v0.1.40"
 
 _VERSION_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
