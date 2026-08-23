@@ -71,7 +71,7 @@ jobs:
     permissions:
       contents: read
     with:
-      job_split: true
+      job_split: false
       install-extras: ""
       cov-package: "robotsix_central_deploy"
       pytest-args: "tests/ --dist loadscope -x --tb=long"
