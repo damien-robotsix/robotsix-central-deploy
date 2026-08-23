@@ -152,11 +152,12 @@ module = "jsonschema.*"
 ignore_missing_imports = true
 
 [tool.coverage.run]
-source = ["src"]
 branch = true
+source_pkgs = ["robotsix_central_deploy"]
+omit = ["tests/*"]
 
 [tool.coverage.report]
-fail_under = 80
+show_missing = true
 
 [tool.deptry]
 known_first_party = ["robotsix_central_deploy"]
