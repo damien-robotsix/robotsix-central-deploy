@@ -1,0 +1,1 @@
+Adopt the shared AppShell navigation shell (from robotsix-ui v0.1.40) as the persistent top-of-page chrome on the dashboard and settings pages, replacing the bespoke header. Nav highlights the active page and the Settings entry links to the existing settings surface. The robotsix-ui version pin is bumped from v0.1.34 to v0.1.40.

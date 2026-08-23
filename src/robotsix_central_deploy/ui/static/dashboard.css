@@ -16,7 +16,6 @@
     --text-muted: var(--rsu-color-text-muted, #888);
   }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
-  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
   h1 { font-size: 1.4rem; color: var(--blue); }
   #refresh-time { font-size: 0.8rem; color: var(--grey); }
   .error-banner { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); padding: 10px 16px; border-radius: 4px; margin-bottom: 16px; display: none; }
