@@ -1,0 +1,42 @@
+name: Python CI setup
+description: >
+  Shared checkout + Python + uv + dev-deps install for the python-ci
+  reusable workflow.  Required as a local adapter because the shared
+  workflow's ./ reference resolves to the caller's repo (known
+  GitHub Actions checkout-ordering defect).  Remove this file once
+  robotsix-github-workflows fixes its local-action reference.
+inputs:
+  python-version:
+    description: Python version to set up.
+    required: true
+  uv-version:
+    description: uv version to install.
+    required: true
+  install-extras:
+    description: Extras to install (space-separated).
+    required: false
+    default: "tracing"
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+      with:
+        version: ${{ inputs.uv-version }}
+    - name: Install dev deps
+      shell: bash
+      env:
+        UV_PROJECT_ENVIRONMENT: system
+        INSTALL_EXTRAS: ${{ inputs.install-extras }}
+      run: |
+        extras=""
+        for x in $INSTALL_EXTRAS; do
+          extras="$extras --extra $x"
+        done
+        uv sync --frozen $extras

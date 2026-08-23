@@ -38,6 +38,9 @@ dev = [
     "types-docker>=7.2.0.20260728",
     "towncrier>=24.0",
     "hypothesis>=6.165.1",
+    # Required by the shared python-ci.yml reusable workflow (uv run
+    # deptry . without --with).
+    "deptry>=0.23",
     # vulture: dead-code detection (CI gate). Findings that are false
     # positives are recorded in vulture_whitelist.py.
     "vulture>=2.14",
