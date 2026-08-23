@@ -97,7 +97,7 @@ When a component has siblings, lifecycle actions (start/stop/restart/deploy/roll
 
 ### Service Management
 
-All service endpoints require auth when configured.
+All service endpoints are reachable only through the fleet edge (Traefik + tinyauth); central-deploy itself enforces no per-endpoint auth.
 
 | Method | Path | Description |
 | -------- | ------ | ------------- |
@@ -167,14 +167,13 @@ component that owns the config.
 
 ## Authentication
 
-Configured via environment variables (`ROBOTSIX_LIFECYCLE_` prefix):
-
-- `API_KEY` — `X-API-Key` header
-- `AUTH_USERNAME` + `AUTH_PASSWORD` — HTTP Basic Auth
-
-Auth is **off** when no credentials are configured (dev mode). `/health` is always open.
-
-**There is no login page and no session store.** Operator authentication happens once at the fleet edge (Traefik + tinyauth); `verify_auth` above is defence-in-depth on the JSON API against a caller already on the internal Docker network. Do not re-introduce per-app login — see the [component standard](https://damien-robotsix.github.io/robotsix-standards/component-standard/).
+central-deploy ships **no authentication of its own**. The trust model follows the
+[component standard](
+  https://damien-robotsix.github.io/robotsix-standards/component-standard/
+): the network behind the fleet edge is trusted, so the component enforces no auth
+(no login page, no HTTP Basic middleware, no session handling, no bearer-token
+dependency on routers, no `auth.*` config section). The fleet edge (Traefik +
+tinyauth) is the single gate. `/health` is always open.
 
 ## Configuration
 

@@ -37,8 +37,6 @@ for local development builds from the checkout).
     docker run --rm -i -v central_deploy_data:/data alpine sh -c \
       'cat > /data/config.json && chmod 600 /data/config.json && chown 1000:1000 /data/config.json' << 'EOF'
     {
-      "auth_username": "admin",
-      "auth_password": "...",
       "store_backend": "file",
       "store_path": "/data/lifecycle_state.yaml",
       "component_config_store_path": "/data/component_configs.json",
