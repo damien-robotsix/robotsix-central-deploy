@@ -36,6 +36,7 @@ RUN --mount=type=secret,id=github_token,required=false \
          -o /tmp/requirements.txt \
     && uv pip install --system --no-cache -r /tmp/requirements.txt \
     && uv pip install --system --no-cache --no-deps . \
+    && uv pip install --system --no-cache 'setuptools>=83.0.0' \
     && rm -f /tmp/requirements.txt
 
 # Runtime stage — only git (needed at runtime by the onboard fetcher), the
@@ -51,6 +52,9 @@ RUN apt-get update && apt-get upgrade -y \
 
 COPY --from=builder /usr/local/lib/python3.14/site-packages/ /usr/local/lib/python3.14/site-packages/
 COPY --from=builder /usr/local/bin/robotsix-lifecycle /usr/local/bin/robotsix-lifecycle
+
+# Ensure setuptools is at the patched version (CVE-2026-59890).
+RUN python -m pip install --no-cache-dir 'setuptools>=83.0.0'
 
 # Non-root runtime user. /data is the state-volume mount point; a named
 # volume created empty inherits this ownership on first use (pre-existing
