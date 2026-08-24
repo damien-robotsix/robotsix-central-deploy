@@ -4,6 +4,33 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.9.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.8.1...v0.9.0) (2026-08-24)
+
+
+### Features
+
+* **ci:** schedule the fleet-wide pin-bump sweep from central-deploy ([#790](https://github.com/damien-robotsix/robotsix-central-deploy/issues/790)) ([f59d7a5](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f59d7a553face19e9983193ddd3fe0b042acac1f))
+* Delete generateConfigForm — the deploy UI no longer renders component config (20260802T192015Z-delete-generateconfigform-the-deploy-ui-bdb5) ([#774](https://github.com/damien-robotsix/robotsix-central-deploy/issues/774)) ([7765606](https://github.com/damien-robotsix/robotsix-central-deploy/commit/776560611ff80b2f15354bd88df566eb2c35a052))
+* Remove auth config fields, settings-store fields, and settings-form UI (20260809T225800Z-remove-auth-config-fields-settings-store-6b5f) ([#775](https://github.com/damien-robotsix/robotsix-central-deploy/issues/775)) ([74fb842](https://github.com/damien-robotsix/robotsix-central-deploy/commit/74fb842b224ac3d970d535f51d57f9df8dd05351))
+* Remove stale auth-username/auth-password compose labels from deploy/docker-compose.yml (20260821T130622Z-remove-stale-auth-username-auth-password-b833) ([#787](https://github.com/damien-robotsix/robotsix-central-deploy/issues/787)) ([553a241](https://github.com/damien-robotsix/robotsix-central-deploy/commit/553a2411316a11be30d03e79f984e6a55db0549f))
+* **ui:** give central-deploy back a Settings panel, the fleet's shared one ([#781](https://github.com/damien-robotsix/robotsix-central-deploy/issues/781)) ([1e95c6b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/1e95c6bd6b09f2498f635ea4e62c34d303ea1dca))
+
+
+### Bug Fixes
+
+* CI failure: Pin Bump Sweep on main (20260822T182849Z-ci-failure-pin-bump-sweep-on-main-d530) ([#795](https://github.com/damien-robotsix/robotsix-central-deploy/issues/795)) ([274e3be](https://github.com/damien-robotsix/robotsix-central-deploy/commit/274e3be9934f19b111439f6e57acbe1dffc87a0c))
+* **ci:** repin pin-bump-sweep to per-repo-lock-failure-resilience fix ([#802](https://github.com/damien-robotsix/robotsix-central-deploy/issues/802)) ([943ad1c](https://github.com/damien-robotsix/robotsix-central-deploy/commit/943ad1c24e9c27f149df2f9a034a8d3ca5eafcbb))
+* **edge:** set Secure on the SSO cookie and pin tinyauth to v5.1.3 ([#782](https://github.com/damien-robotsix/robotsix-central-deploy/issues/782)) ([a342863](https://github.com/damien-robotsix/robotsix-central-deploy/commit/a342863ed3485cd1cf9b94f313bb1382607c8764))
+* Fix restart restoration asymmetry in POST /volumes/{name}/relocate success path (20260816T231652Z-fix-restart-restoration-asymmetry-in-pos-3a82) ([#777](https://github.com/damien-robotsix/robotsix-central-deploy/issues/777)) ([5550c51](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5550c5166e3c922a5dc8a4860c86e89d3ab2b103))
+* Genuinely remediate the 9 CVEs suppressed by PR [#789](https://github.com/damien-robotsix/robotsix-central-deploy/issues/789) (remove .trivyignore blanket suppression, bump base image/setuptools) (20260823T114410Z-genuinely-remediate-the-9-cves-suppresse-2da1) ([#798](https://github.com/damien-robotsix/robotsix-central-deploy/issues/798)) ([7eb8b16](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7eb8b162e95a3f39f87f4ffe1ee2479c5a3076f7))
+* **ghcr:** stop a stale PAT from shadowing the GitHub App credential ([#805](https://github.com/damien-robotsix/robotsix-central-deploy/issues/805)) ([387c629](https://github.com/damien-robotsix/robotsix-central-deploy/commit/387c629472a45c33442f506f28a62da4f2109055))
+* main CI is red: 13 stale tests in test_self_config.py still assert the removed api_key auth (20260821T103517Z-main-ci-is-red-13-stale-tests-in-test-se-9f11) ([#786](https://github.com/damien-robotsix/robotsix-central-deploy/issues/786)) ([6c6141a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/6c6141a290f559eee6f444123e9ff5adb77bb08a))
+
+
+### Documentation
+
+* Rewrite AGENT.md and deployment docs to drop component-level auth (20260809T225800Z-rewrite-agent-md-and-deployment-docs-to-a4c1) ([#796](https://github.com/damien-robotsix/robotsix-central-deploy/issues/796)) ([4412358](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4412358f6df43e5fcb7dc79450e2d3259efa66f5))
+
 ## [0.8.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.8.0...v0.8.1) (2026-08-16)
 
 
