@@ -221,7 +221,13 @@ async def client() -> AsyncClient:
 
 @pytest.fixture
 def auth_headers() -> dict[str, str]:
-    return {"X-API-Key": "test-key"}
+    """Empty headers — component-level auth was removed (auth-removal epic).
+
+    The fleet edge (Traefik + tinyauth) is the only gate; every request
+    arriving here is already authenticated, so tests send no credentials.
+    The fixture is kept so existing test signatures stay stable.
+    """
+    return {}
 
 
 # ---------------------------------------------------------------------------
