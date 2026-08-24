@@ -1,0 +1,53 @@
+name: Trivy SARIF scan and upload
+description: >
+  Run aquasecurity/trivy-action in SARIF format and upload the results
+  to GitHub Code Scanning.  Encapsulates the two-step SARIF scan +
+  SARIF upload tail shared by Docker-family workflows.
+
+inputs:
+  image-ref:
+    description: Full image reference to scan (e.g.
+      `ghcr.io/owner/repo:tag`).  Required.
+    required: true
+  ignore-unfixed:
+    description: Skip CVEs with no upstream fix.
+    required: false
+    default: "true"
+  skip-if-empty:
+    description: >
+      When true, adds an `if: always() && <image-ref> != ''` guard on
+      the Trivy scan step so scanning is skipped when no image was
+      built.  Useful for workflows where the image build may fail
+      before reaching this action.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # Code-scanning surface: separate Trivy run that emits SARIF for
+    # all severities (no exit-code).  The two steps MUST stay separate:
+    # the trivy-action's entrypoint unsets TRIVY_SEVERITY when
+    # format=sarif (unless limit-severities-for-sarif=true), so
+    # combining a gate + SARIF into one step would silently scan for
+    # ALL severities and fail on HIGH/MEDIUM findings the gate is
+    # supposed to ignore.  `if: always()` so we still surface findings
+    # in the Security tab even when an earlier gate step trips.
+    - name: Trivy vulnerability scan (SARIF for code-scanning)
+      if: ${{ inputs.skip-if-empty == 'true' && always() && inputs.image-ref != '' || inputs.skip-if-empty != 'true' }}
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+      with:
+        image-ref: ${{ inputs.image-ref }}
+        format: sarif
+        output: trivy-results.sarif
+        # No exit-code: this step is observability-only.
+        ignore-unfixed: ${{ inputs.ignore-unfixed }}
+
+    - name: Upload Trivy SARIF results
+      uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57  # v3.36.0
+      if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+      # Code-scanning upload is observability-only; a SARIF-upload auth
+      # failure (e.g. 401) must not gate the workflow.
+      continue-on-error: true
+      with:
+        sarif_file: trivy-results.sarif
