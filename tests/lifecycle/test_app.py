@@ -190,10 +190,10 @@ def test_no_route_has_real_auth_dependency():
         for dep in getattr(route, "dependencies", ()):
             _check_dep_callable(route.path, dep.dependency, auth_module_names)
 
-        # Check the full resolved dependant tree (signature-level Depends).
-        dependant = getattr(route, "dependant", None)
-        if dependant is not None:
-            _check_dependant_tree(route.path, dependant, auth_module_names)
+        # Check the full resolved dependent tree (signature-level Depends).
+        dependent = getattr(route, "dependant", None)  # codespell:ignore
+        if dependent is not None:
+            _check_dependent_tree(route.path, dependent, auth_module_names)
 
 
 def _check_dep_callable(
@@ -232,14 +232,14 @@ def _check_dep_callable(
         )
 
 
-def _check_dependant_tree(
+def _check_dependent_tree(
     route_path: str,
-    dependant: object,
+    dependent: object,
     auth_module_names: tuple[str, ...],
 ) -> None:
     """Recursively inspect a Dependant tree for real auth dependencies."""
-    # NOTE: dependant.call at the root is the *endpoint function* itself,
+    # NOTE: dependant.call at the root is the *endpoint function* itself,  # codespell:ignore
     # not a dependency — only recurse into the dependencies list.
-    for sub in getattr(dependant, "dependencies", []):
+    for sub in getattr(dependent, "dependencies", []):
         _check_dep_callable(route_path, getattr(sub, "call", None), auth_module_names)
-        _check_dependant_tree(route_path, sub, auth_module_names)
+        _check_dependent_tree(route_path, sub, auth_module_names)
