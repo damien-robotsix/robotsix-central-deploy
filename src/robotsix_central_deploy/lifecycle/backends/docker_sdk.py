@@ -81,7 +81,7 @@ class DockerSdkBackend(ExecutionBackend):
         )
         self._volume = VolumeOps(self._client)
         self._self_mgmt = SelfMgmtOps(
-            self._client, self._get_container, self._build_auth_config
+            self._client, self._get_container, self._build_auth_configs
         )
 
     @property
@@ -600,28 +600,106 @@ class DockerSdkBackend(ExecutionBackend):
         except Exception as restore_exc:  # noqa: BLE001
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
-    async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
-        """Return an auth config dict for *image_ref*, or *None* for anonymous pull.
+    async def _build_auth_configs(self, image_ref: str) -> list[dict[str, str]]:
+        """Return auth config dicts for *image_ref*, most-preferred first.
 
-        Only ``ghcr.io`` images are authenticated; the credential itself comes
-        from the shared resolver, so the pull and the update check present the
-        same identity.  Anonymous pull (``None``) works for public images only
-        — a 401 on a private image surfaces a diagnostic error.
+        Only ``ghcr.io`` images are authenticated; the credentials come from
+        the shared resolver, so the pull and the update check present the same
+        identities.  An empty list means anonymous pull, which works for public
+        images only — a 401 on a private image surfaces a diagnostic error.
+
+        The list matters: a rejected credential must be able to fall through to
+        the next one, or a stale PAT silently shadows a working GitHub App.
         """
         if _image_registry_host(image_ref) != GHCR_HOST:
-            return None
+            return []
 
         try:
-            creds = await self._ghcr_credentials.resolve()
+            candidates = await self._ghcr_credentials.resolve_all()
         except RuntimeError as exc:
             raise RuntimeError(f"{exc} (pull of {image_ref!r})") from exc
-        if creds is None:
-            return None
-        return {
-            "username": creds.username,
-            "password": creds.password,
-            "serveraddress": GHCR_HOST,
-        }
+        return [
+            {
+                "username": creds.username,
+                "password": creds.password,
+                "serveraddress": GHCR_HOST,
+            }
+            for creds in candidates
+        ]
+
+    async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
+        """Return the most-preferred auth config for *image_ref*, or ``None``.
+
+        For callers that cannot retry with a second credential.
+        """
+        configs = await self._build_auth_configs(image_ref)
+        return configs[0] if configs else None
+
+    async def _pull_with_fallback(
+        self,
+        image_ref: str,
+        auth_configs: list[dict[str, str]],
+        loop: Any,
+        docker: Any,
+    ) -> Any:
+        """Pull *image_ref*, trying each auth config until one is accepted.
+
+        Raises ``RuntimeError`` with a diagnostic that distinguishes the two
+        very different ghcr.io failures: *no* credential was presented (401 on
+        a private package — nothing is configured) versus a credential was
+        presented and **rejected** (403 ``denied`` — what a revoked PAT looks
+        like).  Conflating them sends operators hunting for a missing token
+        that is in fact present and dead.
+        """
+        is_ghcr = _image_registry_host(image_ref) == GHCR_HOST
+        attempts: list[dict[str, str] | None] = list(auth_configs) or [None]
+        last_exc: Exception | None = None
+
+        for index, auth_config in enumerate(attempts):
+            try:
+                return await loop.run_in_executor(
+                    None,
+                    lambda ac=auth_config: self._client.images.pull(
+                        image_ref, auth_config=ac
+                    ),
+                )
+            except docker.errors.APIError as exc:
+                last_exc = exc
+                response = getattr(exc, "response", None)
+                status = getattr(response, "status_code", None)
+                if status not in (401, 403) or index == len(attempts) - 1:
+                    break
+                logger.warning(
+                    "ghcr.io rejected credential %d/%d (%s) for %s — trying the next one",
+                    index + 1,
+                    len(attempts),
+                    status,
+                    image_ref,
+                )
+
+        response = getattr(last_exc, "response", None)
+        status = getattr(response, "status_code", None)
+        if is_ghcr and status in (401, 403):
+            if not auth_configs:
+                raise RuntimeError(
+                    f"Image pull failed for {image_ref!r}: ghcr.io returned {status} "
+                    "and no credential was presented. Configure ghcr_pull_token "
+                    "(a read:packages PAT) or github_app_id / "
+                    "github_app_private_key / installation_id to authenticate."
+                ) from last_exc
+            tried = ", ".join(sorted({ac["username"] for ac in auth_configs}))
+            raise RuntimeError(
+                f"Image pull failed for {image_ref!r}: ghcr.io rejected every "
+                f"configured credential ({tried}) with {status}. The credentials "
+                "are present but not accepted — check whether ghcr_pull_token is "
+                "revoked or expired (note it overrides config.json when set in "
+                "system_settings.json), and that the GitHub App installation "
+                "still grants read access to this package."
+            ) from last_exc
+
+        raise RuntimeError(
+            f"Image pull failed for {image_ref!r}: {last_exc}"
+        ) from last_exc
 
     async def deploy(
         self, service: ServiceRecord, config: ComponentConfig, image_ref: str
@@ -633,27 +711,8 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         # Step 1 — pull target image; obtain its digest
-        auth_config = await self._build_auth_config(image_ref)
-        try:
-            image = await loop.run_in_executor(
-                None,
-                lambda: self._client.images.pull(image_ref, auth_config=auth_config),
-            )
-        except docker.errors.APIError as exc:
-            response = getattr(exc, "response", None)
-            if (
-                response is not None
-                and response.status_code == 401
-                and _image_registry_host(image_ref) == "ghcr.io"
-                and not auth_config
-            ):
-                raise RuntimeError(
-                    f"Image pull failed for {image_ref!r}: received 401 Unauthorized "
-                    "from ghcr.io. Configure ghcr_pull_token (a read:packages PAT) "
-                    "or github_app_id / github_app_private_key / installation_id "
-                    "in config/config.json to authenticate."
-                ) from exc
-            raise RuntimeError(f"Image pull failed for {image_ref!r}: {exc}") from exc
+        auth_configs = await self._build_auth_configs(image_ref)
+        image = await self._pull_with_fallback(image_ref, auth_configs, loop, docker)
         # Derive manifest digest from RepoDigests (comparable to registry
         # Docker-Content-Digest header), falling back to config digest.
         # Strip a digest suffix first (repo@sha256:… — the caretaker deploys

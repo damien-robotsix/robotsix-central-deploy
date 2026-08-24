@@ -27,11 +27,11 @@ class SelfMgmtOps:
         self,
         client: Any,
         get_container: Callable[..., Any],
-        build_auth_config: Callable[..., Any],
+        build_auth_configs: Callable[..., Any],
     ) -> None:
         self._client = client
         self._get_container = get_container
-        self._build_auth_config = build_auth_config
+        self._build_auth_configs = build_auth_configs
 
     async def _find_by_config_hostname(self, hostname: str) -> Any:
         """Find the running container whose ``Config.Hostname`` is *hostname*.
@@ -228,14 +228,33 @@ class SelfMgmtOps:
         # Mint the auth config before entering the executor — token minting
         # does network I/O and cannot run inside a thread that's already
         # inside run_in_executor.
-        auth_config = await self._build_auth_config(watchtower_image)
+        auth_configs = await self._build_auth_configs(watchtower_image)
 
         def _run() -> str:
             api = self._client.api
-            self._client.images.pull(
-                watchtower_image,
-                auth_config=auth_config,
-            )
+            # Try each credential in turn: a rejected one must not shadow a
+            # working one behind it (see GhcrCredentialResolver.resolve_all).
+            attempts = list(auth_configs) or [None]
+            for index, auth_config in enumerate(attempts):
+                try:
+                    self._client.images.pull(
+                        watchtower_image,
+                        auth_config=auth_config,
+                    )
+                    break
+                except docker.errors.APIError as exc:
+                    status = getattr(
+                        getattr(exc, "response", None), "status_code", None
+                    )
+                    if status not in (401, 403) or index == len(attempts) - 1:
+                        raise
+                    logger.warning(
+                        "watchtower image pull: ghcr.io rejected credential "
+                        "%d/%d (%s) — trying the next one",
+                        index + 1,
+                        len(attempts),
+                        status,
+                    )
             networking = None
             if target.networks:
                 # Multi-endpoint create keeps the watchtower container itself
