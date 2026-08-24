@@ -56,6 +56,41 @@ def _build_store(cfg: LifecycleConfig) -> ServiceStore:
     return InMemoryStore()
 
 
+def _log_ghcr_credential_posture(
+    cfg: LifecycleConfig, pre_overlay_pull_token: str
+) -> None:
+    """Record which ghcr.io credentials are in play, and where they came from.
+
+    ``system_settings.json`` silently overrides ``config.json`` for every
+    ``SETTINGS_DEFAULTS`` key.  A ``ghcr_pull_token`` stored there is invisible
+    in the config file, so a revoked one can sit shadowing a working GitHub App
+    credential indefinitely — which is exactly what blocked fleet pulls on
+    2026-08-24.  Naming the source at startup makes that state greppable.
+    """
+    token = cfg.ghcr_pull_token.get_secret_value()
+    app_configured = bool(
+        cfg.github_app_id.get_secret_value()
+        and cfg.github_app_private_key.get_secret_value()
+        and cfg.installation_id.get_secret_value()
+    )
+
+    if token and not pre_overlay_pull_token:
+        logger.warning(
+            "ghcr.io: ghcr_pull_token comes from system_settings.json and "
+            "overrides config.json%s. If pulls fail with 403 'denied', suspect "
+            "this token before the GitHub App.",
+            " (a GitHub App is also configured and will be tried as a fallback)"
+            if app_configured
+            else "",
+        )
+    elif token:
+        logger.info("ghcr.io: authenticating with the configured ghcr_pull_token")
+    elif app_configured:
+        logger.info("ghcr.io: authenticating with the GitHub App installation")
+    else:
+        logger.info("ghcr.io: no credential configured — public packages only")
+
+
 def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
     if cfg.execution_backend == ExecutionBackendType.DOCKER_SDK:
         return DockerSdkBackend(
@@ -325,10 +360,13 @@ async def _init_settings(app: FastAPI) -> None:
             )
 
     # 3. Overlay persisted settings onto LifecycleConfig.
+    _pre_overlay_pull_token = _config.ghcr_pull_token.get_secret_value()
     _config = settings_store.overlay(
         _config
     )  # returns new LifecycleConfig (or same if no file)
     app.state.config = _config  # replace with overlaid version
+
+    _log_ghcr_credential_posture(_config, _pre_overlay_pull_token)
 
     # -- Backend (constructed from overlaid config) ----------------------
     _backend = _build_backend(_config)

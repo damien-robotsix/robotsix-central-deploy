@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from robotsix_http import RetryClient
+from robotsix_http import ExternalHTTPError, RetryClient
 
 from robotsix_central_deploy._ghcr_auth import GhcrCredentials
 from robotsix_central_deploy.registry_check.checker import RegistryChecker
@@ -175,10 +175,19 @@ class TestRegistryCheckerGhcrAuth:
         return AsyncMock(spec=RetryClient)
 
     @staticmethod
-    def _resolver(creds):
+    def _resolver(*creds):
+        """Resolver yielding *creds* in preference order (None → anonymous)."""
+        candidates = [c for c in creds if c is not None]
         resolver = MagicMock()
-        resolver.resolve = AsyncMock(return_value=creds)
+        resolver.resolve_all = AsyncMock(return_value=candidates)
         return resolver
+
+    @staticmethod
+    def _auth_error(status):
+        """What RetryClient actually raises on a 4xx — it never returns one."""
+        return ExternalHTTPError(
+            f"HTTP {status}", status_code=status, response=MagicMock(status_code=status)
+        )
 
     @staticmethod
     def _auth_header(mock_client) -> str:
@@ -251,7 +260,7 @@ class TestRegistryCheckerGhcrAuth:
     ):
         """A broken GitHub App must not take the whole update check down."""
         resolver = MagicMock()
-        resolver.resolve = AsyncMock(side_effect=RuntimeError("mint failed"))
+        resolver.resolve_all = AsyncMock(side_effect=RuntimeError("mint failed"))
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"token": "anon-token"}
         manifest_resp = MagicMock(status_code=200)
@@ -281,3 +290,78 @@ class TestRegistryCheckerGhcrAuth:
         await checker.get_latest_digest("docker.io/robotsix/mill:latest")
 
         assert "headers" not in mock_client.get.call_args[1]
+
+    async def test_raised_auth_error_on_token_exchange_is_logged(
+        self, mock_client, caplog
+    ):
+        """RetryClient *raises* on 4xx — the returned-response path is a mock
+        artefact.  A revoked PAT went unnoticed for 15 days because the only
+        coverage used the shape the real client never produces."""
+        mock_client.get = AsyncMock(side_effect=self._auth_error(403))
+        mock_client.head = AsyncMock()
+        checker = RegistryChecker(
+            mock_client,
+            ghcr_credentials=self._resolver(GhcrCredentials("robot", "dead")),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result is None
+        assert "registry auth failed" in caplog.text
+        assert "ghcr_pull_token" in caplog.text, "the log must say how to fix it"
+
+    async def test_raised_auth_error_on_manifest_head_is_logged(
+        self, mock_client, caplog
+    ):
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(side_effect=self._auth_error(401))
+        checker = RegistryChecker(mock_client)
+
+        with caplog.at_level(logging.WARNING):
+            result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result is None
+        assert "registry auth failed" in caplog.text
+
+    async def test_rejected_credential_falls_through_to_the_next_one(self, mock_client):
+        """A stale PAT must not shadow a working GitHub App credential."""
+        dead = GhcrCredentials("robot", "revoked-pat")
+        good = GhcrCredentials("x-access-token", "app-token")
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "scoped"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:private"}
+        mock_client.get = AsyncMock(side_effect=[self._auth_error(403), token_resp])
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(
+            mock_client, ghcr_credentials=self._resolver(dead, good)
+        )
+
+        result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result == "sha256:private", "must retry with the App credential"
+        second = mock_client.get.call_args_list[1][1]["headers"]["Authorization"]
+        assert base64.b64decode(second.split()[1]).decode() == (
+            "x-access-token:app-token"
+        )
+
+    async def test_all_credentials_rejected_falls_back_to_anonymous(self, mock_client):
+        """A public package must still resolve when every credential is dead."""
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "anon"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": "sha256:public"}
+        mock_client.get = AsyncMock(side_effect=[self._auth_error(403), token_resp])
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(
+            mock_client,
+            ghcr_credentials=self._resolver(GhcrCredentials("robot", "revoked")),
+        )
+
+        result = await checker.get_latest_digest("ghcr.io/owner/public:main")
+
+        assert result == "sha256:public"
+        assert "Authorization" not in mock_client.get.call_args_list[1][1]["headers"]

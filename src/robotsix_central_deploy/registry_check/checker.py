@@ -7,9 +7,9 @@ import logging
 import time
 from dataclasses import dataclass
 
-from robotsix_http import RetryClient
+from robotsix_http import ExternalHTTPError, RetryClient
 
-from .._ghcr_auth import GHCR_HOST, GhcrCredentialResolver
+from .._ghcr_auth import GHCR_HOST, GhcrCredentialResolver, GhcrCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +91,27 @@ class RegistryChecker:
                 headers["Authorization"] = f"Bearer {token}"
 
             url = f"https://{manifest_host}/v2/{repo}/manifests/{tag}"
-            resp = await self._client.head(url, headers=headers, follow_redirects=True)
+            try:
+                resp = await self._client.head(
+                    url, headers=headers, follow_redirects=True
+                )
+            except ExternalHTTPError as exc:
+                # RetryClient raises on non-2xx; without this the warning
+                # below is unreachable and the failure is silent.
+                if exc.status_code in (401, 403):
+                    logger.warning(
+                        "registry auth failed — %s returned %s for the manifest "
+                        "of %s; update status stays unknown",
+                        manifest_host,
+                        exc.status_code,
+                        image_ref,
+                    )
+                return None
             if resp.status_code in (401, 403):
+                # Same both-shapes guard as the token exchange above.
                 logger.warning(
-                    "registry auth failed — %s returned %s for the manifest of %s; "
-                    "update status stays unknown",
+                    "registry auth failed — %s returned %s for the manifest "
+                    "of %s; update status stays unknown",
                     manifest_host,
                     resp.status_code,
                     image_ref,
@@ -121,19 +137,84 @@ class RegistryChecker:
         except Exception:  # noqa: BLE001
             return None
 
-    async def _fetch_ghcr_token(self, repo: str) -> str | None:
-        """Exchange the fleet GHCR credential for a pull token on *repo*.
+    async def _exchange_ghcr_token(
+        self, repo: str, creds: GhcrCredentials | None
+    ) -> str | None:
+        """Run one ghcr.io token exchange for *repo* as *creds*.
 
-        Falls back to an anonymous exchange when no credential is configured,
-        which only resolves public packages.  Returns ``None`` on failure.
+        Returns the pull token, or ``None`` when the credential is rejected
+        (401/403) or the exchange otherwise fails.  Rejection is logged —
+        silence here is what let a revoked PAT go unnoticed for 15 days.
         """
         headers: dict[str, str] = {}
-        authenticated = False
+        if creds is not None:
+            basic = base64.b64encode(
+                f"{creds.username}:{creds.password}".encode()
+            ).decode()
+            headers["Authorization"] = f"Basic {basic}"
+        who = f"the {creds.username!r} credential" if creds else "an anonymous request"
+
+        url = (
+            f"https://{GHCR_HOST}/token"
+            f"?scope=repository:{repo}:pull&service={GHCR_HOST}"
+        )
         try:
-            creds = (
-                await self._ghcr_credentials.resolve()
+            resp = await self._client.get(url, headers=headers)
+        except ExternalHTTPError as exc:
+            # RetryClient raises on non-2xx rather than returning the
+            # response, so status checks below never see an auth failure.
+            if exc.status_code in (401, 403):
+                logger.warning(
+                    "registry auth failed — ghcr.io rejected %s (%s) for the "
+                    "token exchange on %s. %s",
+                    who,
+                    exc.status_code,
+                    repo,
+                    "Check ghcr_pull_token / the GitHub App installation."
+                    if creds
+                    else "The package is private; configure ghcr_pull_token "
+                    "(a read:packages PAT) or the GitHub App credentials.",
+                )
+            return None
+        except Exception:  # noqa: BLE001  network errors, parse errors
+            return None
+
+        # Belt and braces: a client configured not to raise returns the 4xx
+        # instead.  Handle both shapes so the diagnostic can't go dark again.
+        if resp.status_code in (401, 403):
+            logger.warning(
+                "registry auth failed — ghcr.io rejected %s (%s) for the "
+                "token exchange on %s. %s",
+                who,
+                resp.status_code,
+                repo,
+                "Check ghcr_pull_token / the GitHub App installation."
+                if creds
+                else "The package is private; configure ghcr_pull_token "
+                "(a read:packages PAT) or the GitHub App credentials.",
+            )
+            return None
+        if resp.status_code != 200:
+            return None
+        try:
+            return resp.json().get("token") or None
+        except Exception:  # noqa: BLE001  malformed body
+            return None
+
+    async def _fetch_ghcr_token(self, repo: str) -> str | None:
+        """Exchange a fleet GHCR credential for a pull token on *repo*.
+
+        Tries every configured credential in preference order, then falls back
+        to an anonymous exchange (which only resolves public packages).  The
+        fallback matters: without it a single stale credential makes every
+        private package report "unknown" even though a working one is
+        configured behind it.
+        """
+        try:
+            candidates = (
+                await self._ghcr_credentials.resolve_all()
                 if self._ghcr_credentials is not None
-                else None
+                else []
             )
         except Exception:
             logger.warning(
@@ -142,35 +223,11 @@ class RegistryChecker:
                 repo,
                 exc_info=True,
             )
-            creds = None
-        if creds is not None:
-            basic = base64.b64encode(
-                f"{creds.username}:{creds.password}".encode()
-            ).decode()
-            headers["Authorization"] = f"Basic {basic}"
-            authenticated = True
+            candidates = []
 
-        try:
-            url = (
-                f"https://{GHCR_HOST}/token"
-                f"?scope=repository:{repo}:pull&service={GHCR_HOST}"
-            )
-            resp = await self._client.get(url, headers=headers)
-            if resp.status_code in (401, 403):
-                logger.warning(
-                    "registry auth failed — ghcr.io returned %s for %s token "
-                    "exchange on %s. %s",
-                    resp.status_code,
-                    "a credentialed" if authenticated else "an anonymous",
-                    repo,
-                    "Check ghcr_pull_token / the GitHub App installation."
-                    if authenticated
-                    else "The package is private; configure ghcr_pull_token "
-                    "(a read:packages PAT) or the GitHub App credentials.",
-                )
-                return None
-            if resp.status_code != 200:
-                return None
-            return resp.json().get("token") or None
-        except Exception:  # noqa: BLE001
-            return None
+        for creds in candidates:
+            token = await self._exchange_ghcr_token(repo, creds)
+            if token:
+                return token
+
+        return await self._exchange_ghcr_token(repo, None)

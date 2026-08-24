@@ -554,7 +554,7 @@ class TestDockerSdkBackendDeploy:
         """401 on ghcr.io with GitHub App creds raises generic error (token may be
         invalid/expired — don't mislead into thinking no creds are set)."""
         b, client, dm = backend
-        # Mock mint_installation_token so _build_auth_config returns an auth_config
+        # Mock mint_installation_token so _build_auth_configs yields a credential
         resolver = b.ghcr_credentials
         resolver._github_app_id = "123"
         resolver._github_app_private_key = "key"
@@ -578,14 +578,91 @@ class TestDockerSdkBackendDeploy:
         with pytest.raises(RuntimeError, match="Image pull failed for"):
             await b.deploy(record, config, "ghcr.io/o/img:main")
 
+    # -- credential fallthrough (the 2026-08-24 pull outage) ----------------
+
+    @staticmethod
+    def _make_api_error(
+        dm: MagicMock, status: int, message: str = "denied"
+    ) -> Exception:
+        exc = dm.errors.APIError(message, status_code=status)
+        resp = MagicMock()
+        resp.status_code = status
+        exc.response = resp
+        return exc
+
+    @staticmethod
+    def _configure_app(backend_obj, monkeypatch, token: str = "ghs_app") -> None:  # noqa: S107
+        resolver = backend_obj.ghcr_credentials
+        resolver._github_app_id = "123"
+        resolver._github_app_private_key = "key"
+        resolver._installation_id = "456"
+        monkeypatch.setattr(
+            "robotsix_central_deploy._ghcr_auth.mint_installation_token",
+            MagicMock(return_value=MagicMock(token=token)),
+        )
+        monkeypatch.setattr("robotsix_central_deploy._ghcr_auth._HAS_GITHUB_AUTH", True)
+
+    async def test_deploy_retries_with_the_app_when_the_pat_is_rejected(
+        self, backend, monkeypatch
+    ):
+        """A revoked ghcr_pull_token must not block a healthy App credential.
+
+        This is the exact 2026-08-24 failure: ghcr.io answered the pull with
+        403 ``denied`` because a PAT revoked 15 days earlier was presented,
+        while the App credential behind it was fine.
+        """
+        b, client, dm = backend
+        self._configure_app(b, monkeypatch)
+        b.ghcr_pull_token = "ghp_revoked"
+        config = self._make_config()
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        pulled = MagicMock()
+        pulled.id = "sha256:img"
+        pulled.attrs = {"RepoDigests": ["ghcr.io/o/img@sha256:new"]}
+        client.images.pull.side_effect = [self._make_api_error(dm, 403), pulled]
+
+        await b.deploy(record, config, "ghcr.io/o/img:main")
+
+        assert client.images.pull.call_count == 2, "must retry with the next credential"
+        second_auth = client.images.pull.call_args_list[1][1]["auth_config"]
+        assert second_auth["username"] == "x-access-token"
+        assert second_auth["password"] == "ghs_app"
+
+    async def test_deploy_403_with_every_credential_rejected_says_so(
+        self, backend, monkeypatch
+    ):
+        """The message must not send operators hunting for a *missing* token."""
+        b, client, dm = backend
+        self._configure_app(b, monkeypatch)
+        b.ghcr_pull_token = "ghp_revoked"
+        config = self._make_config()
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        client.images.pull.side_effect = self._make_api_error(dm, 403)
+
+        with pytest.raises(RuntimeError, match="rejected every configured credential"):
+            await b.deploy(record, config, "ghcr.io/o/img:main")
+
+    async def test_deploy_403_with_no_credential_asks_for_one(self, backend):
+        """403/401 with nothing configured is the opposite diagnosis."""
+        b, client, dm = backend
+        config = self._make_config()
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        client.images.pull.side_effect = self._make_api_error(dm, 403)
+
+        with pytest.raises(RuntimeError, match="no credential was presented"):
+            await b.deploy(record, config, "ghcr.io/o/img:main")
+
 
 # ---------------------------------------------------------------------------
-# _build_auth_config static method
+# _build_auth_configs
 # ---------------------------------------------------------------------------
 
 
 class TestDockerSdkBackendBuildAuthConfig:
-    """Tests for _build_auth_config method."""
+    """Tests for the _build_auth_configs method."""
 
     @pytest.fixture
     def backend(self):
@@ -610,40 +687,40 @@ class TestDockerSdkBackendBuildAuthConfig:
 
     @pytest.mark.asyncio
     async def test_non_ghcr_image_returns_none(self, backend):
-        """Images not starting with ghcr.io/ return None (anonymous pull)."""
+        """Images not starting with ghcr.io/ yield no credentials (anonymous pull)."""
         b = backend()
-        assert await b._build_auth_config("docker.io/library/nginx:latest") is None
-        assert await b._build_auth_config("registry.example.com/app:v1") is None
+        assert await b._build_auth_configs("docker.io/library/nginx:latest") == []
+        assert await b._build_auth_configs("registry.example.com/app:v1") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_no_github_app_returns_none(self, backend):
-        """ghcr.io image without GitHub App creds returns None."""
+        """ghcr.io image without GitHub App creds yields no credentials."""
         b = backend()
-        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_partial_creds_returns_none(self, backend):
-        """ghcr.io image with only some GitHub App creds returns None."""
+        """ghcr.io image with only some GitHub App creds yields no credentials."""
         b = backend(
             github_app_id="123", github_app_private_key="key", installation_id=""
         )
-        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_whitespace_creds_returns_none(self, backend):
-        """ghcr.io image with whitespace-only creds returns None."""
+        """ghcr.io image with whitespace-only creds yields no credentials."""
         b = backend(
             github_app_id="   ",
             github_app_private_key="   ",
             installation_id="   ",
         )
-        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_with_app_creds_returns_auth_config(
         self, backend, monkeypatch
     ):
-        """ghcr.io image with GitHub App creds mints token and returns auth_config."""
+        """ghcr.io image with GitHub App creds mints a token and yields it."""
         fake_token = MagicMock()
         fake_token.token = "ghs_test_token"
         mock_mint = MagicMock(return_value=fake_token)
@@ -660,12 +737,14 @@ class TestDockerSdkBackendBuildAuthConfig:
             github_app_private_key="key",
             installation_id="456",
         )
-        result = await b._build_auth_config("ghcr.io/owner/repo:tag")
-        assert result == {
-            "username": "x-access-token",
-            "password": "ghs_test_token",
-            "serveraddress": "ghcr.io",
-        }
+        result = await b._build_auth_configs("ghcr.io/owner/repo:tag")
+        assert result == [
+            {
+                "username": "x-access-token",
+                "password": "ghs_test_token",
+                "serveraddress": "ghcr.io",
+            }
+        ]
         mock_mint.assert_called_once_with("123", "key", "456")
 
 
