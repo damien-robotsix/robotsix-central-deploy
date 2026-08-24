@@ -180,7 +180,6 @@ class TestRegistryCheckerGhcrAuth:
         candidates = [c for c in creds if c is not None]
         resolver = MagicMock()
         resolver.resolve_all = AsyncMock(return_value=candidates)
-        resolver.resolve = AsyncMock(return_value=candidates[0] if candidates else None)
         return resolver
 
     @staticmethod
@@ -261,7 +260,7 @@ class TestRegistryCheckerGhcrAuth:
     ):
         """A broken GitHub App must not take the whole update check down."""
         resolver = MagicMock()
-        resolver.resolve = AsyncMock(side_effect=RuntimeError("mint failed"))
+        resolver.resolve_all = AsyncMock(side_effect=RuntimeError("mint failed"))
         token_resp = MagicMock(status_code=200)
         token_resp.json.return_value = {"token": "anon-token"}
         manifest_resp = MagicMock(status_code=200)

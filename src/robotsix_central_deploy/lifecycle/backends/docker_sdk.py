@@ -627,14 +627,6 @@ class DockerSdkBackend(ExecutionBackend):
             for creds in candidates
         ]
 
-    async def _build_auth_config(self, image_ref: str) -> dict[str, str] | None:
-        """Return the most-preferred auth config for *image_ref*, or ``None``.
-
-        For callers that cannot retry with a second credential.
-        """
-        configs = await self._build_auth_configs(image_ref)
-        return configs[0] if configs else None
-
     async def _pull_with_fallback(
         self,
         image_ref: str,

@@ -554,7 +554,7 @@ class TestDockerSdkBackendDeploy:
         """401 on ghcr.io with GitHub App creds raises generic error (token may be
         invalid/expired — don't mislead into thinking no creds are set)."""
         b, client, dm = backend
-        # Mock mint_installation_token so _build_auth_config returns an auth_config
+        # Mock mint_installation_token so _build_auth_configs yields a credential
         resolver = b.ghcr_credentials
         resolver._github_app_id = "123"
         resolver._github_app_private_key = "key"
@@ -657,12 +657,12 @@ class TestDockerSdkBackendDeploy:
 
 
 # ---------------------------------------------------------------------------
-# _build_auth_config static method
+# _build_auth_configs
 # ---------------------------------------------------------------------------
 
 
 class TestDockerSdkBackendBuildAuthConfig:
-    """Tests for _build_auth_config method."""
+    """Tests for the _build_auth_configs method."""
 
     @pytest.fixture
     def backend(self):
@@ -687,40 +687,40 @@ class TestDockerSdkBackendBuildAuthConfig:
 
     @pytest.mark.asyncio
     async def test_non_ghcr_image_returns_none(self, backend):
-        """Images not starting with ghcr.io/ return None (anonymous pull)."""
+        """Images not starting with ghcr.io/ yield no credentials (anonymous pull)."""
         b = backend()
-        assert await b._build_auth_config("docker.io/library/nginx:latest") is None
-        assert await b._build_auth_config("registry.example.com/app:v1") is None
+        assert await b._build_auth_configs("docker.io/library/nginx:latest") == []
+        assert await b._build_auth_configs("registry.example.com/app:v1") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_no_github_app_returns_none(self, backend):
-        """ghcr.io image without GitHub App creds returns None."""
+        """ghcr.io image without GitHub App creds yields no credentials."""
         b = backend()
-        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_partial_creds_returns_none(self, backend):
-        """ghcr.io image with only some GitHub App creds returns None."""
+        """ghcr.io image with only some GitHub App creds yields no credentials."""
         b = backend(
             github_app_id="123", github_app_private_key="key", installation_id=""
         )
-        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_whitespace_creds_returns_none(self, backend):
-        """ghcr.io image with whitespace-only creds returns None."""
+        """ghcr.io image with whitespace-only creds yields no credentials."""
         b = backend(
             github_app_id="   ",
             github_app_private_key="   ",
             installation_id="   ",
         )
-        assert await b._build_auth_config("ghcr.io/owner/repo:tag") is None
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
 
     @pytest.mark.asyncio
     async def test_ghcr_image_with_app_creds_returns_auth_config(
         self, backend, monkeypatch
     ):
-        """ghcr.io image with GitHub App creds mints token and returns auth_config."""
+        """ghcr.io image with GitHub App creds mints a token and yields it."""
         fake_token = MagicMock()
         fake_token.token = "ghs_test_token"
         mock_mint = MagicMock(return_value=fake_token)
@@ -737,12 +737,14 @@ class TestDockerSdkBackendBuildAuthConfig:
             github_app_private_key="key",
             installation_id="456",
         )
-        result = await b._build_auth_config("ghcr.io/owner/repo:tag")
-        assert result == {
-            "username": "x-access-token",
-            "password": "ghs_test_token",
-            "serveraddress": "ghcr.io",
-        }
+        result = await b._build_auth_configs("ghcr.io/owner/repo:tag")
+        assert result == [
+            {
+                "username": "x-access-token",
+                "password": "ghs_test_token",
+                "serveraddress": "ghcr.io",
+            }
+        ]
         mock_mint.assert_called_once_with("123", "key", "456")
 
 

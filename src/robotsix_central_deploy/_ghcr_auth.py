@@ -49,7 +49,7 @@ class GhcrCredentials:
 
 
 class GhcrCredentialResolver:
-    """Resolves the single fleet-wide ``ghcr.io`` credential.
+    """Resolves the fleet-wide ``ghcr.io`` credentials.
 
     One instance is shared by the pull path and the update-check path, so a
     token updated at runtime (``PUT /services/central-deploy/env``) takes
@@ -147,12 +147,3 @@ class GhcrCredentialResolver:
                     )
 
         return candidates
-
-    async def resolve(self) -> GhcrCredentials | None:
-        """Return the single most-preferred credential, or ``None``.
-
-        Retained for callers that cannot retry.  Prefer :meth:`resolve_all`,
-        which lets a rejected credential fall through to the next one.
-        """
-        candidates = await self.resolve_all()
-        return candidates[0] if candidates else None
