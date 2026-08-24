@@ -142,3 +142,104 @@ def test_onboard_preflight_route_matches_the_onboard_router():
     endpoint = getattr(route, "endpoint", None)
     module = getattr(endpoint, "__module__", "")
     assert module.startswith("robotsix_central_deploy.lifecycle.routers"), module
+
+
+# ---------------------------------------------------------------------------
+# No component-level auth dependency — fleet edge is the only gate
+# ---------------------------------------------------------------------------
+
+
+def test_no_route_has_real_auth_dependency():
+    """No route may carry a real (non-no-op) auth dependency.
+
+    Component-level authentication was removed (auth-removal epic):
+    the fleet edge (Traefik + tinyauth) is the only gate.  The
+    ``verify_auth`` function is a no-op stub that must never be
+    replaced with a real credential check, and no new auth-like
+    dependency may be added to any route.
+
+    The ForwardAuth endpoint (``/auth/validate``) is the one exception:
+    it calls ``verify_bearer_token`` **inline** (not as a FastAPI
+    dependency), so it does not appear in the dependency tree.
+    """
+    import asyncio
+    from unittest.mock import MagicMock
+
+    from fastapi.routing import APIRoute
+
+    from robotsix_central_deploy.lifecycle.auth import verify_auth
+
+    # 1. verify_auth must be a no-op — call it and confirm it returns
+    #    None without raising.
+    mock_request = MagicMock()
+    result = asyncio.run(verify_auth(mock_request))
+    assert result is None, f"verify_auth must be a no-op returning None, got {result!r}"
+
+    # 2. Walk every route and check its dependency tree for auth-like
+    #    dependencies that are not the known verify_auth no-op stub.
+    #    An auth dependency is one that guards access — the function
+    #    name starts with ``verify`` or ``check`` and mentions auth,
+    #    or the function lives in the ``lifecycle.auth`` module.
+    auth_module_names = ("robotsix_central_deploy.lifecycle.auth",)
+
+    for route in _flatten_routes(app):
+        if not isinstance(route, APIRoute):
+            continue
+
+        # Check route-level dependencies (from decorator).
+        for dep in getattr(route, "dependencies", ()):
+            _check_dep_callable(route.path, dep.dependency, auth_module_names)
+
+        # Check the full resolved dependant tree (signature-level Depends).
+        dependant = getattr(route, "dependant", None)
+        if dependant is not None:
+            _check_dependant_tree(route.path, dependant, auth_module_names)
+
+
+def _check_dep_callable(
+    route_path: str,
+    callable_obj: object | None,
+    auth_module_names: tuple[str, ...],
+) -> None:
+    """Fail if *callable_obj* is an auth function that is not the no-op stub.
+
+    An auth function is one whose module is in *auth_module_names* or whose
+    name starts with ``verify_`` / ``check_`` and mentions ``auth``.
+    """
+    if callable_obj is None:
+        return
+
+    from robotsix_central_deploy.lifecycle.auth import verify_auth
+
+    if callable_obj is verify_auth:
+        return  # Known no-op stub — permitted.
+
+    mod = getattr(callable_obj, "__module__", "")
+    name = getattr(callable_obj, "__name__", "")
+
+    # Match functions defined in the auth module.
+    if mod in auth_module_names:
+        raise AssertionError(
+            f"Route {route_path!r} carries an auth-module dependency "
+            f"{name!r} (from {mod}) that is not the verify_auth no-op stub."
+        )
+
+    # Match functions whose name pattern suggests a credential guard.
+    if name.startswith(("verify_", "check_")) and "auth" in name.lower():
+        raise AssertionError(
+            f"Route {route_path!r} carries an auth-guard dependency "
+            f"{name!r} that is not the verify_auth no-op stub."
+        )
+
+
+def _check_dependant_tree(
+    route_path: str,
+    dependant: object,
+    auth_module_names: tuple[str, ...],
+) -> None:
+    """Recursively inspect a Dependant tree for real auth dependencies."""
+    # NOTE: dependant.call at the root is the *endpoint function* itself,
+    # not a dependency — only recurse into the dependencies list.
+    for sub in getattr(dependant, "dependencies", []):
+        _check_dep_callable(route_path, getattr(sub, "call", None), auth_module_names)
+        _check_dependant_tree(route_path, sub, auth_module_names)
