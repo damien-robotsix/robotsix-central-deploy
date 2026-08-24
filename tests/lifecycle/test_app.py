@@ -237,7 +237,7 @@ def _check_dependent_tree(
     dependent: object,
     auth_module_names: tuple[str, ...],
 ) -> None:
-    """Recursively inspect a Dependant tree for real auth dependencies."""
+    """Recursively inspect a Dependant tree for real auth dependencies."""  # codespell:ignore
     # NOTE: dependant.call at the root is the *endpoint function* itself,  # codespell:ignore
     # not a dependency — only recurse into the dependencies list.
     for sub in getattr(dependent, "dependencies", []):
