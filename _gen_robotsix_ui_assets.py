@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ROBOTSIX_UI_VERSION = "v0.1.40"
+ROBOTSIX_UI_VERSION = "v0.1.41"
 
 _VERSION_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 
