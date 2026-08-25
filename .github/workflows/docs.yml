@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: read  # reusable workflow needs checkout
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -15,8 +15,8 @@ jobs:
       # workflow's build job needs contents:read (checkout), and requesting
       # more than the caller grants fails the whole run at startup.
       contents: read
-      pages: write
-      id-token: write
+      pages: write         # deploy to GitHub Pages
+      id-token: write      # OIDC token for Pages deployment
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-docs.yml@4c25a782556a8811d7aeed635b91fd9f790df203  # main
     with:
       docs-install-args: "--group docs"
