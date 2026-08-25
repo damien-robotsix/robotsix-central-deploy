@@ -67,6 +67,11 @@ jobs:
   # ── Shared fleet workflows (lint, type-check, test, security, container scan) ──
 
   lint:
+    # Must stay byte-identical to the job id: branch protection on main
+    # requires the status contexts 'lint', 'typecheck' and 'test', and the
+    # reported context is this name. zizmor's anonymous-definition audit
+    # requires the name to be present at all.
+    name: lint
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -114,6 +119,11 @@ jobs:
           uv run ruff format --check --diff .
 
   typecheck:
+    # Must stay byte-identical to the job id: branch protection on main
+    # requires the status contexts 'lint', 'typecheck' and 'test', and the
+    # reported context is this name. zizmor's anonymous-definition audit
+    # requires the name to be present at all.
+    name: typecheck
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -144,6 +154,11 @@ jobs:
         run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
 
   test:
+    # Must stay byte-identical to the job id: branch protection on main
+    # requires the status contexts 'lint', 'typecheck' and 'test', and the
+    # reported context is this name. zizmor's anonymous-definition audit
+    # requires the name to be present at all.
+    name: test
     needs: changes
     runs-on: ubuntu-latest
     permissions:
