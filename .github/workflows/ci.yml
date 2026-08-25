@@ -67,7 +67,6 @@ jobs:
   # ── Shared fleet workflows (lint, type-check, test, security, container scan) ──
 
   lint:
-    name: Lint
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -115,7 +114,6 @@ jobs:
           uv run ruff format --check --diff .
 
   typecheck:
-    name: Typecheck
     needs: changes
     runs-on: ubuntu-latest
     permissions:
@@ -146,7 +144,6 @@ jobs:
         run: uv run --with 'bandit[toml]' bandit -c pyproject.toml -r src/ --severity-level medium
 
   test:
-    name: Test
     needs: changes
     runs-on: ubuntu-latest
     permissions:
