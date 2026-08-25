@@ -67,7 +67,7 @@ jobs:
   python-ci:
     name: Lint / Typecheck / Test (shared)
     needs: changes
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@773f7661c1f92142955a24da0498a782c5711ff0  # mill/20260823T170303Z-fix-shared-reusable-python-ci-yml-so-con-3a40
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@main
     permissions:
       contents: read
     with:
