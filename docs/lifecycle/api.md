@@ -64,6 +64,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.claude_auth
 
+::: robotsix_central_deploy.lifecycle.routers.auth_token
+
 ::: robotsix_central_deploy.lifecycle.routers.self_config
 
 ::: robotsix_central_deploy.lifecycle.routers.services_config
