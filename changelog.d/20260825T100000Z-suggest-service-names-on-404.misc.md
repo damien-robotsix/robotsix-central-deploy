@@ -1,0 +1,1 @@
+A 404 from the deploy plane now suggests close service names, so addressing a component by its repository name (`robotsix-invest`) points at the name it is registered under (`invest`) instead of looking like a permissions problem.

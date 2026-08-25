@@ -16,6 +16,7 @@ from robotsix_central_deploy.lifecycle.deps.dependencies import (
     _get_or_create_record,
     _get_sibling_pairs,
     _get_store,
+    _suggest_service_names,
 )
 from robotsix_central_deploy.lifecycle.models import HealthStatus
 
@@ -112,6 +113,78 @@ class TestGetOrCreateRecord:
         record = object()
         store.get.return_value = record
         assert await _get_or_create_record("present-svc", store) is record
+
+    async def test_404_suggests_the_registered_short_name(
+        self, store: AsyncMock
+    ) -> None:
+        """Addressing a component by its repo name points at the short name.
+
+        This is the reported failure: the deploy plane registers `invest`, the
+        caller asked for `robotsix-invest`, and the bare "not found" read like
+        a permissions bug.
+        """
+        store.get.return_value = None
+        store.list_all.return_value = [
+            SimpleNamespace(name="invest"),
+            SimpleNamespace(name="chat"),
+        ]
+        with pytest.raises(HTTPException) as exc_info:
+            await _get_or_create_record("robotsix-invest", store)
+        detail = exc_info.value.detail
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert "robotsix-invest" in detail
+        assert "did you mean 'invest'?" in detail
+
+    async def test_404_has_no_suggestion_clause_when_nothing_is_close(
+        self, store: AsyncMock
+    ) -> None:
+        """An unrelated name keeps the plain message."""
+        store.get.return_value = None
+        store.list_all.return_value = [SimpleNamespace(name="chat")]
+        with pytest.raises(HTTPException) as exc_info:
+            await _get_or_create_record("zzzzzz", store)
+        assert exc_info.value.detail == "Service 'zzzzzz' not found"
+
+    async def test_404_survives_a_store_listing_failure(self, store: AsyncMock) -> None:
+        """A broken list_all must not mask the 404."""
+        store.get.return_value = None
+        store.list_all.side_effect = RuntimeError("store down")
+        with pytest.raises(HTTPException) as exc_info:
+            await _get_or_create_record("missing", store)
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert exc_info.value.detail == "Service 'missing' not found"
+
+
+class TestSuggestServiceNames:
+    """Tests for ``_suggest_service_names``."""
+
+    @pytest.fixture
+    def store(self) -> AsyncMock:
+        s = AsyncMock()
+        s.list_all = AsyncMock()
+        return s
+
+    async def test_substring_match_beats_ratio(self, store: AsyncMock) -> None:
+        """`robotsix-invest` -> `invest` shares no prefix, so ratio alone misses it."""
+        store.list_all.return_value = [
+            SimpleNamespace(name="invest"),
+            SimpleNamespace(name="mill"),
+        ]
+        assert await _suggest_service_names("robotsix-invest", store) == ["invest"]
+
+    async def test_typo_is_caught_by_close_matches(self, store: AsyncMock) -> None:
+        store.list_all.return_value = [SimpleNamespace(name="central-deploy")]
+        assert await _suggest_service_names("central-deply", store) == [
+            "central-deploy"
+        ]
+
+    async def test_caps_at_three_without_duplicates(self, store: AsyncMock) -> None:
+        store.list_all.return_value = [
+            SimpleNamespace(name=f"svc-{i}") for i in range(10)
+        ]
+        got = await _suggest_service_names("svc", store)
+        assert len(got) == 3
+        assert len(set(got)) == 3
 
 
 # ===========================================================================
