@@ -145,9 +145,7 @@ class TestGetOrCreateRecord:
             await _get_or_create_record("zzzzzz", store)
         assert exc_info.value.detail == "Service 'zzzzzz' not found"
 
-    async def test_404_survives_a_store_listing_failure(
-        self, store: AsyncMock
-    ) -> None:
+    async def test_404_survives_a_store_listing_failure(self, store: AsyncMock) -> None:
         """A broken list_all must not mask the 404."""
         store.get.return_value = None
         store.list_all.side_effect = RuntimeError("store down")
