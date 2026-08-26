@@ -102,15 +102,22 @@ async def _require_allowed_service(
     Virtual components are never mutatable (they have no Docker containers
     to restart/deploy).
 
-    The *action* parameter customises the 403 detail message — use
+    The *action* parameter customises the detail message — use
     ``"mutate"`` (default) for write endpoints and ``"access"`` for
     read-only endpoints so the chat agent receives a clear signal about
     which gate denied it.
+
+    Raises:
+        HTTP 404 when the component is not known at all.
+        HTTP 403 when the component exists but is not chat-agent accessible.
     """
     comp_cfg = component_config_store.get(name)
-    if comp_cfg is None or not (
-        comp_cfg.chat_agent_mutatable or comp_cfg.allow_chat_access
-    ):
+    if comp_cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Service '{name}' not found.",
+        )
+    if not (comp_cfg.chat_agent_mutatable or comp_cfg.allow_chat_access):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Chat agent is not permitted to {action} service '{name}'.",
