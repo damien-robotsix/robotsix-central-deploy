@@ -54,6 +54,13 @@ async def ui_static(filename: str) -> FileResponse:
     with the resolved static root directory.  The os.path.realpath +
     str.startswith pattern is the canonical CodeQL-recognised sanitizer
     for py/path-injection (as used in Starlette's StaticFiles).
+
+    These assets carry no version in their URL, and ``/ui`` is rendered
+    fresh on every request, so a browser that heuristically caches
+    ``dashboard.js`` ends up running it against markup from a *later*
+    deploy.  That mismatch is what makes the dashboard fail in ways that
+    only a hard refresh clears.  ``no-cache`` keeps the assets cacheable
+    but forces a revalidation, which the ETag answers with a cheap 304.
     """
     static_root = os.path.realpath(str(_STATIC_DIR))
     safe = os.path.realpath(os.path.join(str(_STATIC_DIR), filename))
@@ -61,7 +68,7 @@ async def ui_static(filename: str) -> FileResponse:
         raise HTTPException(status_code=404)
     if not os.path.isfile(safe):
         raise HTTPException(status_code=404)
-    return FileResponse(safe)
+    return FileResponse(safe, headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/ui", response_class=HTMLResponse, include_in_schema=False)

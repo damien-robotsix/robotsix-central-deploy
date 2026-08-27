@@ -7,6 +7,17 @@
  */
 import { mountAppShell } from "/ui/static/robotsix-ui-vanilla.js";
 
+/* mountAppShell renders a string rightSlot with `textContent`, so markup
+ * handed over as a string is escaped and shown as literal source rather
+ * than parsed — and the buttons it declares never enter the DOM, which
+ * takes dashboard.js's getElementById lookups down with it. Only a Node
+ * is appended as real DOM, so parse the markup here and pass that. */
+function nodeFromHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html.trim();
+  return template.content;
+}
+
 (function () {
   const container = document.getElementById("appshell-container");
   if (!container) return;
@@ -20,13 +31,13 @@ import { mountAppShell } from "/ui/static/robotsix-ui-vanilla.js";
         { href: "/ui", label: "Dashboard", active: true },
       ],
       settingsHref: "/ui/settings",
-      rightSlot: `
+      rightSlot: nodeFromHtml(`
 <button id="add-component-btn" data-action="openOnboardModal" class="btn-header">+ Add Component</button>
 <button id="claude-auth-btn" data-action="showClaudeAuthSection" class="btn-header">Claude Auth</button>
 <button id="self-update-btn" data-action="triggerSelfUpdate" title="A newer server image is available on the registry" class="btn-update-server hidden">⬆ Update server</button>
 <button id="logout-btn" data-action="doLogout" class="btn-header">Logout</button>
 <span id="refresh-time">Last refreshed: --:--:--</span>
-`,
+`),
     });
   } else if (pathname === "/ui/settings") {
     mountAppShell(container, {
