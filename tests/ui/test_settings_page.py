@@ -57,6 +57,51 @@ class TestSettingsRoute:
         assert 'settingsHref: "/ui/settings"' in _APPSHELL_JS
 
 
+class TestAppShellRightSlotIsADomNode:
+    """The dashboard's header controls live in AppShell's `rightSlot`.
+
+    `mountAppShell` renders a **string** rightSlot with `textContent` and only
+    a **Node** with `appendChild`.  Handing it markup as a string therefore
+    escapes it: the buttons show up as literal source text and never enter the
+    DOM, so every `getElementById` in dashboard.js that looks for one returns
+    null and the dashboard dies with "can't access property ..., is null".
+    """
+
+    #: Header element ids that exist nowhere but the rightSlot markup.
+    _HEADER_IDS = (
+        "add-component-btn",
+        "claude-auth-btn",
+        "self-update-btn",
+        "logout-btn",
+        "refresh-time",
+    )
+
+    def test_right_slot_is_not_handed_a_bare_string(self):
+        """A backtick (or quote) straight after `rightSlot:` is the bug."""
+        match = re.search(r"rightSlot:\s*(\S)", _APPSHELL_JS)
+        assert match is not None, "the dashboard shell declares no rightSlot"
+        assert match.group(1) not in "`'\"", (
+            "rightSlot is a string literal — mountAppShell will render it as "
+            "escaped text and the header buttons will never exist in the DOM"
+        )
+
+    def test_right_slot_markup_is_parsed_into_dom(self):
+        assert 'createElement("template")' in _APPSHELL_JS
+        assert ".content" in _APPSHELL_JS
+
+    @pytest.mark.parametrize("element_id", _HEADER_IDS)
+    def test_header_control_is_declared(self, element_id: str):
+        assert f'id="{element_id}"' in _APPSHELL_JS
+
+    @pytest.mark.parametrize("element_id", _HEADER_IDS)
+    def test_dashboard_lookup_has_a_target(self, element_id: str):
+        """Each id dashboard.js resolves is one the shell actually mounts."""
+        dashboard_js = (_UI_DIR / "static" / "dashboard.js").read_text(encoding="utf-8")
+        if f"getElementById('{element_id}')" not in dashboard_js:
+            pytest.skip(f"dashboard.js does not look up {element_id}")
+        assert f'id="{element_id}"' in _APPSHELL_JS
+
+
 class TestSettingsPageConstraints:
     """The page lives under `script-src 'self'` and behind CSRF."""
 

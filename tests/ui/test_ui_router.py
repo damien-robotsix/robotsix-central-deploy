@@ -268,6 +268,37 @@ class TestRobotsixUiAssets:
 
 
 # ---------------------------------------------------------------------------
+# TestStaticAssetCaching
+# ---------------------------------------------------------------------------
+
+
+class TestStaticAssetCaching:
+    """Static assets must revalidate on every load.
+
+    Their URLs carry no version, and ``/ui`` is rendered fresh per request.
+    Without an explicit ``Cache-Control`` a browser applies heuristic
+    caching and can pair a stale ``dashboard.js`` with markup from a later
+    deploy -- a mismatch that surfaces as a broken dashboard only a hard
+    refresh will clear.
+    """
+
+    async def test_static_asset_must_revalidate(self, client: AsyncClient):
+        response = await client.get("/ui/static/dashboard.js")
+        assert response.status_code == 200
+        assert response.headers.get("cache-control") == "no-cache"
+
+    async def test_static_asset_still_carries_a_validator(self, client: AsyncClient):
+        """no-cache means 'revalidate', not 'do not store' -- the ETag is
+        what turns that revalidation into a cheap 304."""
+        response = await client.get("/ui/static/dashboard.js")
+        assert response.headers.get("etag")
+
+    async def test_traversal_is_still_refused(self, client: AsyncClient):
+        response = await client.get("/ui/static/../router.py")
+        assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # TestRateLimiting
 # ---------------------------------------------------------------------------
 
