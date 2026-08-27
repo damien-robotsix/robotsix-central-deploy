@@ -41,6 +41,7 @@ class UpdateState(str, Enum):
     UNKNOWN = "unknown"
     UP_TO_DATE = "up-to-date"
     UPDATE_AVAILABLE = "update-available"
+    AUTH_ERROR = "auth-error"
 
 
 class StoreBackend(str, Enum):
@@ -159,13 +160,18 @@ class ServiceRecord:
     )
     update_available: bool = False
     latest_registry_digest: str = ""
+    registry_auth_error: bool = (
+        False  # True when the last registry check failed due to 401/403
+    )
     component_id: str = (
         ""  # non-empty for sibling records; set to primary component name
     )
     repo_id: str = ""
 
     def to_status(self) -> ServiceStatus:
-        if not self.deployed_image_digest or not self.latest_registry_digest:
+        if self.registry_auth_error:
+            update_state = UpdateState.AUTH_ERROR
+        elif not self.deployed_image_digest or not self.latest_registry_digest:
             update_state = UpdateState.UNKNOWN
         elif self.deployed_image_digest == self.latest_registry_digest:
             update_state = UpdateState.UP_TO_DATE

@@ -365,3 +365,145 @@ class TestRegistryCheckerGhcrAuth:
 
         assert result == "sha256:public"
         assert "Authorization" not in mock_client.get.call_args_list[1][1]["headers"]
+
+
+class TestRegistryCheckerAuthErrorTracking:
+    """Tests for the ``was_auth_error`` tracking method."""
+
+    @pytest.fixture
+    def mock_client(self):
+        return AsyncMock(spec=RetryClient)
+
+    def _setup_checker(self, mock_client, checker_fn=None):
+        """Return a fresh RegistryChecker with an optional credentials resolver."""
+
+    def _token_and_manifest(self, mock_client, digest="sha256:ok"):
+        """Set up a normal token exchange + manifest response sequence."""
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        manifest_resp = MagicMock(status_code=200)
+        manifest_resp.headers = {"Docker-Content-Digest": digest}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+
+    async def test_was_auth_error_false_after_successful_fetch(self, mock_client):
+        """After a successful fetch, was_auth_error returns False."""
+        self._token_and_manifest(mock_client)
+        checker = RegistryChecker(mock_client)
+
+        await checker.get_latest_digest("ghcr.io/owner/image:main")
+
+        assert checker.was_auth_error("ghcr.io/owner/image:main") is False
+
+    async def test_was_auth_error_true_after_manifest_401(self, mock_client):
+        """When the manifest HEAD returns 401, was_auth_error is True."""
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        manifest_resp = MagicMock(status_code=401)
+        manifest_resp.headers = {}
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(mock_client)
+
+        result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result is None
+        assert checker.was_auth_error("ghcr.io/owner/private:main") is True
+
+    async def test_was_auth_error_true_after_manifest_403(self, mock_client):
+        """When the manifest HEAD raises 403, was_auth_error is True."""
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        mock_client.head = AsyncMock(
+            side_effect=ExternalHTTPError(
+                "HTTP 403", status_code=403, response=MagicMock(status_code=403)
+            )
+        )
+        checker = RegistryChecker(mock_client)
+
+        result = await checker.get_latest_digest("ghcr.io/owner/private:main")
+
+        assert result is None
+        assert checker.was_auth_error("ghcr.io/owner/private:main") is True
+
+    async def test_was_auth_error_false_on_network_error(self, mock_client):
+        """When a network error occurs (not 401/403), was_auth_error is False."""
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("timeout"))
+        checker = RegistryChecker(mock_client)
+
+        result = await checker.get_latest_digest("ghcr.io/owner/image:main")
+
+        assert result is None
+        assert checker.was_auth_error("ghcr.io/owner/image:main") is False
+
+    async def test_was_auth_error_false_for_unsupported_registry(self, mock_client):
+        """Unsupported registries do not set auth_error."""
+        checker = RegistryChecker(mock_client)
+
+        result = await checker.get_latest_digest("quay.io/org/image:latest")
+
+        assert result is None
+        assert checker.was_auth_error("quay.io/org/image:latest") is False
+
+    async def test_was_auth_error_caches_properly(self, mock_client):
+        """Auth error state is cached alongside the digest (same TTL)."""
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+        manifest_resp = MagicMock(status_code=401)
+        manifest_resp.headers = {}
+        mock_client.head = AsyncMock(return_value=manifest_resp)
+        checker = RegistryChecker(mock_client, ttl_seconds=300)
+
+        await checker.get_latest_digest("ghcr.io/owner/private:main")
+        # Second call should hit cache — no extra HTTP request
+        auth_err = checker.was_auth_error("ghcr.io/owner/private:main")
+
+        assert auth_err is True
+        assert mock_client.head.call_count == 1  # cached
+
+    async def test_was_auth_error_returns_false_when_image_unknown(self, mock_client):
+        """For an image that has never been fetched, was_auth_error is False."""
+        checker = RegistryChecker(mock_client)
+        assert checker.was_auth_error("ghcr.io/unknown/image:main") is False
+
+    async def test_auth_error_cleared_on_success_after_retry(
+        self, mock_client, monkeypatch
+    ):
+        """When a subsequent cache miss succeeds, auth_error is cleared."""
+        _fixed_time = 1000
+
+        class _FakeMonotonic:
+            def __init__(self):
+                self.val = _fixed_time
+
+            def __call__(self):
+                return self.val
+
+        fake_mono = _FakeMonotonic()
+        monkeypatch.setattr(
+            "robotsix_central_deploy.registry_check.checker.time.monotonic", fake_mono
+        )
+
+        token_resp = MagicMock(status_code=200)
+        token_resp.json.return_value = {"token": "tok"}
+        mock_client.get = AsyncMock(return_value=token_resp)
+
+        manifest_resp_401 = MagicMock(status_code=401)
+        manifest_resp_401.headers = {}
+        manifest_resp_ok = MagicMock(status_code=200)
+        manifest_resp_ok.headers = {"Docker-Content-Digest": "sha256:ok"}
+        mock_client.head = AsyncMock(side_effect=[manifest_resp_401, manifest_resp_ok])
+
+        checker = RegistryChecker(mock_client, ttl_seconds=300)
+
+        await checker.get_latest_digest("ghcr.io/owner/img:main")
+        assert checker.was_auth_error("ghcr.io/owner/img:main") is True
+
+        # Advance time past TTL
+        fake_mono.val = _fixed_time + 301
+
+        result = await checker.get_latest_digest("ghcr.io/owner/img:main")
+        assert result == "sha256:ok"
+        assert checker.was_auth_error("ghcr.io/owner/img:main") is False

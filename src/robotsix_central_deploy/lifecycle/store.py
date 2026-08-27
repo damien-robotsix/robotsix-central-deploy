@@ -141,6 +141,7 @@ class FileStore(ServiceStore):
                 previous_image_digest=d.get("previous_image_digest", ""),
                 update_available=d.get("update_available", False),
                 latest_registry_digest=d.get("latest_registry_digest", ""),
+                registry_auth_error=d.get("registry_auth_error", False),
                 component_id=d.get("component_id", ""),
                 repo_id=d.get("repo_id", ""),
             )
@@ -162,6 +163,7 @@ class FileStore(ServiceStore):
                 "previous_image_digest": r.previous_image_digest,
                 "update_available": r.update_available,
                 "latest_registry_digest": r.latest_registry_digest,
+                "registry_auth_error": r.registry_auth_error,
                 "component_id": r.component_id,
                 "repo_id": r.repo_id,
             }

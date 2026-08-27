@@ -426,6 +426,7 @@ class TestUpdateAvailable:
         )
         mock_checker = MagicMock()
         mock_checker.get_latest_digest = AsyncMock(return_value=None)
+        mock_checker.was_auth_error = MagicMock(return_value=False)
         monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
         resp = await client.get("/services/svc-a", headers=auth_headers)
         assert resp.status_code == 200
@@ -460,6 +461,25 @@ class TestUpdateAvailable:
         data = resp.json()
         assert data["running_digest"] == "sha256:e9f0"
         assert data["update_state"] == "unknown"  # latest not yet fetched
+
+    async def test_auth_error_state_for_private_image(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """When the registry checker reports an auth error, the status
+        endpoint returns 'auth-error' update_state instead of 'unknown'.
+        """
+        await _seed_store(
+            "svc-a", image="ghcr.io/o/img:main", deployed_digest="sha256:aaa"
+        )
+        mock_checker = MagicMock()
+        mock_checker.get_latest_digest = AsyncMock(return_value=None)
+        mock_checker.was_auth_error = MagicMock(return_value=True)
+        monkeypatch.setattr(server_mod.app.state, "registry_checker", mock_checker)
+        resp = await client.get("/services/svc-a", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["update_available"] is False
+        assert data["update_state"] == "auth-error"
 
 
 # ---------------------------------------------------------------------------

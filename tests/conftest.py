@@ -131,6 +131,7 @@ def _reset_globals(monkeypatch, tmp_path):
     # Registry checker mock
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
+    mock_checker.was_auth_error = MagicMock(return_value=False)
 
     # File-backed stores isolated under a subdirectory to avoid
     # collisions with tests that inspect tmp_path directly.

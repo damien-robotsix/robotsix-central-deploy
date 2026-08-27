@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class _CacheEntry:
     digest: str | None  # sha256:... or None on error
     fetched_at: float
+    auth_error: bool = False  # True when the fetch failed due to 401/403
 
 
 class RegistryChecker:
@@ -43,18 +44,41 @@ class RegistryChecker:
         """Return cached or freshly fetched manifest digest for *image_ref*.
 
         Returns ``None`` on network error, non-2xx response, or unsupported
-        registry.
+        registry.  After this call, check :meth:`was_auth_error` for whether
+        the most recent fetch (or cache hit) failed due to a 401/403 auth
+        rejection rather than a generic network/registry error.
         """
         entry = self._cache.get(image_ref)
         if entry and (time.monotonic() - entry.fetched_at) < self._ttl:
             return entry.digest
 
-        digest = await self._fetch_digest(image_ref)
-        self._cache[image_ref] = _CacheEntry(digest=digest, fetched_at=time.monotonic())
+        digest, auth_error = await self._fetch_digest(image_ref)
+        self._cache[image_ref] = _CacheEntry(
+            digest=digest, fetched_at=time.monotonic(), auth_error=auth_error
+        )
         return digest
 
-    async def _fetch_digest(self, image_ref: str) -> str | None:
-        """Fetch manifest digest from registry.  Returns ``None`` on any failure."""
+    def was_auth_error(self, image_ref: str) -> bool:
+        """True if the most recent fetch for *image_ref* failed due to 401/403.
+
+        Returns ``False`` when no fetch has been attempted (or the cache has
+        expired and no fresh fetch has been done).  Callers check this after
+        ``get_latest_digest`` returns ``None`` to distinguish an auth
+        rejection from a generic network or registry error.
+        """
+        entry = self._cache.get(image_ref)
+        if entry and (time.monotonic() - entry.fetched_at) < self._ttl:
+            return entry.auth_error
+        return False
+
+    async def _fetch_digest(self, image_ref: str) -> tuple[str | None, bool]:
+        """Fetch manifest digest from registry.
+
+        Returns ``(digest, auth_error)``.  ``auth_error`` is ``True`` when
+        the fetch was rejected with 401/403, indicating that the credentials
+        are missing or invalid rather than a generic network or protocol
+        failure.
+        """
         try:
             parts = image_ref.rsplit(":", 1)
             ref_no_tag = parts[0]
@@ -77,7 +101,7 @@ class RegistryChecker:
                 manifest_host = "registry-1.docker.io"
                 token = await self._fetch_dockerhub_token(repo)
             else:
-                return None  # unsupported registry
+                return (None, False)  # unsupported registry
 
             headers = {
                 "Accept": (
@@ -106,7 +130,8 @@ class RegistryChecker:
                         exc.status_code,
                         image_ref,
                     )
-                return None
+                    return (None, True)
+                return (None, False)
             if resp.status_code in (401, 403):
                 # Same both-shapes guard as the token exchange above.
                 logger.warning(
@@ -116,12 +141,12 @@ class RegistryChecker:
                     resp.status_code,
                     image_ref,
                 )
-                return None
+                return (None, True)
             if resp.status_code not in (200, 206):
-                return None
-            return resp.headers.get("Docker-Content-Digest") or None
+                return (None, False)
+            return (resp.headers.get("Docker-Content-Digest") or None, False)
         except Exception:  # noqa: BLE001  network errors, parse errors
-            return None
+            return (None, False)
 
     async def _fetch_dockerhub_token(self, repo: str) -> str | None:
         """GET anonymous pull token from Docker Hub auth service."""

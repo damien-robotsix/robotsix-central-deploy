@@ -9949,7 +9949,8 @@
         "enum": [
           "unknown",
           "up-to-date",
-          "update-available"
+          "update-available",
+          "auth-error"
         ],
         "title": "UpdateState",
         "description": "Image-update availability derived from registry polling."

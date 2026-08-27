@@ -60,17 +60,30 @@ async def refresh_record_status(
         record.deployed_image_digest = inspect.running_digest
         await store.put(record)
 
-    if record.image and record.deployed_image_digest:
+    if record.image:
         try:
             latest = await checker.get_latest_digest(record.image)
             if latest is not None:
-                new_ua = latest != record.deployed_image_digest
+                new_ua = (
+                    bool(record.deployed_image_digest)
+                    and latest != record.deployed_image_digest
+                )
                 if (
                     record.update_available != new_ua
                     or record.latest_registry_digest != latest
+                    or record.registry_auth_error
                 ):
                     record.update_available = new_ua
                     record.latest_registry_digest = latest
+                    record.registry_auth_error = False
+                    await store.put(record)
+            elif checker.was_auth_error(record.image):
+                if not record.registry_auth_error:
+                    record.registry_auth_error = True
+                    await store.put(record)
+            else:
+                if record.registry_auth_error:
+                    record.registry_auth_error = False
                     await store.put(record)
         except Exception:
             logger.debug(

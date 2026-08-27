@@ -655,6 +655,30 @@ class TestDockerSdkBackendDeploy:
         with pytest.raises(RuntimeError, match="no credential was presented"):
             await b.deploy(record, config, "ghcr.io/o/img:main")
 
+    async def test_deploy_attaches_pat_auth_to_pull(self, backend):
+        """When ghcr_pull_token is set the deploy call passes auth_config
+        to images.pull, which Docker turns into the X-Registry-Auth header."""
+        b, client, _dm = backend
+        b.ghcr_pull_token = "ghp_secret"
+
+        config = self._make_config()
+        record = ServiceRecord(name="test-svc", container_name="test-svc")
+
+        image = self._make_image_mock(
+            ["ghcr.io/o/img@sha256:e9f02675cf8a7c09"], "sha256:newid"
+        )
+        client.images.pull.return_value = image
+        client.containers.create.return_value = MagicMock()
+
+        await b.deploy(record, config, "ghcr.io/o/img:main")
+
+        # The pull must include the auth config derived from ghcr_pull_token
+        auth = client.images.pull.call_args[1]["auth_config"]
+        assert auth is not None
+        assert auth["username"] == "robot"
+        assert auth["password"] == "ghp_secret"
+        assert auth["serveraddress"] == "ghcr.io"
+
 
 # ---------------------------------------------------------------------------
 # _build_auth_configs
@@ -746,6 +770,21 @@ class TestDockerSdkBackendBuildAuthConfig:
             }
         ]
         mock_mint.assert_called_once_with("123", "key", "456")
+
+    @pytest.mark.asyncio
+    async def test_ghcr_pull_token_pat_creates_auth_config(self, backend, monkeypatch):
+        """ghcr.io image with only a PAT in ghcr_pull_token yields an auth
+        config so the pull sends X-Registry-Auth for private packages."""
+        b = backend()
+        b.ghcr_pull_token = "ghp_test_read_packages"
+        result = await b._build_auth_configs("ghcr.io/owner/repo:tag")
+        assert result == [
+            {
+                "username": "robot",
+                "password": "ghp_test_read_packages",
+                "serveraddress": "ghcr.io",
+            }
+        ]
 
 
 # ---------------------------------------------------------------------------
