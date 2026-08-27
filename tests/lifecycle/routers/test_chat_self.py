@@ -137,13 +137,13 @@ async def test_chat_self_restart_not_allowed(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """Restart returns 403 when central-deploy is not chat-agent-mutatable."""
+    """Restart returns 404 when central-deploy is not registered."""
     # Deliberately do NOT register central-deploy.
     resp = await client.post(
         "/chat/services/central-deploy/restart",
         headers=auth_headers,
     )
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------

@@ -192,12 +192,12 @@ async def test_status_not_found(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """Status returns 403 for unknown component (same as not-allowlisted)."""
+    """Status returns 404 for unknown component."""
     resp = await client.get(
         "/chat/services/no-such-svc/status",
         headers=auth_headers,
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -360,12 +360,12 @@ async def test_volume_file_component_not_found(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """File read returns 403 when component does not exist (same as not-allowlisted)."""
+    """File read returns 404 when component does not exist."""
     resp = await client.get(
         "/chat/services/no-such-svc/volumes/data-vol/files?path=foo.txt",
         headers=auth_headers,
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

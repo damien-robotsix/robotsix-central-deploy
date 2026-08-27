@@ -288,7 +288,7 @@ async def test_restart_not_allowlisted(
 
 
 # ---------------------------------------------------------------------------
-# Restart — component not registered at all (403)
+# Restart — component not registered at all (404)
 # ---------------------------------------------------------------------------
 
 
@@ -297,12 +297,12 @@ async def test_restart_unregistered_component(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """Restart returns 403 when no component config exists at all."""
+    """Restart returns 404 when no component config exists at all."""
     resp = await client.post(
         "/chat/services/test-svc/restart",
         headers=auth_headers,
     )
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------

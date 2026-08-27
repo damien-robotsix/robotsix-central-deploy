@@ -202,7 +202,7 @@ async def test_chat_disk_reclaim_nothing(
 
 
 # ---------------------------------------------------------------------------
-# Not allowed (403)
+# Not allowed (404)
 # ---------------------------------------------------------------------------
 
 
@@ -211,14 +211,14 @@ async def test_chat_disk_reclaim_not_allowed(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """Disk reclaim returns 403 when central-deploy is not registered."""
+    """Disk reclaim returns 404 when central-deploy is not registered."""
     # Deliberately do NOT register central-deploy.
     resp = await client.post(
         "/chat/disk/reclaim",
         headers=auth_headers,
         json={"build_cache": True},
     )
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------
