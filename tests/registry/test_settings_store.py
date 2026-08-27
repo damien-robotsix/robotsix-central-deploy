@@ -148,7 +148,18 @@ class TestSystemSettingsStore:
         assert result.log_level == "DEBUG"
         assert config.log_level == original_level  # original unchanged
 
-    def test_overlay_partial_settings_preserve_config_defaults(self, tmp_path: Path):
+    def test_overlay_stored_default_does_not_discard_a_configured_value(
+        self, tmp_path: Path
+    ):
+        """A stored value still at its default is not an operator choice.
+
+        This assertion used to run the other way — the stored default won and
+        the configured 5000 was discarded. That is the bug that broke fleet
+        GHCR pulls on 2026-08-27 (see ``overlay``); ``SystemSettings`` fills
+        every unset field from ``SETTINGS_DEFAULTS`` and the store is seeded
+        with a full key set, so "stored" and "never touched" were
+        indistinguishable and config.json could not set these keys at all.
+        """
         path = tmp_path / "settings.json"
         path.write_text(
             json.dumps({"log_level": "DEBUG"}),
@@ -161,9 +172,57 @@ class TestSystemSettingsStore:
             rate_limit_api_per_hour=5000,
         )
         result = store.overlay(config)
+        # A real stored choice still wins.
         assert result.log_level == "DEBUG"
-        # Stored default for rate_limit_api_per_hour (20000) should override
-        assert result.rate_limit_api_per_hour == 20000
+        # A stored default does not overwrite a configured value.
+        assert result.rate_limit_api_per_hour == 5000
+
+    def test_overlay_keeps_a_configured_secret_against_a_seeded_empty_store(
+        self, tmp_path: Path
+    ):
+        """The exact 2026-08-27 GHCR shape: seeded ``""`` over a real PAT.
+
+        ``ghcr_pull_token`` is a ``SETTINGS_DEFAULTS`` key, so the PAT saved
+        through the config panel (which writes and reads back ``config.json``,
+        and so displayed it as stored) was overwritten with the seeded empty
+        string on every boot.
+        """
+        path = tmp_path / "settings.json"
+        path.write_text(
+            json.dumps({"ghcr_pull_token": "", "log_level": "DEBUG"}),
+            encoding="utf-8",
+        )
+        store = SystemSettingsStore(path)
+
+        result = store.overlay(
+            LifecycleConfig(ghcr_pull_token="ghp_configured", log_level="INFO")
+        )
+
+        assert result.ghcr_pull_token.get_secret_value() == "ghp_configured"
+        assert result.log_level == "DEBUG"
+
+    def test_overlay_stored_secret_still_overrides_the_configured_one(
+        self, tmp_path: Path
+    ):
+        """Rotating a credential through the store must still take effect."""
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"ghcr_pull_token": "ghp_stored"}), encoding="utf-8")
+        store = SystemSettingsStore(path)
+
+        result = store.overlay(LifecycleConfig(ghcr_pull_token="ghp_configured"))
+
+        assert result.ghcr_pull_token.get_secret_value() == "ghp_stored"
+
+    def test_overlay_leaves_a_key_at_its_default_when_neither_layer_sets_it(
+        self, tmp_path: Path
+    ):
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({"ghcr_pull_token": ""}), encoding="utf-8")
+        store = SystemSettingsStore(path)
+
+        result = store.overlay(LifecycleConfig())
+
+        assert result.ghcr_pull_token.get_secret_value() == ""
 
     def test_overlay_rate_limit_fields(self, tmp_path: Path):
         path = tmp_path / "settings.json"

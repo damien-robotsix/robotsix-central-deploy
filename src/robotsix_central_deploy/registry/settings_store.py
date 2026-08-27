@@ -148,11 +148,39 @@ class SystemSettingsStore:
     # Overlay stored settings onto a LifecycleConfig
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _plain(value: Any) -> Any:
+        """Unwrap a ``SecretStr`` so it compares equal to a plain string.
+
+        ``SystemSettings`` types these fields as ``str`` while
+        ``LifecycleConfig`` may type the same field as ``SecretStr``, so the
+        two layers cannot be compared without this.
+        """
+        getter = getattr(value, "get_secret_value", None)
+        return getter() if callable(getter) else value
+
     def overlay(self, config: Any) -> Any:
         """Return a *copy* of *config* with every stored setting overlaid.
 
-        All stored values take precedence over env-var defaults — an entry
-        in the store represents an intentional operator choice.
+        A stored value takes precedence over the config file and env vars —
+        an entry in the store represents an intentional operator choice.
+
+        **Except when it is not a choice at all.** ``SystemSettings`` fills
+        every unset field from ``SETTINGS_DEFAULTS``, and the store is seeded
+        with a full set of keys on first boot, so a field the operator never
+        touched is indistinguishable from one deliberately set to the default.
+        Copying those over a real ``config.json`` value silently discards it.
+        That is what broke fleet GHCR pulls on 2026-08-27: ``ghcr_pull_token``
+        is a ``SETTINGS_DEFAULTS`` key, so the PAT saved through the config
+        panel — which writes ``config.json`` and reads it straight back, so the
+        panel showed it as stored — was overwritten with the seeded ``""`` at
+        every boot. The credential could not be set from the surface that
+        appeared to set it.
+
+        So a stored value that still equals its default does not override a
+        config value that differs from that default. A default cannot express
+        an override, only the absence of one. To force a key back to its
+        default, clear it in ``config.json`` rather than storing the default.
 
         When the settings file does not exist yet (first boot), the config
         is returned unchanged so that ``ROBOTSIX_LIFECYCLE_*`` environment
@@ -169,5 +197,19 @@ class SystemSettingsStore:
         # Use model_validate so SecretStr fields are coerced from plain
         # strings (model_copy(update=...) bypasses type coercion).
         merged = config.model_dump()
-        merged.update({key: getattr(stored, key) for key in SETTINGS_DEFAULTS})
+
+        for key, default in SETTINGS_DEFAULTS.items():
+            stored_value = getattr(stored, key)
+            if (
+                self._plain(stored_value) == default
+                and self._plain(merged.get(key)) != default
+            ):
+                logger.info(
+                    "SystemSettingsStore: keeping the configured %s — the stored "
+                    "value is still the default and would otherwise discard it",
+                    key,
+                )
+                continue
+            merged[key] = stored_value
+
         return type(config).model_validate(merged)
