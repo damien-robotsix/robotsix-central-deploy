@@ -16,7 +16,7 @@ from robotsix_central_deploy.lifecycle.deps.dependencies import (
     _get_or_create_record,
     _get_sibling_pairs,
     _get_store,
-    _suggest_service_names,
+    _known_service_names,
 )
 from robotsix_central_deploy.lifecycle.models import HealthStatus
 
@@ -155,8 +155,13 @@ class TestGetOrCreateRecord:
         assert exc_info.value.detail == "Service 'missing' not found"
 
 
-class TestSuggestServiceNames:
-    """Tests for ``_suggest_service_names``."""
+class TestKnownServiceNames:
+    """Tests for ``_known_service_names`` — the store read behind the 404 hint.
+
+    The matching itself is covered by ``tests/lifecycle/test_name_suggest.py``;
+    what matters here is that a store failure degrades to "no suggestions"
+    instead of masking the 404 it decorates.
+    """
 
     @pytest.fixture
     def store(self) -> AsyncMock:
@@ -164,27 +169,19 @@ class TestSuggestServiceNames:
         s.list_all = AsyncMock()
         return s
 
-    async def test_substring_match_beats_ratio(self, store: AsyncMock) -> None:
-        """`robotsix-invest` -> `invest` shares no prefix, so ratio alone misses it."""
+    async def test_returns_every_registered_name(self, store: AsyncMock) -> None:
         store.list_all.return_value = [
             SimpleNamespace(name="invest"),
             SimpleNamespace(name="mill"),
         ]
-        assert await _suggest_service_names("robotsix-invest", store) == ["invest"]
-
-    async def test_typo_is_caught_by_close_matches(self, store: AsyncMock) -> None:
-        store.list_all.return_value = [SimpleNamespace(name="central-deploy")]
-        assert await _suggest_service_names("central-deply", store) == [
-            "central-deploy"
+        assert await _known_service_names("robotsix-invest", store) == [
+            "invest",
+            "mill",
         ]
 
-    async def test_caps_at_three_without_duplicates(self, store: AsyncMock) -> None:
-        store.list_all.return_value = [
-            SimpleNamespace(name=f"svc-{i}") for i in range(10)
-        ]
-        got = await _suggest_service_names("svc", store)
-        assert len(got) == 3
-        assert len(set(got)) == 3
+    async def test_store_failure_yields_no_names(self, store: AsyncMock) -> None:
+        store.list_all.side_effect = RuntimeError("store down")
+        assert await _known_service_names("anything", store) == []
 
 
 # ===========================================================================

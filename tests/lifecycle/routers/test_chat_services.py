@@ -389,6 +389,34 @@ async def test_restart_service_not_found(
 
 
 # ---------------------------------------------------------------------------
+# Unknown component — 404 names the registered id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unknown_component_404_suggests_the_registered_id(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """The chat plane phrases its 404 like the operator plane's.
+
+    Addressing a component by its repository name is the common mistake; a
+    bare "not found" reads as a permissions problem instead.
+    """
+    _register_component("invest")
+
+    resp = await client.post(
+        "/chat/services/robotsix-invest/restart",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404, resp.text
+    # register_error_handlers wraps a str detail as {"error": ..., "detail": ""}.
+    message = resp.json()["error"]
+    assert "robotsix-invest" in message
+    assert "did you mean 'invest'?" in message
+
+
+# ---------------------------------------------------------------------------
 # Update — service not found (404)
 # ---------------------------------------------------------------------------
 
