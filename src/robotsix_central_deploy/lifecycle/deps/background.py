@@ -66,7 +66,9 @@ async def _check_and_update_record(
         except Exception:  # noqa: BLE001
             pass  # Status check may fail if the container isn't running; proceed without digest
 
-    if not record.image or not record.deployed_image_digest:
+    if not record.image:
+        return
+    if not record.deployed_image_digest:
         return
     try:
         latest = await checker.get_latest_digest(record.image)
@@ -75,9 +77,19 @@ async def _check_and_update_record(
             if (
                 record.update_available != new_ua
                 or record.latest_registry_digest != latest
+                or record.registry_auth_error
             ):
                 record.update_available = new_ua
                 record.latest_registry_digest = latest
+                record.registry_auth_error = False
+                await store.put(record)
+        elif checker.was_auth_error(record.image):
+            if not record.registry_auth_error:
+                record.registry_auth_error = True
+                await store.put(record)
+        else:
+            if record.registry_auth_error:
+                record.registry_auth_error = False
                 await store.put(record)
     except Exception:  # noqa: BLE001
         pass

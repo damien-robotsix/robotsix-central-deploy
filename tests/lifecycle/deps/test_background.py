@@ -27,6 +27,7 @@ def _make_record(
     deployed_image_digest: str = "",
     update_available: bool = False,
     latest_registry_digest: str = "",
+    registry_auth_error: bool = False,
 ) -> ServiceRecord:
     return ServiceRecord(
         name=name,
@@ -34,6 +35,7 @@ def _make_record(
         deployed_image_digest=deployed_image_digest,
         update_available=update_available,
         latest_registry_digest=latest_registry_digest,
+        registry_auth_error=registry_auth_error,
     )
 
 
@@ -262,6 +264,7 @@ class TestCheckAndUpdateRecord:
         store = MagicMock(put=AsyncMock())
         checker = MagicMock()
         checker.get_latest_digest = AsyncMock(return_value=None)
+        checker.was_auth_error = MagicMock(return_value=False)
         backend = MagicMock()
 
         await _check_and_update_record(record, store, checker, backend)
@@ -288,6 +291,81 @@ class TestCheckAndUpdateRecord:
         # Record fields were updated in-memory despite the store failure.
         assert record.update_available is True
         assert record.latest_registry_digest == "sha256:new"
+
+    # -- auth-error propagation -------------------------------------------
+
+    async def test_auth_error_set_when_checker_flags_401(self) -> None:
+        """When get_latest_digest returns None and was_auth_error is True,
+        registry_auth_error is set and the record is persisted."""
+        record = _make_record(
+            deployed_image_digest="sha256:old",
+            update_available=False,
+        )
+        store = MagicMock(put=AsyncMock())
+        checker = MagicMock()
+        checker.get_latest_digest = AsyncMock(return_value=None)
+        checker.was_auth_error = MagicMock(return_value=True)
+        backend = MagicMock()
+
+        await _check_and_update_record(record, store, checker, backend)
+
+        assert record.registry_auth_error is True
+        store.put.assert_awaited_once_with(record)
+
+    async def test_auth_error_cleared_when_fetch_succeeds(self) -> None:
+        """When a subsequent check succeeds, registry_auth_error is cleared."""
+        record = _make_record(
+            deployed_image_digest="sha256:old",
+            update_available=False,
+            registry_auth_error=True,
+        )
+        store = MagicMock(put=AsyncMock())
+        checker = MagicMock()
+        checker.get_latest_digest = AsyncMock(return_value="sha256:old")
+        checker.was_auth_error = MagicMock(return_value=False)
+        backend = MagicMock()
+
+        await _check_and_update_record(record, store, checker, backend)
+
+        assert record.registry_auth_error is False
+        store.put.assert_awaited_once_with(record)
+
+    async def test_auth_error_cleared_on_generic_failure(self) -> None:
+        """When the checker returns None but was_auth_error is False,
+        previously-set auth_error is cleared."""
+        record = _make_record(
+            deployed_image_digest="sha256:old",
+            update_available=False,
+            registry_auth_error=True,
+        )
+        store = MagicMock(put=AsyncMock())
+        checker = MagicMock()
+        checker.get_latest_digest = AsyncMock(return_value=None)
+        checker.was_auth_error = MagicMock(return_value=False)
+        backend = MagicMock()
+
+        await _check_and_update_record(record, store, checker, backend)
+
+        assert record.registry_auth_error is False
+        store.put.assert_awaited_once_with(record)
+
+    async def test_auth_error_noop_when_already_set(self) -> None:
+        """When registry_auth_error is already True and another auth error
+        occurs, store.put is NOT called (no state change)."""
+        record = _make_record(
+            deployed_image_digest="sha256:old",
+            registry_auth_error=True,
+        )
+        store = MagicMock(put=AsyncMock())
+        checker = MagicMock()
+        checker.get_latest_digest = AsyncMock(return_value=None)
+        checker.was_auth_error = MagicMock(return_value=True)
+        backend = MagicMock()
+
+        await _check_and_update_record(record, store, checker, backend)
+
+        assert record.registry_auth_error is True
+        store.put.assert_not_awaited()
 
 
 # ===========================================================================

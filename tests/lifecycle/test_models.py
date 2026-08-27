@@ -6,6 +6,7 @@ from robotsix_central_deploy.lifecycle.models import (
     TRANSITIONS,
     ServiceRecord,
     ServiceState,
+    UpdateState,
     can_transition,
 )
 
@@ -104,3 +105,56 @@ class TestServiceRecord:
         )
         sib_item = sib.to_list_item()
         assert sib_item.component_id == "svc"
+
+
+class TestUpdateState:
+    """Ensure the four update states are present."""
+
+    def test_all_states_exist(self):
+        assert {s.value for s in UpdateState} == {
+            "unknown",
+            "up-to-date",
+            "update-available",
+            "auth-error",
+        }
+
+    def test_auth_error_is_string_comparable(self):
+        assert UpdateState.AUTH_ERROR == "auth-error"
+        assert UpdateState.AUTH_ERROR.value == "auth-error"
+
+
+class TestServiceRecordAuthError:
+    def test_to_status_auth_error_when_flag_set(self):
+        """When registry_auth_error is True, update_state is auth-error."""
+        rec = ServiceRecord(
+            name="svc",
+            image="ghcr.io/o/img:main",
+            state=ServiceState.RUNNING,
+            registry_auth_error=True,
+        )
+        status = rec.to_status()
+        assert status.update_state == UpdateState.AUTH_ERROR
+
+    def test_to_status_unknown_when_no_auth_error(self):
+        """Without registry_auth_error, missing digest gives UNKNOWN."""
+        rec = ServiceRecord(
+            name="svc",
+            image="ghcr.io/o/img:main",
+            state=ServiceState.RUNNING,
+            registry_auth_error=False,
+        )
+        status = rec.to_status()
+        assert status.update_state == UpdateState.UNKNOWN
+
+    def test_auth_error_preserves_over_known_digests(self):
+        """registry_auth_error takes precedence regardless of digest state."""
+        rec = ServiceRecord(
+            name="svc",
+            image="ghcr.io/o/img:main",
+            state=ServiceState.RUNNING,
+            deployed_image_digest="sha256:aaa",
+            latest_registry_digest="sha256:aaa",
+            registry_auth_error=True,
+        )
+        status = rec.to_status()
+        assert status.update_state == UpdateState.AUTH_ERROR
