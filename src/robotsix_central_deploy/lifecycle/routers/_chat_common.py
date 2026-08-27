@@ -18,6 +18,7 @@ from fastapi import HTTPException, status
 
 from ...registry.config_store import ComponentConfigStore
 from ...registry.models import ComponentConfig
+from .._name_suggest import with_suggestions
 
 logger = logging.getLogger(__name__)
 
@@ -108,14 +109,22 @@ async def _require_allowed_service(
     which gate denied it.
 
     Raises:
-        HTTP 404 when the component is not known at all.
+        HTTP 404 when the component is not known at all — with a
+            ``did you mean …?`` clause when a registered id is close.
         HTTP 403 when the component exists but is not chat-agent accessible.
     """
     comp_cfg = component_config_store.get(name)
     if comp_cfg is None:
+        # Same phrasing as the operator plane's 404 (``_get_or_create_record``):
+        # the caller is usually addressing a component by its repository name
+        # while it is registered under a short one.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Service '{name}' not found.",
+            detail=with_suggestions(
+                f"Service '{name}' not found",
+                name,
+                (c.id for c in component_config_store.all()),
+            ),
         )
     if not (comp_cfg.chat_agent_mutatable or comp_cfg.allow_chat_access):
         raise HTTPException(

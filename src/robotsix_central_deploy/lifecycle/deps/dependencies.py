@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import logging
 from typing import TYPE_CHECKING
 
@@ -17,6 +16,7 @@ from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.settings_store import SystemSettingsStore
 from ...registry_check import RegistryChecker
+from .._name_suggest import with_suggestions
 from ..backends import ExecutionBackend
 from ..config import LifecycleConfig
 from ..models import HealthStatus, ServiceRecord
@@ -85,41 +85,30 @@ async def _get_job_registry(request: Request) -> JobRegistry:
     return request.app.state.job_registry  # type: ignore[no-any-return]
 
 
-async def _suggest_service_names(name: str, store: ServiceStore) -> list[str]:
-    """Registered service names close to *name*, best match first.
+async def _known_service_names(name: str, store: ServiceStore) -> list[str]:
+    """Every registered service name, for suggestion matching.
 
-    Callers routinely address the deploy plane by a component's repository
-    name (``robotsix-invest``) when it is registered under a short name
-    (``invest``); a bare "not found" sent them hunting for a permissions bug.
-    Substring matches are included because that pair shares no prefix and so
-    scores poorly on ratio alone. Best-effort: a store failure yields no
-    suggestions rather than masking the 404.
+    Best-effort: a store failure yields no names — and therefore no
+    suggestions — rather than masking the 404 it is decorating.
     """
     try:
-        known = [r.name for r in await store.list_all()]
+        return [r.name for r in await store.list_all()]
     except Exception:  # pragma: no cover - suggestion is never load-bearing
         logger.debug("could not list services to suggest for %r", name, exc_info=True)
         return []
-
-    lowered = name.lower()
-    substring = [k for k in known if lowered in k.lower() or k.lower() in lowered]
-    close = difflib.get_close_matches(name, known, n=3, cutoff=0.6)
-    # dict.fromkeys keeps substring hits first while dropping duplicates.
-    return list(dict.fromkeys(substring + close))[:3]
 
 
 async def _get_or_create_record(name: str, store: ServiceStore) -> ServiceRecord:
     """Fetch a service record by name, raising 404 when absent."""
     record = await store.get(name)
     if record is None:
-        detail = f"Service '{name}' not found"
-        suggestions = await _suggest_service_names(name, store)
-        if suggestions:
-            quoted = ", ".join(f"'{s}'" for s in suggestions)
-            detail += f"; did you mean {quoted}?"
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=detail,
+            detail=with_suggestions(
+                f"Service '{name}' not found",
+                name,
+                await _known_service_names(name, store),
+            ),
         )
     return record
 
