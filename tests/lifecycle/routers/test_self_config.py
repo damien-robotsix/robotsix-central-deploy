@@ -101,6 +101,27 @@ class TestGetConfig:
         body = (await client.get("/config")).json()
         assert body["config"][UNSET_SECRET_FIELD] == ""
 
+    async def test_llmio_tier_config_roundtrips_as_dict(
+        self, client: AsyncClient, config_file
+    ):
+        """A populated llmio_tier_config must come back as a dict and survive
+        a round-trip through PUT /config.  This guards against the settings
+        page string-coercing the field to "[object Object]", which the
+        backend rejects as a dict_type validation error.
+        """
+        tier = {"level1": {"provider": "openai", "model": "gpt-4o"}}
+        data = _on_disk(config_file)
+        data["llmio_tier_config"] = tier
+        config_file.write_text(json.dumps(data))
+
+        get_body = (await client.get("/config")).json()
+        assert isinstance(get_body["config"]["llmio_tier_config"], dict)
+        assert get_body["config"]["llmio_tier_config"] == tier
+
+        put_resp = await client.put("/config", json={"llmio_tier_config": tier})
+        assert put_resp.status_code == 200
+        assert put_resp.json()["config"]["llmio_tier_config"] == tier
+
 
 class TestPutConfig:
     async def test_partial_update_leaves_other_keys_alone(
