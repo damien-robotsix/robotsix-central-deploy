@@ -183,8 +183,8 @@ class SystemSettingsStore:
         default, clear it in ``config.json`` rather than storing the default.
 
         When the settings file does not exist yet (first boot), the config
-        is returned unchanged so that ``ROBOTSIX_LIFECYCLE_*`` environment
-        variables are preserved.
+        is returned unchanged — whatever ``config.json`` and the model
+        defaults produced stands.
 
         The overlay field set is driven by ``SETTINGS_DEFAULTS`` keys, so
         adding a shared field to ``_settings_defaults.py`` automatically

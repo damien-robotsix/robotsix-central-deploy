@@ -297,8 +297,7 @@ Not every deployable component needs an onboarding pipeline or persisted
 `ComponentConfig` from the start.  The server supports a **generic deploy**
 endpoint (`POST /chat/deploy`) that lets the chat agent pull + recreate any
 component whose name appears in the `chat_agent_deployable_components` list
-in `config/config.json` (or equivalently the
-`ROBOTSIX_LIFECYCLE_CHAT_AGENT_DEPLOYABLE_COMPONENTS` environment variable).
+in `config/config.json`.
 
 On first deploy, a minimal `ComponentConfig` is derived from the request body
 (``name``, ``image``, optional ``container_port``), persisted automatically,

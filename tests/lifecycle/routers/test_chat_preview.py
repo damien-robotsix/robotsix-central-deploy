@@ -545,17 +545,10 @@ class TestDockerHelpers:
 
 
 class TestPreviewDeployEndpoint:
-    @pytest.fixture(autouse=True)
-    def _configure_gateway_domain(self, monkeypatch):
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN", "deploy.example.com"
-        )
-
     async def test_deploy_missing_gateway_domain_returns_503(
-        self, client: AsyncClient, auth_headers, monkeypatch
+        self, client: AsyncClient, auth_headers
     ):
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN", "")
-        # Force the module-level config to be reloaded
+        # gateway_base_domain is a config field, so set it on the config object
         server_mod._config = LifecycleConfig(  # type: ignore[call-arg]
             store_backend="memory",
             execution_backend="noop",

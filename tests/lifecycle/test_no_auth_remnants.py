@@ -5,11 +5,14 @@ edge — Traefik plus tinyauth — is the only gate, and central-deploy holds
 itself to the same fleet-wide rule it enforces on every other component.
 
 ``tests/lifecycle/test_app.py`` already guards the *runtime* surface: no route
-may carry a real auth dependency.  This module guards the surface that test
-cannot see — the committed configuration files, the configuration models, and
-the operator-facing documentation — because a reintroduced ``api_key`` key or
-a documented ``AUTH_PASSWORD`` variable costs the same credential-provisioning
-mistakes even when no route reads it.
+may carry a real auth dependency.  This module guards what that test cannot
+see — the committed configuration files and the configuration models — because
+a reintroduced ``api_key`` key costs the same credential-provisioning mistakes
+even when no route reads it.
+
+The docs half lives in ``test_no_env_config_channel.py``, which forbids naming
+*any* concrete ``ROBOTSIX_LIFECYCLE_*`` variable and so covers the deleted auth
+and login-rate-limit names as a special case.
 
 Note that ``data/`` is gitignored: the live settings store is operator state,
 not a committed default, so only tracked files are scanned here.
@@ -39,19 +42,6 @@ CONFIG_FILES = (
     "config/config.example.json",
     "config/config.schema.json",
 )
-
-#: Documented variable names for the same deleted settings, plus the login
-#: rate limits that only ever guarded the deleted login endpoint.
-BANNED_DOC_TOKENS = (
-    "ROBOTSIX_LIFECYCLE_API_KEY",
-    "ROBOTSIX_LIFECYCLE_AUTH_USERNAME",
-    "ROBOTSIX_LIFECYCLE_AUTH_PASSWORD",
-    "ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_PER_MINUTE",
-    "ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_MAX_ATTEMPTS",
-    "ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_LOCKOUT_SECONDS",
-)
-
-DOC_FILES = ("docs/lifecycle/configuration.md",)
 
 
 def _banned_key_paths(node: object, trail: str = "") -> list[str]:
@@ -89,18 +79,4 @@ def test_config_models_carry_no_auth_fields(model: type) -> None:
     assert not offenders, (
         f"{model.__name__} reintroduces component-level auth field(s) "
         f"{offenders} — the fleet edge is the only gate (see docs/edge.md)."
-    )
-
-
-@pytest.mark.parametrize("relative_path", DOC_FILES)
-def test_docs_do_not_document_removed_auth_settings(relative_path: str) -> None:
-    """Docs must not advertise settings nothing reads any more."""
-    path = REPO_ROOT / relative_path
-    assert path.is_file(), f"{relative_path} is missing — update DOC_FILES"
-
-    text = path.read_text()
-    found = [token for token in BANNED_DOC_TOKENS if token in text]
-    assert not found, (
-        f"{relative_path} documents removed setting(s) {found}; nothing reads "
-        f"them, so an operator following the docs configures nothing."
     )
