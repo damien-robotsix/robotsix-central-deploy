@@ -10,7 +10,6 @@ The lifecycle server is configured via environment variables, all prefixed with 
 | --- | --- | --- |
 | `ROBOTSIX_LIFECYCLE_HOST` | `0.0.0.0` | IP address the lifecycle server binds to. |
 | `ROBOTSIX_LIFECYCLE_PORT` | `8100` | TCP port the lifecycle server listens on. |
-| `ROBOTSIX_LIFECYCLE_API_KEY` | `""` | Static API key accepted via the `X-API-Key` header. When empty, authentication is disabled (unless `AUTH_USERNAME`/`AUTH_PASSWORD` are both set). |
 
 ### Persistence
 
@@ -38,10 +37,12 @@ The lifecycle server is configured via environment variables, all prefixed with 
 
 ### Auth
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_AUTH_USERNAME` | `""` | HTTP Basic auth username. Authentication is enforced when both `AUTH_USERNAME` and `AUTH_PASSWORD` are non-empty, or when `API_KEY` is set. |
-| `ROBOTSIX_LIFECYCLE_AUTH_PASSWORD` | `""` | HTTP Basic auth password. |
+central-deploy ships **no** authentication of its own — no login page, no
+session store, no API key, no HTTP Basic credentials. The fleet edge (Traefik
++ tinyauth) is the only gate; see [The edge](../edge.md). `verify_auth` on the
+JSON API is a deliberate no-op stub, kept only as an interception point, and
+`tests/lifecycle/test_app.py` fails if any route ever grows a real credential
+dependency.
 
 ### Docker
 
@@ -98,10 +99,16 @@ The lifecycle server is configured via environment variables, all prefixed with 
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_PER_MINUTE` | `10` | Max `POST /login` requests per IP per minute. Exceeding this returns HTTP 429. |
-| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_API_PER_HOUR` | `20000` | Max authenticated API requests (e.g. `/services`, `/volumes`, `/onboard`, `/chat`) per IP per hour. Exceeding this returns HTTP 429. |
-| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_MAX_ATTEMPTS` | `20` | Consecutive failed login attempts before the IP is temporarily locked out. Successful login resets the counter. |
-| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_LOGIN_LOCKOUT_SECONDS` | `300` | Duration in seconds an IP remains locked out after exceeding the max login attempts. |
+| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_API_PER_HOUR` | `20000` | Max requests per IP per hour to central-deploy's own JSON API (`/services`, `/volumes`, `/onboard`, `/chat`, …). Exceeding this returns HTTP 429. |
+
+`rate_limit_api_per_hour` is the **only** rate limit central-deploy enforces.
+It is applied by `RateLimitMiddleware` (`lifecycle/rate_limiter.py`) to
+central-deploy's own traffic; component traffic is served by the Traefik edge
+and never reaches this middleware.
+
+There are no login rate limits, because there is no login: the per-minute,
+max-attempts, and lockout settings that used to sit in this table were part of
+the component-level auth that was removed, and nothing has read them since.
 
 ### Chat Agent
 
