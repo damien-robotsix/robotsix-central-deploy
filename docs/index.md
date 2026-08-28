@@ -40,24 +40,16 @@ Langfuse.
 
 ## Security / Credentials
 
-The lifecycle server supports two authentication mechanisms,
-either of which can be used independently or together:
+The lifecycle server ships **no authentication of its own** — no login page,
+no session store, no API key, no HTTP Basic credentials. The fleet edge
+(Traefik + tinyauth) authenticates every request before it reaches any
+container, so a component behind it only ever receives authenticated traffic.
+See [The edge](edge.md) and [Configuration](lifecycle/configuration.md#auth).
 
-- **`ROBOTSIX_LIFECYCLE_API_KEY`** — API key accepted via the
-  `X-API-Key` header (intended for programmatic clients / scripts).
-- **`ROBOTSIX_LIFECYCLE_AUTH_USERNAME`** +
-  **`ROBOTSIX_LIFECYCLE_AUTH_PASSWORD`** — HTTP Basic Auth
-  credentials (intended for browser / UI access). The server
-  responds with `WWW-Authenticate: Basic realm="Central Deploy"`
-  on authentication failures so browsers can show a login dialog.
-
-All endpoints except `GET /health` require authentication when
-credentials are configured. `GET /health` is always open as a
-liveness probe.
-
-**Dev mode:** when *none* of the above environment variables are
-set, every endpoint is accessible without credentials — useful for
-local development.
+Credentials central-deploy *presents* to services it calls — the GHCR pull
+token, the GitHub App key, the board API token — are ordinary config fields,
+declared as `SecretStr` and masked in the deploy UI. They are not a gate on
+inbound requests.
 
 ### GHCR image-pull authentication
 
@@ -81,14 +73,6 @@ When neither credential is configured, `ghcr.io` pulls fall back to anonymous
 access (public images only). A 403 ``denied`` error means the configured
 credential lacks ``read:packages`` on the target package — check the PAT scope
 or App installation permissions.
-
-### Example `.env.lifecycle` snippet
-
-```ini
-ROBOTSIX_LIFECYCLE_API_KEY=changeme
-ROBOTSIX_LIFECYCLE_AUTH_USERNAME=admin
-ROBOTSIX_LIFECYCLE_AUTH_PASSWORD=secure-password
-```
 
 ## Docker Socket Proxy
 
@@ -118,14 +102,17 @@ and never execs into containers.
 
 ### Configuration
 
-| Env variable | Default | Production |
-|---|---|---|
-| `ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL` | `unix:///var/run/docker.sock` | `tcp://socket-proxy:2375` |
+The endpoint is the `docker_socket_url` config field (see
+[Configuration](lifecycle/configuration.md)), not an environment variable.
 
-- **Local dev (without compose):** the default `unix:///var/run/docker.sock`
-  works directly against the host Docker daemon — no proxy needed.
-- **Production (via `docker-compose.yml`):** the compose file sets
-  `ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL=tcp://socket-proxy:2375` so the
-  lifecycle server connects through the proxy sidecar. The raw socket
-  (`/var/run/docker.sock`) is mounted **only** into the `socket-proxy`
-  container (read-only) — `central-deploy` never touches it.
+- **Local dev:** the default `unix:///var/run/docker.sock` works directly
+  against the host Docker daemon — no proxy needed.
+- **Production:** `/data/config.json` sets
+  `"docker_socket_url": "tcp://socket-proxy:2375"` so the lifecycle server
+  connects through the proxy sidecar. The raw socket (`/var/run/docker.sock`)
+  is mounted **only** into the `socket-proxy` container (read-only) —
+  `central-deploy` never touches it.
+
+The scope flags in the table above *are* environment variables, and legitimately
+so: `socket-proxy` is a third-party image, and per §5 of the config standard a
+sibling you do not control takes its configuration however it takes it.

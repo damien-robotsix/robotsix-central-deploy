@@ -1,41 +1,89 @@
 # Configuration
 
-The lifecycle server is configured via environment variables, all prefixed with `ROBOTSIX_LIFECYCLE_`.
+central-deploy follows the fleet [config standard][config-standard]: **one
+pydantic model, one JSON file, no environment overlay.**
 
-## Environment Variables
+- The model is `LifecycleConfig` in `lifecycle/config.py` — 54 fields, each
+  with a type, a default, and a description.
+- The file is `config/config.json`, located by the single environment variable
+  **`ROBOTSIX_CONFIG_FILE`**. That variable only *locates* the file; it never
+  carries a value. In the deployed stack the compose file points it at
+  `/data/config.json`.
+- `config/config.schema.json` is the model reflected as JSON Schema, committed
+  and kept in sync by the **Config Schema Drift** CI job. The deploy UI reads
+  it to render typed inputs and the per-field help bubbles.
 
-### Server
+`LifecycleConfig` is a plain `BaseModel`, not `BaseSettings`, and nothing in
+`src/` reads `os.environ`. There is no `ROBOTSIX_LIFECYCLE_*` variable, and
+setting one has no effect.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_HOST` | `0.0.0.0` | IP address the lifecycle server binds to. |
-| `ROBOTSIX_LIFECYCLE_PORT` | `8100` | TCP port the lifecycle server listens on. |
+## Where the field reference lives
 
-### Persistence
+**In the model, and nowhere else.** Every field's type, default, allowed
+values, and description are on `LifecycleConfig`; `config/config.schema.json`
+is the generated reflection of exactly that, and the deploy UI renders it.
 
-| Variable | Default | Allowed Values | Description |
-| --- | --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_STORE_BACKEND` | `memory` | `memory`, `file` | State store backend. `memory` keeps state in-process; `file` persists to disk. |
-| `ROBOTSIX_LIFECYCLE_STORE_PATH` | `lifecycle_state.yaml` | — | File path for the state store when `STORE_BACKEND=file`. |
-| `ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH` | `data/component_configs.json` | — | File path for the dynamic component configuration store. |
-| `ROBOTSIX_LIFECYCLE_ENV_STORE_PATH` | `component_env.json` | — | File path for the per-component environment variable store. |
-| `ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH` | `secrets.key` | — | File path for the secret key store. |
-| `ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH` | `data/component_config_yaml.json` | — | File path for the per-component `config.yaml` store. |
-| `ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH` | `data/system_settings.json` | — | File path for the system settings store. |
+This page deliberately does **not** restate them. It used to, as a hand-written
+table of 24 environment variables — which by the time it was removed named a
+mechanism that no longer existed, documented four settings nothing read, and
+omitted 22 fields that did exist. A second copy of the schema is a second thing
+to forget to update.
 
-### Self-Contract
+To read the fields:
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_SELF_CONTRACT_PATH` | `deploy/docker-compose.yml` | Path to central-deploy's own deploy contract. Read at startup to seed system settings from contract labels (`robotsix.deploy.settings.*`). |
+```bash
+# the model — descriptions live next to the defaults
+$EDITOR src/robotsix_central_deploy/lifecycle/config.py
 
-### Execution
+# or the generated schema
+python -m json.tool config/config.schema.json
+```
 
-| Variable | Default | Allowed Values | Description |
-|---|---|---|---|
-| `ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND` | `docker_sdk` | `docker_sdk`, `docker`, `noop` | Backend used to execute lifecycle operations. `docker_sdk` uses the Docker SDK for Python; `docker` uses the CLI; `noop` is a dry-run backend that performs no real work. |
+## The three layers, in order
 
-### Auth
+A field's effective value comes from the last layer that sets it.
+
+1. **`config/config.json`** — read at startup by `robotsix_config.load_config`.
+   Anything the file omits falls back to the model's field default; a missing
+   file means "all defaults".
+2. **Self-contract labels** — on first boot, `robotsix.deploy.settings.*`
+   labels on central-deploy's own deploy contract
+   (`self_contract_path`, default `deploy/docker-compose.yml`) seed the
+   settings store. This is how a fresh deployment arrives with its operator
+   settings already set.
+3. **`data/system_settings.json`** — the operator-editable store behind
+   `GET`/`PUT /settings` and the dashboard's Settings panel, applied over the
+   config by `SystemSettingsStore.overlay`. Changes take effect without
+   editing `config.json` and without a redeploy.
+
+Only the keys in `SETTINGS_DEFAULTS` (`lifecycle/_settings_defaults.py`) take
+part in layer 3 — 18 of the 54 fields:
+
+`caretaker_enabled`, `caretaker_interval_hours`,
+`chat_agent_registration_enabled`, `claude_auth_refresh_interval`,
+`disk_warn_pct`, `gateway_base_domain`, `ghcr_pull_token`, `image_auto_prune`,
+`llmio_tier_config`, `log_level`, `mill_component_id`, `mobile_token_ttl_days`,
+`rate_limit_api_per_hour`, `registry_check_interval`, `volume_audit_enabled`,
+`volume_audit_growth_threshold_pct`, `volume_audit_interval_seconds`,
+`volume_audit_min_delta_bytes`.
+
+Adding a key to `SETTINGS_DEFAULTS` adds it to the overlay automatically —
+`SystemSettings` and `LifecycleConfig` both source their defaults from it, so
+the two cannot drift apart.
+
+!!! warning "The overlay is silent, and it wins"
+    A value in `system_settings.json` overrides `config.json` without
+    appearing there. A revoked `ghcr_pull_token` stored in the settings file
+    sat shadowing a working GitHub App credential for 15 days and blocked
+    every fleet image pull. The startup log now names which source each
+    `ghcr.io` credential came from — grep for `ghcr.io:` when a pull 403s.
+
+One exception keeps the overlay honest: a **stored value equal to its default
+does not override** a differing config value. A default cannot express an
+override, only the absence of one. To force a key back to its default, clear it
+in `config.json` rather than storing the default.
+
+## Auth
 
 central-deploy ships **no** authentication of its own — no login page, no
 session store, no API key, no HTTP Basic credentials. The fleet edge
@@ -44,82 +92,31 @@ session store, no API key, no HTTP Basic credentials. The fleet edge
 interception point, and `tests/lifecycle/test_app.py` fails if any route ever
 grows a real credential dependency.
 
-### Docker
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL` | `unix:///var/run/docker.sock` | Docker socket URL for connecting to the Docker daemon. Set to `tcp://socket-proxy:2375` in production when running behind a Docker socket proxy. |
-| `ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT` | `120` | Timeout in seconds for all Docker SDK operations (image pull, container create/start/stop/remove, volume create/remove, etc.). Prevents indefinite blocking when the Docker daemon is slow or unresponsive. |
-
-### Disk
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_DISK_PATH` | `/` | Filesystem path to monitor for disk usage. Set to `/host_root` when running containerised with a host-root bind mount. |
-| `ROBOTSIX_LIFECYCLE_DISK_WARN_PCT` | `10.0` (10%) | Disk usage warning threshold as a percentage of total disk. A warning is emitted when free space drops below this percentage. |
-
-### Registry
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL` | `300` | Cache TTL in seconds for registry availability checks. |
-| `ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL` | `300` | Background registry check interval in seconds. Set to `0` to disable periodic checks. |
-
-### Self-update
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE` | `containrrr/watchtower:1.7.1` | One-shot updater image launched by `POST /system/update` to pull the newest server image and recreate the central-deploy container. |
-| `ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION` | `1.44` | `DOCKER_API_VERSION` exported to the one-shot updater. Watchtower 1.7.1's client defaults to API 1.25, below modern daemons' minimum, and crashes without it. Raise if a future daemon drops 1.44. |
-
-### Logging
-
-| Variable | Default | Description |
-|---|---|---|
-| `ROBOTSIX_LIFECYCLE_LOG_LEVEL` | `INFO` | Log level for the lifecycle server. |
-
-### Edge
-
-| Variable | Default | Description |
-|---|---|---|
-| `ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN` | `""` | Fleet base domain. Components are published at `<id>.<base-domain>`; must match `GATEWAY_BASE_DOMAIN` in the edge's `.env`. |
-
-### Volume Audit
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_ENABLED` | `false` | Master on/off switch for the volume audit background scanner. |
-| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_INTERVAL_SECONDS` | `3600` | Interval in seconds between volume audit scan passes. |
-| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_SNAPSHOT_PATH` | `data/volume_audit_snapshots.json` | File path for persisted volume size snapshots. |
-| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_FINDINGS_PATH` | `data/volume_audit_findings.json` | File path for persisted audit findings. |
-| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_GROWTH_THRESHOLD_PCT` | `10.0` | Growth percentage threshold — a finding is emitted when a volume grows more than this percentage between scans. |
-| `ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES` | `10485760` (10 MiB) | Minimum absolute growth in bytes before a finding is emitted. |
-
-### Rate Limiting
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_RATE_LIMIT_API_PER_HOUR` | `20000` | Max requests per IP per hour to central-deploy's own JSON API (`/services`, `/volumes`, `/onboard`, `/chat`, …). Exceeding this returns HTTP 429. |
+## Rate limiting
 
 `rate_limit_api_per_hour` is the **only** rate limit central-deploy enforces.
-It is applied by `RateLimitMiddleware` (`lifecycle/rate_limiter.py`) to
-central-deploy's own traffic; component traffic is served by the Traefik edge
-and never reaches this middleware.
+`RateLimitMiddleware` (`lifecycle/rate_limiter.py`) applies it per client IP to
+central-deploy's own JSON API (`/services`, `/volumes`, `/onboard`, `/chat`, …)
+and returns HTTP 429 above the limit. Component traffic is served by the
+Traefik edge and never reaches this middleware.
 
-There are no login rate limits, because there is no login: the per-minute,
-max-attempts, and lockout settings that used to sit in this table were part of
-the component-level auth that was removed, and nothing has read them since.
+The default is deliberately high (20000/hour): the dashboard polls several
+endpoints every few seconds, so a single open tab costs roughly 5000 requests
+an hour from one IP.
 
-### Chat Agent
+There are no login rate limits, because there is no login.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_CHAT_AGENT_DEPLOYABLE_COMPONENTS` | `[]` | Comma-separated list of component names the chat agent may deploy via `POST /chat/deploy`. Each entry must match `^[a-z0-9][a-z0-9-]*$`. This is a server-level allowlist for components that may not have a persisted `ComponentConfig` yet (distinct from the per-component `chat_agent_mutatable` flag). |
+## What `environment:` is still for
 
-### Board Integration
+Per [§5 of the config standard][config-standard-env], compose `environment:`
+carries deploy-topology wiring, never first-party settings. In this stack that
+means `ROBOTSIX_CONFIG_FILE` on central-deploy itself, and the scope flags on
+the `socket-proxy` sidecar — a third-party image that takes its configuration
+however it takes it.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ROBOTSIX_LIFECYCLE_BOARD_API_URL` | `""` | Base URL for the robotsix board API. When empty, board integration is disabled. |
-| `ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN` | `""` | API token for authenticating with the robotsix board. |
-| `ROBOTSIX_LIFECYCLE_BOARD_REPO_ID` | `""` | Repository ID on the robotsix board where tickets are filed. |
+The per-component `EnvStore` slots central-deploy manages for *other* services
+follow the same rule: they exist for third-party images, not for first-party
+components, which carry their settings in their own `config.json`.
+
+[config-standard]: https://damien-robotsix.github.io/robotsix-standards/config-standard/
+[config-standard-env]: https://damien-robotsix.github.io/robotsix-standards/config-standard/#5-what-environment-is-for

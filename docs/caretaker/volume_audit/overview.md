@@ -43,16 +43,19 @@ Both must be true. Neither alone is sufficient.
 
 ## Configuration
 
-All settings are loaded via environment variables (prefix `ROBOTSIX_LIFECYCLE_`).
+These are ordinary `LifecycleConfig` fields, set in `config/config.json`. The
+four non-path fields are also part of the settings overlay, so they can be
+changed at runtime through the dashboard's Settings panel — see
+[Configuration](../../lifecycle/configuration.md#the-three-layers-in-order).
 
-| Variable | Type | Default | Description |
+| Field | Type | Default | Description |
 | ---------- | ------ | --------- | ------------- |
-| `VOLUME_AUDIT_ENABLED` | `bool` | `False` | Master switch for the background loop |
-| `VOLUME_AUDIT_INTERVAL_SECONDS` | `int` | `3600` | Seconds between scan passes |
-| `VOLUME_AUDIT_SNAPSHOT_PATH` | `str` | `data/volume_audit_snapshots.json` | Snapshot persistence path |
-| `VOLUME_AUDIT_FINDINGS_PATH` | `str` | `data/volume_audit_findings.json` | Findings persistence path |
-| `VOLUME_AUDIT_GROWTH_THRESHOLD_PCT` | `float` | `10.0` | Percent-growth guard threshold |
-| `VOLUME_AUDIT_MIN_DELTA_BYTES` | `int` | `10_485_760` (10 MiB) | Minimum absolute byte delta to flag |
+| `volume_audit_enabled` | `bool` | `False` | Master switch for the background loop |
+| `volume_audit_interval_seconds` | `int` | `3600` | Seconds between scan passes |
+| `volume_audit_snapshot_path` | `str` | `data/volume_audit_snapshots.json` | Snapshot persistence path |
+| `volume_audit_findings_path` | `str` | `data/volume_audit_findings.json` | Findings persistence path |
+| `volume_audit_growth_threshold_pct` | `float` | `10.0` | Percent-growth guard threshold |
+| `volume_audit_min_delta_bytes` | `int` | `10_485_760` (10 MiB) | Minimum absolute byte delta to flag |
 
 ## API
 

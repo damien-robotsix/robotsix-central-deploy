@@ -174,7 +174,6 @@ def env_store(state_dir: Path) -> EnvStore:
 
 @pytest.fixture(autouse=True)
 def _wire_app_state(
-    monkeypatch,
     cfg: LifecycleConfig,
     store: InMemoryStore,
     backend: NoopBackend,
@@ -186,8 +185,6 @@ def _wire_app_state(
     state_dir: Path,
 ):
     """Wire app.state with all needed stores before each test."""
-    monkeypatch.setenv("ROBOTSIX_LIFECYCLE_API_KEY", "test-key")
-
     mock_checker = MagicMock()
     mock_checker.get_latest_digest = AsyncMock(return_value=None)
 

@@ -57,12 +57,14 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 
 ## Configuration
 
-All settings are managed via the self-contract labels in
-`deploy/docker-compose.yml` (prefix `robotsix.deploy.settings.*`) or
-environment variables (prefix `ROBOTSIX_LIFECYCLE_`). Changes to the
-self-contract take effect on the next server restart.
+These are ordinary `LifecycleConfig` fields, set in `config/config.json`. All
+four are also part of the settings overlay, so they can be changed at runtime
+through the dashboard's Settings panel or seeded from the self-contract labels
+in `deploy/docker-compose.yml` (prefix `robotsix.deploy.settings.*`) — see
+[Configuration](../lifecycle/configuration.md#the-three-layers-in-order).
+Self-contract changes take effect on the next server restart.
 
-| Variable | Type | Default | Description |
+| Field | Type | Default | Description |
 | ---------- | ------ | --------- | ------------- |
 | `caretaker_enabled` | `bool` | `False` | Master switch for the caretaker loop |
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |

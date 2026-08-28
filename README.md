@@ -33,21 +33,23 @@ reference and dashboard UI.
 
 ## Configuration
 
-All settings are loaded from environment variables (or a `.env.lifecycle` file).
-Key variables:
+All settings live in **one JSON file**, `config/config.json`, located by the
+single environment variable `ROBOTSIX_CONFIG_FILE` — which only *locates* the
+file and never carries a value. There is no environment overlay.
 
-| Variable | Default | Description |
-| ---------- | --------- | ------------- |
-| `ROBOTSIX_LIFECYCLE_HOST` | `0.0.0.0` | Server bind host |
-| `ROBOTSIX_LIFECYCLE_PORT` | `8100` | Server bind port |
-| `ROBOTSIX_LIFECYCLE_STORE_BACKEND` | `memory` | `memory` or `file` |
-| `ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND` | `docker_sdk` | `docker_sdk`, `docker`, or `noop` |
-| `ROBOTSIX_LIFECYCLE_LOG_LEVEL` | `INFO` | Root logger level |
+The schema is the `LifecycleConfig` pydantic model in
+`src/robotsix_central_deploy/lifecycle/config.py`, reflected into the committed
+`config/config.schema.json` that the deploy UI renders. Read the field
+reference there rather than in a table that can drift from it.
 
-Authentication is configured via `ROBOTSIX_LIFECYCLE_API_KEY` or
-`ROBOTSIX_LIFECYCLE_AUTH_USERNAME` / `ROBOTSIX_LIFECYCLE_AUTH_PASSWORD`.
-See the [Configuration docs](https://robotsix.net/central-deploy/configuration/)
-for full details.
+Eighteen operator-facing keys are additionally editable at runtime through
+`GET`/`PUT /settings` and the dashboard's Settings panel, which overlay
+`data/system_settings.json` onto the config without a redeploy.
+
+central-deploy ships no authentication of its own — the fleet edge is the only
+gate. See the
+[Configuration docs](https://robotsix.net/central-deploy/lifecycle/configuration/)
+for the layering rules and the overlay gotcha.
 
 ## Development / Contributing
 

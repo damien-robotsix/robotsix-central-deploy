@@ -2,12 +2,11 @@
 
 - ``SystemSettingsStore`` — file-backed save/load/round-trip/overlay/corruption.
 - ``cli.main`` — argument parsing + uvicorn launch (mocked, nothing serves).
-- Lifespan first-boot seed behaviour (contract + env-var based).
+- Lifespan first-boot seed behaviour (contract + config-file based).
 """
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,57 +19,19 @@ from robotsix_central_deploy.registry.settings_store import (
 )
 
 # ---------------------------------------------------------------------------
-# Helper: build a LifecycleConfig from ROBOTSIX_LIFECYCLE_* env vars
+# Helper: the config a mocked robotsix_config.load_config should return
 # ---------------------------------------------------------------------------
 
 
-def _make_lifecycle_config_from_env() -> LifecycleConfig:
-    """Return a ``LifecycleConfig`` populated from current env vars.
+def _lifecycle_config(**overrides: object) -> LifecycleConfig:
+    """Return the ``LifecycleConfig`` a mocked ``load_config`` hands back.
 
-    Used by ``TestSettingsFirstBoot`` so the mock ``robotsix_config`` can
-    supply a config that reflects the env vars the test set — the real
-    ``robotsix_config.load_config`` reads only a JSON file and does **not**
-    overlay environment variables.
+    ``robotsix_config.load_config`` reads one JSON file and applies no
+    environment overlay (per the fleet config standard), so these tests build
+    the config object directly rather than round-tripping through variables
+    nothing reads.
     """
-    env_map: dict[str, str] = {
-        "ROBOTSIX_LIFECYCLE_HOST": "host",
-        "ROBOTSIX_LIFECYCLE_PORT": "port",
-        "ROBOTSIX_LIFECYCLE_STORE_BACKEND": "store_backend",
-        "ROBOTSIX_LIFECYCLE_STORE_PATH": "store_path",
-        "ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND": "execution_backend",
-        "ROBOTSIX_LIFECYCLE_COMPONENT_CONFIG_STORE_PATH": "component_config_store_path",
-        "ROBOTSIX_LIFECYCLE_DOCKER_SOCKET_URL": "docker_socket_url",
-        "ROBOTSIX_LIFECYCLE_DOCKER_SDK_TIMEOUT": "docker_sdk_timeout",
-        "ROBOTSIX_LIFECYCLE_DISK_PATH": "disk_path",
-        "ROBOTSIX_LIFECYCLE_DISK_WARN_PCT": "disk_warn_pct",
-        "ROBOTSIX_LIFECYCLE_ENV_STORE_PATH": "env_store_path",
-        "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH": "secret_key_path",
-        "ROBOTSIX_LIFECYCLE_CONFIG_YAML_STORE_PATH": "config_yaml_store_path",
-        "ROBOTSIX_LIFECYCLE_SELF_UPDATE_WATCHTOWER_IMAGE": "self_update_watchtower_image",
-        "ROBOTSIX_LIFECYCLE_SELF_UPDATE_DOCKER_API_VERSION": "self_update_docker_api_version",
-        "ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_TTL": "registry_check_ttl",
-        "ROBOTSIX_LIFECYCLE_REGISTRY_CHECK_INTERVAL": "registry_check_interval",
-        "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH": "system_settings_path",
-        "ROBOTSIX_LIFECYCLE_LOG_LEVEL": "log_level",
-        "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN": "gateway_base_domain",
-        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_ENABLED": "volume_audit_enabled",
-        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_INTERVAL_SECONDS": "volume_audit_interval_seconds",
-        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_SNAPSHOT_PATH": "volume_audit_snapshot_path",
-        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_FINDINGS_PATH": "volume_audit_findings_path",
-        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_GROWTH_THRESHOLD_PCT": "volume_audit_growth_threshold_pct",
-        "ROBOTSIX_LIFECYCLE_VOLUME_AUDIT_MIN_DELTA_BYTES": "volume_audit_min_delta_bytes",
-        "ROBOTSIX_LIFECYCLE_BOARD_API_URL": "board_api_url",
-        "ROBOTSIX_LIFECYCLE_BOARD_API_TOKEN": "board_api_token",
-        "ROBOTSIX_LIFECYCLE_BOARD_REPO_ID": "board_repo_id",
-        "ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED": "caretaker_enabled",
-        "ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS": "caretaker_interval_hours",
-    }
-    kwargs: dict[str, object] = {}
-    for env_name, field_name in env_map.items():
-        val = os.environ.get(env_name)
-        if val is not None:
-            kwargs[field_name] = val
-    return LifecycleConfig(**kwargs)  # type: ignore[arg-type]
+    return LifecycleConfig(execution_backend="noop", **overrides)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -175,17 +136,12 @@ class TestSystemSettingsStore:
 
 
 class TestSettingsFirstBoot:
-    async def test_lifespan_does_not_overwrite_existing_settings_file(
-        self, tmp_path, monkeypatch
-    ):
+    async def test_lifespan_does_not_overwrite_existing_settings_file(self, tmp_path):
         """When a settings file already exists, lifespan must not reseed it."""
         settings_path = tmp_path / "settings.json"
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
-        )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
+        cfg = _lifecycle_config(
+            system_settings_path=str(settings_path),
+            secret_key_path=str(tmp_path / "secrets.key"),
         )
         from robotsix_central_deploy.registry.settings_store import (
             SystemSettings,
@@ -200,57 +156,47 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        mock_rc.load_config = MagicMock(return_value=cfg)
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
                 # not overwritten with the default
                 assert stored.gateway_base_domain == "custom-op.example.net"
 
-    async def test_lifespan_seeds_caretaker_defaults_when_no_env(
-        self, tmp_path, monkeypatch
-    ):
-        """First-boot: caretaker fields seed to defaults when no env vars set."""
+    async def test_lifespan_seeds_caretaker_defaults(self, tmp_path):
+        """First-boot: caretaker fields seed to the model defaults."""
         settings_path = tmp_path / "settings.json"
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        cfg = _lifecycle_config(
+            system_settings_path=str(settings_path),
+            secret_key_path=str(tmp_path / "secrets.key"),
         )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
-        )
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED", raising=False)
-        monkeypatch.delenv("ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS", raising=False)
 
         from robotsix_central_deploy.lifecycle.app import app
         from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        mock_rc.load_config = MagicMock(return_value=cfg)
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
                 assert stored.caretaker_enabled is False
                 assert stored.caretaker_interval_hours == 24
 
-    async def test_lifespan_seeds_caretaker_from_env(self, tmp_path, monkeypatch):
-        """First-boot: caretaker fields are seeded from env vars."""
+    async def test_lifespan_seeds_caretaker_from_config(self, tmp_path):
+        """First-boot: caretaker fields are seeded from the config file."""
         settings_path = tmp_path / "settings.json"
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
+        cfg = _lifecycle_config(
+            system_settings_path=str(settings_path),
+            secret_key_path=str(tmp_path / "secrets.key"),
+            caretaker_enabled=True,
+            caretaker_interval_hours=6,
         )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
-        )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CARETAKER_ENABLED", "true")
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_CARETAKER_INTERVAL_HOURS", "6")
 
         from robotsix_central_deploy.lifecycle.app import app
         from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        mock_rc.load_config = MagicMock(return_value=cfg)
         with patch.dict("sys.modules", {"robotsix_config": mock_rc}):
             async with lifespan(app):
                 stored = await app.state.settings_store.get()
@@ -260,27 +206,20 @@ class TestSettingsFirstBoot:
                 assert app.state.config.caretaker_enabled is True
                 assert app.state.config.caretaker_interval_hours == 6
 
-    async def test_lifespan_builds_backend_after_settings_overlay(
-        self, tmp_path, monkeypatch
-    ):
+    async def test_lifespan_builds_backend_after_settings_overlay(self, tmp_path):
         """Backend is constructed from the overlaid config, not the raw config.
 
         When ``system_settings.json`` overrides a setting (e.g.
         ``gateway_base_domain``), the ``DockerSdkBackend`` (or whichever
         backend is selected) must receive the *overlaid* value, not the
-        raw env-var default.
+        raw config-file value.
         """
         settings_path = tmp_path / "settings.json"
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SYSTEM_SETTINGS_PATH", str(settings_path)
-        )
-        monkeypatch.setenv("ROBOTSIX_LIFECYCLE_EXECUTION_BACKEND", "noop")
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_SECRET_KEY_PATH", str(tmp_path / "secrets.key")
-        )
-        # Raw config default — different from what the overlay will supply.
-        monkeypatch.setenv(
-            "ROBOTSIX_LIFECYCLE_GATEWAY_BASE_DOMAIN", "env-default.example.com"
+        # Raw config value — different from what the overlay will supply.
+        cfg = _lifecycle_config(
+            system_settings_path=str(settings_path),
+            secret_key_path=str(tmp_path / "secrets.key"),
+            gateway_base_domain="file-value.example.com",
         )
 
         from robotsix_central_deploy.registry.settings_store import (
@@ -288,7 +227,7 @@ class TestSettingsFirstBoot:
             SystemSettingsStore,
         )
 
-        # Pre-write a settings file that overrides the env-var default.
+        # Pre-write a settings file that overrides the config-file value.
         store = SystemSettingsStore(settings_path)
         await store.put(SystemSettings(gateway_base_domain="overlaid.example.com"))
 
@@ -297,7 +236,7 @@ class TestSettingsFirstBoot:
         from robotsix_central_deploy.lifecycle.deps import lifespan
 
         mock_rc = MagicMock()
-        mock_rc.load_config = MagicMock(return_value=_make_lifecycle_config_from_env())
+        mock_rc.load_config = MagicMock(return_value=cfg)
 
         with (
             patch.object(
@@ -309,8 +248,8 @@ class TestSettingsFirstBoot:
                 # _build_backend must have been called at least once.
                 mock_build.assert_called_once()
                 # The config passed to _build_backend must carry the
-                # overlaid gateway_base_domain, not the raw env-var
-                # default.
+                # overlaid gateway_base_domain, not the raw config-file
+                # value.
                 called_cfg = mock_build.call_args[0][0]
                 assert called_cfg.gateway_base_domain == "overlaid.example.com"
 
