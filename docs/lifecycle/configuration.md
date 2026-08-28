@@ -38,11 +38,11 @@ The lifecycle server is configured via environment variables, all prefixed with 
 ### Auth
 
 central-deploy ships **no** authentication of its own — no login page, no
-session store, no API key, no HTTP Basic credentials. The fleet edge (Traefik
-+ tinyauth) is the only gate; see [The edge](../edge.md). `verify_auth` on the
-JSON API is a deliberate no-op stub, kept only as an interception point, and
-`tests/lifecycle/test_app.py` fails if any route ever grows a real credential
-dependency.
+session store, no API key, no HTTP Basic credentials. The fleet edge
+(Traefik + tinyauth) is the only gate; see [The edge](../edge.md).
+`verify_auth` on the JSON API is a deliberate no-op stub, kept only as an
+interception point, and `tests/lifecycle/test_app.py` fails if any route ever
+grows a real credential dependency.
 
 ### Docker
 
