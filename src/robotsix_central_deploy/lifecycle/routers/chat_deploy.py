@@ -25,6 +25,7 @@ from robotsix_central_deploy.lifecycle.deps.seed import (
 
 from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAuditStore
 from ...registry.config_store import ComponentConfigStore
+from ...registry.config_yaml_store import ConfigYamlStore
 from ...registry.env_store import EnvStore
 from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
@@ -43,6 +44,7 @@ from ..deps import (
     _get_or_create_record,
     _get_registry,
     _get_store,
+    refresh_component_contract,
 )
 from ..models import DeployOutcome, ServiceRecord, ServiceState
 from ..schemas import (
@@ -156,10 +158,17 @@ async def chat_update_service(
     backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
     registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
     audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentUpdateResponse:
     """Pull the latest image and recreate the container for an allowlisted service.
+
+    Re-fetches the component's ``deploy/docker-compose.yml`` from its repo
+    before recreating, so compose-only changes (e.g. added or edited
+    ``robotsix.deploy.*`` proxy labels) reach the container even when the image
+    digest is unchanged — otherwise the proxy route table never gains the route.
 
     Synchronous — waits for the deploy to complete before returning.
     Rate-limited to one update per 300 seconds per service.
@@ -183,6 +192,28 @@ async def chat_update_service(
         )
 
     record = await _get_or_create_record(name, store)
+
+    # Re-fetch the component's deploy contract from the repo before recreating,
+    # so compose-only changes (e.g. added/edited robotsix.deploy.* proxy labels)
+    # are applied even when the image digest is unchanged. Best-effort: a
+    # component with no git_url, or a transient repo-fetch/parse failure, must
+    # not block an image update — fall back to the cached config in that case.
+    refreshed_fields: list[str] = []
+    try:
+        refresh = await refresh_component_contract(
+            name,
+            component_config_store,
+            config_yaml_store,
+            registry,
+            lifecycle_config,
+        )
+        refreshed_fields = refresh.changed_fields
+    except HTTPException as exc:
+        logger.warning(
+            "chat update %s: contract refresh skipped (%s); using cached config",
+            _sanitize_log(name),
+            exc.detail,
+        )
 
     config = registry.get(name)
     if config is None:
@@ -210,6 +241,12 @@ async def chat_update_service(
         env_store=env_store,
     )
 
+    contract_note = (
+        f"; contract changes applied: {', '.join(refreshed_fields)}"
+        if refreshed_fields
+        else ""
+    )
+
     await audit_store.append(
         ChatAgentAuditEntry(
             component=name,
@@ -223,6 +260,7 @@ async def chat_update_service(
                     if updated_siblings
                     else ""
                 )
+                + contract_note
             ),
         )
     )
@@ -233,7 +271,12 @@ async def chat_update_service(
         previous_digest=outcome.previous_digest,
         current_state=outcome.state.value,
         detail="Update completed."
-        + (f" Also updated: {', '.join(updated_siblings)}" if updated_siblings else ""),
+        + (f" Also updated: {', '.join(updated_siblings)}" if updated_siblings else "")
+        + (
+            f" Contract changes applied: {', '.join(refreshed_fields)}."
+            if refreshed_fields
+            else ""
+        ),
         updated_siblings=updated_siblings,
     )
 

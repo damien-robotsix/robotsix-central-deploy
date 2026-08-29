@@ -346,7 +346,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
 
@@ -374,7 +374,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
 
@@ -408,7 +408,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
         monkeypatch.setattr(
@@ -451,7 +451,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
         monkeypatch.setattr(
@@ -506,7 +506,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
         monkeypatch.setattr(
@@ -545,7 +545,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
         monkeypatch.setattr(
@@ -580,7 +580,7 @@ class TestRefreshContract:
             )
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.services_maintenance._fetch_component_repo_files",
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
             _fake_fetch,
         )
         monkeypatch.setattr(

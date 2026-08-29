@@ -3005,7 +3005,7 @@
           "chat"
         ],
         "summary": "Pull + recreate (deploy) an allowlisted service",
-        "description": "Pull the latest image and recreate the container for an allowlisted service.\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one update per 300 seconds per service.",
+        "description": "Pull the latest image and recreate the container for an allowlisted service.\n\nRe-fetches the component's ``deploy/docker-compose.yml`` from its repo\nbefore recreating, so compose-only changes (e.g. added or edited\n``robotsix.deploy.*`` proxy labels) reach the container even when the image\ndigest is unchanged \u2014 otherwise the proxy route table never gains the route.\n\nSynchronous \u2014 waits for the deploy to complete before returning.\nRate-limited to one update per 300 seconds per service.",
         "operationId": "chat_update_service_chat_services__name__update_post",
         "parameters": [
           {
