@@ -16,6 +16,10 @@ import httpx
 from . import background as _background
 from . import lifespan as _lifespan
 from ._compose_resolver import _resolve_compose_backbone
+from ._contract_refresh import (
+    ContractRefreshResult,
+    refresh_component_contract,
+)
 from .background import _claude_auth_refresh_loop, get_claude_auth_refresh_state
 from .dependencies import (
     _compute_overall_health,
@@ -108,6 +112,7 @@ _current.__class__ = _DepsModule
 __all__ = [
     # volume
     "VOLUME_CAT_MAX_BYTES",
+    "ContractRefreshResult",
     # jobs
     "DeployJob",
     "Job",
@@ -155,4 +160,5 @@ __all__ = [
     "get_claude_auth_refresh_state",
     "httpx",
     "lifespan",
+    "refresh_component_contract",
 ]

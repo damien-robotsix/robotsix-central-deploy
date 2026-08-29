@@ -348,6 +348,91 @@ async def test_update_happy_path(
 
 
 # ---------------------------------------------------------------------------
+# Update — re-fetches deploy contract before recreating
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_refreshes_contract_before_deploy(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Update re-fetches the compose contract so compose-only changes apply.
+
+    A compose-only change (e.g. added robotsix.deploy.* proxy labels) has an
+    unchanged image digest, so the update path must refresh the stored contract
+    before recreating; the applied changes are surfaced in the response.
+    """
+    import robotsix_central_deploy.lifecycle.routers.chat_deploy as chat_deploy_mod
+    from robotsix_central_deploy.lifecycle.deps import ContractRefreshResult
+
+    cfg = _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.RUNNING)
+
+    called: dict[str, str] = {}
+
+    async def _fake_refresh(name, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        called["name"] = name
+        return ContractRefreshResult(new_config=cfg, changed_fields=["mounts"])
+
+    monkeypatch.setattr(chat_deploy_mod, "refresh_component_contract", _fake_refresh)
+
+    outcome = DeployOutcome(
+        deployed_digest="sha256:abc123def456",
+        previous_digest="sha256:abc123def456",
+        state=ServiceState.RUNNING,
+    )
+    mock = MagicMock()
+    mock.deploy = AsyncMock(return_value=outcome)
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/services/test-svc/update",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert called["name"] == "test-svc"
+    assert "Contract changes applied" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_contract_refresh_best_effort(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A repo-fetch/parse failure during refresh must not block an update."""
+    from fastapi import HTTPException
+
+    import robotsix_central_deploy.lifecycle.routers.chat_deploy as chat_deploy_mod
+
+    _register_component("test-svc")
+    await _seed_service_record("test-svc", state=ServiceState.RUNNING)
+
+    async def _failing_refresh(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise HTTPException(status_code=422, detail="repo fetch failed")
+
+    monkeypatch.setattr(chat_deploy_mod, "refresh_component_contract", _failing_refresh)
+
+    outcome = DeployOutcome(
+        deployed_digest="sha256:abc123def456",
+        previous_digest="sha256:111222333444",
+        state=ServiceState.RUNNING,
+    )
+    mock = MagicMock()
+    mock.deploy = AsyncMock(return_value=outcome)
+    server_mod.app.state.backend = mock
+
+    resp = await client.post(
+        "/chat/services/test-svc/update",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert "Contract changes applied" not in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # Update — not allowlisted (403)
 # ---------------------------------------------------------------------------
 
