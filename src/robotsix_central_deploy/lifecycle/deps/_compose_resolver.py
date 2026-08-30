@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
@@ -26,14 +25,6 @@ from ..config import LifecycleConfig
 from .seed import _require_config_standard
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_github_owner_repo(git_url: str) -> tuple[str, str] | None:
-    """Extract (owner, repo) from a GitHub HTTPS git URL, or ``None``."""
-    m = re.match(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", git_url)
-    if m:
-        return m.group(1), m.group(2)
-    return None
 
 
 async def _resolve_compose_backbone(

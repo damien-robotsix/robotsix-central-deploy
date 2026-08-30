@@ -446,7 +446,7 @@ async def test_fetch_component_repo_files_uses_github_app_token() -> None:
 
     cfg = LifecycleConfig(
         github_app_id="12345",
-        github_app_private_key="-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----",
+        github_app_private_key="not-a-real-key-material",
         installation_id="678",
     )
     repo_files = RepoFiles(

@@ -12,8 +12,10 @@ from pydantic import SecretStr
 
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.lifecycle.deps._compose_resolver import (
-    _parse_github_owner_repo,
     _resolve_compose_backbone,
+)
+from robotsix_central_deploy.lifecycle.deps._github_token import (
+    parse_github_owner_repo as _parse_github_owner_repo,
 )
 from robotsix_central_deploy.onboard.fetcher import FetchError, RepoFiles
 from robotsix_central_deploy.onboard.models import DerivedSpec
