@@ -424,3 +424,79 @@ async def test_refresh_no_longer_401(
 ) -> None:
     resp = await client.post("/services/test-comp/refresh-contract")
     assert resp.status_code != 401
+
+
+@pytest.mark.asyncio
+async def test_fetch_component_repo_files_uses_github_app_token() -> None:
+    """A configured GitHub App mints an installation token for the clone (private
+    repos); without it hexarchy's refresh failed with 'could not read Username'."""
+    from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+    from robotsix_central_deploy.lifecycle.deps.seed import _fetch_component_repo_files
+
+    comp = ComponentConfig(
+        id="hexarchy",
+        image="ghcr.io/damien-robotsix/hexarchy:latest",
+        container_name="hexarchy",
+        git_url="https://github.com/damien-robotsix/hexarchy.git",
+    )
+
+    class _Store:
+        def get(self, name):
+            return comp if name == "hexarchy" else None
+
+    cfg = LifecycleConfig(
+        github_app_id="12345",
+        github_app_private_key="not-a-real-key-material",
+        installation_id="678",
+    )
+    repo_files = RepoFiles(
+        compose_bytes=b"# central-deploy-contract-version: 1\nservices: {}\n",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
+            return_value="ghs_token",
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ) as mock_fetch,
+    ):
+        got_cfg, got_files = await _fetch_component_repo_files(
+            "hexarchy", _Store(), cfg
+        )
+
+    assert got_cfg is comp and got_files is repo_files
+    mock_fetch.assert_called_once_with(comp.git_url, 30, "ghs_token")
+
+
+@pytest.mark.asyncio
+async def test_fetch_component_repo_files_without_config_clones_anonymously() -> None:
+    from robotsix_central_deploy.lifecycle.deps.seed import _fetch_component_repo_files
+
+    comp = ComponentConfig(
+        id="pub",
+        image="ghcr.io/x/pub:main",
+        container_name="pub",
+        git_url="https://github.com/x/pub.git",
+    )
+
+    class _Store:
+        def get(self, name):
+            return comp
+
+    repo_files = RepoFiles(
+        compose_bytes=b"x",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with patch(
+        "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+        return_value=repo_files,
+    ) as mock_fetch:
+        await _fetch_component_repo_files("pub", _Store())
+    mock_fetch.assert_called_once_with(comp.git_url, 30, None)

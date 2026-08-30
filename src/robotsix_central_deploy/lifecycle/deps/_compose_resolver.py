@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
@@ -26,14 +25,6 @@ from ..config import LifecycleConfig
 from .seed import _require_config_standard
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_github_owner_repo(git_url: str) -> tuple[str, str] | None:
-    """Extract (owner, repo) from a GitHub HTTPS git URL, or ``None``."""
-    m = re.match(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", git_url)
-    if m:
-        return m.group(1), m.group(2)
-    return None
 
 
 async def _resolve_compose_backbone(
@@ -62,39 +53,11 @@ async def _resolve_compose_backbone(
     )
 
     # --- Token fetch (GitHub App installation token for private repos) ---
-    github_token: str | None = None
-    parsed = _parse_github_owner_repo(git_url)
-    if (
-        parsed is not None
-        and lifecycle_config.github_app_id.get_secret_value()
-        and lifecycle_config.github_app_private_key.get_secret_value()
-        and lifecycle_config.installation_id.get_secret_value()
-    ):
-        owner, repo = parsed
-        try:
-            from robotsix_central_deploy.lifecycle.github_app import (
-                get_installation_token_sync,
-            )
+    from ._github_token import github_token_for_repo
 
-            github_token = await loop.run_in_executor(
-                None,
-                get_installation_token_sync,
-                lifecycle_config.github_app_id.get_secret_value(),
-                lifecycle_config.github_app_private_key.get_secret_value(),
-                lifecycle_config.installation_id.get_secret_value(),
-            )
-        except Exception:  # noqa: BLE001
-            # owner/repo come from a regex match on a user-supplied URL;
-            # sanitise to prevent log-injection (newline forgery).
-            safe_owner = owner.replace("\n", "_").replace("\r", "_")
-            safe_repo = repo.replace("\n", "_").replace("\r", "_")
-            logger.warning(
-                "Cannot get GitHub App installation token for %s/%s; "
-                "cloning unauthenticated (public repos only)",
-                safe_owner,
-                safe_repo,
-            )
-
+    github_token: str | None = await github_token_for_repo(
+        git_url, lifecycle_config, loop
+    )
     # --- Fetch repo files (clone is blocking → run in executor) ---
     try:
         repo_files = await loop.run_in_executor(

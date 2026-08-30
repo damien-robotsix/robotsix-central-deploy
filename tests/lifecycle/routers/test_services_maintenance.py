@@ -337,7 +337,7 @@ class TestRefreshContract:
             config_store, "svc-a", git_url="https://github.com/org/test.git"
         )
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
@@ -363,7 +363,7 @@ class TestRefreshContract:
             config_store, "svc-a", git_url="https://github.com/org/test.git"
         )
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
@@ -397,7 +397,7 @@ class TestRefreshContract:
 
         spec = _make_derived_spec(name="svc-a", image="svc-a:latest", command=["run"])
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
@@ -440,7 +440,7 @@ class TestRefreshContract:
             name="svc-a", image="svc-a:v2", command=["run", "--verbose"]
         )
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
@@ -495,7 +495,7 @@ class TestRefreshContract:
         }
         spec = _make_derived_spec(name="svc-a")
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
@@ -534,7 +534,7 @@ class TestRefreshContract:
 
         spec = _make_derived_spec(name="svc-a")
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
@@ -569,7 +569,7 @@ class TestRefreshContract:
         )
         spec = _make_derived_spec(name="svc-a")
 
-        async def _fake_fetch(name, ccs):
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
             return (
                 config_store.get("svc-a"),
                 RepoFiles(
