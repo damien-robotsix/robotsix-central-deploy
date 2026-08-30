@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from ...registry import ComponentConfig, ConfigAssistSeed
     from ...registry.config_store import ComponentConfigStore
+    from ..config import LifecycleConfig
 
 _ACCOUNT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -453,6 +454,7 @@ def _resolve_placeholders(command_str: str, values: dict[str, Any]) -> str:
 async def _fetch_component_repo_files(
     name: str,
     component_config_store: ComponentConfigStore,
+    lifecycle_config: LifecycleConfig | None = None,
 ) -> tuple[ComponentConfig, RepoFiles]:
     """Look up *name* in *component_config_store*, verify it has a git_url,
     and fetch its repo files — raising the appropriate HTTPException at
@@ -477,9 +479,19 @@ async def _fetch_component_repo_files(
     )
 
     loop = asyncio.get_running_loop()
+    # A private repo needs the GitHub App token (same as onboarding); without
+    # it the clone fails with "could not read Username" and the component
+    # keeps its stale onboard-time contract forever (hexarchy, 2026-08-30).
+    github_token: str | None = None
+    if lifecycle_config is not None:
+        from ._github_token import github_token_for_repo
+
+        github_token = await github_token_for_repo(
+            comp_cfg.git_url, lifecycle_config, loop
+        )
     try:
         repo_files = await loop.run_in_executor(
-            None, fetch_repo_files, comp_cfg.git_url
+            None, fetch_repo_files, comp_cfg.git_url, 30, github_token
         )
     except FetchError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

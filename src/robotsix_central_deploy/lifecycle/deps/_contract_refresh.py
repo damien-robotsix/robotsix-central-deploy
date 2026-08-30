@@ -105,7 +105,7 @@ async def refresh_component_contract(
     )
 
     comp_cfg, repo_files = await _fetch_component_repo_files(
-        name, component_config_store
+        name, component_config_store, lifecycle_config
     )
 
     loop = asyncio.get_running_loop()
