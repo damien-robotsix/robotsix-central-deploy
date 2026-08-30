@@ -28,6 +28,7 @@
   "volume_audit_findings_path": "data/volume_audit_findings.json",
   "volume_audit_growth_threshold_pct": 10.0,
   "volume_audit_min_delta_bytes": 10485760,
+  "chat_volume_write_max_bytes": 1048576,
   "board_api_url": "",
   "board_api_token": "",
   "board_repo_id": "",
