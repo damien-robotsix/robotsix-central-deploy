@@ -6,6 +6,14 @@ queries:
 paths:
   - src
   - tests
+# vulture_whitelist.py is a parse-only dead-code allowlist (bare name
+# references, no real logic) and lives at the repo root — outside the
+# src/tests scan scope above. It must NOT be listed as a "!"-negation
+# entry under `paths:`: the CodeQL Python extractor walks each `paths`
+# entry as a real directory and crashes with FileNotFoundError on the
+# literal "!vulture_whitelist.py". Exclusions belong under `paths-ignore`.
+paths-ignore:
+  - vulture_whitelist.py
 
 query-filters:
   # The diagnose endpoint intentionally probes the fleet edge with
