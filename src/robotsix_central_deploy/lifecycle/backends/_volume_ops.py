@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 #: exceptions by the callers.  A plain empty result cannot say *why*.
 _NOT_A_DIR = "\x01robotsix-not-a-dir"
 _IS_A_DIR = "\x01robotsix-is-a-dir"
+_FILE_EXISTS = "\x01robotsix-file-exists"
 
 #: Shell function printing the apparent-bytes recursive size of its argument,
 #: excluding SQLite transient sidecars.  Shared by the whole-volume measure and
@@ -351,6 +352,78 @@ class VolumeOps:
             "binary": binary,
             "truncated": truncated,
         }
+
+    async def write_volume_file(
+        self,
+        volume_name: str,
+        rel_path: str,
+        content: str,
+        overwrite: bool,
+    ) -> dict[str, Any]:
+        """Create-or-overwrite ``/vol/<rel_path>`` with *content* (UTF-8 text)
+        via a one-shot busybox container.
+
+        Parent directories are created as needed.  The write is create-only
+        unless *overwrite* is True: when the target already exists and
+        *overwrite* is False, raises ``FileExistsError``.  When the target is
+        an existing directory, raises ``IsADirectoryError``.  The busybox
+        helper mounts only the named volume at ``/vol``, so a symlink pointing
+        outside the volume resolves within the ephemeral container filesystem
+        and cannot escape to the host.  Returns ``{"size_bytes": int}`` — the
+        number of content bytes written.
+        """
+        import base64
+
+        import docker
+
+        data = content.encode("utf-8")
+        encoded = base64.b64encode(data).decode()
+        size_bytes = len(data)
+        overwrite_flag = "1" if overwrite else "0"
+        # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in
+        # sh without quoting.  $1 = rel_path, $2 = overwrite flag ("1"/"0").
+        # The busybox helper runs as root while fleet components run as
+        # 1000:1000, so the created file is chowned to 1000:1000 (matching
+        # write_config_to_volume) or the component cannot read its own file.
+        script = (
+            'target="/vol/$1"\n'
+            'overwrite="$2"\n'
+            'if [ -d "$target" ]; then\n'
+            f"  printf '{_IS_A_DIR}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            'if [ -e "$target" ] && [ "$overwrite" != "1" ]; then\n'
+            f"  printf '{_FILE_EXISTS}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            'dir=$(dirname "$target")\n'
+            'mkdir -p "$dir"\n'
+            f'echo {encoded} | base64 -d > "$target"\n'
+            'chown 1000:1000 "$target" 2>/dev/null || true\n'
+            'chmod 600 "$target" 2>/dev/null || true\n'
+        )
+        loop = asyncio.get_running_loop()
+
+        def _run() -> bytes:
+            try:
+                raw = self._client.containers.run(
+                    "busybox",
+                    command=["sh", "-c", script, "sh", rel_path, overwrite_flag],
+                    volumes={volume_name: {"bind": "/vol", "mode": "rw"}},
+                    remove=True,
+                )
+                return raw if isinstance(raw, bytes) else raw.encode()
+            except (docker.errors.APIError, docker.errors.ContainerError) as exc:
+                raise RuntimeError(
+                    f"write_volume_file failed for {volume_name}: {exc}"
+                ) from exc
+
+        raw = await loop.run_in_executor(None, _run)
+        if raw.startswith(_IS_A_DIR.encode()):
+            raise IsADirectoryError(rel_path)
+        if raw.startswith(_FILE_EXISTS.encode()):
+            raise FileExistsError(rel_path)
+        return {"size_bytes": size_bytes}
 
     async def remove_volume(self, volume_name: str) -> None:
         """Remove the Docker named volume *volume_name* (best-effort).

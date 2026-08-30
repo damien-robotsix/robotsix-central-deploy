@@ -369,6 +369,186 @@ async def test_volume_file_component_not_found(
 
 
 # ---------------------------------------------------------------------------
+# PUT /chat/services/{name}/volumes/{vol}/files
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_creates(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PUT with a new path writes the file and returns its size."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    mock = MagicMock()
+    mock.write_volume_file = AsyncMock(return_value={"size_bytes": 5})
+    server_mod.app.state.backend = mock
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": "sub/dir/note.txt", "content": "hello"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"volume": "data-vol", "path": "sub/dir/note.txt", "size_bytes": 5}
+    mock.write_volume_file.assert_awaited_once_with(
+        "data-vol", "sub/dir/note.txt", "hello", False
+    )
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_existing_without_overwrite_conflicts(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PUT on an existing path without overwrite returns 409."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    mock = MagicMock()
+    mock.write_volume_file = AsyncMock(side_effect=FileExistsError("note.txt"))
+    server_mod.app.state.backend = mock
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": "note.txt", "content": "hi"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_overwrite_replaces(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PUT with overwrite=true replaces content."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    mock = MagicMock()
+    mock.write_volume_file = AsyncMock(return_value={"size_bytes": 3})
+    server_mod.app.state.backend = mock
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": "note.txt", "content": "new", "overwrite": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    mock.write_volume_file.assert_awaited_once_with("data-vol", "note.txt", "new", True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_path", ["../x", "/etc/passwd", "a/../../b"])
+async def test_volume_file_write_traversal_rejected(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    bad_path: str,
+) -> None:
+    """PUT rejects traversal / absolute paths with 400 and writes nothing."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    mock = MagicMock()
+    mock.write_volume_file = AsyncMock(return_value={"size_bytes": 1})
+    server_mod.app.state.backend = mock
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": bad_path, "content": "x"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    mock.write_volume_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_over_size_cap(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PUT with content over the configured cap returns 413."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+    server_mod.app.state.config.chat_volume_write_max_bytes = 10
+
+    mock = MagicMock()
+    mock.write_volume_file = AsyncMock(return_value={"size_bytes": 1})
+    server_mod.app.state.backend = mock
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": "big.txt", "content": "x" * 50},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 413
+    mock.write_volume_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_not_allowlisted(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PUT returns 403 when component is not allowlisted."""
+    _register_component(
+        "test-svc", mutatable=False, allow_chat_access=False, named_volumes=["data-vol"]
+    )
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": "note.txt", "content": "x"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_not_owned(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """PUT returns 404 when the volume does not belong to the component."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/other-vol/files",
+        json={"path": "note.txt", "content": "x"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_volume_file_write_audited(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """A successful write appears in GET /chat/audit-log."""
+    _register_component("test-svc", mutatable=True, named_volumes=["data-vol"])
+
+    mock = MagicMock()
+    mock.write_volume_file = AsyncMock(return_value={"size_bytes": 5})
+    server_mod.app.state.backend = mock
+
+    resp = await client.put(
+        "/chat/services/test-svc/volumes/data-vol/files",
+        json={"path": "note.txt", "content": "hello"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    audit = await client.get("/chat/audit-log", headers=auth_headers)
+    assert audit.status_code == 200
+    entries = audit.json()["entries"]
+    assert any(
+        e["component"] == "test-svc"
+        and e["action"] == "volume_write"
+        and e["key"] == "data-vol:note.txt"
+        for e in entries
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
 
