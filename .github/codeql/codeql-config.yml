@@ -1,0 +1,23 @@
+name: "CodeQL Config"
+
+queries:
+  - uses: security-extended
+
+paths:
+  - src
+  - tests
+  - "!vulture_whitelist.py"
+
+query-filters:
+  # The diagnose endpoint intentionally probes the fleet edge with
+  # verify=False (internal TLS may use self-signed certs) and constructs
+  # URLs from operator-configured component names + base_domain — both
+  # are trusted inputs behind the fleet edge (Traefik + tinyauth).
+  - exclude:
+      id: py/request-without-cert-validation
+  - exclude:
+      id: py/full-ssrf
+  # The diagnose endpoint logs the component name (an operator-configured
+  # slug) via positional-argument formatting — not string interpolation.
+  - exclude:
+      id: py/log-injection

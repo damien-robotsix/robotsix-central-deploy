@@ -58,6 +58,13 @@ images_skipped_in_use  # unused variable (src/robotsix_central_deploy/lifecycle/
 images_skipped_intermediate  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1006)
 images_skipped_error  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1011)
 images_error_summary  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1015)
+fetched  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1107) — GET /services/{name}/diagnose
+parsed_ports  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1111) — GET /services/{name}/diagnose
+parsed_health_check  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1114) — GET /services/{name}/diagnose
+container_state  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1167) — GET /services/{name}/diagnose
+restart_count  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1170) — GET /services/{name}/diagnose
+classification  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1185) — GET /services/{name}/diagnose
+remediation  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:1192) — GET /services/{name}/diagnose
 label  # unused variable (src/robotsix_central_deploy/registry/models.py:101)
 
 # ===========================================================================

@@ -1345,6 +1345,69 @@
         }
       }
     },
+    "/services/{name}/diagnose": {
+      "get": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Diagnostic report for a managed service",
+        "description": "Return a structured diagnostic report for a managed component.\n\nCompares stored spec vs repo contract, expected vs actual Traefik\nlabels, edge reachability, and container runtime state.  Every\nsection is best-effort \u2014 a failure in one section does not prevent\nthe others from being populated.\n\nRead-only: no side effects, no state mutations.",
+        "operationId": "diagnose_service_services__name__diagnose_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnoseReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/services/{name}/config": {
       "get": {
         "tags": [
@@ -3920,6 +3983,62 @@
           },
           "501": {
             "description": "Volume writes not supported by this backend"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/services/{name}/diagnose": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Diagnostic report for an allowlisted service",
+        "description": "Return a structured diagnostic report for an allowlisted service.\n\nCompares stored spec vs repo contract, expected vs actual Traefik\nlabels, edge reachability, and container runtime state.  Every\nsection is best-effort \u2014 a failure in one section does not prevent\nthe others from being populated.\n\nRead-only: no side effects, no state mutations.",
+        "operationId": "chat_diagnose_service_chat_services__name__diagnose_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnoseReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service not allowlisted or not found"
           },
           "422": {
             "description": "Validation Error",
@@ -8196,6 +8315,348 @@
         ],
         "title": "DerivedSpec",
         "description": "Parsed output from a service repo's docker-compose.yml."
+      },
+      "DiagnoseEdgeProbe": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "URL probed"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code",
+            "description": "HTTP status code (None on connection error)"
+          },
+          "body_preview": {
+            "type": "string",
+            "title": "Body Preview",
+            "description": "First 100 bytes of the response body",
+            "default": ""
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Connection or DNS error (verbatim)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "DiagnoseEdgeProbe",
+        "description": "Edge probe result: HTTP status from inside the control plane."
+      },
+      "DiagnoseRepoContract": {
+        "properties": {
+          "fetched": {
+            "type": "boolean",
+            "title": "Fetched",
+            "description": "Whether the fetch succeeded"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Fetch or parse error (verbatim)"
+          },
+          "parsed_ports": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Parsed Ports",
+            "description": "Ports from the repo contract"
+          },
+          "parsed_health_check": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsed Health Check",
+            "description": "Health check from the repo contract"
+          },
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Changed Fields",
+            "description": "Contract-derived fields that differ from the stored spec"
+          },
+          "previous": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Previous",
+            "description": "Previous values of changed fields"
+          },
+          "current": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Current",
+            "description": "New values of changed fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fetched"
+        ],
+        "title": "DiagnoseRepoContract",
+        "description": "Repo contract fetched from deploy/docker-compose.yml at HEAD."
+      },
+      "DiagnoseReport": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Component id"
+          },
+          "stored_spec": {
+            "$ref": "#/components/schemas/DiagnoseStoredSpec"
+          },
+          "repo_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnoseRepoContract"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Repo contract info (None when component has no git_url)"
+          },
+          "routing": {
+            "$ref": "#/components/schemas/DiagnoseRouting"
+          },
+          "edge_probe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnoseEdgeProbe"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Edge probe result (None when not routable)"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiagnoseRuntime"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Runtime info (None when container not found)"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/DiagnoseVerdict"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "stored_spec",
+          "routing",
+          "verdict"
+        ],
+        "title": "DiagnoseReport",
+        "description": "Full diagnostic report for a managed component."
+      },
+      "DiagnoseRouting": {
+        "properties": {
+          "expected_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Expected Labels",
+            "description": "Labels traefik_labels() would generate from the stored spec"
+          },
+          "actual_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Actual Labels",
+            "description": "Traefik labels actually on the running container"
+          },
+          "container_networks": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Container Networks",
+            "description": "Networks the container is attached to (name \u2192 aliases/ip)"
+          },
+          "proxy_network_attached": {
+            "type": "boolean",
+            "title": "Proxy Network Attached",
+            "description": "Whether central-deploy-proxy network is attached"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proxy_network_attached"
+        ],
+        "title": "DiagnoseRouting",
+        "description": "Routing label comparison: expected vs actual."
+      },
+      "DiagnoseRuntime": {
+        "properties": {
+          "container_state": {
+            "type": "string",
+            "title": "Container State",
+            "description": "Docker container state",
+            "default": ""
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "description": "Health check status",
+            "default": ""
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At",
+            "description": "Container start time (ISO 8601)",
+            "default": ""
+          },
+          "restart_count": {
+            "type": "integer",
+            "title": "Restart Count",
+            "description": "Number of container restarts",
+            "default": 0
+          },
+          "image_digest": {
+            "type": "string",
+            "title": "Image Digest",
+            "description": "sha256 digest of the running image",
+            "default": ""
+          },
+          "registry_digest": {
+            "type": "string",
+            "title": "Registry Digest",
+            "description": "Latest digest from the registry",
+            "default": ""
+          },
+          "recent_logs": {
+            "type": "string",
+            "title": "Recent Logs",
+            "description": "Last 20 non-access log lines from the container",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "DiagnoseRuntime",
+        "description": "Runtime state from the Docker container."
+      },
+      "DiagnoseStoredSpec": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "description": "Container image reference"
+          },
+          "ports": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Ports",
+            "description": "Port mappings (host, container, protocol)"
+          },
+          "health_check": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Check",
+            "description": "Health check config or None"
+          },
+          "routable": {
+            "type": "boolean",
+            "title": "Routable",
+            "description": "Whether the component is edge-routable"
+          },
+          "mounts_summary": {
+            "type": "string",
+            "title": "Mounts Summary",
+            "description": "Human-readable mount count, e.g. '3 mounts'"
+          },
+          "git_url": {
+            "type": "string",
+            "title": "Git Url",
+            "description": "Source repository URL",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "image",
+          "routable",
+          "mounts_summary"
+        ],
+        "title": "DiagnoseStoredSpec",
+        "description": "Stored component specification summary."
+      },
+      "DiagnoseVerdict": {
+        "properties": {
+          "classification": {
+            "type": "string",
+            "title": "Classification",
+            "description": "One of: stale-contract, not-routable, no-proxy-network, unhealthy, edge-mismatch, ok"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable explanation"
+          },
+          "remediation": {
+            "type": "string",
+            "title": "Remediation",
+            "description": "Suggested action to fix the issue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "classification",
+          "detail",
+          "remediation"
+        ],
+        "title": "DiagnoseVerdict",
+        "description": "Rule-based classification of the component's health."
       },
       "DiskUsageResponse": {
         "properties": {

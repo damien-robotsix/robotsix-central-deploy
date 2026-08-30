@@ -55,6 +55,7 @@ from .routers.self_config import router as self_config_router
 from .routers.services import router as services_router
 from .routers.services_config import router as services_config_router
 from .routers.services_deploy import router as services_deploy_router
+from .routers.services_diagnose import router as services_diagnose_router
 from .routers.services_env import router as services_env_router
 from .routers.services_lifecycle import router as services_lifecycle_router
 from .routers.services_maintenance import router as services_maintenance_router
@@ -128,6 +129,7 @@ app.include_router(volumes_router)
 app.include_router(services_router)
 app.include_router(services_maintenance_router)
 app.include_router(services_deploy_router)
+app.include_router(services_diagnose_router)
 app.include_router(services_config_router)
 app.include_router(services_env_router)
 app.include_router(services_lifecycle_router)

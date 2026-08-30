@@ -292,3 +292,12 @@ class ExecutionBackend(ABC):
         Returns the parsed JSON dict.  Raises ``ValueError`` when the file
         is missing or unparsable.
         """
+
+    async def get_container_diagnostics(self, service: ServiceRecord) -> dict[str, Any]:
+        """Return diagnostic information about the running container.
+
+        Default implementation returns ``{"exists": False}``.
+        Backends with Docker access should override to provide labels,
+        networks, health, restart count, and image digest.
+        """
+        return {"exists": False}
