@@ -22,7 +22,7 @@ from ..registry_check import RegistryChecker
 from .backends import ExecutionBackend
 from .config import LifecycleConfig
 from .deps._contract_refresh import _CONTRACT_FIELDS
-from .models import ServiceRecord
+from .models import HealthStatus, ServiceRecord
 from .schemas import (
     DiagnoseEdgeProbe,
     DiagnoseRepoContract,
@@ -89,9 +89,9 @@ def _compute_verdict(
             )
 
     # 4. Unhealthy
-    if runtime is not None and runtime.health == "unhealthy":
+    if runtime is not None and runtime.health == HealthStatus.UNHEALTHY.value:
         return DiagnoseVerdict(
-            classification="unhealthy",
+            classification=HealthStatus.UNHEALTHY.value,
             detail="Container health check is reporting unhealthy.",
             remediation=f"Check logs: GET /services/{config.id}/logs?tail=50",
         )

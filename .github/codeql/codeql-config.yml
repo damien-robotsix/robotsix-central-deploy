@@ -6,7 +6,6 @@ queries:
 paths:
   - src
   - tests
-  - "!vulture_whitelist.py"
 
 query-filters:
   # The diagnose endpoint intentionally probes the fleet edge with
