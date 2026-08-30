@@ -6,4 +6,5 @@
 
 - [ ] Tests pass locally (`uv run pytest`)
 - [ ] Pre-commit hooks pass (`pre-commit run --all-files`)
-- [ ] Commit subjects and PR title are conventional (`feat:`/`fix:`/`chore:`/`docs:`/`refactor:`/`test:`/`ci:`) — release-please generates the changelog
+- [ ] Commit subjects and PR title are conventional
+  (`feat:`/`fix:`/`chore:`/`docs:`/`refactor:`/`test:`/`ci:`) — release-please generates the changelog
