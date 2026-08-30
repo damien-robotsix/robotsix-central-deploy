@@ -435,6 +435,72 @@ class DockerSdkBackend(ExecutionBackend):
         """Read and return the parsed ``.credentials.json`` from *volume_name*."""
         return await self._auth.read_claude_credentials(volume_name)
 
+    async def get_container_diagnostics(
+        self, service: ServiceRecord
+    ) -> dict[str, Any]:
+        """Return diagnostic information about the running container.
+
+        Returns a dict with keys: ``exists``, ``labels``, ``networks``,
+        ``state``, ``health``, ``started_at``, ``restart_count``,
+        ``image_digest``.  When the container is not found, only
+        ``exists=False`` is returned.
+        """
+        name = self._container_name(service)
+        container = await self._get_container(name)
+        if container is None:
+            return {"exists": False}
+
+        loop = asyncio.get_running_loop()
+
+        def _inspect() -> dict[str, Any]:
+            container.reload()
+            attrs = container.attrs
+            state_obj = attrs.get("State", {})
+            networks_raw = attrs.get("NetworkSettings", {}).get("Networks", {})
+            networks: dict[str, Any] = {}
+            for net_name, net_cfg in networks_raw.items():
+                networks[net_name] = {
+                    "aliases": net_cfg.get("Aliases") or [],
+                    "ip": net_cfg.get("IPAddress", ""),
+                }
+
+            health = ""
+            health_obj = state_obj.get("Health")
+            if health_obj:
+                health = health_obj.get("Status", "")
+
+            image_digest = ""
+            try:
+                image_id = attrs.get("Image", "")
+                if image_id:
+                    img = self._client.images.get(image_id)
+                    repo_digests = img.attrs.get("RepoDigests", [])
+                    prefix = service.image.rsplit(":", 1)[0] + "@"
+                    for rd in repo_digests:
+                        if rd.startswith(prefix):
+                            image_digest = rd.split("@", 1)[1]
+                            break
+                    if not image_digest:
+                        for rd in repo_digests:
+                            if "@sha256:" in rd:
+                                image_digest = rd.split("@", 1)[1]
+                                break
+            except Exception:  # noqa: BLE001
+                pass
+
+            return {
+                "exists": True,
+                "labels": attrs.get("Config", {}).get("Labels", {}),
+                "networks": networks,
+                "state": state_obj.get("Status", ""),
+                "health": health,
+                "started_at": state_obj.get("StartedAt", ""),
+                "restart_count": attrs.get("RestartCount", 0),
+                "image_digest": image_digest,
+            }
+
+        return await loop.run_in_executor(None, _inspect)
+
     async def _remove_old_container(self, name: str, existing: Any) -> str:
         """Stop + remove *existing* container, returning its prior image digest."""
         import docker

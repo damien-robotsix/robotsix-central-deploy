@@ -71,6 +71,7 @@ async def deploy_chat_skill() -> str:
         "- `GET /chat/langfuse/{project}/observations/{observationId}` — single observation detail\n"
         "- `GET /chat/services/{name}/logs` — recent container logs (bounded tail, per-component gate)\n"
         "- `GET /chat/services/{name}/status` — lifecycle status as structured JSON (per-component gate)\n"
+        "- `GET /chat/services/{name}/diagnose` — full diagnostic report: stored spec vs repo contract, routing labels, edge probe, runtime state, and verdict (per-component gate)\n"
         "- `GET /chat/services/{name}/volumes` — list named volumes for a service (per-component gate)\n"
         "- `GET /chat/services/{name}/volumes/{vol}/files?path=…` — read-only file inspection within a volume (per-component gate)\n\n"
         "## Scoped write endpoints (chat-agent allowlisted)\n"

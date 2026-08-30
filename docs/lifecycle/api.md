@@ -10,6 +10,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.services_maintenance
 
+::: robotsix_central_deploy.lifecycle.routers.services_diagnose
+
 ::: robotsix_central_deploy.lifecycle.routers.health
 
 ::: robotsix_central_deploy.lifecycle.routers.volumes
