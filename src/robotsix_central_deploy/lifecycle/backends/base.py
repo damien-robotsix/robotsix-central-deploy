@@ -293,9 +293,7 @@ class ExecutionBackend(ABC):
         is missing or unparsable.
         """
 
-    async def get_container_diagnostics(
-        self, service: ServiceRecord
-    ) -> dict[str, Any]:
+    async def get_container_diagnostics(self, service: ServiceRecord) -> dict[str, Any]:
         """Return diagnostic information about the running container.
 
         Default implementation returns ``{"exists": False}``.

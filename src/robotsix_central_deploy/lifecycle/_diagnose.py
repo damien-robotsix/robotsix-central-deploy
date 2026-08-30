@@ -360,7 +360,7 @@ async def _probe_edge(name: str, base_domain: str) -> DiagnoseEdgeProbe:
     """
     url = f"https://{name}.{base_domain}/health"
     try:
-        async with httpx.AsyncClient(timeout=5.0, verify=False) as client:  # noqa: S501
+        async with httpx.AsyncClient(timeout=5.0, verify=False) as client:  # noqa: S501  # nosec B501
             resp = await client.get(url)
             body_preview = resp.text[:100]
             return DiagnoseEdgeProbe(

@@ -435,9 +435,7 @@ class DockerSdkBackend(ExecutionBackend):
         """Read and return the parsed ``.credentials.json`` from *volume_name*."""
         return await self._auth.read_claude_credentials(volume_name)
 
-    async def get_container_diagnostics(
-        self, service: ServiceRecord
-    ) -> dict[str, Any]:
+    async def get_container_diagnostics(self, service: ServiceRecord) -> dict[str, Any]:
         """Return diagnostic information about the running container.
 
         Returns a dict with keys: ``exists``, ``labels``, ``networks``,
