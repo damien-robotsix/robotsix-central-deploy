@@ -158,6 +158,123 @@ class TestVolumeOpsWriteConfig:
 
 
 # ---------------------------------------------------------------------------
+# write_volume_file
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeOpsWriteVolumeFile:
+    @staticmethod
+    def _docker_mock() -> MagicMock:
+        docker_mock = MagicMock()
+        docker_mock.errors.APIError = type("APIError", (Exception,), {})
+        docker_mock.errors.ContainerError = type("ContainerError", (Exception,), {})
+        return docker_mock
+
+    @staticmethod
+    def _container(logs: bytes = b"") -> MagicMock:
+        container = MagicMock()
+        container.wait.return_value = {"StatusCode": 0}
+        container.logs.return_value = logs
+        return container
+
+    @staticmethod
+    def _extract_payload(container: MagicMock) -> bytes:
+        """Return the raw bytes of /robotsix-staging/payload from the tar sent
+        to put_archive."""
+        import io
+        import tarfile
+
+        _path, blob = container.put_archive.call_args[0]
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r") as tar:
+            member = tar.extractfile("robotsix-staging/payload")
+            assert member is not None
+            return member.read()
+
+    async def test_large_content_streamed_not_inlined_in_argv(self):
+        """A write near the 1 MiB cap must not inline content into the shell
+        argv (which Linux caps at 128 KiB); it is streamed via put_archive."""
+        client = MagicMock()
+        container = self._container()
+        client.containers.create.return_value = container
+        vo = VolumeOps(client)
+
+        big = "A" * 500_000  # ~500 KiB, well past MAX_ARG_STRLEN
+
+        with patch.dict(sys.modules, {"docker": self._docker_mock()}):
+            result = await vo.write_volume_file("data-vol", "blob.json", big, False)
+
+        assert result == {"size_bytes": 500_000}
+        # No inlined content anywhere in the argv (script + args).
+        command = client.containers.create.call_args[1]["command"]
+        assert all(big not in part for part in command)
+        # command = ["sh", "-c", <script>, "sh", rel_path, overwrite_flag]
+        assert command[4] == "blob.json"
+        # Content reached the container as a streamed tar payload instead.
+        assert self._extract_payload(container).decode() == big
+        container.put_archive.assert_called_once()
+        container.start.assert_called_once()
+        container.remove.assert_called_once_with(force=True)
+
+    async def test_returns_byte_count_for_utf8(self):
+        client = MagicMock()
+        client.containers.create.return_value = self._container()
+        vo = VolumeOps(client)
+
+        with patch.dict(sys.modules, {"docker": self._docker_mock()}):
+            result = await vo.write_volume_file("data-vol", "note.txt", "héllo", False)
+
+        # "héllo" is 6 UTF-8 bytes (é = 2 bytes).
+        assert result == {"size_bytes": 6}
+
+    async def test_file_exists_marker_raises(self):
+        from robotsix_central_deploy.lifecycle.backends._volume_ops import _FILE_EXISTS
+
+        client = MagicMock()
+        client.containers.create.return_value = self._container(
+            logs=(_FILE_EXISTS + "\n").encode()
+        )
+        vo = VolumeOps(client)
+
+        with (
+            patch.dict(sys.modules, {"docker": self._docker_mock()}),
+            pytest.raises(FileExistsError),
+        ):
+            await vo.write_volume_file("data-vol", "note.txt", "x", False)
+
+    async def test_is_a_dir_marker_raises(self):
+        from robotsix_central_deploy.lifecycle.backends._volume_ops import _IS_A_DIR
+
+        client = MagicMock()
+        client.containers.create.return_value = self._container(
+            logs=(_IS_A_DIR + "\n").encode()
+        )
+        vo = VolumeOps(client)
+
+        with (
+            patch.dict(sys.modules, {"docker": self._docker_mock()}),
+            pytest.raises(IsADirectoryError),
+        ):
+            await vo.write_volume_file("data-vol", "adir", "x", True)
+
+    async def test_container_removed_on_api_error(self):
+        client = MagicMock()
+        container = self._container()
+        client.containers.create.return_value = container
+        vo = VolumeOps(client)
+
+        docker_mock = self._docker_mock()
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            import docker
+
+            container.start.side_effect = docker.errors.APIError("boom")
+            with pytest.raises(RuntimeError, match="write_volume_file failed"):
+                await vo.write_volume_file("data-vol", "note.txt", "x", False)
+
+        # The helper container is always cleaned up, even on failure.
+        container.remove.assert_called_once_with(force=True)
+
+
+# ---------------------------------------------------------------------------
 # read_config_from_volume
 # ---------------------------------------------------------------------------
 
