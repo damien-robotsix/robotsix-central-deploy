@@ -270,6 +270,14 @@ class LifecycleConfig(BaseModel):
         ),
         json_schema_extra={"advanced": True},
     )
+    chat_volume_write_max_bytes: int = Field(
+        1_048_576,
+        description=(
+            "Maximum UTF-8 byte size of a file the chat agent may write via "
+            "PUT /chat/services/{name}/volumes/{vol}/files. Default 1 MiB."
+        ),
+        json_schema_extra={"advanced": True},
+    )
 
     # Board integration (for filing audit-finding tickets and other automations)
     board_api_url: str = Field(

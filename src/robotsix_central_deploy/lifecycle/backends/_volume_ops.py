@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 #: exceptions by the callers.  A plain empty result cannot say *why*.
 _NOT_A_DIR = "\x01robotsix-not-a-dir"
 _IS_A_DIR = "\x01robotsix-is-a-dir"
+_FILE_EXISTS = "\x01robotsix-file-exists"
 
 #: Shell function printing the apparent-bytes recursive size of its argument,
 #: excluding SQLite transient sidecars.  Shared by the whole-volume measure and
@@ -351,6 +352,109 @@ class VolumeOps:
             "binary": binary,
             "truncated": truncated,
         }
+
+    async def write_volume_file(
+        self,
+        volume_name: str,
+        rel_path: str,
+        content: str,
+        overwrite: bool,
+    ) -> dict[str, Any]:
+        """Create-or-overwrite ``/vol/<rel_path>`` with *content* (UTF-8 text)
+        via a one-shot busybox container.
+
+        Parent directories are created as needed.  The write is create-only
+        unless *overwrite* is True: when the target already exists and
+        *overwrite* is False, raises ``FileExistsError``.  When the target is
+        an existing directory, raises ``IsADirectoryError``.  The busybox
+        helper mounts only the named volume at ``/vol``, so a symlink pointing
+        outside the volume resolves within the ephemeral container filesystem
+        and cannot escape to the host.  Returns ``{"size_bytes": int}`` — the
+        number of content bytes written.
+        """
+        import io
+        import tarfile
+
+        import docker
+
+        data = content.encode("utf-8")
+        size_bytes = len(data)
+        overwrite_flag = "1" if overwrite else "0"
+        # The file bytes are streamed into the helper container via
+        # ``put_archive`` (a tar sent over the Docker API), NOT inlined into the
+        # shell command.  Inlining would place the (base64-inflated) content in a
+        # single ``execve`` argv element, which Linux caps at MAX_ARG_STRLEN
+        # (128 KiB) — any write past ~96 KiB raw would fail with E2BIG even
+        # though the advertised cap is 1 MiB.  Streaming lets a write succeed up
+        # to the full ``chat_volume_write_max_bytes`` cap.  $1 = rel_path,
+        # $2 = overwrite flag ("1"/"0").  The busybox helper runs as root while
+        # fleet components run as 1000:1000, so the created file is chowned to
+        # 1000:1000 (matching write_config_to_volume) or the component cannot
+        # read its own file.
+        script = (
+            'target="/vol/$1"\n'
+            'overwrite="$2"\n'
+            'if [ -d "$target" ]; then\n'
+            f"  printf '{_IS_A_DIR}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            'if [ -e "$target" ] && [ "$overwrite" != "1" ]; then\n'
+            f"  printf '{_FILE_EXISTS}\\n'\n"
+            "  exit 0\n"
+            "fi\n"
+            'dir=$(dirname "$target")\n'
+            'mkdir -p "$dir"\n'
+            'cp /robotsix-staging/payload "$target"\n'
+            'chown 1000:1000 "$target" 2>/dev/null || true\n'
+            'chmod 600 "$target" 2>/dev/null || true\n'
+        )
+
+        # Tar carrying the raw file bytes, extracted into the container at
+        # /robotsix-staging/payload before the script runs.
+        tar_buf = io.BytesIO()
+        with tarfile.open(fileobj=tar_buf, mode="w") as tar:
+            dir_info = tarfile.TarInfo(name="robotsix-staging")
+            dir_info.type = tarfile.DIRTYPE
+            dir_info.mode = 0o755
+            tar.addfile(dir_info)
+            file_info = tarfile.TarInfo(name="robotsix-staging/payload")
+            file_info.size = size_bytes
+            file_info.mode = 0o600
+            tar.addfile(file_info, io.BytesIO(data))
+        payload = tar_buf.getvalue()
+
+        loop = asyncio.get_running_loop()
+
+        def _run() -> bytes:
+            container = None
+            try:
+                container = self._client.containers.create(
+                    "busybox",
+                    command=["sh", "-c", script, "sh", rel_path, overwrite_flag],
+                    volumes={volume_name: {"bind": "/vol", "mode": "rw"}},
+                )
+                container.put_archive("/", payload)
+                container.start()
+                container.wait()
+                raw = container.logs(stdout=True, stderr=True)
+                return raw if isinstance(raw, bytes) else raw.encode()
+            except (docker.errors.APIError, docker.errors.ContainerError) as exc:
+                raise RuntimeError(
+                    f"write_volume_file failed for {volume_name}: {exc}"
+                ) from exc
+            finally:
+                if container is not None:
+                    try:
+                        container.remove(force=True)
+                    except docker.errors.APIError:
+                        pass
+
+        raw = await loop.run_in_executor(None, _run)
+        if raw.startswith(_IS_A_DIR.encode()):
+            raise IsADirectoryError(rel_path)
+        if raw.startswith(_FILE_EXISTS.encode()):
+            raise FileExistsError(rel_path)
+        return {"size_bytes": size_bytes}
 
     async def remove_volume(self, volume_name: str) -> None:
         """Remove the Docker named volume *volume_name* (best-effort).

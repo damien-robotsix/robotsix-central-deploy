@@ -3844,6 +3844,94 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Create or overwrite a file in an allowlisted service's volume",
+        "description": "Create-or-overwrite a file within a service's named volume.\n\nCreate-only by design: no delete, no rename, no directory removal.\n``overwrite`` defaults to False; a write to an existing path without it\nreturns 409.  Parent directories are created as needed.  Path traversal\n(``..``), absolute paths and NUL bytes are rejected with 400, and content\nlarger than ``chat_volume_write_max_bytes`` is rejected with 413.  Every\nsuccessful write is recorded in the chat-agent audit log.",
+        "operationId": "chat_volume_file_write_chat_services__name__volumes__vol__files_put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "vol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Vol"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VolumeFileWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolumeFileWriteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path (traversal, absolute, empty or NUL)"
+          },
+          "403": {
+            "description": "Service not allowlisted"
+          },
+          "404": {
+            "description": "Service or volume not found"
+          },
+          "409": {
+            "description": "File exists and overwrite is not set"
+          },
+          "413": {
+            "description": "Content exceeds the configured size cap"
+          },
+          "501": {
+            "description": "Volume writes not supported by this backend"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/chat/github/repos/{owner}/{repo}/actions/runs": {
@@ -10112,6 +10200,60 @@
         ],
         "title": "VolumeFileResponse",
         "description": "File content (or binary/truncation flags) from a volume file read."
+      },
+      "VolumeFileWriteRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "File path relative to the volume root (no traversal, no leading '/')"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "File content as a UTF-8 string"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "title": "Overwrite",
+            "description": "Replace an existing file; when False an existing path returns 409",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "VolumeFileWriteRequest",
+        "description": "Request body for creating or overwriting a file inside a volume."
+      },
+      "VolumeFileWriteResponse": {
+        "properties": {
+          "volume": {
+            "type": "string",
+            "title": "Volume",
+            "description": "Named volume the file was written to"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Normalised path relative to the volume root"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes",
+            "description": "Number of content bytes written"
+          }
+        },
+        "type": "object",
+        "required": [
+          "volume",
+          "path",
+          "size_bytes"
+        ],
+        "title": "VolumeFileWriteResponse",
+        "description": "Result of a successful volume file write."
       },
       "VolumeGrowthRecord": {
         "properties": {

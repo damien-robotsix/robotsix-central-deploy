@@ -246,6 +246,18 @@ class DockerBackend(ExecutionBackend):
             "read_volume_file not supported for DockerBackend — use DockerSdkBackend"
         )
 
+    async def write_volume_file(
+        self,
+        volume_name: str,
+        rel_path: str,
+        content: str,
+        overwrite: bool,
+    ) -> dict[str, Any]:
+        """Not supported — raises NotImplementedError."""
+        raise NotImplementedError(
+            "write_volume_file not supported for DockerBackend — use DockerSdkBackend"
+        )
+
     async def remove_volume(self, volume_name: str) -> None:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(

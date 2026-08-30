@@ -173,6 +173,23 @@ class ExecutionBackend(ABC):
         """
 
     @abstractmethod
+    async def write_volume_file(
+        self,
+        volume_name: str,
+        rel_path: str,
+        content: str,
+        overwrite: bool,
+    ) -> dict[str, Any]:
+        """Create-or-overwrite the file at ``/vol/<rel_path>`` with *content*
+        (UTF-8 text), creating parent directories as needed.
+
+        The write is create-only unless *overwrite* is True.  Returns
+        ``{"size_bytes": int}`` — the number of content bytes written.
+        Raises ``FileExistsError`` when the target exists and *overwrite* is
+        False, and ``IsADirectoryError`` when the target is a directory.
+        """
+
+    @abstractmethod
     async def remove_volume(self, volume_name: str) -> None:
         """Remove the Docker named volume *volume_name*.
 

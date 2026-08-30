@@ -285,6 +285,13 @@
       "title": "Volume Audit Min Delta Bytes",
       "type": "integer"
     },
+    "chat_volume_write_max_bytes": {
+      "advanced": true,
+      "default": 1048576,
+      "description": "Maximum UTF-8 byte size of a file the chat agent may write via PUT /chat/services/{name}/volumes/{vol}/files. Default 1 MiB.",
+      "title": "Chat Volume Write Max Bytes",
+      "type": "integer"
+    },
     "board_api_url": {
       "advanced": true,
       "default": "",

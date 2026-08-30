@@ -293,6 +293,27 @@ class VolumeFileResponse(BaseModel):
     )
 
 
+class VolumeFileWriteRequest(BaseModel):
+    """Request body for creating or overwriting a file inside a volume."""
+
+    path: str = Field(
+        description="File path relative to the volume root (no traversal, no leading '/')"
+    )
+    content: str = Field(description="File content as a UTF-8 string")
+    overwrite: bool = Field(
+        default=False,
+        description="Replace an existing file; when False an existing path returns 409",
+    )
+
+
+class VolumeFileWriteResponse(BaseModel):
+    """Result of a successful volume file write."""
+
+    volume: str = Field(description="Named volume the file was written to")
+    path: str = Field(description="Normalised path relative to the volume root")
+    size_bytes: int = Field(description="Number of content bytes written")
+
+
 # ---------------------------------------------------------------------------
 # Orphan-volume prune models
 # ---------------------------------------------------------------------------

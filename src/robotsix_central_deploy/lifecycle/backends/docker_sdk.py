@@ -857,6 +857,18 @@ class DockerSdkBackend(ExecutionBackend):
         """Read ``/vol/<rel_path>`` via a one-shot busybox container."""
         return await self._volume.read_volume_file(volume_name, rel_path, max_bytes)
 
+    async def write_volume_file(
+        self,
+        volume_name: str,
+        rel_path: str,
+        content: str,
+        overwrite: bool,
+    ) -> dict[str, Any]:
+        """Create-or-overwrite ``/vol/<rel_path>`` via a one-shot busybox container."""
+        return await self._volume.write_volume_file(
+            volume_name, rel_path, content, overwrite
+        )
+
     async def remove_volume(self, volume_name: str) -> None:
         """Remove the Docker named volume *volume_name* (best-effort)."""
         await self._volume.remove_volume(volume_name)
