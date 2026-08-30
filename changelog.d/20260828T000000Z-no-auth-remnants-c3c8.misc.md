@@ -1,1 +1,0 @@
-Guard the config and docs surface against component-level auth creeping back (`api_key`, `auth_username`, `auth_password`), and drop the four settings the docs still advertised that nothing reads: the API key, the two HTTP Basic credentials, and the three login rate limits — `rate_limit_api_per_hour` is now documented as the only rate limit central-deploy enforces.

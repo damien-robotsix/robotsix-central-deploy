@@ -68,10 +68,13 @@ Pull requests that fail any check will be blocked.
 1. Create a feature branch from `main`.
 2. Make your changes, including tests for new behaviour.
 3. Run the full pre-commit suite: `pre-commit run --all-files`
-4. Add a changelog fragment in `changelog.d/` (see the
-   [towncrier](https://towncrier.readthedocs.io/) config in `pyproject.toml`).
-5. Open a PR against `main`. The CI pipeline runs lint, mypy, deptry, and the
+4. Open a PR against `main`. The CI pipeline runs lint, mypy, deptry, and the
    full test suite — make sure everything is green.
+
+Commit subjects and PR titles must be conventional
+(`feat:`/`fix:`/`chore:`/`docs:`/`refactor:`/`test:`/`ci:`);
+[release-please](https://github.com/googleapis/release-please) generates
+`CHANGELOG.md` from them. No changelog fragment is required.
 
 ## Coding standards
 
