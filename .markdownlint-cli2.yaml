@@ -16,4 +16,3 @@ config:
 ignores:
   - "CHANGELOG.md"
   - "AGENT.md"
-  - "changelog.d/**"

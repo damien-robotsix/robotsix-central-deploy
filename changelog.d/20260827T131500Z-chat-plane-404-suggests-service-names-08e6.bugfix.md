@@ -1,1 +1,0 @@
-The chat plane's "service not found" 404 now names the registered component id (`did you mean 'invest'?`) instead of a bare message, matching the operator plane; the matcher behind both is now one shared helper.

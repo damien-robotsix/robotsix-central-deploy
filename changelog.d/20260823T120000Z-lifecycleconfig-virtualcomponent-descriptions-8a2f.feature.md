@@ -1,1 +1,0 @@
-Added ``description=`` to ``VirtualComponentEntry.id``, ``chat_base_url``, and ``chat_skill_endpoint`` fields in ``LifecycleConfig``. These descriptions now appear in ``config/config.schema.json`` and are surfaced as help bubbles in the deploy UI.

@@ -36,7 +36,6 @@ dev = [
     "ruff>=0.16.1",
     "types-PyYAML>=6.0",
     "types-docker>=7.2.0.20260728",
-    "towncrier>=24.0",
     "hypothesis>=6.165.1",
     # vulture: dead-code detection (CI gate). Findings that are false
     # positives are recorded in vulture_whitelist.py.
