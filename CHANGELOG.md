@@ -4,6 +4,31 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.10.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.9.0...v0.10.0) (2026-08-31)
+
+
+### Features
+
+* **lifecycle:** suggest close service names on a 404 ([#807](https://github.com/damien-robotsix/robotsix-central-deploy/issues/807)) ([18a56dd](https://github.com/damien-robotsix/robotsix-central-deploy/commit/18a56dd1c5dcf4e54db5bff9cb5e638432e00852))
+
+
+### Bug Fixes
+
+* **config:** stop a stored default from discarding a configured value ([#814](https://github.com/damien-robotsix/robotsix-central-deploy/issues/814)) ([8b02933](https://github.com/damien-robotsix/robotsix-central-deploy/commit/8b029331b5b5ffe37e22cdc4163153f01679a996))
+* Deploy plane returns misleading 403 for unknown service names (20260825T205542Z-deploy-plane-returns-misleading-403-for-2f4f) ([#810](https://github.com/damien-robotsix/robotsix-central-deploy/issues/810)) ([7b3dbea](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7b3dbea624a2b5360cbccb330983951806bfcd9c))
+* Deploy/update must re-fetch a service's deploy compose from the repo so changed robotsix.deploy.* labels take effect (20260829T203709Z-deploy-update-must-re-fetch-a-service-s-ffa2) ([#819](https://github.com/damien-robotsix/robotsix-central-deploy/issues/819)) ([faf7014](https://github.com/damien-robotsix/robotsix-central-deploy/commit/faf7014ad322cd15a58a7c68d32aa8c3eb2e7b17))
+* **lifecycle:** contract refresh clones private repos with the GitHub App token ([#820](https://github.com/damien-robotsix/robotsix-central-deploy/issues/820)) ([60b5235](https://github.com/damien-robotsix/robotsix-central-deploy/commit/60b52356a0edeb176bc8363c1abcea32e3f078e6))
+* **lifecycle:** suggest close service names on the chat plane's 404 too (20260824T...-08e6) ([#815](https://github.com/damien-robotsix/robotsix-central-deploy/issues/815)) ([02b6aed](https://github.com/damien-robotsix/robotsix-central-deploy/commit/02b6aedfe4b1514192f69941f136b118245b6924))
+* Pass ghcr_pull_token as X-Registry-Auth on image pulls and registry digest checks (20260826T225757Z-pass-ghcr-pull-token-as-x-registry-auth-513d) ([#812](https://github.com/damien-robotsix/robotsix-central-deploy/issues/812)) ([fc430a7](https://github.com/damien-robotsix/robotsix-central-deploy/commit/fc430a7307084e0bdd01d892b1e6024f624623fa))
+* Settings dashboard sends llmio_tier_config as the string "[object Object]", causing 422 on every config save (20260826T225803Z-settings-dashboard-sends-llmio-tier-conf-0d37) ([#811](https://github.com/damien-robotsix/robotsix-central-deploy/issues/811)) ([ee6478f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/ee6478f9663c27ac49efe18c866bd724d345556f))
+* **ui:** hand AppShell a DOM node, and make static assets revalidate ([#813](https://github.com/damien-robotsix/robotsix-central-deploy/issues/813)) ([b3ccb7b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/b3ccb7bc6b561e00ace9a79817a60ab522cce5fd))
+
+
+### Documentation
+
+* Add mkdocstrings directive for auth_token.py to docs/lifecycle/api.md (20260825T123447Z-add-mkdocstrings-directive-for-auth-toke-d5cc) ([#809](https://github.com/damien-robotsix/robotsix-central-deploy/issues/809)) ([5212be8](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5212be8e10a67cdaf6f25a87f1608f51aa85018b))
+* drop the phantom ROBOTSIX_LIFECYCLE_* env vars, per the config standard ([#818](https://github.com/damien-robotsix/robotsix-central-deploy/issues/818)) ([8da0cc4](https://github.com/damien-robotsix/robotsix-central-deploy/commit/8da0cc4695898b0dcfe8c98388865d01b7468333))
+
 ## [0.9.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.8.1...v0.9.0) (2026-08-24)
 
 
