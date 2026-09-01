@@ -2,9 +2,9 @@
 
 Pulls the compiled stylesheet **and** the framework-free JS bundle from their
 GitHub Release assets at build time, so central-deploy never re-vendors a
-stale, one-shot copy of either. The URL construction mirrors the
-``robotsix_ui.css_url()`` / ``robotsix_ui.vanilla_js_url()`` helpers shipped
-in the robotsix-ui repository.
+stale, one-shot copy of either. The asset download URLs come from the
+``robotsix_ui`` package helpers — ``robotsix_ui.css_url()`` /
+``robotsix_ui.vanilla_js_url()`` — rather than being reconstructed here.
 
 Both files are needed, not just the stylesheet: ``vanilla.js`` exports
 ``mountConfigPanel`` (the fleet's only settings renderer) and
@@ -21,6 +21,8 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+from robotsix_ui import css_url, vanilla_js_url
 
 ROBOTSIX_UI_VERSION = "v0.1.41"
 
@@ -39,19 +41,6 @@ _ASSETS = {
     "style.css": "robotsix-ui.css",
     "vanilla.js": "robotsix-ui-vanilla.js",
 }
-
-
-def asset_url(version: str, asset: str) -> str:
-    """Return the GitHub release download URL for a robotsix-ui asset."""
-    return (
-        "https://github.com/damien-robotsix/robotsix-ui/"
-        f"releases/download/{version}/{asset}"
-    )
-
-
-def css_url(version: str) -> str:
-    """Return the GitHub release download URL for a robotsix-ui version."""
-    return asset_url(version, "style.css")
 
 
 def _fetch(url: str) -> bytes:
@@ -78,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     _STATIC_DIR.mkdir(parents=True, exist_ok=True)
     for asset, filename in _ASSETS.items():
-        url = asset_url(version, asset)
+        url = css_url(version) if asset == "style.css" else vanilla_js_url(version)
         data = _fetch(url)
         if not data:
             print(f"refusing to write empty {filename} from {url}", file=sys.stderr)
