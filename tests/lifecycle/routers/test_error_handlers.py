@@ -11,6 +11,7 @@ from __future__ import annotations
 from httpx import AsyncClient
 
 import robotsix_central_deploy.lifecycle.app as server_mod
+from robotsix_central_deploy.lifecycle.error_handlers import _service_route_hint
 from robotsix_central_deploy.lifecycle.models import ErrorDetail
 
 
@@ -120,3 +121,64 @@ class TestHTTPExceptionEnvelope:
         # Validate it matches the ErrorDetail shape
         _ = ErrorDetail(**body)
         assert "error" in body
+
+
+class TestServiceRouteHint:
+    """A bare 404 on an unknown per-service sub-path names the real routes.
+
+    Agents guessed ``/services/hexarchy/redeploy`` and ``/status``, got a bare
+    404, and wrongly concluded the control plane could not update the image.
+    """
+
+    def test_unit_unknown_action_lists_valid_routes(self):
+        hint = _service_route_hint("POST", "/services/hexarchy/redeploy")
+        assert hint is not None
+        assert "POST /services/hexarchy/redeploy" in hint
+        # The real routes are named so the caller can retry the right one.
+        assert "POST /services/hexarchy/deploy" in hint
+        assert "POST /services/hexarchy/refresh-contract" in hint
+        assert "GET /services/hexarchy/logs" in hint
+        assert "GET|PUT /services/hexarchy/env" in hint
+
+    def test_unit_status_style_get_hints_the_state_endpoint(self):
+        hint = _service_route_hint("GET", "/services/hexarchy/status")
+        assert hint is not None
+        assert "For current state use GET /services/hexarchy." in hint
+
+    def test_unit_non_service_path_is_not_enriched(self):
+        assert _service_route_hint("GET", "/volumes") is None
+        assert _service_route_hint("GET", "/services") is None
+        assert _service_route_hint("GET", "/services/hexarchy") is None
+
+    async def test_unknown_action_404_names_valid_routes(
+        self, client: AsyncClient, auth_headers
+    ):
+        resp = await client.post("/services/hexarchy/redeploy", headers=auth_headers)
+        assert resp.status_code == 404, resp.text
+        body = resp.json()
+        _ = ErrorDetail(**body)
+        assert "POST /services/hexarchy/deploy" in body["error"]
+
+    async def test_status_get_404_hints_the_state_endpoint(
+        self, client: AsyncClient, auth_headers
+    ):
+        resp = await client.get("/services/hexarchy/status", headers=auth_headers)
+        assert resp.status_code == 404, resp.text
+        assert "GET /services/hexarchy" in resp.json()["error"]
+
+    async def test_did_you_mean_404_is_not_clobbered(
+        self, client: AsyncClient, auth_headers
+    ):
+        """A matched route with an unknown service keeps its own 404 message.
+
+        ``POST /services/{name}/deploy`` matches a real route, so the unknown
+        name raises an explicit ``did you mean …?`` 404 — the route-hint must
+        not overwrite it.
+        """
+        resp = await client.post(
+            "/services/nonexistent-zzz/deploy", headers=auth_headers
+        )
+        assert resp.status_code == 404, resp.text
+        error = resp.json()["error"]
+        assert "nonexistent-zzz" in error
+        assert "Valid per-service routes" not in error
