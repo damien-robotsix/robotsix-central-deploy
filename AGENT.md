@@ -113,6 +113,8 @@ All service endpoints are reachable only through the fleet edge (Traefik + tinya
 | POST | `/services/{name}/refresh-contract` | Re-fetch deploy/docker-compose.yml from the repo and update stored contract settings |
 | DELETE | `/services/{name}?stop_container=true` | Remove an onboarded component |
 
+Unknown service sub-paths (e.g., `POST /services/{name}/redeploy` when the correct endpoint is `POST /services/{name}/deploy`) return 404 with a JSON error body that lists all valid per-service routes, helping agents and operators quickly identify the right endpoint. State-query aliases like `GET /services/{name}/status` or `GET /services/{name}/state` also receive a hint pointing to `GET /services/{name}` for current state.
+
 ### Onboarding
 
 Two-phase process:
