@@ -2,7 +2,7 @@
 
 The committed ``config/config.json`` carries safe default values.
 Operators replace it with a deployment-specific file containing real
-secrets (``board_api_token``, ``github_app_private_key``, etc.).
+secrets (``github_app_private_key``, etc.).
 
 Field descriptions are surfaced in ``config/config.schema.json`` (kept in
 sync by the CI drift check) and rendered as help bubbles by the deploy UI.
@@ -279,23 +279,6 @@ class LifecycleConfig(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    # Board integration (for filing audit-finding tickets and other automations)
-    board_api_url: str = Field(
-        "",
-        description="Board API base URL for filing audit-finding tickets; empty disables.",
-        json_schema_extra={"advanced": True},
-    )
-    board_api_token: SecretStr = Field(
-        SecretStr(""),
-        description="Bearer token for the board API.",
-        json_schema_extra={"advanced": True},
-    )
-    board_repo_id: str = Field(
-        "",
-        description="Board repo id under which audit tickets are filed.",
-        json_schema_extra={"advanced": True},
-    )
-
     # GitHub App auth (chat-agent "github" virtual component — GitHub Actions
     # workflow-run status). Shares the same GitHub App installation as the
     # fleet's CI/CD pipeline; the chat container never sees these credentials —
@@ -396,7 +379,7 @@ class LifecycleConfig(BaseModel):
     mill_component_id: str = Field(
         SETTINGS_DEFAULTS["mill_component_id"],
         description=(
-            "Component id of the mill instance the caretaker reports findings to."
+            "Component id of the mill instance onboarding registers repos with."
         ),
         json_schema_extra={"advanced": True},
     )

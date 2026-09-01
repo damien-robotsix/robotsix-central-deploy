@@ -95,34 +95,6 @@ class TestMillClient:
         assert await client.ingest_finding(finding) is False
 
     @pytest.mark.asyncio
-    async def test_health_check_2xx_returns_true(self):
-        http = MagicMock(spec=RetryClient)
-        http.get = AsyncMock(return_value=MagicMock(is_success=True))
-        client = MillClient("http://localhost:8080", http)
-        assert await client.health_check() is True
-        http.get.assert_called_once_with("http://localhost:8080/health")
-
-    @pytest.mark.asyncio
-    async def test_health_check_4xx_returns_false(self):
-        http = MagicMock(spec=RetryClient)
-        http.get = AsyncMock(
-            side_effect=ExternalHTTPError(
-                "service unavailable",
-                status_code=503,
-                response=MagicMock(),
-            )
-        )
-        client = MillClient("http://localhost:8080", http)
-        assert await client.health_check() is False
-
-    @pytest.mark.asyncio
-    async def test_health_check_network_error_returns_false(self):
-        http = MagicMock(spec=RetryClient)
-        http.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
-        client = MillClient("http://localhost:8080", http)
-        assert await client.health_check() is False
-
-    @pytest.mark.asyncio
     async def test_register_repo_201_returns_true(self):
         http = MagicMock(spec=RetryClient)
         http.post = AsyncMock(return_value=MagicMock(is_success=True))

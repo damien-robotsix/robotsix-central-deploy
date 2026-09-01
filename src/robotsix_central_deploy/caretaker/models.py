@@ -73,12 +73,9 @@ class CaretakerFinding(BaseModel):
 class CaretakerReport(BaseModel):
     """Aggregate result of a full caretaker pass.
 
-    Collects every finding emitted by all enabled phases, together
-    with timing and mill-reporting counters.  ``mill_reported``
-    counts findings that were successfully forwarded to the
-    central mill; ``local_only`` counts findings that were
-    detected but could not be reported (e.g. mill unreachable,
-    untracked repo, or explicitly opted out of remote reporting).
+    Collects every finding emitted by all enabled phases, together with
+    timing. Findings are recorded locally (log + findings JSONL) only —
+    the caretaker never files tickets (operator decision, 2026-09-01).
     """
 
     started_at: datetime = Field(
@@ -95,23 +92,7 @@ class CaretakerReport(BaseModel):
         default_factory=list,
         description="Names of the caretaker phases that executed in this pass",
     )
-    mill_reported: int = Field(
-        default=0,
-        description="Count of findings successfully forwarded to the central mill",
-    )
-    local_only: int = Field(
-        default=0,
-        description="Count of findings detected but not reported (mill unreachable, untracked, or opt-out)",
-    )
     errors: list[str] = Field(
         default_factory=list,
         description="Non-fatal errors encountered during the pass",
-    )
-    mill_reachable: bool = Field(
-        default=True,
-        description="Whether the central mill could be reached during this pass",
-    )
-    mill_reachable_detail: str = Field(
-        default="",
-        description="Additional detail about mill reachability (e.g. error message when unreachable)",
     )

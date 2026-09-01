@@ -60,7 +60,7 @@ class TestVolumeAuditScheduler:
         """When a scan pass detects threshold-level growth, report_finding is called."""
         called_with = []
 
-        async def _fake_report(finding, path, board_client=None):
+        async def _fake_report(finding, path):
             called_with.append(finding)
 
         monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
@@ -162,113 +162,6 @@ class TestVolumeAuditScheduler:
         )
         records = await sched.run_once()
         assert len(records) == 1
-
-    @pytest.mark.asyncio
-    async def test_run_once_board_client_creation_failure(self, tmp_path, monkeypatch):
-        """When _maybe_create_board_client raises, the exception propagates
-        and snapshots are NOT saved."""
-        sched, _backend, store = _make_scheduler(tmp_path)
-        comp = ComponentConfig(
-            id="svc",
-            image="ghcr.io/test/image:latest",
-            container_name="svc",
-            named_volumes=["vol"],
-        )
-        store.all.return_value = [comp]
-
-        async def _raise(*args, **kwargs):
-            raise RuntimeError("board init failed")
-
-        monkeypatch.setattr(sched, "_maybe_create_board_client", _raise)
-
-        with pytest.raises(RuntimeError, match="board init failed"):
-            await sched.run_once()
-        assert not (tmp_path / "snapshots.json").exists()
-
-    @pytest.mark.asyncio
-    async def test_run_once_board_client_close_failure(self, tmp_path, monkeypatch):
-        """When board_client.close() raises, it is caught and logged,
-        not propagated — scan completes and snapshots are saved."""
-        sched, _backend, store = _make_scheduler(tmp_path)
-        comp = ComponentConfig(
-            id="svc",
-            image="ghcr.io/test/image:latest",
-            container_name="svc",
-            named_volumes=["vol"],
-        )
-        store.all.return_value = [comp]
-
-        mock_client = MagicMock()
-        mock_client.close = AsyncMock(side_effect=RuntimeError("close failed"))
-
-        async def _fake_create_client():
-            return mock_client
-
-        monkeypatch.setattr(sched, "_maybe_create_board_client", _fake_create_client)
-
-        # Should complete without raising
-        records = await sched.run_once()
-        assert len(records) == 1
-        mock_client.close.assert_awaited_once()
-        # Snapshots saved despite close failure
-        assert (tmp_path / "snapshots.json").exists()
-
-    @pytest.mark.asyncio
-    async def test_run_once_multiple_findings_reuses_board_client(
-        self, tmp_path, monkeypatch
-    ):
-        """When multiple volumes breach thresholds, the same board client
-        instance is passed to every report_finding call."""
-        called_with = []
-        mock_client = MagicMock()
-
-        async def _fake_report(finding, path, board_client=None):
-            called_with.append((finding, board_client))
-
-        async def _fake_create_client():
-            return mock_client
-
-        sched, backend, store = _make_scheduler(tmp_path)
-
-        monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
-        monkeypatch.setattr(sched, "_maybe_create_board_client", _fake_create_client)
-        store.all.return_value = [
-            ComponentConfig(
-                id="svc",
-                image="ghcr.io/test/image:latest",
-                container_name="svc",
-                named_volumes=["vol-a", "vol-b"],
-            )
-        ]
-
-        backend.measure_volume_bytes = AsyncMock(return_value=50_000_000)
-
-        snap_path = tmp_path / "snapshots.json"
-        snap_path.write_text(
-            json.dumps(
-                {
-                    "vol-a": {
-                        "volume_name": "vol-a",
-                        "component_id": "svc",
-                        "measured_at": "2025-01-01T00:00:00+00:00",
-                        "size_bytes": 1_000_000,
-                    },
-                    "vol-b": {
-                        "volume_name": "vol-b",
-                        "component_id": "svc",
-                        "measured_at": "2025-01-01T00:00:00+00:00",
-                        "size_bytes": 1_000_000,
-                    },
-                }
-            )
-        )
-
-        await sched.run_once()
-        assert len(called_with) == 2
-        assert {f.volume_name for f, _ in called_with} == {"vol-a", "vol-b"}
-        # Same board client instance passed to both calls
-        assert called_with[0][1] is mock_client
-        assert called_with[1][1] is mock_client
 
     @pytest.mark.asyncio
     async def test_loop_cancellation_propagates(self, tmp_path, monkeypatch):
