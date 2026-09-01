@@ -4,6 +4,25 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.11.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.10.0...v0.11.0) (2026-09-01)
+
+
+### Features
+
+* **edge:** detect a component the edge does not route ([#772](https://github.com/damien-robotsix/robotsix-central-deploy/issues/772)) ([5d6c9b4](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5d6c9b4e02326513a7f5875770c83b9e4a36e430))
+
+
+### Bug Fixes
+
+* **ci:** heal main — v3 HeaderRegexp in the diagnose fixture, drop re-added changelog.d fragments ([#830](https://github.com/damien-robotsix/robotsix-central-deploy/issues/830)) ([1d383c1](https://github.com/damien-robotsix/robotsix-central-deploy/commit/1d383c1edb7d4851b2c122e65e52af806fccdc57))
+* contract refresh unions claude_mount grants instead of pinning the stored flag ([#832](https://github.com/damien-robotsix/robotsix-central-deploy/issues/832)) ([e308813](https://github.com/damien-robotsix/robotsix-central-deploy/commit/e30881363c0d712bba867d203cb6e653fdb666cd))
+* **edge:** route and persist a chat-registered component ([#770](https://github.com/damien-robotsix/robotsix-central-deploy/issues/770)) ([af76011](https://github.com/damien-robotsix/robotsix-central-deploy/commit/af760117402bfaa0bb21416f8b3e620e01603b81))
+
+
+### Documentation
+
+* describe llmio_tier_config's new two-slot provider-failover shape ([#829](https://github.com/damien-robotsix/robotsix-central-deploy/issues/829)) ([28723e2](https://github.com/damien-robotsix/robotsix-central-deploy/commit/28723e2ec200057445d64e9024dff2a8d0bfc676))
+
 ## [0.10.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.9.0...v0.10.0) (2026-08-31)
 
 
