@@ -1,0 +1,1 @@
+edge: emit the Traefik v3 `HeaderRegexp` matcher on the per-component bearer router. The v2 spelling `HeadersRegexp` made Traefik reject the rule as an unsupported function and drop the router, so every bearer-token request in the fleet fell through to the SSO gate.

@@ -1,0 +1,1 @@
+register: build the stored ComponentConfig from the repo deploy contract instead of discarding it. A component registered through POST /chat/services kept only its id, image and repo URL, so it deployed with no port (no Traefik route — a healthy container behind a 404) and no volume mounts (data written into the container layer, erased by the next redeploy).

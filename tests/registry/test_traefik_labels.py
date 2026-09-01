@@ -73,7 +73,7 @@ def test_bearer_traffic_uses_mobile_token_auth() -> None:
     labels = _labels()
     assert labels["traefik.http.routers.board-bearer.middlewares"] == BEARER_MIDDLEWARE
     assert (
-        "HeadersRegexp(`Authorization`, `^Bearer .+`)"
+        "HeaderRegexp(`Authorization`, `^Bearer .+`)"
         in labels["traefik.http.routers.board-bearer.rule"]
     )
 
@@ -153,6 +153,6 @@ def test_labels_are_derived_never_special_cased() -> None:
     )
     # Bearer router exists and has the expected rule.
     assert (
-        "HeadersRegexp(`Authorization`, `^Bearer .+`)"
+        "HeaderRegexp(`Authorization`, `^Bearer .+`)"
         in labels["traefik.http.routers.brand-new-thing-bearer.rule"]
     )

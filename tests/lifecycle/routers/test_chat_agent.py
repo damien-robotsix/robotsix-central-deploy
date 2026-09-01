@@ -1065,8 +1065,14 @@ async def test_chat_deploy_missing_config_target_returns_422(
 def _mock_parse_compose_for_register(
     compose_bytes: bytes, name: str, git_url: str
 ) -> DerivedSpec:
-    """Return a minimal DerivedSpec suitable for the register endpoint tests."""
-    return DerivedSpec.model_construct(
+    """Return a minimal DerivedSpec suitable for the register endpoint tests.
+
+    Fully constructed rather than ``model_construct``-ed: the register
+    endpoint builds the stored ComponentConfig out of this spec, so a
+    partially-populated stub would raise on the first defaulted field it
+    reads instead of exercising the handler.
+    """
+    return DerivedSpec(
         name=name,
         git_url=git_url,
         image="ghcr.io/damien-robotsix/hexarchy:main",
@@ -1074,6 +1080,7 @@ def _mock_parse_compose_for_register(
         volume_mounts=[],
         env={},
         claude_mount=False,
+        host_docker_sock=False,
         siblings=[],
         config_volume="test-config-vol",
     )
@@ -1711,3 +1718,100 @@ async def test_enable_mutation_unlocks_test_deploy(
     assert resp_test.status_code != 403, (
         f"Expected non-403 after enable, got {resp_test.status_code}: {resp_test.text}"
     )
+
+
+@pytest.mark.asyncio
+async def test_chat_register_stores_contract_ports_and_volumes(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    component_config_store: ComponentConfigStore,
+    config_yaml_store: ConfigYamlStore,
+    monkeypatch,
+):
+    """Registration builds the stored config from the contract, not from the request body.
+
+    Regression: the endpoint validated the contract and then persisted only
+    ``id``/``image``/``git_url``. A component registered that way deployed with
+    no port — so ``traefik_labels`` emitted nothing and its public URL 404'd
+    while the container reported healthy — and with no volume mounts, so its
+    data sat in the container's writable layer until the next redeploy erased
+    it.
+    """
+    from robotsix_central_deploy.onboard import fetcher as fetcher_mod
+    from robotsix_central_deploy.onboard import parser as parser_mod
+    from robotsix_central_deploy.onboard.models import PortMapping, VolumeMount
+    from robotsix_central_deploy.registry.traefik_labels import traefik_labels
+
+    def _spec_with_contract(
+        compose_bytes: bytes, name: str, git_url: str
+    ) -> DerivedSpec:
+        return DerivedSpec(
+            name=name,
+            git_url=git_url,
+            image="ghcr.io/damien-robotsix/hexarchy:main",
+            ports=[PortMapping(host=8300, container=8080, protocol="tcp")],
+            volume_mounts=[
+                VolumeMount(
+                    host="config-data", container="/home/app/config", read_only=False
+                ),
+                VolumeMount(
+                    host="db-data", container="/home/app/data", read_only=False
+                ),
+            ],
+            env={},
+            claude_mount=False,
+            host_docker_sock=False,
+            siblings=[],
+            config_volume="config-data",
+        )
+
+    monkeypatch.setattr(
+        fetcher_mod,
+        "fetch_repo_files",
+        lambda git_url, timeout_sec=30, github_token=None: RepoFiles(
+            compose_bytes=_COMPOSE_WITH_HEADER,
+            config_schema_json=b'{"type": "object"}',
+            config_json=None,
+            config_json_template=None,
+        ),
+    )
+    monkeypatch.setattr(parser_mod, "parse_compose", _spec_with_contract)
+
+    from robotsix_central_deploy.lifecycle import app as server_mod
+
+    server_mod.app.state.config.chat_agent_registration_enabled = True
+
+    resp = await client.post(
+        "/chat/services",
+        json={
+            "name": "hexarchy",
+            "image": "ghcr.io/damien-robotsix/hexarchy:main",
+            "owner_repo": "https://github.com/damien-robotsix/hexarchy",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    stored = component_config_store.get("hexarchy")
+    assert stored is not None
+    assert [(p.host, p.container) for p in stored.ports] == [(8300, 8080)]
+    # Volumes are namespaced by component so two repos cannot claim one name.
+    assert [m.container for m in stored.mounts] == [
+        "/home/app/config",
+        "/home/app/data",
+    ]
+    assert stored.named_volumes == ["hexarchy-config-data", "hexarchy-db-data"]
+    assert stored.config_volume == "hexarchy-config-data"
+
+    # The point of carrying the port: the edge can now route the component.
+    labels = traefik_labels(stored, "deploy.robotsix.net", "central-deploy-proxy")
+    assert labels["traefik.enable"] == "true"
+    assert (
+        labels["traefik.http.routers.hexarchy.rule"]
+        == "Host(`hexarchy.deploy.robotsix.net`)"
+    )
+    assert labels["traefik.http.services.hexarchy.loadbalancer.server.port"] == "8080"
+
+    # The schema is stored too, so the first deploy has a config document to
+    # seed rather than leaving the component on its in-image defaults.
+    assert await config_yaml_store.get_template("hexarchy") == {"type": "object"}
