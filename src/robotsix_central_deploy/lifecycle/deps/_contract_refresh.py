@@ -164,7 +164,19 @@ async def refresh_component_contract(
         caretaker_auto_update=comp_cfg.caretaker_auto_update,
         mem_limit=comp_cfg.mem_limit,
         allow_chat_access=comp_cfg.allow_chat_access,
-        claude_mount=comp_cfg.claude_mount,
+        # claude_mount has TWO legitimate grant sources: the compose label
+        # (parsed into the spec) and the operator API (stored). A refresh must
+        # never lose a grant from either side — the pre-2026-09-01 code pinned
+        # the stored value, so a label added to the compose could never take
+        # effect and a stale stored False silently dropped the claude-auth
+        # mount on the next recreate (mill outage). The path follows the label
+        # when the label grants the mount (it may relocate the credentials,
+        # e.g. mill's /home/mill/.claude); an operator-only grant keeps the
+        # stored path. Revocation is operator-API-only, deliberately.
+        claude_mount=comp_cfg.claude_mount or spec.claude_mount,
+        claude_mount_path=(
+            spec.claude_mount_path if spec.claude_mount else comp_cfg.claude_mount_path
+        ),
     )
 
     # Diff: collect which contract-derived fields changed.

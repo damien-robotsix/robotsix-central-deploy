@@ -424,6 +424,55 @@ class TestRefreshContract:
         assert data["name"] == "svc-a"
         assert data["changed_fields"] == []
 
+    async def test_refresh_adopts_label_claude_mount(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """The compose label owns ``claude_mount``: a stored ``False`` (the
+        pre-label operator default) must flip to the parsed ``True`` on
+        refresh, or the next recreate silently drops the claude-auth mount
+        (mill outage, 2026-09-01)."""
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(
+            config_store,
+            "svc-a",
+            git_url="https://github.com/org/test.git",
+            image="svc-a:latest",
+        )
+        assert config_store.get("svc-a").claude_mount is False
+
+        spec = _make_derived_spec(name="svc-a", image="svc-a:latest")
+        spec.claude_mount = True
+        spec.claude_mount_path = "/home/mill/.claude"
+
+        async def _fake_fetch(name, ccs, lifecycle_config=None):
+            return (
+                config_store.get("svc-a"),
+                RepoFiles(
+                    compose_bytes=b"services:\n  svc:\n    image: svc-a:latest",
+                    config_json=None,
+                    config_schema_json=None,
+                ),
+            )
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.deps._contract_refresh._fetch_component_repo_files",
+            _fake_fetch,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            lambda compose_bytes, name, git_url: spec,
+        )
+
+        resp = await client.post(
+            "/services/svc-a/refresh-contract", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "claude_mount" in data["changed_fields"]
+        stored = config_store.get("svc-a")
+        assert stored.claude_mount is True
+        assert stored.claude_mount_path == "/home/mill/.claude"
+
     async def test_happy_path_with_changes(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
