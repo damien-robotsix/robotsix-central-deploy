@@ -1,1 +1,0 @@
-deploy: verify the edge after every deploy. A component can be healthy and unreachable at the same time — the deploy now probes its public /health and records a warning on the deploy job when the edge has no router for it, instead of reporting success and leaving the 404 to be found by whoever opens the URL next.

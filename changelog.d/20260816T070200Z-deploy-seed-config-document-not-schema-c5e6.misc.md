@@ -1,1 +1,0 @@
-deploy: seed an empty config volume with the config document the schema describes, not the JSON Schema itself. A component whose volume was seeded with the raw schema found none of its settings and silently fell back to in-image defaults, ignoring the volumes its contract mounts.
