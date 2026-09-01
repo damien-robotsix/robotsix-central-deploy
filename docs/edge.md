@@ -253,6 +253,27 @@ A browser gets `302` to the SSO login. A plain `curl` gets `401` — tinyauth
 distinguishes the two, so **`401` is a healthy answer**, not a failure. `404`
 means no router exists.
 
+## The deploy verifies its own route
+
+Container health and edge routing fail independently, and the deploy used to
+report only the first. A component whose registry entry had lost its port
+deployed healthy for days behind a public URL that answered 404, because
+nothing in the deploy path ever looked at that URL.
+
+Every deploy now finishes by probing `https://<id>.<base-domain>/health` — the
+auth-exempt router, so no credentials are involved. A **404 is the signature of
+"no router exists"**; `401` and `302` both mean the edge routed the request and
+the gate answered, and count as success. The probe retries across the recreate
+window below before concluding anything.
+
+The result is advisory. It never fails a deploy that otherwise succeeded — it
+appends to the `warnings` list on the deploy job, which `GET
+/services/deploy-jobs/{job_id}` returns, so the operator UI and the chat agent
+both see it.
+
+A component with no gateway configured, no port, or `routable` unset is skipped:
+there is no public URL to hold to account.
+
 ## Redeploying a component briefly 404s it
 
 Routes live on the container, so changing one means recreating the container.

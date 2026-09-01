@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Self
+
+import pytest
+
 from robotsix_central_deploy.lifecycle.routers.services_deploy import (
     _build_sibling_config,
 )
@@ -122,3 +126,190 @@ def test_build_sibling_config_defaults_preserved() -> None:
     assert result.user is None  # ComponentConfig default
     assert result.env == {}
     assert result.named_volumes == []
+
+
+# ---------------------------------------------------------------------------
+# _verify_edge_route
+# ---------------------------------------------------------------------------
+
+
+def _routable_config() -> ComponentConfig:
+    return ComponentConfig(
+        id="widget",
+        image="widget:latest",
+        container_name="widget",
+        ports=[PortMapping(host=8300, container=8080, protocol="tcp")],
+    )
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+
+
+class _FakeClient:
+    """Stands in for httpx.AsyncClient, replaying a scripted set of outcomes."""
+
+    def __init__(self, outcomes: list[object]) -> None:
+        self._outcomes = outcomes
+        self.requested: list[str] = []
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> bool:
+        return False
+
+    async def get(self, url: str) -> _FakeResponse:
+        self.requested.append(url)
+        outcome = self._outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        assert isinstance(outcome, _FakeResponse)
+        return outcome
+
+
+def _patch_probe(monkeypatch, outcomes: list[object]) -> _FakeClient:
+    """Install the fake client and remove the inter-attempt sleep."""
+    import robotsix_central_deploy.lifecycle.routers.services_deploy as mod
+
+    client = _FakeClient(outcomes)
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda **kwargs: client)
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(mod.asyncio, "sleep", _no_sleep)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_passes_when_the_edge_answers(monkeypatch) -> None:
+    """A 200 from the auth-exempt /health router means the route exists."""
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _verify_edge_route,
+    )
+
+    client = _patch_probe(monkeypatch, [_FakeResponse(200)])
+
+    assert await _verify_edge_route(_routable_config(), "deploy.robotsix.net") is None
+    assert client.requested == ["https://widget.deploy.robotsix.net/health"]
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_accepts_the_sso_gate(monkeypatch) -> None:
+    """401 means the edge routed the request and tinyauth answered — healthy.
+
+    docs/edge.md is explicit that 401 is a healthy answer and only 404 means
+    no router exists; treating the gate's own reply as a failure would warn on
+    every correctly-routed component.
+    """
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _verify_edge_route,
+    )
+
+    _patch_probe(monkeypatch, [_FakeResponse(401)])
+
+    assert await _verify_edge_route(_routable_config(), "deploy.robotsix.net") is None
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_warns_when_no_router_exists(monkeypatch) -> None:
+    """The regression: healthy container, 404 at the public URL.
+
+    This is the signal that was missing entirely — file-hub deployed healthy
+    for days behind a hostname the edge had no router for.
+    """
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _EDGE_PROBE_ATTEMPTS,
+        _verify_edge_route,
+    )
+
+    client = _patch_probe(
+        monkeypatch, [_FakeResponse(404) for _ in range(_EDGE_PROBE_ATTEMPTS)]
+    )
+
+    warning = await _verify_edge_route(_routable_config(), "deploy.robotsix.net")
+
+    assert warning is not None
+    assert "404" in warning
+    assert "https://widget.deploy.robotsix.net/health" in warning
+    # It retried rather than judging on the recreate window alone.
+    assert len(client.requested) == _EDGE_PROBE_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_tolerates_the_recreate_window(monkeypatch) -> None:
+    """A 404 while Traefik is still catching up must not raise a false alarm.
+
+    Recreating a container takes its route with it for a few seconds, so the
+    first probe of a perfectly healthy component can legitimately 404.
+    """
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _verify_edge_route,
+    )
+
+    _patch_probe(
+        monkeypatch, [_FakeResponse(404), _FakeResponse(404), _FakeResponse(200)]
+    )
+
+    assert await _verify_edge_route(_routable_config(), "deploy.robotsix.net") is None
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_reports_a_bad_gateway(monkeypatch) -> None:
+    """A route that exists but leads nowhere is worth saying out loud."""
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _EDGE_PROBE_ATTEMPTS,
+        _verify_edge_route,
+    )
+
+    _patch_probe(monkeypatch, [_FakeResponse(502) for _ in range(_EDGE_PROBE_ATTEMPTS)])
+
+    warning = await _verify_edge_route(_routable_config(), "deploy.robotsix.net")
+
+    assert warning is not None
+    assert "502" in warning
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_skips_unroutable_components(monkeypatch) -> None:
+    """No gateway, no port, or not routable: there is no URL to hold to account."""
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _verify_edge_route,
+    )
+
+    client = _patch_probe(monkeypatch, [])
+
+    assert await _verify_edge_route(_routable_config(), "") is None
+    assert (
+        await _verify_edge_route(
+            _routable_config().model_copy(update={"ports": []}),
+            "deploy.robotsix.net",
+        )
+        is None
+    )
+    assert client.requested == []
+
+
+@pytest.mark.asyncio
+async def test_verify_edge_route_never_raises(monkeypatch) -> None:
+    """A transport failure becomes a warning, never an exception.
+
+    The check is advisory: it must not be able to fail a deploy that
+    otherwise succeeded.
+    """
+    from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+        _EDGE_PROBE_ATTEMPTS,
+        _verify_edge_route,
+    )
+
+    _patch_probe(
+        monkeypatch,
+        [ConnectionError("dns is down") for _ in range(_EDGE_PROBE_ATTEMPTS)],
+    )
+
+    warning = await _verify_edge_route(_routable_config(), "deploy.robotsix.net")
+
+    assert warning is not None
+    assert "ConnectionError" in warning
