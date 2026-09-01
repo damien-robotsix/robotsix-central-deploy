@@ -120,3 +120,12 @@ _.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:28)
 _ = _canonical_hash  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:27)
 _ = _is_key_secret  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:619)
 _ = _restore_secrets_from_current  # unused function (src/robotsix_central_deploy/lifecycle/_config_utils.py:666)
+
+# volume_audit models: pydantic fields serialized into the findings JSONL and
+# the GET /volumes/audit response — read by consumers (dashboard, operator,
+# chat agent), not by name in this package. Their last in-package reader was
+# the board-ticket description builder, removed with the caretaker's
+# ticket-filing capability (2026-09-01).
+VolumeGrowthRecord.delta_bytes
+AuditFinding.finding_at
+AuditFinding.delta_bytes

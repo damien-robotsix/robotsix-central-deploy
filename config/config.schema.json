@@ -292,29 +292,6 @@
       "title": "Chat Volume Write Max Bytes",
       "type": "integer"
     },
-    "board_api_url": {
-      "advanced": true,
-      "default": "",
-      "description": "Board API base URL for filing audit-finding tickets; empty disables.",
-      "title": "Board Api Url",
-      "type": "string"
-    },
-    "board_api_token": {
-      "advanced": true,
-      "default": "",
-      "description": "Bearer token for the board API.",
-      "format": "password",
-      "title": "Board Api Token",
-      "type": "string",
-      "writeOnly": true
-    },
-    "board_repo_id": {
-      "advanced": true,
-      "default": "",
-      "description": "Board repo id under which audit tickets are filed.",
-      "title": "Board Repo Id",
-      "type": "string"
-    },
     "github_app_id": {
       "advanced": true,
       "default": "",
@@ -403,7 +380,7 @@
     "mill_component_id": {
       "advanced": true,
       "default": "",
-      "description": "Component id of the mill instance the caretaker reports findings to.",
+      "description": "Component id of the mill instance onboarding registers repos with.",
       "title": "Mill Component Id",
       "type": "string"
     },

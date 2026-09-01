@@ -3,7 +3,6 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -128,48 +127,26 @@ class TestReportFinding:
         assert names == ["vol-3", "vol-4", "vol-5", "vol-6", "newest"]
 
     @pytest.mark.asyncio
-    async def test_creates_ticket_via_board_client(self, tmp_path: Path):
-        """When board_client is provided, create_ticket is called with correct args."""
+    async def test_finding_is_recorded_and_never_becomes_a_ticket(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        """The reporter records locally and files NO ticket anywhere.
+
+        The caretaker's ticket-filing capability was removed outright
+        (operator decision, 2026-09-01): a finding lands in the log and the
+        findings JSON — the signature takes no client and performs no HTTP.
+        """
+        import inspect
+
         findings_path = tmp_path / "findings.json"
-        board_client = MagicMock()
-        board_client.create_ticket = AsyncMock(return_value={"id": "ticket-42"})
-        finding = _make_finding()
 
-        await report_finding(finding, findings_path, board_client=board_client)
+        with caplog.at_level("WARNING"):
+            await report_finding(_make_finding(), findings_path)
 
-        board_client.create_ticket.assert_awaited_once()
-        call_kwargs = board_client.create_ticket.call_args.kwargs
-        assert call_kwargs["kind"] == "task"
-        assert call_kwargs["source"] == "volume-audit"
-        assert "test-vol" in call_kwargs["title"]
-        # Verify local JSON was also written
-        assert findings_path.exists()
-
-    @pytest.mark.asyncio
-    async def test_handles_board_client_error_gracefully(self, tmp_path: Path):
-        """When create_ticket raises, the error is caught and does not propagate."""
-        findings_path = tmp_path / "findings.json"
-        board_client = MagicMock()
-        board_client.create_ticket = AsyncMock(
-            side_effect=RuntimeError("board API down")
-        )
-        finding = _make_finding()
-
-        # Must not raise
-        await report_finding(finding, findings_path, board_client=board_client)
-
-        board_client.create_ticket.assert_awaited_once()
-        # Local JSON should still have been written
         assert findings_path.exists()
         data = json.loads(findings_path.read_text())
         assert len(data) == 1
-
-    @pytest.mark.asyncio
-    async def test_no_board_client_no_ticket_creation(self, tmp_path: Path):
-        """When board_client is None, no ticket creation is attempted."""
-        findings_path = tmp_path / "findings.json"
-
-        await report_finding(_make_finding(), findings_path)
-
-        # Should succeed without any board interaction
-        assert findings_path.exists()
+        assert any("Volume audit finding" in r.message for r in caplog.records)
+        # The ticket seam is gone at the signature level — nothing to inject.
+        params = inspect.signature(report_finding).parameters
+        assert set(params) == {"finding", "findings_path"}

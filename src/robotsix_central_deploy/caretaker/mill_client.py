@@ -1,4 +1,10 @@
-"""HTTP client for the mill component's ticket-ingest and repo-registration APIs."""
+"""HTTP client for the mill component's ticket-ingest and repo-registration APIs.
+
+Used ONLY by the onboarding flow (repo registration + the one-time
+port-collision finding). The periodic caretaker no longer talks to the mill:
+it records findings locally and just updates containers (operator decision,
+2026-09-01).
+"""
 
 from __future__ import annotations
 
@@ -57,26 +63,6 @@ class MillClient:
             return False
         except httpx.HTTPError as exc:
             logger.warning("mill ingest call failed: %s", exc)
-            return False
-
-    async def health_check(self) -> bool:
-        """GET {base_url}/health — lightweight reachability probe.
-
-        Returns True when the mill responds with a 2xx status, False
-        on any error or non-2xx response.  This is the authoritative
-        reachability signal; it is independent of ingest success.
-        """
-        try:
-            await self._http.get(f"{self._base_url}/health")
-            return True
-        except ExternalHTTPError as exc:
-            logger.warning(
-                "mill health probe returned %d",
-                exc.status_code,
-            )
-            return False
-        except httpx.HTTPError as exc:
-            logger.warning("mill health probe failed: %s", exc)
             return False
 
     async def register_repo(self, repo_id: str, git_url: str) -> bool:

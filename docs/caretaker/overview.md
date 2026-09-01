@@ -14,12 +14,11 @@ CaretakerScheduler.loop()  (scheduler.py)
   ├─ 1. Read current settings (caretaker_enabled, caretaker_interval_hours)
   ├─ 2. Sleep caretaker_interval_hours (min 1 hour)
   ├─ 3. run_once():
-  │      ├─ Probe mill reachability (GET /health)
   │      ├─ phase_update()     — deploy updated images for opted-in components
   │      │   └─ auto-prune dangling images (if image_auto_prune == True)
   │      ├─ phase_health()     — probe all container health states
   │      ├─ phase_volumes()    — volume growth scan + orphan detection + disk check
-  │      └─ Report findings → mill (POST /tickets/ingest) or local JSONL fallback
+  │      └─ Record findings locally (WARNING log + caretaker_findings.jsonl)
   └─ 4. Loop back to step 1; respect CancelledError for graceful shutdown
 ```
 
@@ -27,8 +26,8 @@ CaretakerScheduler.loop()  (scheduler.py)
 
 - **`models.py`** — Pydantic data types: `FindingKind` (enum of finding
   categories), `CaretakerFinding` (single issue with component, severity,
-  title, detail), `CaretakerReport` (aggregate pass result with timing,
-  phases run, and mill reporting status).
+  title, detail), `CaretakerReport` (aggregate pass result with timing and
+  phases run).
 - **`scheduler.py`** — `CaretakerScheduler`: long-running async orchestrator
   that reads settings each iteration, sleeps the configured interval, and
   invokes all three phases via `run_once()`. Exposes `get_status()` for the
@@ -38,9 +37,9 @@ CaretakerScheduler.loop()  (scheduler.py)
   (Docker health probe), `phase_volumes()` (volume audit, orphan detection,
   disk threshold check). Each returns `list[CaretakerFinding]`.
 - **`mill_client.py`** — `MillClient`: thin async HTTP wrapper for the mill
-  component. Provides `ingest_finding()` (POST findings), `health_check()`
-  (reachability probe), and `derive_url_from_registry()` (resolve the mill
-  container address from the registry).
+  component, used ONLY by the onboarding flow (repo registration and the
+  one-time port-collision finding) — the periodic caretaker no longer talks
+  to the mill.
 
 ## Finding Model
 
@@ -49,7 +48,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 | Field | Type | Purpose |
 | ------- | ------ | --------- |
 | `component_id` | `str \| None` | Affected component (or `None` for system-wide) |
-| `repo_id` | `str \| None` | Board repo id for ticket filing |
+| `repo_id` | `str \| None` | Upstream repository identifier (informational) |
 | `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION` |
 | `title` | `str` | Short human-readable summary |
 | `detail` | `str` | Full description |
@@ -68,7 +67,7 @@ Self-contract changes take effect on the next server restart.
 | ---------- | ------ | --------- | ------------- |
 | `caretaker_enabled` | `bool` | `False` | Master switch for the caretaker loop |
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |
-| `mill_component_id` | `str` | `"mill"` | Component id of the mill to report findings to |
+| `mill_component_id` | `str` | `"mill"` | Component id of the mill (used by onboarding repo registration) |
 | `image_auto_prune` | `bool` | `False` | Whether to prune dangling images after successful updates |
 | `disk_warn_pct` | `float` | `10.0` | Percent free disk space that triggers a `DISK` finding |
 
@@ -79,11 +78,12 @@ Additionally, per-component `caretaker_auto_update: bool` (default `True`) in
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/caretaker/status` | Yes | Returns `{enabled, last_run_at, mill_reachable, last_report}` |
+| GET | `/caretaker/status` | Yes | Returns `{enabled, last_run_at, last_report}` |
 
 ## Reporting
 
-Findings are sent to the mill component via `POST /tickets/ingest` when
-the mill is reachable. If the mill is unreachable or the ingest call fails,
-findings are appended to a local JSONL file (`caretaker_findings.jsonl`,
-capped at the most recent 200 entries) as a fallback so no finding is lost.
+The caretaker never files tickets (operator decision, 2026-09-01: it "just
+updates the containers"). Every finding is logged at WARNING level and
+appended to a local JSONL file (`caretaker_findings.jsonl`, capped at the
+most recent 200 entries), where the operator, the fleet monitor, and the
+chat agent can read them.

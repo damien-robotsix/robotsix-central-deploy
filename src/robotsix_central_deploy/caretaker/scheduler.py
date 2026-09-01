@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 from robotsix_http import RetryClient
 
-from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport
 from .phases import phase_health, phase_update, phase_volumes
 
@@ -81,7 +80,6 @@ class CaretakerScheduler:
         self._findings_path = self._resolve_findings_path(config)
 
         self._last_report: CaretakerReport | None = None
-        self._mill_reachable: bool = True
 
     @staticmethod
     def _resolve_findings_path(config: LifecycleConfig) -> Path:
@@ -102,40 +100,10 @@ class CaretakerScheduler:
         errors: list[str] = []
         findings: list[CaretakerFinding] = []
         phases_run: list[str] = []
-        mill_reported = 0
-        local_only = 0
 
         settings = await self._settings_store.get()
 
-        # 1. Discover mill URL and probe reachability
-        mill_url = MillClient.derive_url_from_registry(
-            self._registry,
-            self._component_config_store,
-            settings.mill_component_id,
-        )
-        mill_client: MillClient | None = None
-        mill_reachable_detail = ""
-
-        if mill_url is None:
-            # Distinguish whether the component is missing or just has no ports.
-            mill_cfg = self._component_config_store.get(settings.mill_component_id)
-            if mill_cfg is None:
-                mill_reachable_detail = "mill component not registered"
-            else:
-                mill_reachable_detail = "no ports declared"
-        else:
-            mill_client = MillClient(mill_url, self._http_client)
-            try:
-                healthy = await mill_client.health_check()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("mill health probe raised: %s", exc)
-                healthy = False
-            if healthy:
-                mill_reachable_detail = "ok"
-            else:
-                mill_reachable_detail = "health probe failed"
-
-        # 2. Phase: UPDATE
+        # 1. Phase: UPDATE
         # Identify our own container so phase_update never tries to auto-deploy
         # (and thereby kill) the process running this pass — see phase_update.
         self_container_name = ""
@@ -200,7 +168,7 @@ class CaretakerScheduler:
             logger.exception("phase_update crashed")
             errors.append(f"phase_update: {exc}")
 
-        # 3. Phase: HEALTH
+        # 2. Phase: HEALTH
         try:
             health_findings = await phase_health(
                 self._registry,
@@ -214,7 +182,7 @@ class CaretakerScheduler:
             logger.exception("phase_health crashed")
             errors.append(f"phase_health: {exc}")
 
-        # 4. Phase: VOLUMES
+        # 3. Phase: VOLUMES
         if self._volume_audit_scheduler is not None:
             try:
                 volume_findings = await phase_volumes(
@@ -232,24 +200,19 @@ class CaretakerScheduler:
         else:
             logger.debug("phase_volumes skipped: no VolumeAuditScheduler")
 
-        # 5. Report findings: mill ingest or local fallback
+        # 4. Record findings locally. The caretaker never files tickets
+        # (operator decision, 2026-09-01: it "just updates the containers") —
+        # findings land in caretaker_findings.jsonl and the log, where the
+        # operator, the fleet monitor, and the chat agent can read them.
         for f in findings:
-            if f.repo_id and mill_client is not None:
-                ok = await mill_client.ingest_finding(f)
-                if ok:
-                    mill_reported += 1
-                else:
-                    self._append_local(f)
-                    local_only += 1
-            else:
-                self._append_local(f)
-                local_only += 1
-
-        # mill_reachable: determined by the /health probe performed above,
-        # not by ingest success.  A healthy mill is reachable regardless of
-        # whether individual ingest calls succeed.
-        mill_reachable = mill_reachable_detail == "ok"
-        self._mill_reachable = mill_reachable
+            logger.warning(
+                "caretaker finding [%s] %s%s: %s",
+                f.kind.value,
+                f.component_id or "host",
+                f" ({f.repo_id})" if f.repo_id else "",
+                f.title,
+            )
+            self._append_local(f)
 
         finished_at = datetime.now(tz=UTC)
         report = CaretakerReport(
@@ -257,11 +220,7 @@ class CaretakerScheduler:
             finished_at=finished_at,
             findings=findings,
             phases_run=phases_run,
-            mill_reported=mill_reported,
-            local_only=local_only,
             errors=errors,
-            mill_reachable=mill_reachable,
-            mill_reachable_detail=mill_reachable_detail,
         )
         self._last_report = report
         return report
@@ -283,7 +242,7 @@ class CaretakerScheduler:
             logger.error("Failed to write local finding: %s", exc)
 
     async def get_status(self) -> dict[str, Any]:
-        """Return {enabled, last_run_at, mill_reachable, last_report}."""
+        """Return {enabled, last_run_at, last_report}."""
         settings = await self._settings_store.get()
         return {
             "enabled": settings.caretaker_enabled,
@@ -291,12 +250,6 @@ class CaretakerScheduler:
                 self._last_report.finished_at.isoformat()
                 if self._last_report is not None
                 else None
-            ),
-            "mill_reachable": self._mill_reachable,
-            "mill_reachable_detail": (
-                self._last_report.mill_reachable_detail
-                if self._last_report is not None
-                else ""
             ),
             "last_report": (
                 self._last_report.model_dump(mode="json")

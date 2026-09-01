@@ -6,7 +6,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from robotsix_http import ExternalHTTPError, RetryClient
+from robotsix_http import RetryClient
 
 from robotsix_central_deploy.caretaker.models import CaretakerReport
 from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
@@ -169,191 +169,46 @@ class TestScheduler:
         assert captured["args"][-1] is expect_known
 
     @pytest.mark.asyncio
-    async def test_run_once_routes_to_mill(self, scheduler_fixtures, monkeypatch):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
-
-        store.list_all = AsyncMock(return_value=[])
-        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
-
-        # Prevent spurious disk-warning findings in the sandbox
-        monkeypatch.setattr(
-            "shutil.disk_usage",
-            lambda path: (10**12, 9 * 10**11, 10**11),
-        )
-
-        _register_mill(ccs)
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
-        http.get = AsyncMock(return_value=MagicMock(is_success=True))
-
-        # Make phase_health emit a finding with repo_id
-        record = ServiceRecord(
-            name="svc",
-            image="repo:v1",
-            repo_id="my-repo",
-        )
-        store.list_all = AsyncMock(return_value=[record])
-        backend.status = AsyncMock(
-            return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
-        )
-
-        report = await scheduler.run_once()
-        assert report.mill_reported >= 1
-        assert report.local_only == 0
-        assert report.mill_reachable is True
-
-    @pytest.mark.asyncio
-    async def test_run_once_mill_unreachable_fallback(self, scheduler_fixtures):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
-
-        _register_mill(ccs)
-        # Health probe fails → mill_reachable=False, detail="health probe failed".
-        http.get = AsyncMock(
-            side_effect=ExternalHTTPError(
-                "health probe failed",
-                status_code=503,
-                response=MagicMock(),
-            )
-        )
-        http.post = AsyncMock(
-            side_effect=ExternalHTTPError(
-                "ingest failed",
-                status_code=500,
-                response=MagicMock(),
-            )
-        )
-
-        record = ServiceRecord(
-            name="svc",
-            image="repo:v1",
-            repo_id="my-repo",
-        )
-        store.list_all = AsyncMock(return_value=[record])
-        backend.status = AsyncMock(
-            return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
-        )
-        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
-
-        report = await scheduler.run_once()
-        assert report.mill_reported == 0
-        assert report.local_only >= 1
-        assert report.mill_reachable is False
-        assert report.mill_reachable_detail == "health probe failed"
-
-    @pytest.mark.asyncio
-    async def test_run_once_no_findings_mill_reachable(
-        self, scheduler_fixtures, monkeypatch
+    async def test_findings_are_recorded_locally_never_ingested(
+        self, scheduler_fixtures, monkeypatch, caplog
     ):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
+        """Findings land in the log + local JSONL and NEVER become tickets.
 
-        _register_mill(ccs)
-        store.list_all = AsyncMock(return_value=[])
+        The caretaker's ticket-filing capability was removed outright
+        (operator decision, 2026-09-01: it "just updates the containers") —
+        no mill probe, no ingest POST, regardless of repo_id.
+        """
+        scheduler, store, backend, _ccs, http = scheduler_fixtures
+
         backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
-
-        # Prevent spurious disk-warning findings in the sandbox
         monkeypatch.setattr(
             "shutil.disk_usage",
             lambda path: (10**12, 9 * 10**11, 10**11),
         )
 
-        http.get = AsyncMock(return_value=MagicMock(is_success=True))
-
-        report = await scheduler.run_once()
-        # No findings → mill_reachable=True (no ingest attempted means we don't know
-        # it's unreachable)
-        assert report.mill_reachable is True
-        assert report.mill_reported == 0
-        assert report.local_only == 0
-
-    @pytest.mark.asyncio
-    async def test_run_once_untracked_local_only(self, scheduler_fixtures):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
-
-        _register_mill(ccs)
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
-        http.get = AsyncMock(return_value=MagicMock(is_success=True))
-
-        # Component with no repo_id → local only
-        record = ServiceRecord(
-            name="svc",
-            image="repo:v1",
-            repo_id="",  # untracked
-        )
-        store.list_all = AsyncMock(return_value=[record])
-        backend.status = AsyncMock(
-            return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
-        )
-        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
-
-        report = await scheduler.run_once()
-        assert report.local_only >= 1
-        assert report.mill_reported == 0
-        http.post.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_repo_id_in_ingest_payload(self, scheduler_fixtures):
-        scheduler, store, backend, ccs, http = scheduler_fixtures
-
-        _register_mill(ccs)
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
-        http.get = AsyncMock(return_value=MagicMock(is_success=True))
-
-        record = ServiceRecord(
-            name="svc",
-            image="repo:v1",
-            repo_id="specific-repo",
-        )
-        store.list_all = AsyncMock(return_value=[record])
-        backend.status = AsyncMock(
-            return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
-        )
-        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
-
-        _report = await scheduler.run_once()
-        # Verify the ingest payload contained the right repo_id
-        # Find the call with repo_id="specific-repo"
-        found = False
-        for call in http.post.call_args_list:
-            _args, kwargs = call
-            json_body = kwargs.get("json", {})
-            if json_body.get("repo_id") == "specific-repo":
-                found = True
-                assert json_body["source_tag"] == "caretaker/health"
-                break
-        assert found, "Expected ingest call with repo_id='specific-repo'"
-
-    @pytest.mark.asyncio
-    async def test_custom_mill_component_id(self, scheduler_fixtures):
-        """A mill onboarded under a non-default name is discovered via the
-        ``mill_component_id`` system setting."""
-        from robotsix_central_deploy.registry.settings_store import SystemSettings
-
-        scheduler, store, backend, ccs, http = scheduler_fixtures
-
-        await scheduler._settings_store.put(
-            SystemSettings(caretaker_enabled=True, mill_component_id="my-mill")
-        )
-        # Only "my-mill" resolves; the default "mill" id does not exist.
-        mill_cfg = MagicMock()
-        mill_cfg.container_name = "my-mill"
-        mill_cfg.ports = [MagicMock(host=9999, container=9999)]
-        ccs.get = MagicMock(
-            side_effect=lambda cid: mill_cfg if cid == "my-mill" else None
-        )
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
-        http.get = AsyncMock(return_value=MagicMock(is_success=True))
-
+        # A stopped tracked service makes phase_health emit a finding WITH a
+        # repo_id — exactly the case the old code forwarded to the mill.
         record = ServiceRecord(name="svc", image="repo:v1", repo_id="my-repo")
         store.list_all = AsyncMock(return_value=[record])
         backend.status = AsyncMock(
             return_value=ComponentInspect(state=ServiceState.STOPPED, health="")
         )
-        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        http.post = AsyncMock()
+        http.get = AsyncMock()
 
-        report = await scheduler.run_once()
-        assert report.mill_reported >= 1
-        assert report.mill_reachable is True
-        args, _kwargs = http.post.call_args_list[0]
-        assert args[0].startswith("http://my-mill:9999")
+        with caplog.at_level("WARNING"):
+            report = await scheduler.run_once()
+
+        assert len(report.findings) >= 1
+        # Recorded locally: JSONL written and a WARNING logged per finding.
+        assert scheduler._findings_path.exists()
+        assert any("caretaker finding" in r.message for r in caplog.records)
+        # Never a ticket: no HTTP at all from the reporting step.
+        http.post.assert_not_awaited()
+        http.get.assert_not_awaited()
+        # The mill-reporting counters are gone from the report model.
+        assert not hasattr(report, "mill_reported")
+        assert not hasattr(report, "mill_reachable")
 
     @pytest.mark.asyncio
     async def test_image_auto_prune_after_update(self, scheduler_fixtures):
@@ -472,7 +327,6 @@ class TestScheduler:
         status = await scheduler.get_status()
         assert "enabled" in status
         assert "last_run_at" in status
-        assert "mill_reachable" in status
-        assert "mill_reachable_detail" in status
         assert "last_report" in status
+        assert "mill_reachable" not in status
         assert status["enabled"] is True

@@ -47,11 +47,6 @@ function dismissDeploySuccess() {
   loadDashboard();
 }
 
-function hideCaretakerDegradedBanner() {
-  const el = document.getElementById('caretaker-degraded-banner');
-  if (el) el.classList.add('hidden');
-}
-
 // Delegated click handler — dispatches data-action attributes so the
 // dashboard works under a strict CSP (script-src-attr 'none').
 document.addEventListener('click', function(e) {
@@ -1592,20 +1587,6 @@ function hideClaudeAuthSection() {
   document.querySelector('table').style.display = '';
 }
 
-async function checkCaretakerStatus() {
-  try {
-    var res = await fetch('/caretaker/status', { headers: authHeaders(), credentials: 'same-origin' });
-    if (!res.ok) return;
-    var data = await res.json();
-    var banner = document.getElementById('caretaker-degraded-banner');
-    if (data.enabled && !data.mill_reachable) {
-      banner.classList.remove('hidden');
-    } else {
-      banner.classList.add('hidden');
-    }
-  } catch (_) { /* transient */ }
-}
-
 // ── Volume browser ────────────────────────────────────────────────
 
 let currentVolumeName = null;
@@ -2083,7 +2064,6 @@ async function pollSelfUpdateRecovery(startedAt) {
   loadDashboard();
   startAutoRefresh();
   checkSelfUpdate();
-  checkCaretakerStatus();
   fetchClaudeAuthStatus();
   setInterval(checkSelfUpdate, 5 * 60 * 1000);
 })();

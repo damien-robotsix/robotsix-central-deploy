@@ -27,7 +27,7 @@ import robotsix_central_deploy.lifecycle.app as server_mod
 #: A top-level ``SecretStr`` that still exists on ``LifecycleConfig``. These
 #: tests used ``api_key`` until PR #775 deleted it; nothing here depends on
 #: which field it is, only that it is a top-level secret.
-SECRET_FIELD = "board_api_token"
+SECRET_FIELD = "github_repo_create_token"
 SECRET_VALUE = "tok-live"
 #: A second top-level secret, left unset, for the "do not mask what is not
 #: there" case. Must be a different field from SECRET_FIELD.

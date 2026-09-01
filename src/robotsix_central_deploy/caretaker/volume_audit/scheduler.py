@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...lifecycle.backends import ExecutionBackend
     from ...lifecycle.config import LifecycleConfig
-    from .board import BoardClient
 
 from ...registry.config_store import ComponentConfigStore
 from .growth import compute_growth_records
@@ -119,25 +118,18 @@ class VolumeAuditScheduler:
             self._config.volume_audit_min_delta_bytes,
         )
 
-        # 4. Create a single board client for this scan pass (reused across
-        #    all findings), then emit findings through the report seam.
-        board_client = await self._maybe_create_board_client()
-        try:
-            for finding in findings:
-                try:
-                    await report_finding(finding, self._findings_path, board_client)
-                except Exception as exc:  # noqa: BLE001
-                    logger.error(
-                        "report_finding failed for %s: %s",
-                        finding.volume_name,
-                        exc,
-                    )
-        finally:
-            if board_client is not None:
-                try:
-                    await board_client.close()
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("Failed to close board client: %s", exc)
+        # 4. Record findings locally (log + findings JSON). No tickets —
+        # the caretaker just updates containers (operator decision,
+        # 2026-09-01).
+        for finding in findings:
+            try:
+                await report_finding(finding, self._findings_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "report_finding failed for %s: %s",
+                    finding.volume_name,
+                    exc,
+                )
 
         # 5. Persist new snapshot and update in-memory state
         self._save_snapshots(current)
@@ -150,27 +142,6 @@ class VolumeAuditScheduler:
             len(findings),
         )
         return records
-
-    async def _maybe_create_board_client(self) -> BoardClient | None:
-        """Return a BoardClient if board integration is configured, else None."""
-        cfg = self._config
-        if (
-            cfg.board_api_url
-            and cfg.board_api_token.get_secret_value()
-            and cfg.board_repo_id
-        ):
-            try:
-                from .board import BoardClient
-
-                return BoardClient(
-                    base_url=cfg.board_api_url,
-                    token=cfg.board_api_token.get_secret_value(),
-                    repo_id=cfg.board_repo_id,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Failed to create board client: %s", exc)
-                return None
-        return None
 
     async def loop(self, interval_seconds: int) -> None:
         """Run run_once() repeatedly with *interval_seconds* sleep between passes.
