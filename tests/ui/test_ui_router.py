@@ -242,11 +242,7 @@ class TestRobotsixUiAssets:
         assert "robotsix-ui-base.css" not in html
 
     def test_css_url_uses_release_download_path(self):
-        # URL construction is delegated to the robotsix-ui package helpers,
-        # not reconstructed locally.
-        from robotsix_ui import css_url
-
-        assert css_url("v0.1.30") == (
+        assert robotsix_ui_assets.css_url("v0.1.30") == (
             "https://github.com/damien-robotsix/robotsix-ui/"
             "releases/download/v0.1.30/style.css"
         )
