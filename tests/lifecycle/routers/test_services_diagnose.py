@@ -389,7 +389,7 @@ async def test_diagnose_basic(
         "traefik.http.routers.test-svc-health.priority": "30",
         "traefik.http.routers.test-svc-health.entrypoints": "websecure",
         "traefik.http.routers.test-svc-health.service": "test-svc",
-        "traefik.http.routers.test-svc-bearer.rule": "Host(`test-svc.example.com`) && HeadersRegexp(`Authorization`, `^Bearer .+`)",
+        "traefik.http.routers.test-svc-bearer.rule": "Host(`test-svc.example.com`) && HeaderRegexp(`Authorization`, `^Bearer .+`)",
         "traefik.http.routers.test-svc-bearer.priority": "20",
         "traefik.http.routers.test-svc-bearer.entrypoints": "websecure",
         "traefik.http.routers.test-svc-bearer.service": "test-svc",
