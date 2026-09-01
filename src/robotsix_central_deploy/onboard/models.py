@@ -99,7 +99,7 @@ class DerivedSpec(BaseModel):
     )
     llmio_tier_level: str | None = Field(
         default=None,
-        description='LLM I/O tier level ("level1" through "level4") from robotsix.deploy.llmio-tier-level label; null when unset',
+        description='LLM I/O tier level ("level1" through "level3") from robotsix.deploy.llmio-tier-level label; null when unset',
     )
     allow_chat_access: bool = Field(
         default=False,

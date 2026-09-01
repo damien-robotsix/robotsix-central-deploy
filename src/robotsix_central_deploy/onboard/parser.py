@@ -39,7 +39,7 @@ LABEL_CONFIG_ASSIST = "robotsix.deploy.config-assist"  # shell command string
 LABEL_CONFIG_ASSIST_SEEDS = (
     "robotsix.deploy.config-assist-seeds"  # comma-separated config keys
 )
-LABEL_LLMIO_TIER_LEVEL = "robotsix.deploy.llmio-tier-level"  # "level1"–"level4"
+LABEL_LLMIO_TIER_LEVEL = "robotsix.deploy.llmio-tier-level"  # "level1"–"level3"
 LABEL_CHAT_ACCESS = "robotsix.deploy.chat-access"  # "true" / "false"
 LABEL_CHAT_AGENT_MUTATABLE = "robotsix.deploy.chat-agent-mutatable"  # "true" / "false"
 LABEL_CHAT_SKILL = "robotsix.deploy.chat-skill"  # static Markdown skill body

@@ -731,10 +731,11 @@ async def onboard_confirm(
                 await config_yaml_store.delete(spec.name)
                 raise
 
-    # Write the fleet-global llmio tier config mapping (all four levels)
-    # into the component's config volume before the deploy starts, so
-    # robotsix-llmio's TierConfig.for_level() can resolve any capability
-    # level from first boot.  Matching deploy_service and put_service_config.
+    # Write the fleet-global llmio tier config (both provider slots, all
+    # three levels, plus the failover policy) into the component's config
+    # volume before the deploy starts, so robotsix-llmio's
+    # load_tier_config() can resolve any capability level on either slot
+    # from first boot.  Matching deploy_service and put_service_config.
     if config.llmio_tier_level and config.config_volume:
         try:
             settings = await request.app.state.settings_store.get()
