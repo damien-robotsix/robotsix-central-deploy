@@ -408,8 +408,12 @@ class LifecycleConfig(BaseModel):
     llmio_tier_config: dict[str, Any] = Field(
         default=SETTINGS_DEFAULTS["llmio_tier_config"],
         description=(
-            "Fleet-global mapping from llmio capability level (level1-4) to "
-            "provider and model. Overridden by the System Settings store."
+            "Fleet-global llmio tier configuration, written verbatim as "
+            "llmio_tier_config.json into component config volumes for "
+            "robotsix-llmio's load_tier_config(). Nested shape: 'default' "
+            "and 'fallback' provider slots (each binding level1-level3) "
+            "plus a 'failover' policy (failure_threshold, window_seconds). "
+            "Overridden by the System Settings store."
         ),
         json_schema_extra={"advanced": True},
     )

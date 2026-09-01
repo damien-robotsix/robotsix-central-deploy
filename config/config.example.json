@@ -70,21 +70,19 @@
     }
   ],
   "llmio_tier_config": {
-    "level1": {
-      "provider": "openai",
-      "model": "gpt-4o-mini"
+    "default": {
+      "level2": {
+        "model": "claudeSDK-opus"
+      }
     },
-    "level2": {
-      "provider": "openai",
-      "model": "gpt-4o"
+    "fallback": {
+      "level3": {
+        "model": "openrouter-deepseek/deepseek-v4-pro-0813"
+      }
     },
-    "level3": {
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-20250514"
-    },
-    "level4": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-20250514"
+    "failover": {
+      "failure_threshold": 3,
+      "window_seconds": 900
     }
   }
 }

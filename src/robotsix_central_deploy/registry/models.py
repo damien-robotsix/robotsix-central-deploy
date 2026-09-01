@@ -199,7 +199,7 @@ class ComponentConfig(BaseModel):
     )
     llmio_tier_level: str | None = Field(
         default=None,
-        description="Capability tier: 'level1', 'level2', 'level3', or 'level4'",
+        description="Capability level: 'level1', 'level2', or 'level3'",
     )
     allow_chat_access: bool = Field(
         False,

@@ -418,7 +418,7 @@
       "additionalProperties": true,
       "advanced": true,
       "default": {},
-      "description": "Fleet-global mapping from llmio capability level (level1-4) to provider and model. Overridden by the System Settings store.",
+      "description": "Fleet-global llmio tier configuration, written verbatim as llmio_tier_config.json into component config volumes for robotsix-llmio's load_tier_config(). Nested shape: 'default' and 'fallback' provider slots (each binding level1-level3) plus a 'failover' policy (failure_threshold, window_seconds). Overridden by the System Settings store.",
       "title": "Llmio Tier Config",
       "type": "object"
     },

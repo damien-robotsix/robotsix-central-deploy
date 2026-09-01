@@ -436,9 +436,10 @@ async def _run_deploy_job(
                         )
                         # non-fatal: the component may ship its own default
 
-        # Write the fleet-global llmio tier config mapping (all four levels)
-        # into the component's config volume so robotsix-llmio's
-        # TierConfig.for_level() can resolve any capability level.
+        # Write the fleet-global llmio tier config (both provider slots,
+        # all three levels, plus the failover policy) into the component's
+        # config volume so robotsix-llmio's load_tier_config() can resolve
+        # any capability level on either slot.
         await _write_llmio_tier_config(
             backend, config, settings_store, name, log_context="deploy"
         )
