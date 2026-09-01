@@ -4,7 +4,7 @@ ARG BASE_DIGEST=sha256:d6e0850f13fda0e2305d4c3c1c2f7930fe1042d34ddd958e49bba6ef6
 
 # Named stage for the uv image so COPY --from references a defined alias
 # (satisfies hadolint DL3022).
-FROM ghcr.io/astral-sh/uv:0.11.29 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.8 AS uv
 
 # Builder stage — uv and git resolve the frozen lockfile (including the
 # git-pinned first-party deps) and install the project. Build tooling stays
