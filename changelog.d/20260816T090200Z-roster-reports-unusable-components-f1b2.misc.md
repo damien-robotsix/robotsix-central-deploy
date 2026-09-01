@@ -1,1 +1,0 @@
-chat: report components the operator granted chat access to but which cannot serve a skill, instead of dropping them from the roster. The entry carries _error and an empty skill, so it stays uncallable while the reason travels with the roster rather than living only in the server log.
