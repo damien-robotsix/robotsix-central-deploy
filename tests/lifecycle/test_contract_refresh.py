@@ -306,6 +306,94 @@ async def test_refresh_preserves_operator_set_fields(
 
 
 @pytest.mark.asyncio
+async def test_refresh_applies_mem_limit_and_memswap_labels(
+    client_with_component: AsyncClient,
+) -> None:
+    """robotsix.deploy.mem-limit / memswap-limit labels reach the stored config.
+
+    The label is the out-of-band OOM guard: a refresh must apply the declared
+    limit (like the claude_mount label grant), not silently keep the old value
+    — that is what lets a later recreate drop the guard.
+    """
+    ccs = server_mod.app.state.component_config_store
+    comp = ccs.get("test-comp")
+    assert comp is not None
+    assert comp.mem_limit == "2g"
+    assert comp.memswap_limit is None
+
+    new_spec = _make_derived_spec(image="ghcr.io/org/svc:v2")
+    new_spec.mem_limit = "4.5g"
+    new_spec.memswap_limit = "4.5g"
+
+    repo_files = RepoFiles(
+        compose_bytes=UPDATED_COMPOSE,
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=new_spec,
+        ),
+    ):
+        resp = await client_with_component.post(
+            "/services/test-comp/refresh-contract", headers=HEADERS
+        )
+
+    assert resp.status_code == 200
+    updated = ccs.get("test-comp")
+    assert updated is not None
+    assert updated.mem_limit == "4.5g"
+    assert updated.memswap_limit == "4.5g"
+
+
+@pytest.mark.asyncio
+async def test_refresh_preserves_operator_memswap_when_label_absent(
+    client_with_component: AsyncClient,
+) -> None:
+    """Without a memswap label the stored memswap_limit survives a refresh."""
+    ccs = server_mod.app.state.component_config_store
+    comp = ccs.get("test-comp")
+    assert comp is not None
+    comp.memswap_limit = "6g"
+    await ccs.put(comp)
+
+    new_spec = _make_derived_spec(image="ghcr.io/org/svc:v2")
+    assert new_spec.memswap_limit is None
+
+    repo_files = RepoFiles(
+        compose_bytes=UPDATED_COMPOSE,
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=new_spec,
+        ),
+    ):
+        resp = await client_with_component.post(
+            "/services/test-comp/refresh-contract", headers=HEADERS
+        )
+
+    assert resp.status_code == 200
+    updated = ccs.get("test-comp")
+    assert updated is not None
+    assert updated.memswap_limit == "6g"
+    assert updated.image == "ghcr.io/org/svc:v2"
+
+
+@pytest.mark.asyncio
 async def test_refresh_keeps_assigned_host_port(
     client_with_component: AsyncClient,
 ) -> None:

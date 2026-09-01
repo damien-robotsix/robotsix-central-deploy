@@ -194,6 +194,10 @@ class EnvResponse(BaseModel):
     mem_limit: str = Field(
         default="2g", description="Docker memory limit string (e.g. '2g')"
     )
+    memswap_limit: str | None = Field(
+        default=None,
+        description="Optional Docker memory+swap limit string (e.g. '4g')",
+    )
     allow_chat_access: bool = Field(
         default=False,
         description="Whether chat-agent mutation is permitted for this component",
@@ -245,6 +249,10 @@ class EnvUpdate(_EnvSecretsFields):
     mem_limit: str | None = Field(
         default=None,
         description="Docker memory limit; None leaves the current value unchanged",
+    )
+    memswap_limit: str | None = Field(
+        default=None,
+        description="Docker memory+swap limit; None leaves the current value unchanged",
     )
     allow_chat_access: bool | None = Field(
         default=None,

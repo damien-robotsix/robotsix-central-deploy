@@ -160,6 +160,7 @@ def _build_sibling_config(
         entrypoint=sib_config.entrypoint,
         tmpfs=sib_config.tmpfs,
         mem_limit=sib_config.mem_limit,
+        memswap_limit=sib_config.memswap_limit,
         user=sib_config.user,
     )
 

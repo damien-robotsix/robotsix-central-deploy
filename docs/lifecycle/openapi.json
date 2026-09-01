@@ -8164,6 +8164,18 @@
             "description": "Memory limit for the container (e.g. '512m', '2g')",
             "default": "2g"
           },
+          "memswap_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memswap Limit",
+            "description": "Optional memory+swap limit for the container (e.g. '4g'); defaults to Docker's own 2x-memory swap"
+          },
           "container_name": {
             "type": "string",
             "title": "Container Name",
@@ -8797,6 +8809,18 @@
             "description": "Docker memory limit string (e.g. '2g')",
             "default": "2g"
           },
+          "memswap_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memswap Limit",
+            "description": "Optional Docker memory+swap limit string (e.g. '4g')"
+          },
           "allow_chat_access": {
             "type": "boolean",
             "title": "Allow Chat Access",
@@ -8903,6 +8927,18 @@
             ],
             "title": "Mem Limit",
             "description": "Docker memory limit; None leaves the current value unchanged"
+          },
+          "memswap_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memswap Limit",
+            "description": "Docker memory+swap limit; None leaves the current value unchanged"
           },
           "allow_chat_access": {
             "anyOf": [
@@ -10110,6 +10146,18 @@
             "title": "Mem Limit",
             "description": "Memory limit for this sibling's container (e.g. '2g')",
             "default": "2g"
+          },
+          "memswap_limit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memswap Limit",
+            "description": "Optional memory+swap limit for this sibling's container"
           },
           "user": {
             "anyOf": [

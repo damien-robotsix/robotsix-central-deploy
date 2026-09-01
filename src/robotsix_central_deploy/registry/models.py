@@ -89,6 +89,10 @@ class ServiceConfig(BaseModel):
     mem_limit: str = Field(
         "2g", description="Memory limit for this sibling's container (e.g. '2g')"
     )
+    memswap_limit: str | None = Field(
+        default=None,
+        description="Optional memory+swap limit for this sibling's container",
+    )
     user: str | None = Field(
         default=None, description="Container user override (e.g. '1000:1000' or 'root')"
     )
@@ -192,6 +196,10 @@ class ComponentConfig(BaseModel):
     )
     mem_limit: str = Field(
         "2g", description="Memory limit for the primary container (e.g. '2g')"
+    )
+    memswap_limit: str | None = Field(
+        default=None,
+        description="Optional memory+swap limit for the primary container",
     )
     user: str | None = Field(
         default=None,

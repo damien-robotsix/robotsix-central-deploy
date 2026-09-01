@@ -56,6 +56,7 @@ _CONTRACT_FIELDS = (
     "entrypoint",
     "tmpfs",
     "mem_limit",
+    "memswap_limit",
     "claude_mount",
     "claude_mount_path",
     "host_docker_sock",
@@ -162,7 +163,8 @@ async def refresh_component_contract(
         git_url=comp_cfg.git_url,
         repo_id=comp_cfg.repo_id,
         caretaker_auto_update=comp_cfg.caretaker_auto_update,
-        mem_limit=comp_cfg.mem_limit,
+        mem_limit=(spec.mem_limit if spec.mem_limit != "2g" else comp_cfg.mem_limit),
+        memswap_limit=spec.memswap_limit or comp_cfg.memswap_limit,
         allow_chat_access=comp_cfg.allow_chat_access,
         # claude_mount has TWO legitimate grant sources: the compose label
         # (parsed into the spec) and the operator API (stored). A refresh must
