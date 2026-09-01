@@ -154,7 +154,6 @@
 
 ::: robotsix_central_deploy.caretaker.volume_audit.reporter
 
-
 ## Onboarding
 
 ::: robotsix_central_deploy.onboard.fetcher
