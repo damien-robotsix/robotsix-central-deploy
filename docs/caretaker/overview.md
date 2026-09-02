@@ -49,7 +49,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 | ------- | ------ | --------- |
 | `component_id` | `str \| None` | Affected component (or `None` for system-wide) |
 | `repo_id` | `str \| None` | Upstream repository identifier (informational) |
-| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION` |
+| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
 | `title` | `str` | Short human-readable summary |
 | `detail` | `str` | Full description |
 | `severity` | `Literal["warning", "error"]` | Severity level |

@@ -111,8 +111,17 @@ class TestVolumeAuditScheduler:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_run_once_backend_measure_failure(self, tmp_path):
-        """When measure_volume_bytes raises, the exception propagates."""
+    async def test_run_once_backend_measure_failure_surfaced_as_finding(
+        self, tmp_path, monkeypatch
+    ):
+        """A measure failure is reported as a finding; the scan still completes."""
+        reported = []
+
+        async def _fake_report(finding, path):
+            reported.append(finding)
+
+        monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
+
         sched, backend, store = _make_scheduler(tmp_path)
         comp = ComponentConfig(
             id="svc",
@@ -124,10 +133,71 @@ class TestVolumeAuditScheduler:
         backend.measure_volume_bytes = AsyncMock(
             side_effect=RuntimeError("docker down")
         )
-        with pytest.raises(RuntimeError, match="docker down"):
-            await sched.run_once()
-        # Snapshots should NOT be saved (error before persistence)
-        assert not (tmp_path / "snapshots.json").exists()
+
+        records = await sched.run_once()
+
+        # Scan completed rather than raising; the failed volume yields no record.
+        assert records == []
+        # The failure is surfaced as a finding referencing the volume + error.
+        assert len(reported) == 1
+        assert reported[0].volume_name == "vol"
+        assert "docker down" in reported[0].detail
+        # A snapshot file is written (scan reached persistence).
+        assert (tmp_path / "snapshots.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_run_once_measure_failure_preserves_baseline_and_continues(
+        self, tmp_path, monkeypatch
+    ):
+        """One volume failing does not stop measurement of the others, and the
+        failed volume's prior baseline snapshot is preserved."""
+        reported = []
+
+        async def _fake_report(finding, path):
+            reported.append(finding)
+
+        monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
+
+        sched, backend, store = _make_scheduler(tmp_path)
+        comp = ComponentConfig(
+            id="svc",
+            image="ghcr.io/test/image:latest",
+            container_name="svc",
+            named_volumes=["vol-ok", "vol-bad"],
+        )
+        store.all.return_value = [comp]
+
+        async def _measure(name):
+            if name == "vol-bad":
+                raise RuntimeError("measure boom")
+            return 5_000_000
+
+        backend.measure_volume_bytes = AsyncMock(side_effect=_measure)
+
+        # Seed a prior baseline for the failing volume.
+        snap_path = tmp_path / "snapshots.json"
+        snap_path.write_text(
+            json.dumps(
+                {
+                    "vol-bad": {
+                        "volume_name": "vol-bad",
+                        "component_id": "svc",
+                        "measured_at": "2025-01-01T00:00:00+00:00",
+                        "size_bytes": 1_234_567,
+                    }
+                }
+            )
+        )
+
+        records = await sched.run_once()
+
+        # The healthy volume was still measured.
+        assert {r.volume_name for r in records} == {"vol-ok"}
+        # The failing volume produced exactly one measure finding.
+        assert [f.volume_name for f in reported] == ["vol-bad"]
+        # Its prior baseline is carried forward in the saved snapshot.
+        saved = json.loads(snap_path.read_text())
+        assert saved["vol-bad"]["size_bytes"] == 1_234_567
 
     @pytest.mark.asyncio
     async def test_run_once_corrupt_snapshot_file(self, tmp_path):

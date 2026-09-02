@@ -109,11 +109,43 @@ class VolumeAuditScheduler:
             logger.debug("VolumeAudit: no named volumes registered, skipping scan")
             return []
 
-        # 2. Measure each volume
+        # 2. Load previous snapshots up front so a per-volume measure
+        #    failure can preserve that volume's baseline for the next scan.
+        previous = self._load_snapshots()
+
+        # 3. Measure each volume. A single volume's measurement failure is
+        #    surfaced as an AuditFinding and the scan continues with the
+        #    remaining volumes, rather than aborting the whole pass.
         now = datetime.now(tz=UTC)
         current: dict[str, VolumeSizeSnapshot] = {}
+        preserved: dict[str, VolumeSizeSnapshot] = {}
+        measure_findings: list[AuditFinding] = []
         for component_id, vol_name in volume_owners:
-            size = await self._backend.measure_volume_bytes(vol_name)
+            try:
+                size = await self._backend.measure_volume_bytes(vol_name)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "VolumeAudit: failed to measure volume %s: %s",
+                    vol_name,
+                    exc,
+                )
+                measure_findings.append(
+                    AuditFinding(
+                        volume_name=vol_name,
+                        component_id=component_id,
+                        finding_at=now,
+                        size_bytes=0,
+                        delta_bytes=0,
+                        growth_pct=0.0,
+                        detail=f"Failed to measure volume {vol_name!r}: {exc}",
+                    )
+                )
+                # Preserve the prior baseline (kept out of this pass's growth
+                # records) so tracking resumes once the volume is measurable.
+                prev_snap = previous.get(vol_name)
+                if prev_snap is not None:
+                    preserved[vol_name] = prev_snap
+                continue
             current[vol_name] = VolumeSizeSnapshot(
                 volume_name=vol_name,
                 component_id=component_id,
@@ -121,16 +153,16 @@ class VolumeAuditScheduler:
                 size_bytes=size,
             )
 
-        # 3. Load previous and compute growth
-        previous = self._load_snapshots()
+        # 4. Compute growth vs previous snapshot; prepend measure failures.
         records, findings = compute_growth_records(
             current,
             previous,
             self._config.volume_audit_growth_threshold_pct,
             self._config.volume_audit_min_delta_bytes,
         )
+        findings = measure_findings + findings
 
-        # 4. Record findings locally (log + findings JSON). No tickets —
+        # 5. Record findings locally (log + findings JSON). No tickets —
         # the caretaker just updates containers (operator decision,
         # 2026-09-01).
         for finding in findings:
@@ -143,8 +175,9 @@ class VolumeAuditScheduler:
                     exc,
                 )
 
-        # 5. Persist new snapshot and update in-memory state
-        self._save_snapshots(current)
+        # 6. Persist new snapshot and update in-memory state. Baselines for
+        #    volumes that failed to measure are carried forward unchanged.
+        self._save_snapshots({**preserved, **current})
         self._last_records = records
         self._last_scan_at = now
 
