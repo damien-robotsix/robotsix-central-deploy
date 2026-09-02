@@ -779,3 +779,49 @@ class TestApplyVolumeRetention:
         await _apply_volume_retention(backend, settings)
 
         assert backend.prune_volume_files.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_stale_findings_are_not_rereported(self):
+        """recent_findings carries the cumulative tail of the on-disk log;
+        findings older than the pass window must not be re-reported
+        (2026-09-02: five historical 'chat-chat-data grew' warnings were
+        re-emitted every caretaker pass)."""
+        from datetime import timedelta
+
+        from robotsix_central_deploy.lifecycle.config import LifecycleConfig
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        vas = MagicMock()
+        vas.run_once = AsyncMock()
+        fresh = AuditFinding(
+            volume_name="vol1",
+            component_id="svc",
+            finding_at=datetime.now(tz=UTC),
+            size_bytes=1000,
+            delta_bytes=500,
+            growth_pct=50.0,
+            detail="fresh",
+        )
+        stale = fresh.model_copy(
+            update={
+                "finding_at": datetime.now(tz=UTC) - timedelta(hours=30),
+                "detail": "stale",
+            }
+        )
+        vas.get_audit_response = MagicMock(
+            return_value=VolumeAuditResponse(
+                enabled=True, volumes=[], recent_findings=[stale, fresh]
+            )
+        )
+        backend = MagicMock()
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.all = MagicMock(return_value=[])
+        ccs.get = MagicMock(return_value=None)
+        config = LifecycleConfig(disk_path="/")  # type: ignore[call-arg]
+        settings = SystemSettings(disk_warn_pct=10.0, caretaker_interval_hours=4)
+
+        findings = await phase_volumes(vas, backend, ccs, config, settings)
+        growth = [f for f in findings if f.kind == FindingKind.VOLUME_GROWTH]
+        assert len(growth) == 1
+        assert growth[0].detail == "fresh"

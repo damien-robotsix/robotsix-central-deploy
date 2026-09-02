@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import shutil
 import time
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from ..lifecycle.deploy_lock import release_deploy_lock, try_acquire_deploy_lock
@@ -392,7 +393,18 @@ async def phase_volumes(
         for vol_name in comp_cfg.named_volumes:
             vol_to_component[vol_name] = comp_cfg.id
 
+    # recent_findings is the cumulative tail of the on-disk findings log, so
+    # without an age cutoff every caretaker pass re-reported up to 5 historical
+    # findings as if they were fresh (2026-09-02 04:27Z: five "chat-chat-data
+    # grew" warnings in one pass, four of them from earlier scans) — a
+    # duplicate-ticket source on the mill board.  Report only findings that
+    # occurred within the current pass window.
+    cutoff = datetime.now(tz=UTC) - timedelta(
+        hours=max(1, settings.caretaker_interval_hours)
+    )
     for af in audit_resp.recent_findings:
+        if af.finding_at < cutoff:
+            continue
         comp_id = vol_to_component.get(af.volume_name, "")
         repo_id = ""
         if comp_id:
