@@ -200,6 +200,56 @@ class TestVolumeAuditScheduler:
         assert saved["vol-bad"]["size_bytes"] == 1_234_567
 
     @pytest.mark.asyncio
+    async def test_run_once_measure_failed_surfaces_finding(self, tmp_path, monkeypatch):
+        """When measure_volume_bytes returns None (helper timeout / stream
+        cut), a measurement-failed finding is reported instead of silently
+        recording a bogus 0, and the last-known size is carried forward."""
+        reported = []
+
+        async def _fake_report(finding, path):
+            reported.append(finding)
+
+        monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
+
+        sched, backend, store = _make_scheduler(tmp_path)
+        comp = ComponentConfig(
+            id="svc",
+            image="ghcr.io/test/image:latest",
+            container_name="svc",
+            named_volumes=["vol"],
+        )
+        store.all.return_value = [comp]
+        backend.measure_volume_bytes = AsyncMock(return_value=None)
+
+        # Seed a previous snapshot so the last-known size can carry forward.
+        snap_path = tmp_path / "snapshots.json"
+        snap_path.write_text(
+            json.dumps(
+                {
+                    "vol": {
+                        "volume_name": "vol",
+                        "component_id": "svc",
+                        "measured_at": "2025-01-01T00:00:00+00:00",
+                        "size_bytes": 7_000_000,
+                    }
+                }
+            )
+        )
+
+        records = await sched.run_once()
+
+        # A measurement-failed finding is surfaced (not just a log warning).
+        assert len(reported) == 1
+        assert reported[0].kind == "measurement_failed"
+        assert reported[0].volume_name == "vol"
+        assert "could not be measured" in reported[0].detail
+
+        # The volume stays visible with its last-known size (no bogus 0).
+        assert len(records) == 1
+        assert records[0].volume_name == "vol"
+        assert records[0].size_bytes == 7_000_000
+
+    @pytest.mark.asyncio
     async def test_run_once_corrupt_snapshot_file(self, tmp_path):
         """Corrupt (non-JSON) snapshot file falls back to empty dict."""
         sched, _backend, store = _make_scheduler(tmp_path)

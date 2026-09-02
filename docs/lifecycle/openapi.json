@@ -6545,7 +6545,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Finding At",
-            "description": "UTC timestamp when the threshold breach was detected"
+            "description": "UTC timestamp when the finding was produced"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "Finding category: 'growth' or 'measurement_failed'",
+            "default": "growth"
           },
           "size_bytes": {
             "type": "integer",
@@ -6579,7 +6585,7 @@
           "detail"
         ],
         "title": "AuditFinding",
-        "description": "A threshold-breach finding produced by a scan pass."
+        "description": "A finding produced by a scan pass.\n\n``kind`` distinguishes growth threshold-breach findings (``growth``)\nfrom volume-size measurement failures (``measurement_failed``) so the\noperator / retention / alerting can tell \"grew unexpectedly\" apart from\n\"we could not even measure it this scan\"."
       },
       "ChatAgentAuditEntryResponse": {
         "properties": {

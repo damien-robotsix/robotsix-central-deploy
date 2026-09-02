@@ -1,13 +1,17 @@
 """Tests for VolumeOps — Docker named-volume operations."""
 
 import json
+import subprocess
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from robotsix_central_deploy.lifecycle._yaml_utils import YamlParseError
-from robotsix_central_deploy.lifecycle.backends._volume_ops import VolumeOps
+from robotsix_central_deploy.lifecycle.backends._volume_ops import (
+    _DU_BYTES_FN,
+    VolumeOps,
+)
 
 # ---------------------------------------------------------------------------
 # resolve_user_to_uid_gid (static)
@@ -405,21 +409,43 @@ class TestVolumeOpsMeasureVolumeBytes:
 
         assert result == 0
 
-    async def test_error_returns_zero(self, client):
+    async def test_error_returns_none_after_retries(self, client, monkeypatch):
+        """A persistent helper failure surfaces None (measurement-failed),
+        not a bogus 0 — the scheduler turns that into a finding."""
+        monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
         vo = VolumeOps(client)
         client.containers.run.side_effect = RuntimeError("container failed")
 
         result = await vo.measure_volume_bytes("data-vol")
 
-        assert result == 0
+        assert result is None
 
-    async def test_broken_wait_stream_still_removes_container(self, client):
+    async def test_transient_failure_retries_then_succeeds(self, client, monkeypatch):
+        """A one-off Docker stream cut must not fail the whole measurement:
+        the helper is retried and the size is still returned."""
+        monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
+        vo = VolumeOps(client)
+        first = _one_shot_container(b"")
+        first.wait.side_effect = RuntimeError("Response ended prematurely")
+        second = _one_shot_container(b"1048576\n")
+        client.containers.run.side_effect = [first, second]
+
+        result = await vo.measure_volume_bytes("data-vol")
+
+        assert result == 1048576
+        first.remove.assert_called_once_with(force=True)
+        second.remove.assert_called_once_with(force=True)
+
+    async def test_broken_wait_stream_still_removes_every_attempt(self, client, monkeypatch):
         """Regression: a broken attach/wait stream must not orphan the du.
 
         The old non-detached run(remove=True) leaked the helper container
         when the Docker API stream failed ("Response ended prematurely",
         2026-09-02) — the du kept grinding the volume for 40+ minutes.
+        Every retry attempt removes its helper; after all retries the
+        measurement returns None (a measurement-failed finding), never 0.
         """
+        monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
         vo = VolumeOps(client)
         container = _one_shot_container(b"")
         container.wait.side_effect = RuntimeError("Response ended prematurely")
@@ -427,8 +453,8 @@ class TestVolumeOpsMeasureVolumeBytes:
 
         result = await vo.measure_volume_bytes("data-vol")
 
-        assert result == 0
-        container.remove.assert_called_once_with(force=True)
+        assert result is None
+        assert container.remove.call_count == VolumeOps._MEASURE_ATTEMPTS
 
     async def test_cleanup_failure_does_not_mask_result(self, client):
         vo = VolumeOps(client)
@@ -439,6 +465,49 @@ class TestVolumeOpsMeasureVolumeBytes:
         result = await vo.measure_volume_bytes("data-vol")
 
         assert result == 77
+
+
+class TestDuBytesLargeTree:
+    """Regression test for the recurring mill-mill-data measurement failure.
+
+    The whole-volume du helper must correctly sum a deeply-nested tree of
+    per-board workspaces and exclude SQLite transient sidecars — the
+    measurement that was silently returning 0 when the helper died/timed out
+    (2026-09-02).  The tree is kept modest on purpose: the summation and
+    sidecar-exclusion logic is exercised by the nesting and the sidecar files,
+    not by raw file count, and a multi-thousand-file tree needlessly spikes
+    memory/IO in the constrained CI sandbox (it OOM-killed the suite).
+    """
+
+    def test_large_tree_sums_correctly_and_excludes_sidecars(self, tmp_path):
+        root = tmp_path / "tree"
+        expected = 0
+        # Nested boards x workspaces x files — enough to exercise recursion
+        # and the -exec du batching without a resource spike.
+        for b in range(4):
+            for w in range(4):
+                d = root / f"board-{b}" / f"workspace-{w}"
+                d.mkdir(parents=True, exist_ok=True)
+                for f in range(8):
+                    size = (b + w + f) % 64 + 1
+                    (d / f"file-{f}.txt").write_bytes(b"x" * size)
+                    expected += size
+        # SQLite sidecars must be excluded from the sum.
+        (root / "board-0" / "workspace-0" / "data.db-wal").write_bytes(b"y" * 10_000)
+        (root / "board-0" / "workspace-0" / "data.db-shm").write_bytes(b"y" * 20_000)
+        (root / "board-0" / "workspace-0" / "data.db-journal").write_bytes(b"y" * 30_000)
+
+        script = _DU_BYTES_FN + "du_bytes " + str(root) + "\n"
+        # The script is assembled from a trusted constant + an absolute tmp
+        # path, not user input; sh -c is required to exercise the real helper.
+        proc = subprocess.run(  # noqa: S603
+            ["sh", "-c", script],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert int(proc.stdout.strip()) == expected
 
 
 # ---------------------------------------------------------------------------

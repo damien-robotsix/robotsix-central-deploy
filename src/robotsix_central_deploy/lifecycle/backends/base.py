@@ -162,10 +162,12 @@ class ExecutionBackend(ABC):
         return 0
 
     @abstractmethod
-    async def measure_volume_bytes(self, volume_name: str) -> int:
+    async def measure_volume_bytes(self, volume_name: str) -> int | None:
         """Return effective total bytes for *volume_name*, excluding SQLite
         transient sidecars (*.db-wal, *.db-shm, *.db-journal).
-        Returns 0 on error or when the volume is inaccessible.
+        Returns ``None`` when the volume could not be measured (helper
+        timeout / stream cut), so callers can surface a measurement-failed
+        finding instead of silently recording 0.
         """
 
     @abstractmethod

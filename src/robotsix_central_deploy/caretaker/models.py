@@ -20,6 +20,10 @@ class FindingKind(str, Enum):
     ``volume_growth`` — a named volume exceeded its configured
     growth threshold.
 
+    ``volume_measurement`` — a named volume's size could not be
+    measured this scan (du helper timeout / Docker stream cut); its
+    growth is unknown until a later scan succeeds.
+
     ``volume_orphan`` — a named volume is not attached to any
     running component.
 
@@ -34,6 +38,7 @@ class FindingKind(str, Enum):
     UPDATE_FAILED = "update_failed"
     HEALTH = "health"
     VOLUME_GROWTH = "volume_growth"
+    VOLUME_MEASUREMENT = "volume_measurement"
     VOLUME_ORPHAN = "volume_orphan"
     DISK = "disk"
     PORT_COLLISION = "port_collision"
