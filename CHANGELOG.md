@@ -4,6 +4,17 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.12.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.11.0...v0.12.0) (2026-09-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* LifecycleConfig drops board_api_url/board_api_token/ board_repo_id (stale prod keys are stripped-with-warning by the config loader); /caretaker/status no longer carries mill_reachable fields.
+
+### Features
+
+* caretaker records findings locally — ticket filing removed ([#833](https://github.com/damien-robotsix/robotsix-central-deploy/issues/833)) ([b676a5a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/b676a5ad665b064268afaa494f0a32e0f022f392))
+
 ## [0.11.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.10.0...v0.11.0) (2026-09-01)
 
 
