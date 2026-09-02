@@ -159,7 +159,12 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic/fleet.yml:ro
+      # Mounted as a DIRECTORY, not a single file: a single-file bind pins the
+      # inode at container start, so a `git pull` that replaces dynamic.yml
+      # leaves the container reading the pre-pull version forever and the
+      # file-provider watch never fires (bitten 2026-09-02 — new routers were
+      # invisible until a traefik restart). Directory binds follow the path.
+      - ./deploy/traefik:/etc/traefik/dynamic/fleet:ro
       # Host-level routes for services on this machine that are NOT fleet
       # components — anything the previous ingress served from its own config.
       # Kept outside the checkout so no specific host or service is named in
