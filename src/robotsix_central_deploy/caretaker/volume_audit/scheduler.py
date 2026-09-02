@@ -42,6 +42,11 @@ class VolumeAuditScheduler:
         self._findings_path = Path(config.volume_audit_findings_path)
         self._last_records: list[VolumeGrowthRecord] = []
         self._last_scan_at: datetime | None = None
+        # Serialize scan passes: the background loop and the caretaker's
+        # phase_volumes both call run_once at startup, which put two
+        # concurrent du helpers on the same large volume (2026-09-02,
+        # mill-mill-data) — each slowing the other toward its timeout.
+        self._scan_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Snapshot persistence
@@ -85,7 +90,14 @@ class VolumeAuditScheduler:
         compute growth vs previous snapshot, emit findings.
 
         Returns the list of VolumeGrowthRecord produced this pass.
+
+        Passes are serialized: a call that arrives while another scan is in
+        flight waits for it rather than measuring the same volumes twice.
         """
+        async with self._scan_lock:
+            return await self._run_once_locked()
+
+    async def _run_once_locked(self) -> list[VolumeGrowthRecord]:
         # 1. Collect all (component_id, volume_name) pairs
         all_configs = self._component_config_store.all()  # synchronous
         volume_owners: list[tuple[str, str]] = []

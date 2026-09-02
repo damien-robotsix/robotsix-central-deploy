@@ -658,3 +658,58 @@ class TestVolumeOpsRelocate:
             "type": "none",
         }
         assert restore_call.kwargs["labels"] == {"com.example": "kept"}
+
+
+# ---------------------------------------------------------------------------
+# one-shot helper labelling + stale sweep
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeOpsStaleHelperSweep:
+    @pytest.fixture
+    def client(self) -> MagicMock:
+        return MagicMock()
+
+    async def test_one_shot_helpers_carry_the_sweep_label(self, client):
+        """Regression: a helper without the label is invisible to the startup
+        sweep, so a self-update that kills the parent mid-wait leaks it
+        forever (2026-09-02: the old server's hourly du of mill-mill-data
+        outlived the process by 10+ minutes)."""
+        vo = VolumeOps(client)
+        client.containers.run.return_value = _one_shot_container(b"1\n")
+
+        await vo.measure_volume_bytes("data-vol")
+
+        labels = client.containers.run.call_args[1]["labels"]
+        assert labels == {VolumeOps.HELPER_LABEL: "1"}
+
+    async def test_remove_stale_helpers_force_removes_labelled(self, client):
+        vo = VolumeOps(client)
+        stale_a, stale_b = MagicMock(), MagicMock()
+        client.containers.list.return_value = [stale_a, stale_b]
+
+        removed = await vo.remove_stale_helpers()
+
+        assert removed == 2
+        client.containers.list.assert_called_once_with(
+            all=True, filters={"label": VolumeOps.HELPER_LABEL}
+        )
+        stale_a.remove.assert_called_once_with(force=True)
+        stale_b.remove.assert_called_once_with(force=True)
+
+    async def test_remove_stale_helpers_survives_failures(self, client):
+        vo = VolumeOps(client)
+        bad, good = MagicMock(), MagicMock()
+        bad.remove.side_effect = RuntimeError("daemon busy")
+        client.containers.list.return_value = [bad, good]
+
+        removed = await vo.remove_stale_helpers()
+
+        assert removed == 1
+        good.remove.assert_called_once_with(force=True)
+
+    async def test_remove_stale_helpers_listing_failure_returns_zero(self, client):
+        vo = VolumeOps(client)
+        client.containers.list.side_effect = RuntimeError("daemon unreachable")
+
+        assert await vo.remove_stale_helpers() == 0

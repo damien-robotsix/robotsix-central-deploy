@@ -141,6 +141,13 @@ class ExecutionBackend(ABC):
         Raises TimeoutError if the container does not exit within *timeout_seconds*.
         Always removes the container on exit or timeout."""
 
+    async def remove_stale_helpers(self) -> int:
+        """Remove one-shot helper containers orphaned by a dead predecessor
+        process.  Default: nothing to sweep (backends without container
+        helpers).  Returns the number of containers removed; never raises.
+        """
+        return 0
+
     @abstractmethod
     async def measure_volume_bytes(self, volume_name: str) -> int:
         """Return effective total bytes for *volume_name*, excluding SQLite
