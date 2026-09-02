@@ -42,6 +42,68 @@ class TestMillClient:
         )
 
     @pytest.mark.asyncio
+    async def test_active_stage_summary_reports_heavy_stages(self):
+        # Real GET /active shape: list of {ticket_id, stage, started_at}.
+        http = MagicMock(spec=RetryClient)
+        http.get = AsyncMock(
+            return_value=MagicMock(
+                json=MagicMock(
+                    return_value=[
+                        {
+                            "ticket_id": "20260901T154756Z-scaffold-44e2",
+                            "stage": "implement",
+                            "started_at": "2026-09-02T03:14:48.426836+00:00",
+                        },
+                        {
+                            "ticket_id": "20260901T141144Z-inject-c4d3",
+                            "stage": "implement",
+                            "started_at": "2026-09-02T03:23:54.225249+00:00",
+                        },
+                        {
+                            "ticket_id": "20260902T032527Z-stop-0a7d",
+                            "stage": "classify",
+                            "started_at": "2026-09-02T03:36:47.358219+00:00",
+                        },
+                    ]
+                )
+            )
+        )
+        client = MillClient("http://mill:8077", http)
+        summary = await client.active_stage_summary()
+        assert summary == "2 heavy stage(s) in flight: implement×2"
+        http.get.assert_called_once_with("http://mill:8077/active")
+
+    @pytest.mark.asyncio
+    async def test_active_stage_summary_none_for_cheap_stages_only(self):
+        http = MagicMock(spec=RetryClient)
+        http.get = AsyncMock(
+            return_value=MagicMock(
+                json=MagicMock(
+                    return_value=[{"ticket_id": "t", "stage": "classify"}]
+                )
+            )
+        )
+        client = MillClient("http://mill:8077", http)
+        assert await client.active_stage_summary() is None
+
+    @pytest.mark.asyncio
+    async def test_active_stage_summary_none_when_idle(self):
+        http = MagicMock(spec=RetryClient)
+        http.get = AsyncMock(return_value=MagicMock(json=MagicMock(return_value=[])))
+        client = MillClient("http://mill:8077", http)
+        assert await client.active_stage_summary() is None
+
+    @pytest.mark.asyncio
+    async def test_active_stage_summary_fails_open_on_error(self):
+        # An unreachable mill must NOT read as busy — deploying is then the
+        # likely remedy, and treating errors as busy would pin a broken mill
+        # on its broken image forever.
+        http = MagicMock(spec=RetryClient)
+        http.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
+        client = MillClient("http://mill:8077", http)
+        assert await client.active_stage_summary() is None
+
+    @pytest.mark.asyncio
     async def test_ingest_payload_includes_source_tag_not_kind(self):
         """The mill's TicketIngest model requires 'source_tag', not 'kind'."""
         http = MagicMock(spec=RetryClient)

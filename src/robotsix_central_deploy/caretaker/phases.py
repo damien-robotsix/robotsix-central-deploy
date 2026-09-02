@@ -16,6 +16,8 @@ from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
     from ..lifecycle.models import ComponentInspect, ServiceRecord
@@ -39,6 +41,7 @@ async def phase_update(
     env_store: EnvStore,
     self_container_name: str = "",
     self_identity_known: bool = True,
+    busy_components: Mapping[str, str] | None = None,
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -57,6 +60,10 @@ async def phase_update(
     When ``self_identity_known`` is False the caller could not determine which
     container it runs inside, so no record can be ruled out as self and the
     whole phase is skipped — see the fail-closed note below.
+
+    ``busy_components`` maps component names to a human-readable reason why
+    their deploy must wait (the mill with heavy stages in flight); those
+    records keep ``update_available`` and are retried next pass.
     """
     findings: list[CaretakerFinding] = []
 
@@ -109,6 +116,18 @@ async def phase_update(
             continue
 
         if not record.update_available:
+            continue
+
+        # A component the caller marked busy (the mill with implement/ci_fix
+        # stages in flight — see the scheduler's /active probe) keeps its
+        # pending update for the next pass: recreating it mid-stage aborts
+        # hour-scale agent runs whose work is then redone from scratch.
+        if busy_components and record.name in busy_components:
+            logger.info(
+                "phase_update: deferring %s — %s",
+                record.name,
+                busy_components[record.name],
+            )
             continue
 
         config = component_config_store.get(record.name)
