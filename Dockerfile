@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Digest-pinned python:3.14-slim, same base in both stages (docker standard).
-ARG BASE_DIGEST=sha256:d6e0850f13fda0e2305d4c3c1c2f7930fe1042d34ddd958e49bba6ef685d0bb2
+ARG BASE_DIGEST=sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 # Named stage for the uv image so COPY --from references a defined alias
 # (satisfies hadolint DL3022).
