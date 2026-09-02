@@ -182,3 +182,28 @@ class TestPruneOrphans:
         assert data["removed"] == []
         assert data["failed"] == ["orphan-a"]
         assert data["space_reclaimed_bytes"] == 0
+
+
+class TestClaudeAuthNeverOrphan:
+    async def test_claude_auth_excluded_even_when_unattached(self, client: AsyncClient):
+        """claude-auth holds the fleet's Claude OAuth credential and is only
+        mounted transiently, so it reads as unattached — it must never be
+        listed prune-safe (2026-09-02: caretaker flagged it as an orphan)."""
+        _set_backend(
+            _FakeVolBackend([("claude-auth", 500, False), ("truly-orphan", 10, False)])
+        )
+        resp = await client.get("/volumes/orphans", headers=AUTH)
+        assert resp.status_code == 200
+        names = [v["name"] for v in resp.json()["volumes"]]
+        assert "claude-auth" not in names
+        assert "truly-orphan" in names
+
+    async def test_prune_never_removes_claude_auth(self, client: AsyncClient):
+        backend = _FakeVolBackend(
+            [("claude-auth", 500, False), ("truly-orphan", 10, False)]
+        )
+        _set_backend(backend)
+        resp = await client.post("/volumes/prune", headers=AUTH, json={})
+        assert resp.status_code == 200
+        assert "claude-auth" not in backend.removed
+        assert "truly-orphan" in backend.removed
