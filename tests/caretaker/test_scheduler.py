@@ -441,7 +441,9 @@ class TestSelfUpdate:
         backend.trigger_self_update.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_no_retrigger_when_running_digest_up_to_date(self, scheduler_fixtures):
+    async def test_no_retrigger_when_running_digest_up_to_date(
+        self, scheduler_fixtures
+    ):
         """A stale store must not re-trigger after a successful self-update.
 
         Watchtower swaps the container out-of-band and never persists a new
