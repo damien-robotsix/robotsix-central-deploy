@@ -95,6 +95,7 @@ async def _deploy_onboard_siblings(
             entrypoint=sib.entrypoint,
             tmpfs=sib.tmpfs,
             mem_limit=sib.mem_limit,
+            memswap_limit=sib.memswap_limit,
             user=sib.user,
         )
         sib_record = ServiceRecord(

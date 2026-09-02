@@ -57,6 +57,7 @@ class TestEnvEndpoints:
             "env_scopes": {},
             "secret_scopes": {},
             "mem_limit": "2g",
+            "memswap_limit": None,
             "allow_chat_access": False,
             "claude_mount": False,
         }

@@ -37,6 +37,12 @@ The parser enforces a contract on the service's `deploy/docker-compose.yml`:
 - One or more service definitions with container image, ports, environment variables,
   volumes, and health checks.
 - Optional `config-target` and `config-assist` labels for settings integration.
+- Out-of-band resource labels: `robotsix.deploy.mem-limit` and
+  `robotsix.deploy.memswap-limit` (memory sizes with a `k`/`m`/`g` suffix, e.g.
+  `4.5g`) override the compose `mem_limit` key. These are applied to the
+  container's `HostConfig` on every create/recreate so a memory OOM guard is
+  never silently dropped by a deploy (a live `docker update` only survives
+  until the next recreate).
 
 ### Chat-Access Compliance Advisories
 

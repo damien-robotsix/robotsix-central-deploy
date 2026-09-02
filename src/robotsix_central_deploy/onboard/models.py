@@ -69,6 +69,10 @@ class DerivedSpec(BaseModel):
         default="2g",
         description="Memory limit for the container (e.g. '512m', '2g')",
     )
+    memswap_limit: str | None = Field(
+        default=None,
+        description="Optional memory+swap limit for the container (e.g. '4g'); defaults to Docker's own 2x-memory swap",
+    )
     container_name: str = Field(
         default="",
         description="Docker container name override from docker-compose; empty means use the component id",

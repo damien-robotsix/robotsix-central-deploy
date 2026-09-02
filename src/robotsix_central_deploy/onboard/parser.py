@@ -33,6 +33,8 @@ _GO_DURATION_RE = re.compile(
 HEADER = b"# central-deploy-contract-version: 1"
 CLAUDE_MOUNT_LABEL = "robotsix.deploy.claude-mount"
 HOST_DOCKER_SOCK_LABEL = "robotsix.deploy.host-docker-sock"
+MEM_LIMIT_LABEL = "robotsix.deploy.mem-limit"  # memory limit, e.g. "4.5g"
+MEMSWAP_LIMIT_LABEL = "robotsix.deploy.memswap-limit"  # optional memory+swap limit
 PRIMARY_LABEL = "robotsix.deploy.primary"
 LABEL_CONFIG_TARGET = "robotsix.deploy.config-target"
 LABEL_CONFIG_ASSIST = "robotsix.deploy.config-assist"  # shell command string
@@ -431,6 +433,25 @@ def _parse_chat_skill_endpoint(labels: dict[str, Any]) -> str:
     return "/chat-skill"
 
 
+# Memory-size validation: matches an optional decimal number with a k/m/g
+# suffix (case-insensitive), e.g. "4.5g", "512m", "2g", "1048576k".
+_MEM_SIZE_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([kmg]?)\s*$", re.IGNORECASE)
+
+
+def _validate_mem_size(value: str, *, label: str, prefix: str = "") -> str | None:
+    """Validate a memory-size string with a k/m/g suffix.
+
+    Returns the normalized (lowercased, trimmed) value, or ``None`` and
+    appends a violation to the caller's list when the value is not a valid
+    size.  Used to validate ``robotsix.deploy.mem-limit`` and
+    ``robotsix.deploy.memswap-limit`` labels.
+    """
+    m = _MEM_SIZE_RE.match(value)
+    if not m:
+        return None
+    return f"{m.group(1)}{m.group(2).lower()}"
+
+
 def _parse_one_service(
     svc: dict[str, Any],
     key: str,
@@ -442,7 +463,8 @@ def _parse_one_service(
     """Parse a single service dict (primary or sibling) into a result dict + violations.
 
     The result dict has keys: image, env, ports, mounts, health_check,
-    claude_mount, host_docker_sock, container_name, mem_limit.
+    claude_mount, claude_mount_path, host_docker_sock, container_name,
+    command, entrypoint, tmpfs, user, mem_limit, memswap_limit.
     """
     violations: list[str] = []
 
@@ -577,6 +599,38 @@ def _parse_one_service(
     mem_limit: str = (
         raw_mem_limit if isinstance(raw_mem_limit, str) else str(raw_mem_limit)
     )
+    memswap_limit: str | None = None
+
+    # Out-of-band labels override the compose mem_limit key so a deployed
+    # memory guard survives recreated containers (docker update drops it).
+    if isinstance(labels, dict):
+        if (
+            isinstance(labels.get(MEM_LIMIT_LABEL), str)
+            and labels[MEM_LIMIT_LABEL].strip()
+        ):
+            parsed = _validate_mem_size(
+                labels[MEM_LIMIT_LABEL], label=MEM_LIMIT_LABEL, prefix=prefix
+            )
+            if parsed is None:
+                violations.append(
+                    f"{prefix}{MEM_LIMIT_LABEL} must be a size with k/m/g suffix "
+                    f"(e.g. '4.5g', '512m') — got "
+                    f"{labels[MEM_LIMIT_LABEL]!r}"
+                )
+            else:
+                mem_limit = parsed
+        raw_memswap = labels.get(MEMSWAP_LIMIT_LABEL)
+        if isinstance(raw_memswap, str) and raw_memswap.strip():
+            parsed = _validate_mem_size(
+                raw_memswap, label=MEMSWAP_LIMIT_LABEL, prefix=prefix
+            )
+            if parsed is None:
+                violations.append(
+                    f"{prefix}{MEMSWAP_LIMIT_LABEL} must be a size with k/m/g suffix "
+                    f"(e.g. '4.5g', '512m') — got {raw_memswap!r}"
+                )
+            else:
+                memswap_limit = parsed
 
     return {
         "image": image,
@@ -593,6 +647,7 @@ def _parse_one_service(
         "tmpfs": tmpfs,
         "user": user,
         "mem_limit": mem_limit,
+        "memswap_limit": memswap_limit,
         "config_volume": config_volume,
         "config_assist_command": config_assist_command,
         "config_assist_seeds": config_assist_seeds,
@@ -706,6 +761,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
                 tmpfs=sib_parsed["tmpfs"],
                 user=sib_parsed["user"],
                 mem_limit=sib_parsed["mem_limit"],
+                memswap_limit=sib_parsed["memswap_limit"],
             )
         )
 
@@ -771,6 +827,7 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         entrypoint=primary_parsed["entrypoint"],
         tmpfs=primary_parsed["tmpfs"],
         mem_limit=primary_parsed["mem_limit"],
+        memswap_limit=primary_parsed["memswap_limit"],
         container_name=primary_parsed["container_name"],
         siblings=siblings_parsed,
         config_volume=primary_parsed["config_volume"],

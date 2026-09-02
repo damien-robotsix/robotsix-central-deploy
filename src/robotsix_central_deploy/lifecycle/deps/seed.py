@@ -89,6 +89,7 @@ def _build_component_config_from_spec(
         "entrypoint": spec.entrypoint,
         "tmpfs": spec.tmpfs,
         "mem_limit": spec.mem_limit,
+        "memswap_limit": spec.memswap_limit,
         "claude_mount": spec.claude_mount,
         "claude_mount_path": spec.claude_mount_path,
         "host_docker_sock": spec.host_docker_sock,

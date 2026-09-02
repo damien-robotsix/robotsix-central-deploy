@@ -98,6 +98,7 @@ async def _fanout_siblings_deploy_best_effort(
                     "entrypoint": sib_cfg.entrypoint,
                     "tmpfs": sib_cfg.tmpfs,
                     "mem_limit": sib_cfg.mem_limit,
+                    "memswap_limit": sib_cfg.memswap_limit,
                     "user": sib_cfg.user,
                 }
             )

@@ -613,6 +613,35 @@ class TestDockerSdkBackendNoHostPorts:
         _, kwargs = client.containers.create.call_args
         assert kwargs["ports"] == {}
 
+    def test_create_container_passes_mem_limit_and_memswap(self, backend):
+        """_create_container forwards mem_limit and memswap_limit to HostConfig."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            mem_limit="4.5g",
+            memswap_limit="4.5g",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["mem_limit"] == "4.5g"
+        assert kwargs["memswap_limit"] == "4.5g"
+
+    def test_create_container_omits_memswap_when_unset(self, backend):
+        """Config without memswap_limit passes None (docker omits it) to Docker."""
+        b, client = backend
+        config = ComponentConfig(
+            id="test-svc",
+            image="test:latest",
+            container_name="test-svc",
+            mem_limit="2g",
+        )
+        b._create_container(config, "test:latest")
+        _, kwargs = client.containers.create.call_args
+        assert kwargs["mem_limit"] == "2g"
+        assert kwargs["memswap_limit"] is None
+
     async def test_deploy_succeeds_when_host_port_already_bound(self, backend):
         """deploy() succeeds because _create_container passes ports={},
         so Docker never attempts a host-port bind that could conflict."""

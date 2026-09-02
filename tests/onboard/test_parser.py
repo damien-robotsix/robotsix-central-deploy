@@ -719,6 +719,90 @@ services:
         spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
         assert spec.claude_mount is False
 
+    def test_mem_limit_label(self):
+        """robotsix.deploy.mem-limit overrides the compose mem_limit key."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    mem_limit: 2g
+    labels:
+      robotsix.deploy.mem-limit: "4.5g"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.mem_limit == "4.5g"
+
+    def test_mem_limit_label_sibling(self):
+        """mem-limit label parses on a sibling too."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  app:
+    image: ghcr.io/damien-robotsix/app:main
+    labels:
+      robotsix.deploy.primary: "true"
+  db:
+    image: ghcr.io/damien-robotsix/db:main
+    labels:
+      robotsix.deploy.mem-limit: "512m"
+"""
+        spec = parse_compose(_bytes(y), name="app", git_url="https://x.com/r.git")
+        assert spec.siblings[0].mem_limit == "512m"
+
+    def test_mem_limit_label_invalid_suffix_is_violation(self):
+        """A mem-limit without a k/m/g suffix raises ParseError."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.mem-limit: "lots"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "robotsix.deploy.mem-limit" in str(exc.value)
+
+    def test_memswap_limit_label(self):
+        """robotsix.deploy.memswap-limit parses into memswap_limit."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.mem-limit: "4.5g"
+      robotsix.deploy.memswap-limit: "4.5g"
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.mem_limit == "4.5g"
+        assert spec.memswap_limit == "4.5g"
+
+    def test_memswap_limit_absent_defaults_none(self):
+        """Without the memswap label, memswap_limit stays None."""
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+"""
+        spec = parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert spec.memswap_limit is None
+
+    def test_mem_limit_label_invalid_memswap_is_violation(self):
+        y = """\
+# central-deploy-contract-version: 1
+services:
+  foo:
+    image: ghcr.io/damien-robotsix/foo:main
+    labels:
+      robotsix.deploy.memswap-limit: "lots"
+"""
+        with pytest.raises(ParseError) as exc:
+            parse_compose(_bytes(y), name="foo", git_url="https://x.com/r.git")
+        assert "robotsix.deploy.memswap-limit" in str(exc.value)
+
     def test_host_docker_sock_true_on_sibling(self):
         """host-docker-sock label on a non-primary sibling parses to True."""
         y = """\
