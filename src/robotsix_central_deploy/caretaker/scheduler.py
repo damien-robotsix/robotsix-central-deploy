@@ -11,18 +11,19 @@ from typing import TYPE_CHECKING, Any
 from robotsix_http import RetryClient
 
 from .mill_client import MillClient
-from .models import CaretakerFinding, CaretakerReport
+from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import phase_health, phase_update, phase_volumes
 
 if TYPE_CHECKING:
     from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
+    from ..lifecycle.models import SelfInspect
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
     from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.env_store import EnvStore
     from ..registry.loader import ComponentRegistry
-    from ..registry.settings_store import SystemSettingsStore
+    from ..registry.settings_store import SystemSettings, SystemSettingsStore
     from .volume_audit.scheduler import VolumeAuditScheduler
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,12 @@ class CaretakerScheduler:
 
         self._findings_path = self._resolve_findings_path(config)
 
+        #: Digest of the last detached self-update attempt this boot. Guards
+        #: the end-of-pass self-update step: if ``update_available`` fails to
+        #: clear (updater lost the race, flag stuck), the same pending digest
+        #: is not re-triggered — no repeated self-restarts within one boot.
+        self._last_self_update_digest: str | None = None
+
         self._last_report: CaretakerReport | None = None
 
     @staticmethod
@@ -108,6 +115,9 @@ class CaretakerScheduler:
         # Identify our own container so phase_update never tries to auto-deploy
         # (and thereby kill) the process running this pass — see phase_update.
         self_container_name = ""
+        # Kept beyond the block below: the end-of-pass self-update step hands
+        # it to the detached updater (POST /system/update path).
+        self_info: SelfInspect | None = None
         # Distinguishes "this backend has no self container to protect" from
         # "it has one but we could not name it". Only the latter is dangerous:
         # phase_update fails closed on it rather than risk deploying over the
@@ -218,7 +228,27 @@ class CaretakerScheduler:
         else:
             logger.debug("phase_volumes skipped: no VolumeAuditScheduler")
 
-        # 4. Record findings locally. The caretaker never files tickets
+        # 4. Phase: SELF-UPDATE — detached self-updater for the plane itself.
+        # At the end of the pass, if our own image has a pending update, launch
+        # the same detached watchtower updater POST /system/update uses
+        # (backend.trigger_self_update), so central-deploy updates itself
+        # within one caretaker interval with zero human involvement. phase_update
+        # must never deploy our own container in-process (2026-07-21 loop); this
+        # detached path survives the swap and runs last, so the updater replaces
+        # us only after every other phase has finished.
+        try:
+            self_update_finding = await self._maybe_trigger_self_update(
+                settings=settings,
+                self_info=self_info,
+            )
+            if self_update_finding is not None:
+                findings.append(self_update_finding)
+                phases_run.append("self-update")
+        except Exception as exc:
+            logger.exception("self-update step crashed")
+            errors.append(f"self-update: {exc}")
+
+        # 5. Record findings locally. The caretaker never files tickets
         # (operator decision, 2026-09-01: it "just updates the containers") —
         # findings land in caretaker_findings.jsonl and the log, where the
         # operator, the fleet monitor, and the chat agent can read them.
@@ -242,6 +272,108 @@ class CaretakerScheduler:
         )
         self._last_report = report
         return report
+
+    async def _maybe_trigger_self_update(
+        self,
+        settings: SystemSettings,
+        self_info: SelfInspect | None,
+    ) -> CaretakerFinding | None:
+        """Launch the detached self-updater when the plane's own image has an update.
+
+        Mirrors ``POST /system/update``: ``backend.trigger_self_update``
+        spawns a one-shot watchtower container that survives the swap,
+        unlike an in-process ``backend.deploy`` (which phase_update must
+        never run on our own container — the 2026-07-21 self-restart loop).
+
+        Guards, all of which must pass:
+
+        * ``caretaker_self_update_enabled`` is on (default on).
+        * The backend can identify our own container (containerised).
+        * A self record exists with ``update_available`` true.
+        * The pending digest differs from the running digest AND from the
+          digest of the last self-update attempt this boot — a stale
+          ``update_available`` flag (updater lost the race, or the flag
+          failed to clear) can then not restart the plane more than once
+          per boot.
+        """
+        if not settings.caretaker_self_update_enabled:
+            logger.debug("caretaker: self-update disabled by setting")
+            return None
+        if self_info is None:
+            # Not containerised / backend cannot self-inspect (noop): there
+            # is no own container to replace, nothing to update.
+            return None
+
+        records = await self._store.list_all()
+        self_record = next(
+            (
+                r
+                for r in records
+                if not r.component_id and r.container_name == self_info.container_name
+            ),
+            None,
+        )
+        if self_record is None:
+            logger.debug("caretaker: no self record, skipping self-update")
+            return None
+        if not self_record.update_available:
+            return None
+
+        new_digest = self_record.latest_registry_digest
+        running_digest = self_record.deployed_image_digest
+        if not new_digest or new_digest == running_digest:
+            logger.debug(
+                "caretaker: self-update pending but no distinct digest "
+                "(running=%s latest=%s), skipping",
+                running_digest,
+                new_digest,
+            )
+            return None
+
+        if new_digest == self._last_self_update_digest:
+            logger.warning(
+                "caretaker: self-update to %s already attempted this boot — "
+                "update_available did not clear, skipping to avoid a "
+                "self-restart loop",
+                new_digest,
+            )
+            return None
+
+        try:
+            updater_id = await self._backend.trigger_self_update(
+                self_info,
+                self._config.self_update_watchtower_image,
+                self._config.docker_socket_url,
+                self._config.self_update_docker_api_version,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("caretaker: self-update launch failed: %s", exc)
+            return CaretakerFinding(
+                component_id=self_record.name,
+                kind=FindingKind.UPDATE_FAILED,
+                title="Self-update launch failed",
+                detail=f"Detached updater could not be started: {exc}",
+                severity="error",
+            )
+
+        self._last_self_update_digest = new_digest
+        logger.warning(
+            "caretaker: triggered detached self-update of %s → %s "
+            "(updater container %s)",
+            self_record.name,
+            new_digest,
+            updater_id,
+        )
+        return CaretakerFinding(
+            component_id=self_record.name,
+            kind=FindingKind.SELF_UPDATE_TRIGGERED,
+            title=f"Self-update triggered for {self_record.name}",
+            detail=(
+                f"Pending digest {new_digest} differs from running "
+                f"{running_digest}; launched detached updater {updater_id}. "
+                "The server will restart itself shortly."
+            ),
+        )
 
     def _append_local(self, finding: CaretakerFinding) -> None:
         """Append a JSON line to the local findings file; trim to last 200."""

@@ -330,3 +330,160 @@ class TestScheduler:
         assert "last_report" in status
         assert "mill_reachable" not in status
         assert status["enabled"] is True
+
+
+class TestSelfUpdate:
+    """End-of-pass detached self-update of the plane itself."""
+
+    SELF_CONTAINER = "robotsix-central-deploy-central-deploy-1"
+
+    @staticmethod
+    def _self_record(**overrides) -> ServiceRecord:
+        base = dict(
+            name="central-deploy",
+            image="ghcr.io/damien-robotsix/robotsix-central-deploy:main",
+            container_name=TestSelfUpdate.SELF_CONTAINER,
+            deployed_image_digest="sha256:running",
+            update_available=True,
+            latest_registry_digest="sha256:new",
+        )
+        base.update(overrides)
+        return ServiceRecord(**base)
+
+    @pytest.mark.asyncio
+    async def test_triggered_at_end_of_pass(self, scheduler_fixtures):
+        """A pending self update launches the detached updater (POST /system/update path)."""
+        from robotsix_central_deploy.caretaker.models import FindingKind
+
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        store.list_all = AsyncMock(return_value=[self._self_record()])
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock(return_value="updater-cid")
+
+        report = await scheduler.run_once()
+
+        backend.trigger_self_update.assert_awaited_once()
+        # Same signature/args as POST /system/update: target, watchtower
+        # image, docker host URL, docker api version.
+        args = backend.trigger_self_update.call_args[0]
+        assert isinstance(args[0], SelfInspect)
+        assert args[1] == scheduler._config.self_update_watchtower_image
+        assert args[2] == scheduler._config.docker_socket_url
+        assert args[3] == scheduler._config.self_update_docker_api_version
+        assert "self-update" in report.phases_run
+        kinds = [f.kind for f in report.findings]
+        assert FindingKind.SELF_UPDATE_TRIGGERED in kinds
+        assert scheduler._last_self_update_digest == "sha256:new"
+
+    @pytest.mark.asyncio
+    async def test_respects_disabled_setting(self, scheduler_fixtures):
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        await scheduler._settings_store.put(
+            SystemSettings(
+                caretaker_enabled=True,
+                caretaker_self_update_enabled=False,
+            )
+        )
+        store.list_all = AsyncMock(return_value=[self._self_record()])
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock()
+
+        await scheduler.run_once()
+
+        backend.trigger_self_update.assert_not_awaited()
+        assert scheduler._last_self_update_digest is None
+
+    @pytest.mark.asyncio
+    async def test_skipped_without_pending_update(self, scheduler_fixtures):
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        store.list_all = AsyncMock(
+            return_value=[
+                self._self_record(update_available=False, latest_registry_digest="")
+            ]
+        )
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock()
+
+        await scheduler.run_once()
+
+        backend.trigger_self_update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_skipped_when_digest_unchanged(self, scheduler_fixtures):
+        """update_available true but the pending digest equals the running one."""
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        store.list_all = AsyncMock(
+            return_value=[
+                self._self_record(latest_registry_digest="sha256:running")
+            ]
+        )
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock()
+
+        await scheduler.run_once()
+
+        backend.trigger_self_update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_loop_guard_once_per_boot(self, scheduler_fixtures):
+        """A stale update_available flag must not restart the plane twice per boot.
+
+        Acceptance: a deliberately broken update_available flag cannot cause
+        repeated self-restarts within one boot.
+        """
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock(return_value="updater-cid")
+
+        # Same pending digest across two passes in the same boot — the flag
+        # never clears (e.g. the updater lost the race).
+        store.list_all = AsyncMock(return_value=[self._self_record()])
+
+        await scheduler.run_once()
+        await scheduler.run_once()
+
+        backend.trigger_self_update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_launch_failure_emits_update_failed(self, scheduler_fixtures):
+        from robotsix_central_deploy.caretaker.models import FindingKind
+
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        store.list_all = AsyncMock(return_value=[self._self_record()])
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock(
+            side_effect=RuntimeError("daemon unreachable")
+        )
+
+        report = await scheduler.run_once()
+
+        kinds = [f.kind for f in report.findings]
+        assert FindingKind.UPDATE_FAILED in kinds
+        # Not recorded as an attempt: a transient launch failure retries next pass.
+        assert scheduler._last_self_update_digest is None
