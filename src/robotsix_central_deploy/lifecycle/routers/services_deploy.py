@@ -213,6 +213,16 @@ async def _fanout_sibling_action(
 # ---------------------------------------------------------------------------
 
 
+# Alias: LLM agents recurringly guess "redeploy" for this operation and got
+# 404s (2026-09-02: hexarchy 06:40Z, mill 07:46Z — the mill attempt was never
+# retried on the right route). Hidden from the OpenAPI schema so the published
+# contract keeps a single canonical path.
+@router.post(
+    "/services/{name}/redeploy",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=DeployAcceptedResponse,
+    include_in_schema=False,
+)
 @router.post(
     "/services/{name}/deploy",
     status_code=status.HTTP_202_ACCEPTED,

@@ -149,6 +149,16 @@ def test_onboard_preflight_route_matches_the_onboard_router():
 # ---------------------------------------------------------------------------
 
 
+def test_redeploy_alias_matches_the_deploy_endpoint():
+    """POST /services/{name}/redeploy is an alias of .../deploy — LLM agents
+    keep guessing "redeploy" and previously got 404s (2026-09-02 incidents)."""
+    dep = _first_matching_route(app, "POST", "/services/foo/deploy")
+    red = _first_matching_route(app, "POST", "/services/foo/redeploy")
+    assert dep is not None, "No route matches POST /services/foo/deploy"
+    assert red is not None, "No route matches POST /services/foo/redeploy"
+    assert getattr(red, "endpoint", None) is getattr(dep, "endpoint", None)
+
+
 def test_no_route_has_real_auth_dependency():
     """No route may carry a real (non-no-op) auth dependency.
 
