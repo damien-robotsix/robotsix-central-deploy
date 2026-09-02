@@ -59,5 +59,13 @@ async def _compute_orphan_volumes(
     owned: set[str] = set()
     for cfg in store.all():
         owned.update(cfg.named_volumes)
+    # The claude-auth volume is owned by the engine itself (OAuth credential
+    # + SDK transcripts) and is only mounted transiently, so it shows up as
+    # unattached — without this guard a blanket POST /volumes/prune would
+    # delete the fleet's Claude subscription credential (observed listed as
+    # a prune-safe orphan on 2026-09-02).
+    from ..models import CLAUDE_AUTH_VOLUME
+
+    owned.add(CLAUDE_AUTH_VOLUME)
     df = await backend.disk_df()
     return [v for v in df.volumes if v.name and v.name not in owned and not v.in_use]
