@@ -78,9 +78,7 @@ class TestMillClient:
         http = MagicMock(spec=RetryClient)
         http.get = AsyncMock(
             return_value=MagicMock(
-                json=MagicMock(
-                    return_value=[{"ticket_id": "t", "stage": "classify"}]
-                )
+                json=MagicMock(return_value=[{"ticket_id": "t", "stage": "classify"}])
             )
         )
         client = MillClient("http://mill:8077", http)
