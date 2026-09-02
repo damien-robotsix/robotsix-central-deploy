@@ -339,14 +339,14 @@ class TestSelfUpdate:
 
     @staticmethod
     def _self_record(**overrides) -> ServiceRecord:
-        base = dict(
-            name="central-deploy",
-            image="ghcr.io/damien-robotsix/robotsix-central-deploy:main",
-            container_name=TestSelfUpdate.SELF_CONTAINER,
-            deployed_image_digest="sha256:running",
-            update_available=True,
-            latest_registry_digest="sha256:new",
-        )
+        base = {
+            "name": "central-deploy",
+            "image": "ghcr.io/damien-robotsix/robotsix-central-deploy:main",
+            "container_name": TestSelfUpdate.SELF_CONTAINER,
+            "deployed_image_digest": "sha256:running",
+            "update_available": True,
+            "latest_registry_digest": "sha256:new",
+        }
         base.update(overrides)
         return ServiceRecord(**base)
 
@@ -427,9 +427,7 @@ class TestSelfUpdate:
         """update_available true but the pending digest equals the running one."""
         scheduler, store, backend, _ccs, _http = scheduler_fixtures
         store.list_all = AsyncMock(
-            return_value=[
-                self._self_record(latest_registry_digest="sha256:running")
-            ]
+            return_value=[self._self_record(latest_registry_digest="sha256:running")]
         )
         store.put = AsyncMock()
         backend.status = AsyncMock(
