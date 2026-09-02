@@ -131,9 +131,11 @@ class TestServiceRouteHint:
     """
 
     def test_unit_unknown_action_lists_valid_routes(self):
-        hint = _service_route_hint("POST", "/services/hexarchy/redeploy")
+        # "restart-image" stands in for any unknown action; "redeploy" is no
+        # longer usable here — it became a real alias of /deploy.
+        hint = _service_route_hint("POST", "/services/hexarchy/restart-image")
         assert hint is not None
-        assert "POST /services/hexarchy/redeploy" in hint
+        assert "POST /services/hexarchy/restart-image" in hint
         # The real routes are named so the caller can retry the right one.
         assert "POST /services/hexarchy/deploy" in hint
         assert "POST /services/hexarchy/refresh-contract" in hint
@@ -153,7 +155,9 @@ class TestServiceRouteHint:
     async def test_unknown_action_404_names_valid_routes(
         self, client: AsyncClient, auth_headers
     ):
-        resp = await client.post("/services/hexarchy/redeploy", headers=auth_headers)
+        resp = await client.post(
+            "/services/hexarchy/restart-image", headers=auth_headers
+        )
         assert resp.status_code == 404, resp.text
         body = resp.json()
         _ = ErrorDetail(**body)
