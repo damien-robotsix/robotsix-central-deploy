@@ -358,10 +358,11 @@ jobs:
               violations=$((violations + 1))
             fi
           done
-          # Store-backend strings (exclude models.py and conftest)
+          # Store-backend strings (exclude models.py and conftest; auth_token.py's
+          # "file" is a URI-scheme denylist entry, not a store-backend name)
           for pattern in '"memory"' '"file"'; do
             matches=$(grep -rn "$pattern" src/robotsix_central_deploy/lifecycle/ --include='*.py' \
-              --exclude='models.py' || true)
+              --exclude='models.py' --exclude='auth_token.py' || true)
             if [ -n "$matches" ]; then
               echo "::error file={},line={}::Raw store-backend string $pattern found outside models.py"
               echo "$matches"
