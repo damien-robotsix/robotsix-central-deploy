@@ -6258,6 +6258,141 @@
         }
       }
     },
+    "/auth/login": {
+      "get": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Start Mobile Login",
+        "description": "Start the mobile login handoff (reachable WITHOUT an SSO session).\n\nStashes the validated deep-link target in a short-lived cookie and\nredirects to the SSO-gated ``/auth/login/complete``.  A browser without\na fleet SSO session is bounced through the tinyauth login page on that\nrequest and returns to the same bare path afterwards \u2014 the cookie, not\nthe query string, carries the target across the round-trip (tinyauth\ndrops query strings when rebuilding its post-login redirect).",
+        "operationId": "start_mobile_login_auth_login_get",
+        "parameters": [
+          {
+            "name": "redirect_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The app's deep-link callback, e.g. robotsixchat://auth/callback",
+              "title": "Redirect To"
+            },
+            "description": "The app's deep-link callback, e.g. robotsixchat://auth/callback"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login/complete": {
+      "get": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Complete Mobile Login",
+        "description": "Finish the mobile login handoff (only reachable through the SSO gate).\n\nIssues a mobile bearer token for the SSO-authenticated ``Remote-User``\nand redirects the browser to the deep-link target stored by\n``/auth/login``, appending ``?token=<bearer>``.  The OS hands the\ndeep link to the app, which persists the token.",
+        "operationId": "complete_mobile_login_auth_login_complete_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/auth/mobile-token": {
+      "post": {
+        "tags": [
+          "auth-token"
+        ],
+        "summary": "Exchange Mobile Token",
+        "description": "Validate the app's stored token and return it in TokenResponse shape.\n\nThe mobile app treats the deep-link credential as a subject token and\nexchanges it for an access token before each session.  Fleet mobile\ntokens are already self-contained bearers, so the exchange validates\nthe token (expiry + revocation) and echoes it with its remaining\nlifetime.  Reachable WITHOUT an SSO session: it only ever returns a\ntoken that the caller already holds and that is still valid.",
+        "operationId": "exchange_mobile_token_chat_auth_mobile_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileTokenExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized \u2014 invalid or missing credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/token/{token_id}": {
       "delete": {
         "tags": [
@@ -9209,6 +9344,21 @@
         "type": "object",
         "title": "MergePullRequest",
         "description": "Body for ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge``.\n\nAll fields are optional; *merge_method* defaults to ``\"squash\"``."
+      },
+      "MobileTokenExchangeRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Bearer token obtained via the login handoff."
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "MobileTokenExchangeRequest",
+        "description": "Body of the mobile app's token-exchange call."
       },
       "OnboardConfirmAcceptedResponse": {
         "properties": {

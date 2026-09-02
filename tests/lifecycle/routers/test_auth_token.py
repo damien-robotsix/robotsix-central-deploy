@@ -268,3 +268,157 @@ class TestRevokeUserTokens:
         # Now issue a new token — its iat > revoke timestamp.
         token = wired_store.issue("henry@ex.com")
         assert wired_store.validate(token) is not None
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/login + /auth/login/complete — mobile deep-link login handoff
+# ---------------------------------------------------------------------------
+
+_DEEP_LINK = "robotsixchat://auth/callback"
+
+
+class TestMobileLoginHandoff:
+    async def test_start_sets_cookie_and_redirects_to_complete(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get("/auth/login", params={"redirect_to": _DEEP_LINK})
+        assert resp.status_code == 303, resp.text
+        assert resp.headers["location"] == "/auth/login/complete"
+        set_cookie = resp.headers["set-cookie"]
+        assert "robotsix_login_redirect=" in set_cookie
+        assert "Path=/auth" in set_cookie
+        assert "HttpOnly" in set_cookie
+
+    async def test_start_rejects_web_scheme(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get(
+            "/auth/login", params={"redirect_to": "https://evil.example/steal"}
+        )
+        assert resp.status_code == 400, resp.text
+
+    async def test_start_rejects_control_characters(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get(
+            "/auth/login",
+            params={"redirect_to": "robotsixchat://auth/callback\r\nSet-Cookie: x"},
+        )
+        assert resp.status_code == 400, resp.text
+
+    async def test_start_requires_redirect_to(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get("/auth/login")
+        assert resp.status_code == 422, resp.text
+
+    async def test_complete_without_remote_user_returns_401(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get(
+            "/auth/login/complete",
+            cookies={"robotsix_login_redirect": _DEEP_LINK},
+        )
+        assert resp.status_code == 401, resp.text
+
+    async def test_complete_without_cookie_returns_400(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get(
+            "/auth/login/complete", headers={"Remote-User": "dana@ex.com"}
+        )
+        assert resp.status_code == 400, resp.text
+
+    async def test_complete_rejects_tampered_cookie_scheme(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get(
+            "/auth/login/complete",
+            headers={"Remote-User": "dana@ex.com"},
+            cookies={"robotsix_login_redirect": "https://evil.example/steal"},
+        )
+        assert resp.status_code == 400, resp.text
+
+    async def test_full_handoff_issues_valid_token(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        start = await client.get("/auth/login", params={"redirect_to": _DEEP_LINK})
+        assert start.status_code == 303
+        # Carry the handoff cookie across the (simulated) SSO round-trip.
+        cookie_value = start.cookies["robotsix_login_redirect"]
+
+        complete = await client.get(
+            "/auth/login/complete",
+            headers={"Remote-User": "dana@ex.com"},
+            cookies={"robotsix_login_redirect": cookie_value},
+        )
+        assert complete.status_code == 302, complete.text
+        location = complete.headers["location"]
+        assert location.startswith(f"{_DEEP_LINK}?token="), location
+
+        from urllib.parse import parse_qs, urlsplit
+
+        token = parse_qs(urlsplit(location).query)["token"][0]
+        payload = wired_store.validate(token)
+        assert payload is not None
+        assert payload["sub"] == "dana@ex.com"
+
+        # The handoff cookie is cleared on completion.
+        cleared = complete.headers["set-cookie"]
+        assert "robotsix_login_redirect=" in cleared
+        assert "Max-Age=0" in cleared or "expires" in cleared.lower()
+
+    async def test_complete_appends_with_ampersand_when_target_has_query(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.get(
+            "/auth/login/complete",
+            headers={"Remote-User": "dana@ex.com"},
+            cookies={"robotsix_login_redirect": "robotsixchat://auth/callback?src=sso"},
+        )
+        assert resp.status_code == 302
+        assert "?src=sso&token=" in resp.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/auth/mobile-token — mobile app token exchange
+# ---------------------------------------------------------------------------
+
+
+class TestExchangeMobileToken:
+    async def test_valid_token_is_echoed_with_expiry(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        token = wired_store.issue("erin@ex.com")
+        resp = await client.post("/chat/auth/mobile-token", json={"token": token})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["access_token"] == token
+        assert body["token_type"] == "Bearer"
+        assert body["scope"] == "chat"
+        assert 0 < body["expires_in"] <= 90 * 86400
+
+    async def test_garbage_token_returns_401(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.post(
+            "/chat/auth/mobile-token", json={"token": "not-a-token"}
+        )
+        assert resp.status_code == 401, resp.text
+
+    async def test_revoked_token_returns_401(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        token = wired_store.issue("frank@ex.com")
+        payload = wired_store.validate(token)
+        assert payload is not None
+        await wired_store.revoke_one(payload["jti"])
+
+        resp = await client.post("/chat/auth/mobile-token", json={"token": token})
+        assert resp.status_code == 401, resp.text
+
+    async def test_missing_body_field_returns_422(
+        self, client: AsyncClient, wired_store: TokenStore
+    ):
+        resp = await client.post("/chat/auth/mobile-token", json={})
+        assert resp.status_code == 422, resp.text

@@ -25,6 +25,44 @@
 # admitted directly; all other requests still pass through tinyauth.
 
 http:
+  # Fleet-wide auth handoff routes.  The mobile login flow must work with any
+  # component hostname as the app's base URL, so these routers match on PATH
+  # alone (no Host — the repo-agnostic rule).  They point at the auth engine
+  # (central-deploy), exactly like the `mobile-token` ForwardAuth middleware
+  # below already does.
+  #
+  # - /auth/login is PUBLIC: it only stores the app's deep-link target in a
+  #   short-lived cookie and bounces to /auth/login/complete.  No token is
+  #   issued without SSO.
+  # - /auth/login/complete sits behind tinyauth: the engine sees Remote-User
+  #   and issues the bearer token.  The path is deliberately query-free —
+  #   tinyauth drops query strings when rebuilding its post-login redirect.
+  # - /chat/auth/mobile-token is PUBLIC: it validates and echoes a token the
+  #   caller already holds; invalid tokens get 401.
+  routers:
+    fleet-auth-login:
+      rule: "Path(`/auth/login`)"
+      entryPoints: [websecure]
+      service: fleet-auth
+      priority: 25
+    fleet-auth-login-complete:
+      rule: "Path(`/auth/login/complete`)"
+      entryPoints: [websecure]
+      middlewares: [tinyauth]
+      service: fleet-auth
+      priority: 25
+    fleet-auth-token-exchange:
+      rule: "Path(`/chat/auth/mobile-token`)"
+      entryPoints: [websecure]
+      service: fleet-auth
+      priority: 25
+
+  services:
+    fleet-auth:
+      loadBalancer:
+        servers:
+          - url: "http://central-deploy:8100"
+
   middlewares:
     # Every externally routed request. Unauthenticated ones are redirected to
     # tinyauth's login page and come back with a session cookie valid
