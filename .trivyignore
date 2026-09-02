@@ -203,3 +203,14 @@ CVE-2026-76956
 # CVE-2026-76957 — libexpat1, same upstream PR as CVE-2026-76956.
 #   No Debian upload yet. Review after 2026-11-23.
 CVE-2026-76957
+
+# TEMP-* entries in libpcre2-8-0 (python:3.14-slim base). These are
+# Debian security-tracker temporary identifiers with no assigned CVE and
+# no fixed version available, so the base bump + apt-get upgrade cannot
+# clear them. Not exploitable in this container's attack surface.
+#   Review after 2026-12-02.
+TEMP-0000000-B05303
+TEMP-0000000-A5518C
+TEMP-0000000-8188AC
+TEMP-0000000-64109B
+TEMP-0000000-21C4F8
