@@ -197,6 +197,71 @@ class TestPhaseUpdate:
         backend.deploy.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_defers_busy_component_keeps_update_pending(self):
+        """A component in busy_components is skipped and stays pending.
+
+        Regression guard for the mill: recreating its container while
+        implement/ci_fix stages run aborts hour-scale agent runs (observed
+        2026-08-28 OOM redeploys). The record must keep update_available so
+        the next pass retries.
+        """
+        store = MagicMock()
+        record = _make_record(name="mill")
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock()
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config(id="mill"))
+        dhs = MagicMock(spec=DeployHistoryStore)
+
+        findings = await phase_update(
+            registry,
+            store,
+            backend,
+            ccs,
+            dhs,
+            _make_env_store(),
+            busy_components={"mill": "2 heavy stage(s) in flight: implement×2"},
+        )
+        assert len(findings) == 0
+        backend.deploy.assert_not_called()
+        assert record.update_available is True
+
+    @pytest.mark.asyncio
+    async def test_busy_map_does_not_defer_other_components(self):
+        """Only the named busy component is deferred; others still deploy."""
+        store = MagicMock()
+        record = _make_record(name="svc")
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(
+            registry,
+            store,
+            backend,
+            ccs,
+            dhs,
+            _make_env_store(),
+            busy_components={"mill": "1 heavy stage(s) in flight: implement×1"},
+        )
+        backend.deploy.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_skips_no_update(self):
         store = MagicMock()
         record = _make_record(update_available=False)

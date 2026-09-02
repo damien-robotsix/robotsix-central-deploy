@@ -35,6 +35,40 @@ class MillClient:
         self._base_url = base_url.rstrip("/")
         self._http = http_client
 
+    #: Stages whose agent runs are hour-scale; aborting one wastes real work.
+    #: Cheap, seconds-scale stages (classify, retrospect, …) are NOT listed:
+    #: deferring on those would starve updates on a busy board forever.
+    HEAVY_STAGES: frozenset[str] = frozenset({"implement", "ci_fix", "refine"})
+
+    async def active_stage_summary(self) -> str | None:
+        """GET {base_url}/active — summarise the mill's heavy running stages.
+
+        Returns a short human-readable summary (e.g. ``"2 heavy stage(s):
+        implement×2"``) when the mill has :data:`HEAVY_STAGES` in flight, or
+        ``None`` when only cheap stages (or nothing) run.  Fails open: any
+        transport or shape error also returns ``None`` — an unreachable or
+        broken mill must not block its own update (deploying is then the
+        likely remedy, not the risk).
+        """
+        try:
+            response = await self._http.get(f"{self._base_url}/active")
+            stages = response.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mill /active probe failed (fail-open): %s", exc)
+            return None
+        if not isinstance(stages, list):
+            return None
+        counts: dict[str, int] = {}
+        for entry in stages:
+            stage = entry.get("stage", "") if isinstance(entry, dict) else ""
+            if stage in self.HEAVY_STAGES:
+                counts[stage] = counts.get(stage, 0) + 1
+        if not counts:
+            return None
+        total = sum(counts.values())
+        detail = ", ".join(f"{stage}×{n}" for stage, n in sorted(counts.items()))
+        return f"{total} heavy stage(s) in flight: {detail}"
+
     async def ingest_finding(self, finding: CaretakerFinding) -> bool:
         """POST {base_url}/tickets/ingest — report a finding to the mill.
 

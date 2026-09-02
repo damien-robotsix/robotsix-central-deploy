@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from robotsix_http import RetryClient
 
+from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport
 from .phases import phase_health, phase_update, phase_volumes
 
@@ -128,6 +129,22 @@ class CaretakerScheduler:
             logger.warning("caretaker: inspect_self failed", exc_info=True)
             self_identity_known = False
 
+        # Probe the mill for in-flight stages: recreating its container
+        # mid-implement aborts hour-scale agent runs, so a busy mill keeps
+        # its pending update for the next pass. Fails open — an unreachable
+        # mill is not treated as busy (deploying is then the likely remedy).
+        busy_components: dict[str, str] = {}
+        mill_id = settings.mill_component_id
+        if mill_id:
+            mill_url = MillClient.derive_url_from_registry(
+                self._registry, self._component_config_store, mill_id
+            )
+            if mill_url is not None:
+                mill_client = MillClient(mill_url, self._http_client)
+                busy_reason = await mill_client.active_stage_summary()
+                if busy_reason is not None:
+                    busy_components[mill_id] = busy_reason
+
         try:
             update_findings = await phase_update(
                 self._registry,
@@ -138,6 +155,7 @@ class CaretakerScheduler:
                 self._env_store,
                 self_container_name,
                 self_identity_known,
+                busy_components=busy_components,
             )
             findings.extend(update_findings)
             phases_run.append("update")
