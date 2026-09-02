@@ -697,6 +697,14 @@ async def _init_component_registry(app: FastAPI) -> None:
             logger.info("Registered self-managed 'central-deploy' service")
 
     # --- Volume audit subsystem ---
+    # Sweep helper containers orphaned by the previous server process (a
+    # self-update replaces the container while its du helpers run; their
+    # finally-remove dies with the process) BEFORE new scans start.
+    try:
+        await _backend.remove_stale_helpers()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("stale-helper sweep at startup failed: %s", exc)
+
     _volume_audit_task: asyncio.Task[Any] | None = None
     if _config.volume_audit_enabled:
         _volume_audit_scheduler = VolumeAuditScheduler(

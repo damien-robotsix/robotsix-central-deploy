@@ -207,6 +207,50 @@ class VolumeOps:
     #: killed — better a missing size than a stray container grinding IO.
     _ONE_SHOT_TIMEOUT_S = 600
 
+    #: Label stamped on every one-shot du helper so a fresh server process can
+    #: sweep helpers orphaned by a dead predecessor.  The finally-remove in
+    #: ``_run_one_shot_sync`` only protects the process that spawned the
+    #: helper: a self-update replaces the container mid-wait, and the helper
+    #: keeps running du with nobody left to remove it (2026-09-02: the old
+    #: server's hourly audit du of mill-mill-data outlived it by 10+ minutes).
+    HELPER_LABEL = "robotsix-central-deploy.one-shot-helper"
+
+    async def remove_stale_helpers(self) -> int:
+        """Force-remove every labelled one-shot helper container.
+
+        Called at server startup: any helper alive then belongs to a dead
+        (or dying, mid-self-update) predecessor process.  Returns the number
+        of containers removed; never raises.
+        """
+        loop = asyncio.get_running_loop()
+
+        def _sweep() -> int:
+            removed = 0
+            try:
+                stale = self._client.containers.list(
+                    all=True, filters={"label": self.HELPER_LABEL}
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("stale-helper sweep: listing failed: %s", exc)
+                return 0
+            for container in stale:
+                try:
+                    container.remove(force=True)
+                    removed += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "stale-helper sweep: failed to remove %s: %s",
+                        getattr(container, "name", "?"),
+                        exc,
+                    )
+            if removed:
+                logger.info(
+                    "stale-helper sweep: removed %d orphaned helper(s)", removed
+                )
+            return removed
+
+        return await loop.run_in_executor(None, _sweep)
+
     def _run_one_shot_sync(
         self,
         command: list[str],
@@ -229,6 +273,7 @@ class VolumeOps:
             command=command,
             volumes=volumes,
             detach=True,
+            labels={self.HELPER_LABEL: "1"},
         )
         try:
             container.wait(timeout=self._ONE_SHOT_TIMEOUT_S)

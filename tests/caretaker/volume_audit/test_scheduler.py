@@ -210,3 +210,48 @@ class TestVolumeAuditScheduler:
 
         # Should have called run_once 3 times: error → success → cancel
         assert call_count == 3
+
+
+async def test_run_once_passes_are_serialized(tmp_path):
+    """The background loop and the caretaker's phase_volumes both scan at
+    startup; concurrent passes put two du helpers on the same large volume
+    (2026-09-02, mill-mill-data). run_once must serialize."""
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from robotsix_central_deploy.caretaker.volume_audit.scheduler import (
+        VolumeAuditScheduler,
+    )
+
+    config = MagicMock()
+    config.volume_audit_snapshot_path = str(tmp_path / "snap.json")
+    config.volume_audit_findings_path = str(tmp_path / "findings.json")
+    config.volume_audit_growth_threshold_pct = 10.0
+    config.volume_audit_min_delta_bytes = 1
+    config.board_api_url = ""
+
+    comp = MagicMock()
+    comp.id = "svc"
+    comp.named_volumes = ["vol-a"]
+    store = MagicMock()
+    store.all.return_value = [comp]
+
+    in_flight = 0
+    max_in_flight = 0
+
+    async def _measure(_name):
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return 123
+
+    backend = MagicMock()
+    backend.measure_volume_bytes = AsyncMock(side_effect=_measure)
+
+    scheduler = VolumeAuditScheduler(config, backend, store)
+    await asyncio.gather(scheduler.run_once(), scheduler.run_once())
+
+    assert backend.measure_volume_bytes.await_count == 2  # both passes ran
+    assert max_in_flight == 1  # never concurrently
