@@ -257,8 +257,8 @@ class TestRobotsixUiAssets:
         page loads a stylesheet and mounts nothing.
         """
         assert robotsix_ui_assets._ASSETS == {
-            "style.css": "robotsix-ui.css",
-            "vanilla.js": "robotsix-ui-vanilla.js",
+            robotsix_ui_assets.css_url: "robotsix-ui.css",
+            robotsix_ui_assets.vanilla_js_url: "robotsix-ui-vanilla.js",
         }
 
     def test_pinned_version_is_a_release_tag(self):

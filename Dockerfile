@@ -27,7 +27,6 @@ COPY src/ ./src/
 COPY docs/ui/DEPLOY_CONTRACT.md ./docs/ui/DEPLOY_CONTRACT.md
 
 RUN --mount=type=secret,id=github_token,required=false \
-    python _gen_robotsix_ui_assets.py && \
     if [ -f /run/secrets/github_token ]; then \
       GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
       git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
@@ -37,6 +36,7 @@ RUN --mount=type=secret,id=github_token,required=false \
     && uv pip install --system --no-cache -r /tmp/requirements.txt \
     && uv pip install --system --no-cache --no-deps . \
     && uv pip install --system --no-cache 'setuptools>=83.0.0' \
+    && python _gen_robotsix_ui_assets.py \
     && rm -f /tmp/requirements.txt
 
 # Runtime stage — only git (needed at runtime by the onboard fetcher), the

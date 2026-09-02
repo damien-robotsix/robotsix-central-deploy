@@ -2,9 +2,9 @@
 
 Pulls the compiled stylesheet **and** the framework-free JS bundle from their
 GitHub Release assets at build time, so central-deploy never re-vendors a
-stale, one-shot copy of either. The URL construction mirrors the
-``robotsix_ui.css_url()`` / ``robotsix_ui.vanilla_js_url()`` helpers shipped
-in the robotsix-ui repository.
+stale, one-shot copy of either. The release-download URLs are built by the
+``robotsix_ui`` package's ``css_url()`` / ``vanilla_js_url()`` helpers, the
+single source of truth for the robotsix-ui asset layout.
 
 Both files are needed, not just the stylesheet: ``vanilla.js`` exports
 ``mountConfigPanel`` (the fleet's only settings renderer) and
@@ -22,6 +22,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from robotsix_ui import css_url, vanilla_js_url
+
 ROBOTSIX_UI_VERSION = "v0.1.41"
 
 _VERSION_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
@@ -34,24 +36,11 @@ _STATIC_DIR = (
     / "static"
 )
 
-#: Release asset name → local filename under ``ui/static/``.
+#: Release asset URL helper → local filename under ``ui/static/``.
 _ASSETS = {
-    "style.css": "robotsix-ui.css",
-    "vanilla.js": "robotsix-ui-vanilla.js",
+    css_url: "robotsix-ui.css",
+    vanilla_js_url: "robotsix-ui-vanilla.js",
 }
-
-
-def asset_url(version: str, asset: str) -> str:
-    """Return the GitHub release download URL for a robotsix-ui asset."""
-    return (
-        "https://github.com/damien-robotsix/robotsix-ui/"
-        f"releases/download/{version}/{asset}"
-    )
-
-
-def css_url(version: str) -> str:
-    """Return the GitHub release download URL for a robotsix-ui version."""
-    return asset_url(version, "style.css")
 
 
 def _fetch(url: str) -> bytes:
@@ -77,8 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"invalid robotsix-ui version: {version!r}", file=sys.stderr)
         return 2
     _STATIC_DIR.mkdir(parents=True, exist_ok=True)
-    for asset, filename in _ASSETS.items():
-        url = asset_url(version, asset)
+    for url_builder, filename in _ASSETS.items():
+        url = url_builder(version)
         data = _fetch(url)
         if not data:
             print(f"refusing to write empty {filename} from {url}", file=sys.stderr)
