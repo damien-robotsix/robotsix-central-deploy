@@ -708,3 +708,74 @@ class TestPhaseVolumes:
         assert len(disk) >= 1
         assert "99.5" in disk[0].detail or "99." in disk[0].detail  # pct used
         assert disk[0].component_id == ""
+
+
+# ---------------------------------------------------------------------------
+# _apply_volume_retention
+# ---------------------------------------------------------------------------
+
+
+class TestApplyVolumeRetention:
+    def _settings(self, rules):
+        from unittest.mock import MagicMock
+
+        settings = MagicMock()
+        settings.volume_retention_rules = rules
+        return settings
+
+    async def test_valid_rule_is_applied_with_defaults(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from robotsix_central_deploy.caretaker.phases import _apply_volume_retention
+
+        backend = MagicMock()
+        backend.prune_volume_files = AsyncMock(return_value={"removed": 3, "bytes": 99})
+        settings = self._settings(
+            [{"volume_name": "claude-auth", "path": "projects", "max_age_days": 30}]
+        )
+
+        await _apply_volume_retention(backend, settings)
+
+        backend.prune_volume_files.assert_awaited_once_with(
+            "claude-auth", "projects", "*", 30
+        )
+
+    async def test_invalid_rules_are_skipped(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from robotsix_central_deploy.caretaker.phases import _apply_volume_retention
+
+        backend = MagicMock()
+        backend.prune_volume_files = AsyncMock(return_value={"removed": 0, "bytes": 0})
+        settings = self._settings(
+            [
+                {"path": "projects", "max_age_days": 30},  # no volume
+                {"volume_name": "v", "max_age_days": 0},  # age < 1
+                {"volume_name": "v", "max_age_days": "nope"},  # bad age type
+                {"volume_name": "v", "path": "a/../..", "max_age_days": 5},  # traversal
+            ]
+        )
+
+        await _apply_volume_retention(backend, settings)
+
+        backend.prune_volume_files.assert_not_awaited()
+
+    async def test_one_failing_rule_does_not_abort_the_rest(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from robotsix_central_deploy.caretaker.phases import _apply_volume_retention
+
+        backend = MagicMock()
+        backend.prune_volume_files = AsyncMock(
+            side_effect=[RuntimeError("daemon busy"), {"removed": 1, "bytes": 5}]
+        )
+        settings = self._settings(
+            [
+                {"volume_name": "a", "max_age_days": 7},
+                {"volume_name": "b", "max_age_days": 7},
+            ]
+        )
+
+        await _apply_volume_retention(backend, settings)
+
+        assert backend.prune_volume_files.await_count == 2

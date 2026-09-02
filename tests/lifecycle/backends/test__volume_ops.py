@@ -713,3 +713,48 @@ class TestVolumeOpsStaleHelperSweep:
         client.containers.list.side_effect = RuntimeError("daemon unreachable")
 
         assert await vo.remove_stale_helpers() == 0
+
+
+# ---------------------------------------------------------------------------
+# prune_volume_files
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeOpsPruneVolumeFiles:
+    @pytest.fixture
+    def client(self) -> MagicMock:
+        return MagicMock()
+
+    async def test_parses_count_and_bytes(self, client):
+        vo = VolumeOps(client)
+        client.containers.run.return_value = _one_shot_container(b"12 34567\n")
+
+        result = await vo.prune_volume_files("claude-auth", "projects", "*.jsonl", 30)
+
+        assert result == {"removed": 12, "bytes": 34567}
+        kwargs = client.containers.run.call_args[1]
+        assert kwargs["volumes"]["claude-auth"]["mode"] == "rw"
+        # positional args: command = ["sh", "-c", script, "sh", rel, glob, days]
+        assert kwargs["command"][4:] == ["projects", "*.jsonl", "30"]
+        assert kwargs["detach"] is True
+        assert kwargs["labels"] == {VolumeOps.HELPER_LABEL: "1"}
+
+    async def test_unparseable_output_returns_zeros(self, client):
+        vo = VolumeOps(client)
+        client.containers.run.return_value = _one_shot_container(b"garbage")
+
+        result = await vo.prune_volume_files("v", "", "*", 7)
+
+        assert result == {"removed": 0, "bytes": 0}
+
+    async def test_script_never_deletes_the_rule_root(self, client):
+        """The empty-dir cleanup must keep the rule's root directory —
+        -mindepth 1 guards it."""
+        vo = VolumeOps(client)
+        client.containers.run.return_value = _one_shot_container(b"0 0\n")
+
+        await vo.prune_volume_files("v", "projects", "*", 7)
+
+        script = client.containers.run.call_args[1]["command"][2]
+        assert "-mindepth 1" in script
+        assert "-mtime" in script

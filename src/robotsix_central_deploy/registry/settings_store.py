@@ -63,8 +63,15 @@ class SystemSettings(BaseModel):
     chat_agent_registration_enabled: bool = SETTINGS_DEFAULTS[
         "chat_agent_registration_enabled"
     ]  # allow chat agent to register components via POST /chat/services
-    mobile_token_ttl_days: int = SETTINGS_DEFAULTS[
-        "mobile_token_ttl_days"
+    mobile_token_ttl_days: int = SETTINGS_DEFAULTS["mobile_token_ttl_days"]
+    #: Age-based file pruning applied by the caretaker's volume phase.
+    #: Each rule: {"volume_name": str, "path": str (relative subdir, may be
+    #: ""), "glob": str (default "*"), "max_age_days": int >= 1}.  Rules
+    #: never touch database-backed stores (a file-age delete inside e.g.
+    #: LanceDB corrupts it) — only append-only file trees like transcript
+    #: directories belong here.
+    volume_retention_rules: list[dict[str, Any]] = SETTINGS_DEFAULTS[
+        "volume_retention_rules"
     ]  # mobile bearer-token lifetime in days
 
     @field_validator("volume_audit_interval_seconds")

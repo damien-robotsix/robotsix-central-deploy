@@ -30,6 +30,7 @@ class _SettingsDefaults(TypedDict):
     ghcr_pull_token: str
     chat_agent_registration_enabled: bool
     mobile_token_ttl_days: int
+    volume_retention_rules: list[dict[str, Any]]
 
 
 SETTINGS_DEFAULTS: _SettingsDefaults = {
@@ -51,4 +52,5 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "ghcr_pull_token": "",
     "chat_agent_registration_enabled": True,
     "mobile_token_ttl_days": 90,
+    "volume_retention_rules": [],
 }
