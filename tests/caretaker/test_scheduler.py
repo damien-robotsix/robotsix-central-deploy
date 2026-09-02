@@ -60,7 +60,7 @@ def scheduler_fixtures(tmp_path):
             container_id="self-cid",
             container_name="robotsix-central-deploy-central-deploy-1",
             image_ref="ghcr.io/damien-robotsix/robotsix-central-deploy:main",
-            running_digest="sha256:self",
+            running_digest="sha256:running",
             networks=[],
         )
     )
@@ -439,6 +439,52 @@ class TestSelfUpdate:
         await scheduler.run_once()
 
         backend.trigger_self_update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_retrigger_when_running_digest_up_to_date(self, scheduler_fixtures):
+        """A stale store must not re-trigger after a successful self-update.
+
+        Watchtower swaps the container out-of-band and never persists a new
+        deployed_image_digest, and the caretaker does not run the status-poll
+        path that would refresh it. So after a successful update the store can
+        still hold the OLD deployed_image_digest with update_available=True.
+        The guard must compare against the LIVE running digest from
+        inspect_self (not the stale store value) so a completed update is never
+        relaunched — even on a fresh boot where the per-boot loop guard resets.
+        """
+        scheduler, store, backend, _ccs, _http = scheduler_fixtures
+        # Store is stale: deployed_image_digest still points at the old image
+        # and update_available never cleared.
+        store.list_all = AsyncMock(
+            return_value=[
+                self._self_record(
+                    deployed_image_digest="sha256:old",
+                    latest_registry_digest="sha256:new",
+                )
+            ]
+        )
+        store.put = AsyncMock()
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.trigger_self_update = AsyncMock()
+        # The live container already runs the new image (watchtower finished).
+        backend.inspect_self = AsyncMock(
+            return_value=SelfInspect(
+                container_id="self-cid",
+                container_name=self.SELF_CONTAINER,
+                image_ref="ghcr.io/damien-robotsix/robotsix-central-deploy:main",
+                running_digest="sha256:new",
+                networks=[],
+            )
+        )
+
+        await scheduler.run_once()
+
+        # Pending == live running digest → no re-trigger despite the stale store.
+        backend.trigger_self_update.assert_not_awaited()
+        assert scheduler._last_self_update_digest is None
 
     @pytest.mark.asyncio
     async def test_loop_guard_once_per_boot(self, scheduler_fixtures):

@@ -32,7 +32,7 @@ _MAX_LOCAL_FINDINGS = 200
 
 
 class CaretakerScheduler:
-    """Orchestrates the three-phase caretaker pass on a configurable interval.
+    """Orchestrates the four-phase caretaker pass on a configurable interval.
 
     Created once in the FastAPI lifespan and always running — when the
     caretaker is disabled the loop simply sleeps without executing phases.
@@ -103,7 +103,7 @@ class CaretakerScheduler:
     # ------------------------------------------------------------------
 
     async def run_once(self) -> CaretakerReport:
-        """Execute a full three-phase caretaker pass."""
+        """Execute a full four-phase caretaker pass."""
         started_at = datetime.now(tz=UTC)
         errors: list[str] = []
         findings: list[CaretakerFinding] = []
@@ -241,9 +241,11 @@ class CaretakerScheduler:
                 settings=settings,
                 self_info=self_info,
             )
+            # Record the phase whenever it ran, matching health/volumes which
+            # append even when they produce zero findings.
+            phases_run.append("self-update")
             if self_update_finding is not None:
                 findings.append(self_update_finding)
-                phases_run.append("self-update")
         except Exception as exc:
             logger.exception("self-update step crashed")
             errors.append(f"self-update: {exc}")
@@ -320,7 +322,16 @@ class CaretakerScheduler:
             return None
 
         new_digest = self_record.latest_registry_digest
-        running_digest = self_record.deployed_image_digest
+        # Prefer the LIVE running digest from inspect_self: the detached
+        # watchtower updater swaps the container out-of-band and never persists
+        # a new deployed_image_digest, so the store can go stale after a
+        # successful self-update (its only writer, refresh_record_status, is a
+        # status-poll path the caretaker does not invoke). Comparing against
+        # the actual running digest — falling back to the store's
+        # deployed_image_digest when the live one is unresolvable — means a
+        # completed update (pending == running) is never re-triggered,
+        # regardless of store freshness.
+        running_digest = self_info.running_digest or self_record.deployed_image_digest
         if not new_digest or new_digest == running_digest:
             logger.debug(
                 "caretaker: self-update pending but no distinct digest "

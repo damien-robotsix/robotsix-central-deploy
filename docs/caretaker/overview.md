@@ -58,7 +58,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 ## Configuration
 
 These are ordinary `LifecycleConfig` fields, set in `config/config.json`. All
-four are also part of the settings overlay, so they can be changed at runtime
+six are also part of the settings overlay, so they can be changed at runtime
 through the dashboard's Settings panel or seeded from the self-contract labels
 in `deploy/docker-compose.yml` (prefix `robotsix.deploy.settings.*`) — see
 [Configuration](../lifecycle/configuration.md#the-three-layers-in-order).
