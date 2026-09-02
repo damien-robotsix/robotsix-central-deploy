@@ -203,6 +203,45 @@ class VolumeOps:
 
     # -- volume inspection helpers ------------------------------------------
 
+    #: Hard deadline for a one-shot du helper.  A du that runs longer is
+    #: killed — better a missing size than a stray container grinding IO.
+    _ONE_SHOT_TIMEOUT_S = 600
+
+    def _run_one_shot_sync(
+        self,
+        command: list[str],
+        volumes: dict[str, dict[str, str]],
+    ) -> bytes:
+        """Run a one-shot busybox helper detached and ALWAYS remove it.
+
+        docker-py's non-detached ``run(remove=True)`` performs the removal
+        client-side after the attach stream ends — when that stream breaks
+        (daemon under IO pressure, "Response ended prematurely") the call
+        raises and the helper container is orphaned, still running its du.
+        Two such orphans ground mill-mill-data for 40+ minutes on
+        2026-09-02.  Detach + wait(timeout) + finally-remove(force) kills
+        the helper on every exit path.
+
+        Runs synchronously — callers must wrap in an executor.
+        """
+        container = self._client.containers.run(
+            "busybox",
+            command=command,
+            volumes=volumes,
+            detach=True,
+        )
+        try:
+            container.wait(timeout=self._ONE_SHOT_TIMEOUT_S)
+            raw = container.logs(stdout=True, stderr=False)
+            return raw if isinstance(raw, bytes) else str(raw).encode()
+        finally:
+            try:
+                container.remove(force=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "one-shot helper cleanup failed (container may leak): %s", exc
+                )
+
     async def measure_volume_bytes(self, volume_name: str) -> int:
         """Return effective total bytes for *volume_name*, excluding SQLite
         transient sidecars (*.db-wal, *.db-shm, *.db-journal).
@@ -213,11 +252,9 @@ class VolumeOps:
         try:
             raw: bytes = await loop.run_in_executor(
                 None,
-                lambda: self._client.containers.run(
-                    "busybox",
+                lambda: self._run_one_shot_sync(
                     command=["sh", "-c", cmd],
                     volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                    remove=True,
                 ),
             )
             return int(raw.strip() or b"0")
@@ -266,11 +303,9 @@ class VolumeOps:
         )
         raw: bytes = await loop.run_in_executor(
             None,
-            lambda: self._client.containers.run(
-                "busybox",
+            lambda: self._run_one_shot_sync(
                 command=["sh", "-c", script, "sh", rel_path],
                 volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                remove=True,
             ),
         )
         entries: list[dict[str, Any]] = []

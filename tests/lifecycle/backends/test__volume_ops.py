@@ -363,6 +363,14 @@ class TestVolumeOpsReadConfig:
 # ---------------------------------------------------------------------------
 
 
+def _one_shot_container(output: bytes) -> MagicMock:
+    """Mock of the detached helper container the one-shot runner drives."""
+    container = MagicMock()
+    container.wait.return_value = {"StatusCode": 0}
+    container.logs.return_value = output
+    return container
+
+
 class TestVolumeOpsMeasureVolumeBytes:
     @pytest.fixture
     def client(self) -> MagicMock:
@@ -370,18 +378,20 @@ class TestVolumeOpsMeasureVolumeBytes:
 
     async def test_normal_output_returns_parsed_int(self, client):
         vo = VolumeOps(client)
-        client.containers.run.return_value = b"1048576\n"
+        container = _one_shot_container(b"1048576\n")
+        client.containers.run.return_value = container
 
         result = await vo.measure_volume_bytes("data-vol")
 
         assert result == 1048576
         call_kwargs = client.containers.run.call_args[1]
         assert call_kwargs["volumes"]["data-vol"]["mode"] == "ro"
-        assert call_kwargs["remove"] is True
+        assert call_kwargs["detach"] is True
+        container.remove.assert_called_once_with(force=True)
 
     async def test_zero_output_returns_zero(self, client):
         vo = VolumeOps(client)
-        client.containers.run.return_value = b"0\n"
+        client.containers.run.return_value = _one_shot_container(b"0\n")
 
         result = await vo.measure_volume_bytes("data-vol")
 
@@ -389,7 +399,7 @@ class TestVolumeOpsMeasureVolumeBytes:
 
     async def test_empty_output_returns_zero(self, client):
         vo = VolumeOps(client)
-        client.containers.run.return_value = b""
+        client.containers.run.return_value = _one_shot_container(b"")
 
         result = await vo.measure_volume_bytes("data-vol")
 
@@ -402,6 +412,33 @@ class TestVolumeOpsMeasureVolumeBytes:
         result = await vo.measure_volume_bytes("data-vol")
 
         assert result == 0
+
+    async def test_broken_wait_stream_still_removes_container(self, client):
+        """Regression: a broken attach/wait stream must not orphan the du.
+
+        The old non-detached run(remove=True) leaked the helper container
+        when the Docker API stream failed ("Response ended prematurely",
+        2026-09-02) — the du kept grinding the volume for 40+ minutes.
+        """
+        vo = VolumeOps(client)
+        container = _one_shot_container(b"")
+        container.wait.side_effect = RuntimeError("Response ended prematurely")
+        client.containers.run.return_value = container
+
+        result = await vo.measure_volume_bytes("data-vol")
+
+        assert result == 0
+        container.remove.assert_called_once_with(force=True)
+
+    async def test_cleanup_failure_does_not_mask_result(self, client):
+        vo = VolumeOps(client)
+        container = _one_shot_container(b"77\n")
+        container.remove.side_effect = RuntimeError("daemon busy")
+        client.containers.run.return_value = container
+
+        result = await vo.measure_volume_bytes("data-vol")
+
+        assert result == 77
 
 
 # ---------------------------------------------------------------------------

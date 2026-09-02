@@ -943,6 +943,14 @@ class TestClaudeAuthCredentialCheck:
 # ---------------------------------------------------------------------------
 
 
+def _one_shot_container(output: bytes):
+    """Mock of the detached helper container the one-shot runner drives."""
+    container = MagicMock()
+    container.wait.return_value = {"StatusCode": 0}
+    container.logs.return_value = output
+    return container
+
+
 class TestDockerSdkBackendVolumeBrowser:
     @pytest.fixture
     def client_mock(self) -> MagicMock:
@@ -960,13 +968,13 @@ class TestDockerSdkBackendVolumeBrowser:
 
     async def test_list_volume_dir_empty_root(self, backend):
         b, client = backend
-        client.containers.run.return_value = b""
+        client.containers.run.return_value = _one_shot_container(b"")
         result = await b.list_volume_dir("test-vol", "")
         assert result == []
 
     async def test_list_volume_dir_files_and_dirs(self, backend):
         b, client = backend
-        client.containers.run.return_value = (
+        client.containers.run.return_value = _one_shot_container(
             b"dir\t0\tsubdir\nfile\t1024\tconfig.yaml\nfile\t512\tnotes.txt\n"
         )
         result = await b.list_volume_dir("test-vol", "")
@@ -985,7 +993,7 @@ class TestDockerSdkBackendVolumeBrowser:
 
     async def test_list_volume_dir_passes_rel_path_as_positional_arg(self, backend):
         b, client = backend
-        client.containers.run.return_value = b""
+        client.containers.run.return_value = _one_shot_container(b"")
         await b.list_volume_dir("test-vol", "subdir/logs")
         call_args = client.containers.run.call_args
         command = call_args[1]["command"]
@@ -1000,7 +1008,7 @@ class TestDockerSdkBackendVolumeBrowser:
         so every volume's browser showed bin, dev, etc, home, … (2026-08-08).
         """
         b, client = backend
-        client.containers.run.return_value = b""
+        client.containers.run.return_value = _one_shot_container(b"")
         await b.list_volume_dir("test-vol", "")
         script = client.containers.run.call_args[1]["command"][2]
         assert '"$1"/*' not in script
@@ -1009,7 +1017,7 @@ class TestDockerSdkBackendVolumeBrowser:
 
     async def test_list_volume_dir_reports_recursive_dir_sizes(self, backend):
         b, client = backend
-        client.containers.run.return_value = b"dir\t710000\tdata\n"
+        client.containers.run.return_value = _one_shot_container(b"dir\t710000\tdata\n")
         result = await b.list_volume_dir("test-vol", "")
         assert result == [{"name": "data", "type": "dir", "size_bytes": 710000}]
         script = client.containers.run.call_args[1]["command"][2]
@@ -1017,7 +1025,9 @@ class TestDockerSdkBackendVolumeBrowser:
 
     async def test_list_volume_dir_raises_when_path_is_not_a_directory(self, backend):
         b, client = backend
-        client.containers.run.return_value = b"\x01robotsix-not-a-dir\n"
+        client.containers.run.return_value = _one_shot_container(
+            b"\x01robotsix-not-a-dir\n"
+        )
         with pytest.raises(NotADirectoryError):
             await b.list_volume_dir("test-vol", "notes.txt")
 
@@ -1030,7 +1040,7 @@ class TestDockerSdkBackendVolumeBrowser:
 
     async def test_list_volume_dir_read_only_mount(self, backend):
         b, client = backend
-        client.containers.run.return_value = b""
+        client.containers.run.return_value = _one_shot_container(b"")
         await b.list_volume_dir("test-vol", "")
         call_kwargs = client.containers.run.call_args[1]
         vol_mount = call_kwargs["volumes"]["test-vol"]
