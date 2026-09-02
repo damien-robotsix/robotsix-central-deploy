@@ -349,7 +349,7 @@ class VolumeOps:
             return {"removed": int(n_str), "bytes": int(s_str)}
         except ValueError:
             logger.warning(
-                "prune_volume_files(%r): unparseable helper output %r",
+                "prune_volume_files(%r): unparsable helper output %r",
                 volume_name,
                 raw[:100],
             )
