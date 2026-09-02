@@ -906,6 +906,18 @@ class DockerSdkBackend(ExecutionBackend):
 
     # -- volume inspection (delegated to VolumeOps) -------------------------
 
+    async def prune_volume_files(
+        self,
+        volume_name: str,
+        rel_path: str,
+        glob: str,
+        max_age_days: int,
+    ) -> dict[str, int]:
+        """See :meth:`VolumeOps.prune_volume_files`."""
+        return await self._volume.prune_volume_files(
+            volume_name, rel_path, glob, max_age_days
+        )
+
     async def remove_stale_helpers(self) -> int:
         """See :meth:`VolumeOps.remove_stale_helpers`."""
         return await self._volume.remove_stale_helpers()
