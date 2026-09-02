@@ -307,6 +307,54 @@ class VolumeOps:
             logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
             return 0
 
+    async def prune_volume_files(
+        self,
+        volume_name: str,
+        rel_path: str,
+        glob: str,
+        max_age_days: int,
+    ) -> dict[str, int]:
+        """Delete files under ``/vol/<rel_path>`` matching *glob* whose mtime
+        is older than *max_age_days* days, then remove directories the
+        deletions emptied.  Returns ``{"removed": n, "bytes": total}``.
+
+        Age-based retention for append-only file trees (e.g. Claude SDK
+        transcript directories).  NEVER point a rule at a database-backed
+        store — deleting old files inside e.g. LanceDB corrupts it.
+        """
+        loop = asyncio.get_running_loop()
+        # $1 = rel_path ("" = volume root), $2 = glob, $3 = mtime days.
+        script = (
+            "dir=/vol\n"
+            '[ -n "$1" ] && dir="/vol/$1"\n'
+            '[ -d "$dir" ] || { echo "0 0"; exit 0; }\n'
+            "n=0; s=0\n"
+            'find "$dir" -type f -name "$2" -mtime "+$3" > /tmp/prune-list 2>/dev/null || true\n'
+            "while IFS= read -r f; do\n"
+            '  sz=$(stat -c %s "$f" 2>/dev/null || echo 0)\n'
+            '  rm -f "$f" 2>/dev/null && { n=$((n+1)); s=$((s+sz)); }\n'
+            "done < /tmp/prune-list\n"
+            'find "$dir" -mindepth 1 -depth -type d -empty -delete 2>/dev/null\n'
+            'printf "%s %s\\n" "$n" "$s"\n'
+        )
+        raw: bytes = await loop.run_in_executor(
+            None,
+            lambda: self._run_one_shot_sync(
+                command=["sh", "-c", script, "sh", rel_path, glob, str(max_age_days)],
+                volumes={volume_name: {"bind": "/vol", "mode": "rw"}},
+            ),
+        )
+        try:
+            n_str, s_str = raw.strip().split()
+            return {"removed": int(n_str), "bytes": int(s_str)}
+        except ValueError:
+            logger.warning(
+                "prune_volume_files(%r): unparseable helper output %r",
+                volume_name,
+                raw[:100],
+            )
+            return {"removed": 0, "bytes": 0}
+
     async def list_volume_dir(
         self, volume_name: str, rel_path: str
     ) -> list[dict[str, Any]]:

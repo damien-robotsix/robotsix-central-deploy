@@ -314,6 +314,50 @@ async def _health_finding_detail(
     )
 
 
+async def _apply_volume_retention(
+    backend: ExecutionBackend,
+    settings: SystemSettings,
+) -> None:
+    """Apply the operator's ``volume_retention_rules`` (age-based file
+    pruning).  Invalid rules are skipped with a warning; a failing rule
+    never aborts the pass.  See ``SystemSettings.volume_retention_rules``
+    for the rule shape and the database-store caveat.
+    """
+    for rule in settings.volume_retention_rules:
+        volume_name = str(rule.get("volume_name", "")).strip()
+        rel_path = str(rule.get("path", "")).strip().strip("/")
+        glob = str(rule.get("glob", "*")).strip() or "*"
+        try:
+            max_age_days = int(rule.get("max_age_days", 0))
+        except (TypeError, ValueError):
+            max_age_days = 0
+        if not volume_name or max_age_days < 1 or ".." in rel_path.split("/"):
+            logger.warning("volume retention: skipping invalid rule %r", rule)
+            continue
+        try:
+            result = await backend.prune_volume_files(
+                volume_name, rel_path, glob, max_age_days
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "volume retention: prune failed for %s/%s: %s",
+                volume_name,
+                rel_path,
+                exc,
+            )
+            continue
+        if result.get("removed", 0):
+            logger.info(
+                "volume retention: %s/%s glob=%s >%dd — removed %d file(s), %d bytes",
+                volume_name,
+                rel_path,
+                glob,
+                max_age_days,
+                result["removed"],
+                result["bytes"],
+            )
+
+
 async def phase_volumes(
     volume_audit_scheduler: VolumeAuditScheduler,
     backend: ExecutionBackend,
@@ -326,6 +370,12 @@ async def phase_volumes(
     Returns findings for volume growth, orphan volumes, and disk pressure.
     """
     findings: list[CaretakerFinding] = []
+
+    # 0. Age-based retention (operator-configured, default empty).  Runs
+    #    before the growth scan so the scan measures the post-prune sizes.
+    #    Results are logged, not turned into findings — routine pruning must
+    #    not spawn mill tickets.
+    await _apply_volume_retention(backend, settings)
 
     # 1. Growth scan (reuse VolumeAuditScheduler.run_once)
     try:

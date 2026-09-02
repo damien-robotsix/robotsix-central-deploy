@@ -141,6 +141,19 @@ class ExecutionBackend(ABC):
         Raises TimeoutError if the container does not exit within *timeout_seconds*.
         Always removes the container on exit or timeout."""
 
+    async def prune_volume_files(
+        self,
+        volume_name: str,
+        rel_path: str,
+        glob: str,
+        max_age_days: int,
+    ) -> dict[str, int]:
+        """Delete files older than *max_age_days* matching *glob* under
+        ``<volume>/<rel_path>``.  Default: no-op (backends without volume
+        file access).  Returns ``{"removed": n, "bytes": total}``.
+        """
+        return {"removed": 0, "bytes": 0}
+
     async def remove_stale_helpers(self) -> int:
         """Remove one-shot helper containers orphaned by a dead predecessor
         process.  Default: nothing to sweep (backends without container
