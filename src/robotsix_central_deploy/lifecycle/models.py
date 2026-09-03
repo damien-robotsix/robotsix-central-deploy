@@ -320,6 +320,15 @@ class DeployRequest(BaseModel):
             "for this deploy. Empty means use the stored value."
         ),
     )
+    force: bool = Field(
+        default=False,
+        description=(
+            "Deploy even when the target is the mill component and it has "
+            "heavy agent stages (implement/ci_fix/refine) in flight. "
+            "Without this, such a deploy is refused with 409 because "
+            "recreating the mill container aborts hour-scale agent runs."
+        ),
+    )
 
 
 class RollbackRequest(BaseModel):
