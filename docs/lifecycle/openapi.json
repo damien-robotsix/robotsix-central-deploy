@@ -1087,7 +1087,7 @@
             }
           },
           "409": {
-            "description": "Deploy already in progress for this component",
+            "description": "Deploy already in progress for this component, or the mill has heavy agent stages in flight (retry with force=true)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8170,6 +8170,12 @@
             "title": "Target Disk",
             "description": "Target disk identifier (device path, mount point, or label) for volume placement. Overrides ComponentConfig.target_disk for this deploy. Empty means use the stored value.",
             "default": ""
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Deploy even when the target is the mill component and it has heavy agent stages (implement/ci_fix/refine) in flight. Without this, such a deploy is refused with 409 because recreating the mill container aborts hour-scale agent runs.",
+            "default": false
           }
         },
         "type": "object",

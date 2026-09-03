@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import sys
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -382,6 +383,78 @@ class TestDeployEndpoint:
         data = resp.json()
         assert "Cannot deploy central-deploy" in data["error"]
         assert "/system/update" in data["error"]
+
+    # -- mill busy-stage guard ------------------------------------------------
+
+    def _arm_mill_guard(self, monkeypatch, busy_summary: str | None):
+        """Point the app at a registry containing a mill component and stub
+        the mill probe. The summary string mirrors the real
+        ``MillClient.active_stage_summary`` output shape."""
+        from robotsix_central_deploy.caretaker.mill_client import MillClient
+
+        monkeypatch.setattr(
+            server_mod.app.state,
+            "registry",
+            ComponentRegistry(
+                [_make_config("svc-a", "repo:v1"), _make_config("mill", "mill:v1")]
+            ),
+        )
+
+        class _SettingsStore:
+            async def get(self):
+                return SimpleNamespace(mill_component_id="mill")
+
+        monkeypatch.setattr(
+            server_mod.app.state, "settings_store", _SettingsStore(), raising=False
+        )
+        monkeypatch.setattr(
+            server_mod.app.state, "http_client", MagicMock(), raising=False
+        )
+
+        monkeypatch.setattr(
+            MillClient,
+            "derive_url_from_registry",
+            staticmethod(lambda *a, **k: "http://mill:8077"),
+        )
+
+        async def _summary(self) -> str | None:
+            return busy_summary
+
+        monkeypatch.setattr(MillClient, "active_stage_summary", _summary)
+
+    async def test_deploy_mill_busy_returns_409(
+        self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
+    ):
+        """Deploying the mill while it runs heavy stages is refused: the
+        2026-09-03 chat-driven deploy aborted 3 in-flight implement runs."""
+        await self._seed("mill")
+        self._arm_mill_guard(monkeypatch, "3 heavy stage(s) in flight: implement×3")
+        resp = await client.post("/services/mill/deploy", headers=auth_headers)
+        assert resp.status_code == 409
+        data = resp.json()
+        assert "implement×3" in data["error"]
+        assert "force" in data["error"]
+
+    async def test_deploy_mill_busy_force_returns_202(
+        self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
+    ):
+        await self._seed("mill")
+        self._arm_mill_guard(monkeypatch, "1 heavy stage(s) in flight: implement×1")
+        resp = await client.post(
+            "/services/mill/deploy",
+            json={"force": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 202
+
+    async def test_deploy_mill_idle_returns_202(
+        self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
+    ):
+        """A mill with only cheap stages (probe returns None) deploys freely."""
+        await self._seed("mill")
+        self._arm_mill_guard(monkeypatch, None)
+        resp = await client.post("/services/mill/deploy", headers=auth_headers)
+        assert resp.status_code == 202
 
     async def test_rollback_central_deploy_self_target_returns_409(
         self, client: AsyncClient, auth_headers: dict, registry

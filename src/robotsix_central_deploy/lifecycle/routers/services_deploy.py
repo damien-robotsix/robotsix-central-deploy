@@ -235,7 +235,10 @@ async def _fanout_sibling_action(
         },
         409: {
             "model": ErrorDetail,
-            "description": "Deploy already in progress for this component",
+            "description": (
+                "Deploy already in progress for this component, or the mill "
+                "has heavy agent stages in flight (retry with force=true)"
+            ),
         },
         503: {"model": ErrorDetail, "description": "Registry not loaded"},
     },
@@ -290,6 +293,38 @@ async def deploy_service(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No component config for '{name}' — cannot deploy",
         )
+
+    # Guard: recreating the mill container mid-implement aborts hour-scale
+    # agent runs whose work is then redone from scratch (the caretaker has
+    # deferred for this since #841, but this API path did not — observed
+    # 2026-09-03: a chat-driven deploy killed 3 in-flight implement stages).
+    # Probes GET /active on the mill; heavy stages → 409 unless force=true.
+    # Fails open: an unreachable mill must not block its own deploy.
+    settings_store = getattr(request.app.state, "settings_store", None)
+    if settings_store is not None and not body.force:
+        mill_id = (await settings_store.get()).mill_component_id
+        if mill_id and name == mill_id:
+            from ...caretaker.mill_client import MillClient
+
+            mill_url = MillClient.derive_url_from_registry(
+                registry, component_config_store, mill_id
+            )
+            if mill_url is not None:
+                mill_client = MillClient(mill_url, request.app.state.http_client)
+                busy_reason = await mill_client.active_stage_summary()
+                if busy_reason is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "error": (
+                                f"Mill is busy — {busy_reason}. Deploying now "
+                                "would abort those agent runs and their work "
+                                "would be redone from scratch. Wait for the "
+                                'stages to finish, or pass {"force": true} '
+                                "to deploy anyway."
+                            ),
+                        },
+                    )
 
     env_store: EnvStore = await _get_env_store(request)
     merged_env = await env_store.get_merged_env(name, config.env)
