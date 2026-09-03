@@ -5633,6 +5633,81 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/branches/{branch}": {
+      "delete": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Delete a branch (guarded)",
+        "description": "Delete *branch* on *owner*/*repo*.\n\nRefuses to delete ``main``/``master``, the repo's default branch, or any\nbranch that is the head or base of an open pull request (returns 409).\nA non-existent branch returns 404.  Used by the repo-hygiene agent to\nclean up stale/abandoned branches safely.",
+        "operationId": "delete_branch_chat_github_repos__owner___repo__branches__branch__delete",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Branch Chat Github Repos  Owner   Repo  Branches  Branch  Delete"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository or branch not found"
+          },
+          "409": {
+            "description": "Branch is protected (main/master/default) or belongs to an open pull request"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}/pages": {
       "put": {
         "tags": [
@@ -10672,6 +10747,18 @@
             ],
             "title": "Has Wiki",
             "description": "Enable/disable the Wiki."
+          },
+          "allow_squash_merge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Squash Merge",
+            "description": "Allow squash-merging pull requests."
           },
           "allow_auto_merge": {
             "anyOf": [

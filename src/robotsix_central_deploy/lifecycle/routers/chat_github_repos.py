@@ -7,6 +7,9 @@ Exposes:
   enabled automatically as part of creation)
 - ``POST /chat/github/repos/{owner}/{repo}/relax-merge-gate`` — set required
   approving PR reviews to 0 on the default branch (preserves status checks)
+- ``DELETE /chat/github/repos/{owner}/{repo}/branches/{branch}`` — delete a
+  branch, refusing main/master, the default branch, and any branch that
+  belongs to an open pull request
 """
 
 from __future__ import annotations
@@ -45,6 +48,9 @@ def _repo_to_dict(repo: Any) -> dict[str, Any]:
         "has_wiki": repo.has_wiki,
         "default_branch": repo.default_branch,
         "archived": repo.archived,
+        "delete_branch_on_merge": repo.delete_branch_on_merge,
+        "allow_squash_merge": repo.allow_squash_merge,
+        "allow_auto_merge": repo.allow_auto_merge,
     }
 
 
@@ -92,6 +98,9 @@ class UpdateRepoRequest(BaseModel):
     private: bool | None = Field(None, description="New visibility.")
     has_issues: bool | None = Field(None, description="Enable/disable Issues.")
     has_wiki: bool | None = Field(None, description="Enable/disable the Wiki.")
+    allow_squash_merge: bool | None = Field(
+        None, description="Allow squash-merging pull requests."
+    )
     allow_auto_merge: bool | None = Field(
         None, description="Allow auto-merge on pull requests."
     )
@@ -115,6 +124,9 @@ def _update_repo_sync(
         if body.has_issues is not None
         else GithubObject.NotSet,
         has_wiki=body.has_wiki if body.has_wiki is not None else GithubObject.NotSet,
+        allow_squash_merge=body.allow_squash_merge
+        if body.allow_squash_merge is not None
+        else GithubObject.NotSet,
         allow_auto_merge=body.allow_auto_merge
         if body.allow_auto_merge is not None
         else GithubObject.NotSet,
@@ -348,5 +360,96 @@ async def relax_merge_gate(
             new_value={"branch": body.branch} if body.branch else {},
             detail=f"Relaxed merge gate on {owner}/{repo}"
             + (f" (branch: {body.branch})" if body.branch else ""),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /chat/github/repos/{owner}/{repo}/branches/{branch} — delete a branch
+# (write; App installation token).  Guarded: refuses main/master, the repo's
+# default branch, and any branch referenced by an open pull request.
+# ---------------------------------------------------------------------------
+
+_PROTECTED_BRANCH_NAMES = frozenset({"main", "master"})
+
+
+def _delete_branch_sync(
+    client: Any, owner: str, repo: str, branch: str
+) -> dict[str, Any]:
+    """Delete *branch* on *owner*/*repo* after safety checks.
+
+    Raises :class:`HTTPException` (409) when the branch is protected by
+    policy — ``main``/``master``, the repo's default branch, or a branch
+    that is the head or base of an open pull request.  These guard
+    exceptions propagate unchanged through the shared error mapper.
+    """
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    normalized = branch.strip()
+
+    if (
+        normalized.lower() in _PROTECTED_BRANCH_NAMES
+        or normalized == repo_obj.default_branch
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Refusing to delete protected branch '{normalized}'",
+        )
+
+    for pull in repo_obj.get_pulls(state="open"):
+        if pull.head.ref == normalized or pull.base.ref == normalized:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Refusing to delete branch '{normalized}': it belongs to "
+                    f"open pull request #{pull.number}"
+                ),
+            )
+
+    ref = repo_obj.get_git_ref(f"heads/{normalized}")
+    ref.delete()
+    return {"full_name": repo_obj.full_name, "branch": normalized, "deleted": True}
+
+
+@router.delete(
+    "/chat/github/repos/{owner}/{repo}/branches/{branch:path}",
+    summary="Delete a branch (guarded)",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "Repository or branch not found"},
+        409: {
+            "description": "Branch is protected (main/master/default) or "
+            "belongs to an open pull request"
+        },
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def delete_branch(
+    owner: str,
+    repo: str,
+    branch: str,
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Delete *branch* on *owner*/*repo*.
+
+    Refuses to delete ``main``/``master``, the repo's default branch, or any
+    branch that is the head or base of an open pull request (returns 409).
+    A non-existent branch returns 404.  Used by the repo-hygiene agent to
+    clean up stale/abandoned branches safely.
+    """
+    return await _call_github_endpoint(
+        config,
+        owner,
+        repo,
+        _delete_branch_sync,
+        branch,
+        audit_store=audit_store,
+        audit_entry=ChatAgentAuditEntry(
+            component="github",
+            action="delete_branch",
+            key=f"{owner}/{repo}",
+            new_value=branch,
+            detail=f"Deleted branch {branch} on {owner}/{repo}",
         ),
     )
