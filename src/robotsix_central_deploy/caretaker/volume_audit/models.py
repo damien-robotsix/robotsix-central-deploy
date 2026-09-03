@@ -52,14 +52,24 @@ class VolumeGrowthRecord(BaseModel):
 
 
 class AuditFinding(BaseModel):
-    """A threshold-breach finding produced by a scan pass."""
+    """A finding produced by a scan pass.
+
+    ``kind`` distinguishes growth threshold-breach findings (``growth``)
+    from volume-size measurement failures (``measurement_failed``) so the
+    operator / retention / alerting can tell "grew unexpectedly" apart from
+    "we could not even measure it this scan".
+    """
 
     volume_name: str = Field(description="Docker volume name as reported by the daemon")
     component_id: str = Field(
         description="Managed-component slug this volume belongs to"
     )
     finding_at: datetime = Field(
-        description="UTC timestamp when the threshold breach was detected"
+        description="UTC timestamp when the finding was produced"
+    )
+    kind: str = Field(
+        default="growth",
+        description="Finding category: 'growth' or 'measurement_failed'",
     )
     size_bytes: int = Field(description="Bytes consumed by the volume at finding time")
     delta_bytes: int = Field(description="Absolute growth since the previous audit")

@@ -207,6 +207,19 @@ class VolumeOps:
     #: killed — better a missing size than a stray container grinding IO.
     _ONE_SHOT_TIMEOUT_S = 600
 
+    #: Dedicated, longer deadline for the whole-volume measure.  The generic
+    #: one-shot deadline (600s) is too tight for the largest managed volume
+    #: (tens of thousands of files): the du helper was dying/timing out on it
+    #: every hourly scan ("Response ended prematurely", 2026-09-02) and the
+    #: scan silently recorded 0 bytes for that volume.
+    _MEASURE_TIMEOUT_S = 1800
+
+    #: Retries for the whole-volume measure.  A Docker API stream cut under
+    #: host IO pressure ("Response ended prematurely") is transient — retry
+    #: rather than surfacing a failed measurement on the first hiccup.
+    _MEASURE_ATTEMPTS = 3
+    _MEASURE_RETRY_DELAY_S = 5
+
     #: Label stamped on every one-shot du helper so a fresh server process can
     #: sweep helpers orphaned by a dead predecessor.  The finally-remove in
     #: ``_run_one_shot_sync`` only protects the process that spawned the
@@ -255,6 +268,7 @@ class VolumeOps:
         self,
         command: list[str],
         volumes: dict[str, dict[str, str]],
+        timeout_s: int | None = None,
     ) -> bytes:
         """Run a one-shot busybox helper detached and ALWAYS remove it.
 
@@ -276,7 +290,7 @@ class VolumeOps:
             labels={self.HELPER_LABEL: "1"},
         )
         try:
-            container.wait(timeout=self._ONE_SHOT_TIMEOUT_S)
+            container.wait(timeout=timeout_s or self._ONE_SHOT_TIMEOUT_S)
             raw = container.logs(stdout=True, stderr=False)
             return raw if isinstance(raw, bytes) else str(raw).encode()
         finally:
@@ -287,25 +301,45 @@ class VolumeOps:
                     "one-shot helper cleanup failed (container may leak): %s", exc
                 )
 
-    async def measure_volume_bytes(self, volume_name: str) -> int:
+    async def measure_volume_bytes(self, volume_name: str) -> int | None:
         """Return effective total bytes for *volume_name*, excluding SQLite
         transient sidecars (*.db-wal, *.db-shm, *.db-journal).
-        Returns 0 on error or when the volume is inaccessible.
+
+        Robust for large volumes: runs with the longer measure-specific
+        deadline and retries transient Docker API stream cuts ("Response ended
+        prematurely").  Returns ``None`` — not 0 — when the size could not be
+        determined after all attempts, so callers can surface a
+        measurement-failed finding instead of silently recording a bogus 0.
         """
         loop = asyncio.get_running_loop()
         cmd = _DU_BYTES_FN + "du_bytes /vol\n"
-        try:
-            raw: bytes = await loop.run_in_executor(
-                None,
-                lambda: self._run_one_shot_sync(
-                    command=["sh", "-c", cmd],
-                    volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
-                ),
-            )
-            return int(raw.strip() or b"0")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("measure_volume_bytes(%r) failed: %s", volume_name, exc)
-            return 0
+        for attempt in range(1, self._MEASURE_ATTEMPTS + 1):
+            try:
+                raw: bytes = await loop.run_in_executor(
+                    None,
+                    lambda: self._run_one_shot_sync(
+                        command=["sh", "-c", cmd],
+                        volumes={volume_name: {"bind": "/vol", "mode": "ro"}},
+                        timeout_s=self._MEASURE_TIMEOUT_S,
+                    ),
+                )
+                return int(raw.strip() or b"0")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "measure_volume_bytes(%r) attempt %d/%d failed: %s",
+                    volume_name,
+                    attempt,
+                    self._MEASURE_ATTEMPTS,
+                    exc,
+                )
+                if attempt < self._MEASURE_ATTEMPTS:
+                    await asyncio.sleep(self._MEASURE_RETRY_DELAY_S)
+        logger.error(
+            "measure_volume_bytes(%r) failed after %d attempts",
+            volume_name,
+            self._MEASURE_ATTEMPTS,
+        )
+        return None
 
     async def prune_volume_files(
         self,

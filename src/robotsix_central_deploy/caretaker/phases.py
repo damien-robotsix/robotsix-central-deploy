@@ -411,6 +411,18 @@ async def phase_volumes(
             owner_cfg = component_config_store.get(comp_id)
             if owner_cfg is not None:
                 repo_id = owner_cfg.repo_id
+        if af.kind == "measurement_failed":
+            findings.append(
+                CaretakerFinding(
+                    component_id=comp_id,
+                    repo_id=repo_id,
+                    kind=FindingKind.VOLUME_MEASUREMENT,
+                    title=f"Volume {af.volume_name} size could not be measured",
+                    detail=af.detail,
+                    severity="warning",
+                )
+            )
+            continue
         findings.append(
             CaretakerFinding(
                 component_id=comp_id,

@@ -922,7 +922,7 @@ class DockerSdkBackend(ExecutionBackend):
         """See :meth:`VolumeOps.remove_stale_helpers`."""
         return await self._volume.remove_stale_helpers()
 
-    async def measure_volume_bytes(self, volume_name: str) -> int:
+    async def measure_volume_bytes(self, volume_name: str) -> int | None:
         """Return effective total bytes for *volume_name*, excluding SQLite sidecars."""
         return await self._volume.measure_volume_bytes(volume_name)
 
