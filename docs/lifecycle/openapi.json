@@ -5854,81 +5854,6 @@
         }
       }
     },
-    "/chat/github/repos/{owner}/{repo}/branches/{branch}": {
-      "delete": {
-        "tags": [
-          "chat-github"
-        ],
-        "summary": "Delete a branch (guarded)",
-        "description": "Delete *branch* on *owner*/*repo*.\n\nRefuses to delete ``main``/``master``, the repo's default branch, or any\nbranch that is the head or base of an open pull request (returns 409).\nA non-existent branch returns 404.  Used by the repo-hygiene agent to\nclean up stale/abandoned branches safely.",
-        "operationId": "delete_branch_chat_github_repos__owner___repo__branches__branch__delete",
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Owner"
-            }
-          },
-          {
-            "name": "repo",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Repo"
-            }
-          },
-          {
-            "name": "branch",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Branch"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Delete Branch Chat Github Repos  Owner   Repo  Branches  Branch  Delete"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Repository or branch not found"
-          },
-          "409": {
-            "description": "Branch is protected (main/master/default) or belongs to an open pull request"
-          },
-          "503": {
-            "description": "GitHub App not configured"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/chat/github/repos/{owner}/{repo}/pages": {
       "put": {
         "tags": [
@@ -6209,7 +6134,7 @@
           "chat-github"
         ],
         "summary": "Delete a branch (default/protected branches refused)",
-        "description": "Delete *branch* from *owner*/*repo*.\n\nThe ``{branch:path}`` converter captures branch names containing ``/``\n(e.g. ``feature/foo``) whole.  Deletion is refused with **409** when\n*branch* is the repository's default branch or is protected \u2014 no delete\nis attempted in either case.  An unknown branch returns **404**.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
+        "description": "Delete *branch* from *owner*/*repo*.\n\nThe ``{branch:path}`` converter captures branch names containing ``/``\n(e.g. ``feature/foo``) whole.  Deletion is refused with **409** when\n*branch* is ``main``/``master``, the repository's default branch, is\nprotected, or is the head or base of an open pull request \u2014 no delete\nis attempted in any of those cases.  An unknown branch returns **404**.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
         "operationId": "delete_branch_chat_github_repos__owner___repo__branches__branch__delete",
         "parameters": [
           {
@@ -6260,7 +6185,7 @@
             "description": "Branch or repository not found, or App not installed"
           },
           "409": {
-            "description": "Refused: the branch is the default branch or is protected"
+            "description": "Refused: the branch is main/master, the default branch, is protected, or belongs to an open pull request"
           },
           "502": {
             "description": "GitHub API returned an unexpected error"
