@@ -436,7 +436,9 @@ class TestVolumeOpsMeasureVolumeBytes:
         first.remove.assert_called_once_with(force=True)
         second.remove.assert_called_once_with(force=True)
 
-    async def test_broken_wait_stream_still_removes_every_attempt(self, client, monkeypatch):
+    async def test_broken_wait_stream_still_removes_every_attempt(
+        self, client, monkeypatch
+    ):
         """Regression: a broken attach/wait stream must not orphan the du.
 
         The old non-detached run(remove=True) leaked the helper container
@@ -495,7 +497,9 @@ class TestDuBytesLargeTree:
         # SQLite sidecars must be excluded from the sum.
         (root / "board-0" / "workspace-0" / "data.db-wal").write_bytes(b"y" * 10_000)
         (root / "board-0" / "workspace-0" / "data.db-shm").write_bytes(b"y" * 20_000)
-        (root / "board-0" / "workspace-0" / "data.db-journal").write_bytes(b"y" * 30_000)
+        (root / "board-0" / "workspace-0" / "data.db-journal").write_bytes(
+            b"y" * 30_000
+        )
 
         script = _DU_BYTES_FN + "du_bytes " + str(root) + "\n"
         # The script is assembled from a trusted constant + an absolute tmp

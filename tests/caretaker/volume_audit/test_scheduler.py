@@ -200,7 +200,9 @@ class TestVolumeAuditScheduler:
         assert saved["vol-bad"]["size_bytes"] == 1_234_567
 
     @pytest.mark.asyncio
-    async def test_run_once_measure_failed_surfaces_finding(self, tmp_path, monkeypatch):
+    async def test_run_once_measure_failed_surfaces_finding(
+        self, tmp_path, monkeypatch
+    ):
         """When measure_volume_bytes returns None (helper timeout / stream
         cut), a measurement-failed finding is reported instead of silently
         recording a bogus 0, and the last-known size is carried forward."""

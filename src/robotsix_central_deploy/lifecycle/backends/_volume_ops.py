@@ -334,7 +334,11 @@ class VolumeOps:
                 )
                 if attempt < self._MEASURE_ATTEMPTS:
                     await asyncio.sleep(self._MEASURE_RETRY_DELAY_S)
-        logger.error("measure_volume_bytes(%r) failed after %d attempts", volume_name, self._MEASURE_ATTEMPTS)
+        logger.error(
+            "measure_volume_bytes(%r) failed after %d attempts",
+            volume_name,
+            self._MEASURE_ATTEMPTS,
+        )
         return None
 
     async def prune_volume_files(
