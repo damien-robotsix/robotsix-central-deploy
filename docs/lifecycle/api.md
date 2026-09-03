@@ -44,6 +44,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_github_actions
 
+::: robotsix_central_deploy.lifecycle.routers.chat_github_branches
+
 ::: robotsix_central_deploy.lifecycle.routers.chat_preview
 
 ::: robotsix_central_deploy.lifecycle.routers.chat_langfuse
