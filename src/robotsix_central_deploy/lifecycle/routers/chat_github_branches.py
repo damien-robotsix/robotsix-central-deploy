@@ -20,6 +20,8 @@ from ._github_common import _call_github_endpoint
 
 router = APIRouter(tags=["chat-github"])
 
+_PROTECTED_BRANCH_NAMES = frozenset({"main", "master"})
+
 
 def _branch_to_dict(b: Any) -> dict[str, Any]:
     """Flatten a PyGithub ``Branch`` to the fields the chat agent needs."""
@@ -41,10 +43,12 @@ def _list_branches_sync(
 def _delete_branch_sync(
     client: Any, owner: str, repo: str, branch: str
 ) -> dict[str, Any]:
-    """Delete *branch* after enforcing the default/protected guards.
+    """Delete *branch* after enforcing the safety guards.
 
-    The default-branch and protected-branch checks are domain rules (not
-    GitHub errors) and raise ``HTTPException`` 409 directly.  Because
+    Deletion is refused (409) when *branch* is ``main``/``master``, the
+    repo's default branch, is flagged as protected, or is the head or base
+    of an open pull request.  These are domain rules (not GitHub errors)
+    and raise ``HTTPException`` 409 directly.  Because
     ``_reraise_github_errors`` re-raises non-``GithubException`` exceptions
     unchanged, the 409 passes through ``_call_github_endpoint`` intact.  An
     unknown branch surfaces naturally: ``get_branch`` raises
@@ -52,7 +56,7 @@ def _delete_branch_sync(
     """
     repo_obj = client.get_repo(f"{owner}/{repo}")
 
-    if branch == repo_obj.default_branch:
+    if branch.lower() in _PROTECTED_BRANCH_NAMES or branch == repo_obj.default_branch:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Refusing to delete the default branch '{branch}' of {owner}/{repo}",
@@ -64,6 +68,16 @@ def _delete_branch_sync(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Refusing to delete protected branch '{branch}' of {owner}/{repo}",
         )
+
+    for pull in repo_obj.get_pulls(state="open"):
+        if pull.head.ref == branch or pull.base.ref == branch:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Refusing to delete branch '{branch}': it belongs to "
+                    f"open pull request #{pull.number}"
+                ),
+            )
 
     repo_obj.get_git_ref(f"heads/{branch}").delete()
     return {"deleted": True, "branch": branch}
@@ -106,7 +120,8 @@ async def list_branches(
         401: {"description": "Unauthorized"},
         404: {"description": "Branch or repository not found, or App not installed"},
         409: {
-            "description": "Refused: the branch is the default branch or is protected"
+            "description": "Refused: the branch is main/master, the default "
+            "branch, is protected, or belongs to an open pull request"
         },
         502: {"description": "GitHub API returned an unexpected error"},
         503: {"description": "GitHub App not configured"},
@@ -124,8 +139,9 @@ async def delete_branch(
 
     The ``{branch:path}`` converter captures branch names containing ``/``
     (e.g. ``feature/foo``) whole.  Deletion is refused with **409** when
-    *branch* is the repository's default branch or is protected — no delete
-    is attempted in either case.  An unknown branch returns **404**.
+    *branch* is ``main``/``master``, the repository's default branch, is
+    protected, or is the head or base of an open pull request — no delete
+    is attempted in any of those cases.  An unknown branch returns **404**.
 
     Requires the GitHub App installation token.  Returns 503 if the App is
     not configured and 404 if the App is not installed on the repo.
