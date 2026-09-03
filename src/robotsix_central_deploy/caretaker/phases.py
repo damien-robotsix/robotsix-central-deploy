@@ -55,8 +55,9 @@ async def phase_update(
     runs inside) is also skipped: an in-process ``backend.deploy`` of our own
     container stops+recreates us mid-pass, so ``update_available=False`` is
     never persisted and the replacement self-updates forever. Self-update is
-    handled exclusively by ``POST /system/update`` (a detached watchtower
-    container that survives the swap).
+    handled only via the detached watchtower updater that survives the swap —
+    ``POST /system/update`` and the caretaker's end-of-pass self-update step
+    both use that path.
 
     When ``self_identity_known`` is False the caller could not determine which
     container it runs inside, so no record can be ruled out as self and the
@@ -107,11 +108,12 @@ async def phase_update(
         # ``update_available=False``, so every replacement boots, still sees
         # the update as pending, and self-updates again — an unbreakable loop
         # that took down deploy.robotsix.net on 2026-07-21. Self-update is
-        # operator/watchtower-driven via POST /system/update instead.
+        # instead driven by the detached updater: POST /system/update or the
+        # caretaker's end-of-pass self-update step (same path).
         if self_container_name and record.container_name == self_container_name:
             logger.debug(
                 "phase_update: skipping self-component %s "
-                "(self-update handled by /system/update)",
+                "(self-update handled by the detached updater)",
                 record.name,
             )
             continue

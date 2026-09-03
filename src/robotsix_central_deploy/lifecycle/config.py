@@ -388,6 +388,14 @@ class LifecycleConfig(BaseModel):
         description=("After updates, remove dangling images not needed for rollback."),
         json_schema_extra={"advanced": True},
     )
+    caretaker_self_update_enabled: bool = Field(
+        SETTINGS_DEFAULTS["caretaker_self_update_enabled"],
+        description=(
+            "At the end of each caretaker pass, if the plane's own image has "
+            "a pending update, launch the detached self-updater (same path "
+            "as POST /system/update)."
+        ),
+    )
     llmio_tier_config: dict[str, Any] = Field(
         default=SETTINGS_DEFAULTS["llmio_tier_config"],
         description=(

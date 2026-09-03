@@ -36,6 +36,9 @@ class SystemSettings(BaseModel):
     ]  # e.g. "deploy.robotsix.net"
     caretaker_enabled: bool = SETTINGS_DEFAULTS["caretaker_enabled"]
     caretaker_interval_hours: int = SETTINGS_DEFAULTS["caretaker_interval_hours"]
+    caretaker_self_update_enabled: bool = SETTINGS_DEFAULTS[
+        "caretaker_self_update_enabled"
+    ]  # detached self-update of the plane itself at end of caretaker pass
     mill_component_id: str = SETTINGS_DEFAULTS[
         "mill_component_id"
     ]  # component id the caretaker reports to

@@ -11,13 +11,14 @@ status via `GET /caretaker/status`.
 ```
 CaretakerScheduler.loop()  (scheduler.py)
   │
-  ├─ 1. Read current settings (caretaker_enabled, caretaker_interval_hours)
+  ├─ 1. Read current settings (caretaker_enabled, caretaker_interval_hours, caretaker_self_update_enabled)
   ├─ 2. Sleep caretaker_interval_hours (min 1 hour)
   ├─ 3. run_once():
-  │      ├─ phase_update()     — deploy updated images for opted-in components
+  │      ├─ phase_update()      — deploy updated images for opted-in components
   │      │   └─ auto-prune dangling images (if image_auto_prune == True)
-  │      ├─ phase_health()     — probe all container health states
-  │      ├─ phase_volumes()    — volume growth scan + orphan detection + disk check
+  │      ├─ phase_health()      — probe all container health states
+  │      ├─ phase_volumes()     — volume growth scan + orphan detection + disk check
+  │      ├─ phase_self_update() — launch detached self-updater if plane image has update (if caretaker_self_update_enabled == True)
   │      └─ Record findings locally (WARNING log + caretaker_findings.jsonl)
   └─ 4. Loop back to step 1; respect CancelledError for graceful shutdown
 ```
@@ -49,7 +50,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 | ------- | ------ | --------- |
 | `component_id` | `str \| None` | Affected component (or `None` for system-wide) |
 | `repo_id` | `str \| None` | Upstream repository identifier (informational) |
-| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
+| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `SELF_UPDATE_TRIGGERED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
 | `title` | `str` | Short human-readable summary |
 | `detail` | `str` | Full description |
 | `severity` | `Literal["warning", "error"]` | Severity level |
@@ -57,7 +58,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 ## Configuration
 
 These are ordinary `LifecycleConfig` fields, set in `config/config.json`. All
-four are also part of the settings overlay, so they can be changed at runtime
+six are also part of the settings overlay, so they can be changed at runtime
 through the dashboard's Settings panel or seeded from the self-contract labels
 in `deploy/docker-compose.yml` (prefix `robotsix.deploy.settings.*`) — see
 [Configuration](../lifecycle/configuration.md#the-three-layers-in-order).
@@ -67,6 +68,7 @@ Self-contract changes take effect on the next server restart.
 | ---------- | ------ | --------- | ------------- |
 | `caretaker_enabled` | `bool` | `False` | Master switch for the caretaker loop |
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |
+| `caretaker_self_update_enabled` | `bool` | `True` | At end of each pass, launch detached self-updater if plane's own image has a pending update |
 | `mill_component_id` | `str` | `"mill"` | Component id of the mill (used by onboarding repo registration) |
 | `image_auto_prune` | `bool` | `False` | Whether to prune dangling images after successful updates |
 | `disk_warn_pct` | `float` | `10.0` | Percent free disk space that triggers a `DISK` finding |

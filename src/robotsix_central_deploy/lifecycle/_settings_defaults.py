@@ -18,6 +18,7 @@ class _SettingsDefaults(TypedDict):
     gateway_base_domain: str
     caretaker_enabled: bool
     caretaker_interval_hours: int
+    caretaker_self_update_enabled: bool
     mill_component_id: str
     image_auto_prune: bool
     llmio_tier_config: dict[str, Any]
@@ -40,6 +41,7 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "gateway_base_domain": "",
     "caretaker_enabled": False,
     "caretaker_interval_hours": 24,
+    "caretaker_self_update_enabled": True,
     "mill_component_id": "",
     "image_auto_prune": False,
     "llmio_tier_config": {},

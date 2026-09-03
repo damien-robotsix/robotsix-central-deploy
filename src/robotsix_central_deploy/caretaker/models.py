@@ -15,6 +15,9 @@ class FindingKind(str, Enum):
     ``update_applied`` / ``update_failed`` — registry-check-driven
     image updates that succeeded or errored.
 
+    ``self_update_triggered`` — the caretaker launched the detached
+    self-updater for the management plane itself (central-deploy).
+
     ``health`` — a component health-check is failing.
 
     ``volume_growth`` — a named volume exceeded its configured
@@ -36,6 +39,7 @@ class FindingKind(str, Enum):
 
     UPDATE_APPLIED = "update_applied"
     UPDATE_FAILED = "update_failed"
+    SELF_UPDATE_TRIGGERED = "self_update_triggered"
     HEALTH = "health"
     VOLUME_GROWTH = "volume_growth"
     VOLUME_MEASUREMENT = "volume_measurement"
@@ -63,7 +67,7 @@ class CaretakerFinding(BaseModel):
         description="Upstream repository identifier; empty when the finding is untracked",
     )
     kind: FindingKind = Field(
-        description="Category of the finding (update_applied, update_failed, health, volume_growth, volume_orphan, disk, port_collision)"
+        description="Category of the finding (update_applied, update_failed, self_update_triggered, health, volume_growth, volume_orphan, disk, port_collision)"
     )
     title: str = Field(description="Short human-readable summary of the finding")
     detail: str = Field(
