@@ -46,6 +46,9 @@ class _FakeRepo:
         has_wiki: bool = True,
         default_branch: str = "main",
         archived: bool = False,
+        delete_branch_on_merge: bool = False,
+        allow_squash_merge: bool = True,
+        allow_auto_merge: bool = False,
     ) -> None:
         self.full_name = full_name
         self.html_url = f"https://github.com/{full_name}"
@@ -57,6 +60,9 @@ class _FakeRepo:
         self.has_wiki = has_wiki
         self.default_branch = default_branch
         self.archived = archived
+        self.delete_branch_on_merge = delete_branch_on_merge
+        self.allow_squash_merge = allow_squash_merge
+        self.allow_auto_merge = allow_auto_merge
         self.edit = MagicMock()
 
 
@@ -99,6 +105,9 @@ class TestGetRepo:
             "has_wiki": True,
             "default_branch": "main",
             "archived": False,
+            "delete_branch_on_merge": False,
+            "allow_squash_merge": True,
+            "allow_auto_merge": False,
         }
 
     async def test_unknown_repo_returns_404(
@@ -803,3 +812,190 @@ class TestUpdateRepoExtended:
             headers=auth_headers,
         )
         assert resp.status_code == 422
+
+    async def test_updates_allow_squash_merge(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo_after = _FakeRepo()
+        fake_client = MagicMock(name="fake-github-client")
+        fake_client.get_repo.side_effect = [fake_repo, fake_repo_after]
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.patch(
+            "/chat/github/repos/acme/widget",
+            json={"allow_squash_merge": False},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        fake_repo.edit.assert_called_once()
+        _, kwargs = fake_repo.edit.call_args
+        assert kwargs["allow_squash_merge"] is False
+
+
+def _fake_pull(*, number: int, head_ref: str, base_ref: str = "main") -> MagicMock:
+    pull = MagicMock(name=f"pull-{number}")
+    pull.number = number
+    pull.head.ref = head_ref
+    pull.base.ref = base_ref
+    return pull
+
+
+class TestDeleteBranch:
+    async def test_unauthorized_no_longer_401(self, client: AsyncClient):
+        resp = await client.delete("/chat/github/repos/acme/widget/branches/stale")
+        assert resp.status_code != 401
+
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.delete(
+            "/chat/github/repos/acme/widget/branches/stale", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_deletes_stale_branch(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo.get_pulls = MagicMock(return_value=[])
+        fake_ref = MagicMock(name="git-ref")
+        fake_repo.get_git_ref = MagicMock(return_value=fake_ref)
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.delete(
+            "/chat/github/repos/acme/widget/branches/stale", headers=auth_headers
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "full_name": "acme/widget",
+            "branch": "stale",
+            "deleted": True,
+        }
+        fake_repo.get_git_ref.assert_called_once_with("heads/stale")
+        fake_ref.delete.assert_called_once()
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].action == "delete_branch"
+        assert entries[0].key == "acme/widget"
+
+    @pytest.mark.parametrize("branch", ["main", "master", "MAIN"])
+    async def test_refuses_protected_branch(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        monkeypatch,
+        enable_github_app,
+        branch: str,
+    ):
+        fake_repo = _FakeRepo(default_branch="develop")
+        fake_repo.get_pulls = MagicMock(return_value=[])
+        fake_repo.get_git_ref = MagicMock()
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.delete(
+            f"/chat/github/repos/acme/widget/branches/{branch}", headers=auth_headers
+        )
+
+        assert resp.status_code == 409
+        fake_repo.get_git_ref.assert_not_called()
+
+    async def test_refuses_default_branch(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo(default_branch="develop")
+        fake_repo.get_pulls = MagicMock(return_value=[])
+        fake_repo.get_git_ref = MagicMock()
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.delete(
+            "/chat/github/repos/acme/widget/branches/develop", headers=auth_headers
+        )
+
+        assert resp.status_code == 409
+        fake_repo.get_git_ref.assert_not_called()
+
+    async def test_refuses_branch_with_open_pr(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_repo = _FakeRepo()
+        fake_repo.get_pulls = MagicMock(
+            return_value=[_fake_pull(number=42, head_ref="stale")]
+        )
+        fake_repo.get_git_ref = MagicMock()
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.delete(
+            "/chat/github/repos/acme/widget/branches/stale", headers=auth_headers
+        )
+
+        assert resp.status_code == 409
+        assert "#42" in resp.json()["error"]
+        fake_repo.get_git_ref.assert_not_called()
+
+    async def test_unknown_branch_returns_404(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import UnknownObjectException
+
+        fake_repo = _FakeRepo()
+        fake_repo.get_pulls = MagicMock(return_value=[])
+        fake_repo.get_git_ref = MagicMock(
+            side_effect=UnknownObjectException(404, data={"message": "Not Found"})
+        )
+        fake_client = _fake_client(fake_repo)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.delete(
+            "/chat/github/repos/acme/widget/branches/ghost", headers=auth_headers
+        )
+        assert resp.status_code == 404
