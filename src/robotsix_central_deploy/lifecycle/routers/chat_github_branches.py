@@ -106,8 +106,7 @@ async def list_branches(
         401: {"description": "Unauthorized"},
         404: {"description": "Branch or repository not found, or App not installed"},
         409: {
-            "description": "Refused: the branch is the default branch or is "
-            "protected"
+            "description": "Refused: the branch is the default branch or is protected"
         },
         502: {"description": "GitHub API returned an unexpected error"},
         503: {"description": "GitHub App not configured"},
