@@ -5,6 +5,12 @@ Exposes:
 - ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}`` — a single pull request
 - ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge`` — merge (or
   merge-queue) a pull request
+- ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}/files`` — list the
+  files changed by a pull request
+- ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/close`` — close a
+  pull request
+- ``POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reopen`` — reopen a
+  closed (unmerged) pull request
 - ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews`` — list
   reviews on a pull request
 - ``GET /chat/github/repos/{owner}/{repo}/pulls/{number}/comments`` — list
@@ -87,6 +93,19 @@ def _review_comment_to_dict(comment: Any) -> dict[str, Any]:
     }
 
 
+def _pr_file_to_dict(f: Any) -> dict[str, Any]:
+    """Flatten a PyGithub ``File`` (a file changed by a pull request)."""
+    return {
+        "filename": f.filename,
+        "status": f.status,
+        "additions": f.additions,
+        "deletions": f.deletions,
+        "changes": f.changes,
+        "sha": f.sha,
+        "previous_filename": getattr(f, "previous_filename", None),
+    }
+
+
 def _list_pulls_sync(
     client: Any, owner: str, repo: str, state: str, per_page: int
 ) -> list[dict[str, Any]]:
@@ -98,6 +117,33 @@ def _list_pulls_sync(
 def _get_pull_sync(client: Any, owner: str, repo: str, number: int) -> dict[str, Any]:
     repo_obj = client.get_repo(f"{owner}/{repo}")
     return _pr_to_dict(repo_obj.get_pull(number))
+
+
+def _list_pull_files_sync(
+    client: Any, owner: str, repo: str, pull_number: int, per_page: int
+) -> list[dict[str, Any]]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    pr = repo_obj.get_pull(pull_number)
+    paginated = pr.get_files()
+    return [_pr_file_to_dict(f) for f in paginated[: min(per_page, 100)]]
+
+
+def _close_pull_sync(
+    client: Any, owner: str, repo: str, pull_number: int
+) -> dict[str, Any]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    pr = repo_obj.get_pull(pull_number)
+    pr.edit(state="closed")
+    return _pr_to_dict(pr)
+
+
+def _reopen_pull_sync(
+    client: Any, owner: str, repo: str, pull_number: int
+) -> dict[str, Any]:
+    repo_obj = client.get_repo(f"{owner}/{repo}")
+    pr = repo_obj.get_pull(pull_number)
+    pr.edit(state="open")
+    return _pr_to_dict(pr)
 
 
 # ---------------------------------------------------------------------------
@@ -709,3 +755,156 @@ async def get_pull(
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s pull request *number* (status, mergeable, URL)."""
     return await _call_github_endpoint(config, owner, repo, _get_pull_sync, number)
+
+
+# ---------------------------------------------------------------------------
+# GET  /chat/github/repos/{owner}/{repo}/pulls/{number}/files — list the
+#       files changed by a pull request (read; App installation token)
+# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/close — close a PR
+#       (write; App installation token)
+# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reopen — reopen a PR
+#       (write; App installation token)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/files",
+    summary="List the files changed by a pull request",
+    responses={
+        401: {"description": "Unauthorized"},
+        404: {"description": "PR or repository not found, or App not installed on it"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def list_pull_files(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    per_page: int = 30,
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    _auth: None = Depends(verify_auth),
+) -> list[dict[str, Any]]:
+    """List the files changed by *owner*/*repo*'s pull request *pull_number*.
+
+    Returns ``filename``, ``status`` (``added``, ``modified``, ``removed``,
+    ``renamed``), ``additions``, ``deletions``, ``changes``, ``sha``, and
+    ``previous_filename`` (set only for renames).  *per_page* is capped at
+    100.
+
+    Requires the GitHub App installation token.  Returns 503 if the App is
+    not configured and 404 if the App is not installed on the repo.
+    """
+    return await _call_github_endpoint(
+        config, owner, repo, _list_pull_files_sync, pull_number, per_page
+    )
+
+
+@router.post(
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/close",
+    summary="Close a pull request",
+    responses={
+        200: {"description": "Pull request closed successfully"},
+        401: {"description": "Unauthorized"},
+        404: {"description": "PR or repository not found, or App not installed on it"},
+        422: {"description": "GitHub rejected the close request"},
+        502: {"description": "GitHub API returned an unexpected error"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def close_pull(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Close *owner*/*repo*'s open pull request *pull_number*.
+
+    Returns the updated pull-request payload with ``state`` reflecting
+    ``closed``.
+
+    Requires the GitHub App installation token.  Returns 503 if the App is
+    not configured and 404 if the App is not installed on the repo.
+    """
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(
+            _close_pull_sync, client, owner, repo, pull_number
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="close_pull",
+            key=f"{owner}/{repo}#{pull_number}",
+            new_value={"state": result["state"]},
+            detail=f"Closed {owner}/{repo}#{pull_number}",
+        )
+    )
+    return result
+
+
+@router.post(
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/reopen",
+    summary="Reopen a pull request",
+    responses={
+        200: {"description": "Pull request reopened successfully"},
+        401: {"description": "Unauthorized"},
+        404: {"description": "PR or repository not found, or App not installed on it"},
+        422: {
+            "description": "GitHub rejected the reopen (e.g. the PR has been "
+            "merged and cannot be reopened)"
+        },
+        502: {"description": "GitHub API returned an unexpected error"},
+        503: {"description": "GitHub App not configured"},
+    },
+)
+async def reopen_pull(
+    owner: str,
+    repo: str,
+    pull_number: int,
+    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    _auth: None = Depends(verify_auth),
+) -> dict[str, Any]:
+    """Reopen *owner*/*repo*'s closed (unmerged) pull request *pull_number*.
+
+    Returns the updated pull-request payload with ``state`` reflecting
+    ``open``.  GitHub rejects reopening a **merged** pull request with 422.
+
+    Requires the GitHub App installation token.  Returns 503 if the App is
+    not configured and 404 if the App is not installed on the repo.
+    """
+    from github import GithubException
+
+    client = await _get_client_or_503(config, owner, repo)
+    try:
+        result = await asyncio.to_thread(
+            _reopen_pull_sync, client, owner, repo, pull_number
+        )
+    except GithubException as exc:
+        if exc.status == 422:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"GitHub rejected reopening {owner}/{repo}#{pull_number}: {exc}",
+            ) from exc
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover
+
+    await audit_store.append(
+        ChatAgentAuditEntry(
+            component="github",
+            action="reopen_pull",
+            key=f"{owner}/{repo}#{pull_number}",
+            new_value={"state": result["state"]},
+            detail=f"Reopened {owner}/{repo}#{pull_number}",
+        )
+    )
+    return result

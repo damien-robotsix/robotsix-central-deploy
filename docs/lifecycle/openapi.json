@@ -5387,6 +5387,227 @@
         }
       }
     },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/files": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "List the files changed by a pull request",
+        "description": "List the files changed by *owner*/*repo*'s pull request *pull_number*.\n\nReturns ``filename``, ``status`` (``added``, ``modified``, ``removed``,\n``renamed``), ``additions``, ``deletions``, ``changes``, ``sha``, and\n``previous_filename`` (set only for renames).  *per_page* is capped at\n100.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
+        "operationId": "list_pull_files_chat_github_repos__owner___repo__pulls__pull_number__files_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Pull Files Chat Github Repos  Owner   Repo  Pulls  Pull Number  Files Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/close": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Close a pull request",
+        "description": "Close *owner*/*repo*'s open pull request *pull_number*.\n\nReturns the updated pull-request payload with ``state`` reflecting\n``closed``.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
+        "operationId": "close_pull_chat_github_repos__owner___repo__pulls__pull_number__close_post",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pull request closed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Close Pull Chat Github Repos  Owner   Repo  Pulls  Pull Number  Close Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "422": {
+            "description": "GitHub rejected the close request"
+          },
+          "502": {
+            "description": "GitHub API returned an unexpected error"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/pulls/{pull_number}/reopen": {
+      "post": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Reopen a pull request",
+        "description": "Reopen *owner*/*repo*'s closed (unmerged) pull request *pull_number*.\n\nReturns the updated pull-request payload with ``state`` reflecting\n``open``.  GitHub rejects reopening a **merged** pull request with 422.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
+        "operationId": "reopen_pull_chat_github_repos__owner___repo__pulls__pull_number__reopen_post",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "pull_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Pull Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pull request reopened successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Reopen Pull Chat Github Repos  Owner   Repo  Pulls  Pull Number  Reopen Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "PR or repository not found, or App not installed on it"
+          },
+          "422": {
+            "description": "GitHub rejected the reopen (e.g. the PR has been merged and cannot be reopened)"
+          },
+          "502": {
+            "description": "GitHub API returned an unexpected error"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          }
+        }
+      }
+    },
     "/chat/github/repos/{owner}/{repo}": {
       "get": {
         "tags": [
@@ -5827,6 +6048,160 @@
           },
           "503": {
             "description": "Neither GitHub App nor PAT configured for this operation"
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/branches": {
+      "get": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "List branches for a repository",
+        "description": "List *owner*/*repo*'s branches.\n\nReturns ``name``, ``protected``, and ``commit_sha`` per branch.\n*per_page* is capped at 100.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
+        "operationId": "list_branches_chat_github_repos__owner___repo__branches_get",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Branches Chat Github Repos  Owner   Repo  Branches Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Repository not found or App not installed on it"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/github/repos/{owner}/{repo}/branches/{branch}": {
+      "delete": {
+        "tags": [
+          "chat-github"
+        ],
+        "summary": "Delete a branch (default/protected branches refused)",
+        "description": "Delete *branch* from *owner*/*repo*.\n\nThe ``{branch:path}`` converter captures branch names containing ``/``\n(e.g. ``feature/foo``) whole.  Deletion is refused with **409** when\n*branch* is the repository's default branch or is protected \u2014 no delete\nis attempted in either case.  An unknown branch returns **404**.\n\nRequires the GitHub App installation token.  Returns 503 if the App is\nnot configured and 404 if the App is not installed on the repo.",
+        "operationId": "delete_branch_chat_github_repos__owner___repo__branches__branch__delete",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Repo"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Branch deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Branch Chat Github Repos  Owner   Repo  Branches  Branch  Delete"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Branch or repository not found, or App not installed"
+          },
+          "409": {
+            "description": "Refused: the branch is the default branch or is protected"
+          },
+          "502": {
+            "description": "GitHub API returned an unexpected error"
+          },
+          "503": {
+            "description": "GitHub App not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }

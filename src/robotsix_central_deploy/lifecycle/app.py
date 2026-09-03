@@ -41,6 +41,7 @@ from .routers.auth_token import router as auth_token_router
 from .routers.caretaker import router as caretaker_router
 from .routers.chat import router as chat_router
 from .routers.chat_github_actions import router as chat_github_actions_router
+from .routers.chat_github_branches import router as chat_github_branches_router
 from .routers.chat_github_pages import router as chat_github_pages_router
 from .routers.chat_github_pulls import router as chat_github_pulls_router
 from .routers.chat_github_repos import router as chat_github_repos_router
@@ -142,6 +143,7 @@ app.include_router(chat_github_pulls_router)
 app.include_router(chat_github_repos_router)
 app.include_router(chat_github_pages_router)
 app.include_router(chat_github_security_router)
+app.include_router(chat_github_branches_router)
 app.include_router(chat_preview_router)
 app.include_router(chat_langfuse_router)
 app.include_router(fleet_langfuse_router)

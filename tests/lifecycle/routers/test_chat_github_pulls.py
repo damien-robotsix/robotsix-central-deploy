@@ -1846,3 +1846,237 @@ class TestRelaxMergeGate:
         fake_branch.edit_required_pull_request_reviews.assert_called_once_with(
             required_approving_review_count=0
         )
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/github/repos/{owner}/{repo}/pulls/{number}/files
+# ---------------------------------------------------------------------------
+
+
+class _FakeFile:
+    """Stand-in for a PyGithub ``File`` (a file changed by a PR)."""
+
+    def __init__(
+        self,
+        *,
+        filename: str = "src/app.py",
+        status: str = "modified",
+        additions: int = 3,
+        deletions: int = 1,
+        changes: int = 4,
+        sha: str = "filesha",
+        previous_filename: str | None = None,
+    ) -> None:
+        self.filename = filename
+        self.status = status
+        self.additions = additions
+        self.deletions = deletions
+        self.changes = changes
+        self.sha = sha
+        if previous_filename is not None:
+            self.previous_filename = previous_filename
+
+
+class TestListPullFiles:
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/42/files", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_lists_files(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_pr.get_files.return_value = [
+            _FakeFile(filename="src/a.py"),
+            _FakeFile(
+                filename="src/b.py",
+                status="renamed",
+                previous_filename="src/old_b.py",
+            ),
+        ]
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/42/files", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        assert body[0] == {
+            "filename": "src/a.py",
+            "status": "modified",
+            "additions": 3,
+            "deletions": 1,
+            "changes": 4,
+            "sha": "filesha",
+            "previous_filename": None,
+        }
+        assert body[1]["status"] == "renamed"
+        assert body[1]["previous_filename"] == "src/old_b.py"
+
+    async def test_per_page_capped_at_100(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = MagicMock()
+        fake_pr.get_files.return_value = [_FakeFile() for _ in range(5)]
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.get(
+            "/chat/github/repos/acme/widget/pulls/42/files?per_page=999",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 5
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/close
+# ---------------------------------------------------------------------------
+
+
+def _pull_with_edit(number: int, *, state: str = "open") -> MagicMock:
+    """A fake PR whose ``edit(state=...)`` updates its ``state`` in place."""
+    fake_pr = _FakePull(number, state=state)
+
+    def _edit(**kwargs):
+        if "state" in kwargs:
+            fake_pr.state = kwargs["state"]
+
+    fake_pr.edit = MagicMock(side_effect=_edit)
+    return fake_pr
+
+
+class TestClosePull:
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/close", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_closes_pull(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = _pull_with_edit(42, state="open")
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/close", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "closed"
+        fake_pr.edit.assert_called_once_with(state="closed")
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].action == "close_pull"
+        assert entries[0].key == "acme/widget#42"
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reopen
+# ---------------------------------------------------------------------------
+
+
+class TestReopenPull:
+    async def test_503_when_app_not_configured(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/reopen", headers=auth_headers
+        )
+        assert resp.status_code == 503
+
+    async def test_reopens_pull(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        fake_pr = _pull_with_edit(42, state="closed")
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/reopen", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "open"
+        fake_pr.edit.assert_called_once_with(state="open")
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert len(entries) == 1
+        assert entries[0].action == "reopen_pull"
+        assert entries[0].key == "acme/widget#42"
+
+    async def test_reopen_merged_returns_422(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch, enable_github_app
+    ):
+        from github import GithubException
+
+        fake_pr = _FakePull(42, state="closed", merged=True)
+        fake_pr.edit = MagicMock(
+            side_effect=GithubException(
+                422, data={"message": "state cannot be changed. It was merged."}
+            )
+        )
+        repo_obj = MagicMock()
+        repo_obj.get_pull.return_value = fake_pr
+        fake_client = _fake_client(repo_obj)
+
+        async def _fake_get_client(config, owner, repo):
+            return fake_client
+
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_github.get_github_client",
+            _fake_get_client,
+        )
+
+        resp = await client.post(
+            "/chat/github/repos/acme/widget/pulls/42/reopen", headers=auth_headers
+        )
+        assert resp.status_code == 422
+
+        entries = await server_mod.app.state.chat_agent_audit_store.list()
+        assert entries == []
