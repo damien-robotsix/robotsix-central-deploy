@@ -37,6 +37,17 @@ RUN --mount=type=secret,id=github_token,required=false \
     && uv pip install --system --no-cache --no-deps . \
     && uv pip install --system --no-cache 'setuptools>=83.0.0' \
     && python _gen_robotsix_ui_assets.py \
+    # The wheel was installed BEFORE the asset fetch (the fetch script
+    # imports robotsix_ui, so it needs the deps installed), which means the
+    # generated files land only in the source tree. The runtime stage copies
+    # site-packages, so mirror them into the installed package — without
+    # this the dashboard serves 404 for the robotsix-ui bundle and the
+    # entire AppShell header (incl. the Claude Auth button) vanishes
+    # (live incident 2026-09-04, first surfaced by the caretaker's
+    # self-update deploying the broken image).
+    && cp src/robotsix_central_deploy/ui/static/robotsix-ui.css \
+          src/robotsix_central_deploy/ui/static/robotsix-ui-vanilla.js \
+          /usr/local/lib/python3.14/site-packages/robotsix_central_deploy/ui/static/ \
     && rm -f /tmp/requirements.txt
 
 # Runtime stage — only git (needed at runtime by the onboard fetcher), the
