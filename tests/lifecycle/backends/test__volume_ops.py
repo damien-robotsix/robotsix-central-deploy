@@ -177,7 +177,8 @@ class TestVolumeOpsWriteVolumeFile:
     @staticmethod
     def _container(logs: bytes = b"") -> MagicMock:
         container = MagicMock()
-        container.wait.return_value = {"StatusCode": 0}
+        container.status = "exited"
+        container.attrs = {"State": {"ExitCode": 0}}
         container.logs.return_value = logs
         return container
 
@@ -370,8 +371,18 @@ class TestVolumeOpsReadConfig:
 def _one_shot_container(output: bytes) -> MagicMock:
     """Mock of the detached helper container the one-shot runner drives."""
     container = MagicMock()
-    container.wait.return_value = {"StatusCode": 0}
+    container.status = "exited"
+    container.attrs = {"State": {"ExitCode": 0}}
     container.logs.return_value = output
+    return container
+
+
+def _exited_container(exit_code: int, logs: bytes = b"") -> MagicMock:
+    """Mock of a detached container that has already exited with *exit_code*."""
+    container = MagicMock()
+    container.status = "exited"
+    container.attrs = {"State": {"ExitCode": exit_code}}
+    container.logs.return_value = logs
     return container
 
 
@@ -424,9 +435,10 @@ class TestVolumeOpsMeasureVolumeBytes:
         """A one-off Docker stream cut must not fail the whole measurement:
         the helper is retried and the size is still returned."""
         monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
+        monkeypatch.setattr(VolumeOps, "_WAIT_POLL_MAX_CONSECUTIVE_ERRORS", 1)
         vo = VolumeOps(client)
         first = _one_shot_container(b"")
-        first.wait.side_effect = RuntimeError("Response ended prematurely")
+        first.reload.side_effect = RuntimeError("Response ended prematurely")
         second = _one_shot_container(b"1048576\n")
         client.containers.run.side_effect = [first, second]
 
@@ -448,15 +460,45 @@ class TestVolumeOpsMeasureVolumeBytes:
         measurement returns None (a measurement-failed finding), never 0.
         """
         monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
+        monkeypatch.setattr(VolumeOps, "_WAIT_POLL_MAX_CONSECUTIVE_ERRORS", 1)
         vo = VolumeOps(client)
         container = _one_shot_container(b"")
-        container.wait.side_effect = RuntimeError("Response ended prematurely")
+        container.reload.side_effect = RuntimeError("Response ended prematurely")
         client.containers.run.return_value = container
 
         result = await vo.measure_volume_bytes("data-vol")
 
         assert result is None
         assert container.remove.call_count == VolumeOps._MEASURE_ATTEMPTS
+
+    async def test_long_helper_survives_proxy_idle_timeout(self, client, monkeypatch):
+        """Regression (2026-09-04): the blocking ``/containers/{id}/wait``
+        call idles for the helper's whole runtime, and the socket-proxy's
+        haproxy (``timeout client/server 10m``) cut it at ~600s on every
+        mill-mill-data measure — "Response ended prematurely" three times
+        per scan, despite the 1800s deadline.  The wait now polls short
+        inspect calls, so a du outliving any idle window still completes
+        and ``wait()`` is never used.
+        """
+        monkeypatch.setattr(VolumeOps, "_WAIT_POLL_START_S", 0)
+        vo = VolumeOps(client)
+        container = _one_shot_container(b"123\n")
+        container.status = "running"
+        polls = {"n": 0}
+
+        def _reload():
+            polls["n"] += 1
+            if polls["n"] >= 150:  # helper runs far longer than one idle window
+                container.status = "exited"
+
+        container.reload.side_effect = _reload
+        client.containers.run.return_value = container
+
+        result = await vo.measure_volume_bytes("data-vol")
+
+        assert result == 123
+        container.wait.assert_not_called()
+        container.remove.assert_called_once_with(force=True)
 
     async def test_cleanup_failure_does_not_mask_result(self, client):
         vo = VolumeOps(client)
@@ -582,10 +624,12 @@ class TestVolumeOpsRelocate:
         # The copy and verify use detach=True, so they return container objects.
         probe_result = b"robotsix-probe"
         copy_container = MagicMock()
-        copy_container.wait.return_value = {"StatusCode": 0}
+        copy_container.status = "exited"
+        copy_container.attrs = {"State": {"ExitCode": 0}}
         copy_container.logs.return_value = b""
         verify_container = MagicMock()
-        verify_container.wait.return_value = {"StatusCode": 0}
+        verify_container.status = "exited"
+        verify_container.attrs = {"State": {"ExitCode": 0}}
         client.containers.run.side_effect = [
             probe_result,
             copy_container,
@@ -647,7 +691,7 @@ class TestVolumeOpsRelocate:
         vo = VolumeOps(client)
         client.containers.run.side_effect = [
             b"robotsix-probe",  # probe
-            MagicMock(wait=lambda **kw: {"StatusCode": 1}),  # copy fails
+            _exited_container(1),  # copy fails
         ]
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
@@ -684,10 +728,8 @@ class TestVolumeOpsRelocate:
         vo = VolumeOps(client)
         client.containers.run.side_effect = [
             b"robotsix-probe",  # probe
-            MagicMock(
-                wait=lambda **kw: {"StatusCode": 0}, logs=lambda **kw: b""
-            ),  # copy ok
-            MagicMock(wait=lambda **kw: {"StatusCode": 1}),  # verify fails
+            _exited_container(0),  # copy ok
+            _exited_container(1),  # verify fails
         ]
 
         with patch.dict(sys.modules, {"docker": docker_mock}):
@@ -704,10 +746,8 @@ class TestVolumeOpsRelocate:
         vo = VolumeOps(client)
         client.containers.run.side_effect = [
             b"robotsix-probe",  # probe
-            MagicMock(
-                wait=lambda **kw: {"StatusCode": 0}, logs=lambda **kw: b""
-            ),  # copy ok
-            MagicMock(wait=lambda **kw: {"StatusCode": 0}),  # verify ok
+            _exited_container(0),  # copy ok
+            _exited_container(0),  # verify ok
         ]
         conflict = docker_mock.errors.APIError("already exists", status_code=409)
         recreate_err = docker_mock.errors.APIError("daemon exploded", status_code=500)
