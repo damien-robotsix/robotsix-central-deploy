@@ -52,6 +52,9 @@ services:
     volumes:
       - central_deploy_data:/data
       - /:/host_root:ro      # exposes host filesystem at /host_root (read-only)
+      # Traefik file-provider fragments for remote-host components — written
+      # here by central-deploy, read by Traefik (same volume, ro there).
+      - traefik_dynamic_remote:/traefik-dynamic
     # No host port. central-deploy is reachable only over central-deploy-proxy,
     # via Traefik, which authenticates every request. Publishing 127.0.0.1:8100
     # would be a way onto the control plane that skips the fleet's auth gate.
@@ -165,6 +168,11 @@ services:
       # file-provider watch never fires (bitten 2026-09-02 — new routers were
       # invisible until a traefik restart). Directory binds follow the path.
       - ./deploy/traefik:/etc/traefik/dynamic/fleet:ro
+      # Routes for components running on REMOTE hosts (ComponentConfig.host):
+      # central-deploy writes one fragment per remote component into this
+      # shared volume; the edge dials the port published on the remote host's
+      # tunnel address.
+      - traefik_dynamic_remote:/etc/traefik/dynamic/remote:ro
       # Host-level routes for services on this machine that are NOT fleet
       # components — anything the previous ingress served from its own config.
       # Kept outside the checkout so no specific host or service is named in
@@ -285,6 +293,7 @@ services:
 volumes:
   central_deploy_data:
   traefik_letsencrypt:
+  traefik_dynamic_remote:
   tinyauth_data:
 
 networks:

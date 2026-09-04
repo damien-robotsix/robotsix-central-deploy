@@ -7,6 +7,8 @@
   "component_config_store_path": "data/component_configs.json",
   "docker_socket_url": "unix:///var/run/docker.sock",
   "docker_sdk_timeout": 120,
+  "remote_hosts": {},
+  "traefik_dynamic_dir": "/traefik-dynamic",
   "disk_path": "/",
   "disk_warn_pct": 10.0,
   "env_store_path": "component_env.json",

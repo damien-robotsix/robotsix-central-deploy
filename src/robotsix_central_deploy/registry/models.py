@@ -252,3 +252,13 @@ class ComponentConfig(BaseModel):
             "are placed. Empty means use Docker's default volume location."
         ),
     )
+    host: str = Field(
+        default="",
+        description=(
+            "Remote host this component runs on — a key of the lifecycle "
+            "config's remote_hosts map. Empty means the local Docker daemon. "
+            "Remote components publish their primary port on the host's "
+            "reach address and are routed via a Traefik file-provider "
+            "fragment instead of container labels."
+        ),
+    )

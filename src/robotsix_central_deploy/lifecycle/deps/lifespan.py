@@ -26,7 +26,13 @@ from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 from ...registry.secret_key import SecretKeyManager
 from ...registry_check import RegistryChecker
-from ..backends import DockerBackend, DockerSdkBackend, ExecutionBackend, NoopBackend
+from ..backends import (
+    DockerBackend,
+    DockerSdkBackend,
+    ExecutionBackend,
+    MultiHostBackend,
+    NoopBackend,
+)
 from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntry
 from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
 from ..store import FileStore, InMemoryStore, ServiceStore
@@ -93,14 +99,31 @@ def _log_ghcr_credential_posture(
 
 def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
     if cfg.execution_backend == ExecutionBackendType.DOCKER_SDK:
-        return DockerSdkBackend(
-            socket_url=cfg.docker_socket_url,
-            timeout=cfg.docker_sdk_timeout,
-            github_app_id=cfg.github_app_id.get_secret_value(),
-            github_app_private_key=cfg.github_app_private_key.get_secret_value(),
-            installation_id=cfg.installation_id.get_secret_value(),
-            ghcr_pull_token=cfg.ghcr_pull_token.get_secret_value(),
+
+        def _make_sdk(socket_url: str, remote_bind_ip: str = "") -> DockerSdkBackend:
+            return DockerSdkBackend(
+                socket_url=socket_url,
+                timeout=cfg.docker_sdk_timeout,
+                github_app_id=cfg.github_app_id.get_secret_value(),
+                github_app_private_key=cfg.github_app_private_key.get_secret_value(),
+                installation_id=cfg.installation_id.get_secret_value(),
+                ghcr_pull_token=cfg.ghcr_pull_token.get_secret_value(),
+                # Remote backends get no base domain: routing labels are
+                # meaningless on a daemon the local edge cannot see, and an
+                # empty domain suppresses them.
+                gateway_base_domain="" if remote_bind_ip else cfg.gateway_base_domain,
+                remote_bind_ip=remote_bind_ip,
+            )
+
+        local = _make_sdk(cfg.docker_socket_url)
+        if not cfg.remote_hosts:
+            return local
+        return MultiHostBackend(
+            local,
+            cfg.remote_hosts,
+            _make_sdk,
             gateway_base_domain=cfg.gateway_base_domain,
+            traefik_dynamic_dir=cfg.traefik_dynamic_dir,
         )
     if cfg.execution_backend == ExecutionBackendType.DOCKER:
         return DockerBackend()
@@ -620,6 +643,10 @@ async def _init_component_registry(app: FastAPI) -> None:
     store_path: Path = _config.effective_component_config_store_path
     component_config_store = ComponentConfigStore(store_path)
     app.state.component_config_store = component_config_store
+    # Multi-host routing needs the store to resolve each component's host;
+    # until now the backend routed everything to the local daemon.
+    if isinstance(app.state.backend, MultiHostBackend):
+        app.state.backend.bind_store(component_config_store)
 
     await _seed_component_registry(
         _store, component_config_store, registry, _config.virtual_components

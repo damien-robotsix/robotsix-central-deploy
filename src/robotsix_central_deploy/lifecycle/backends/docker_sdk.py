@@ -67,10 +67,16 @@ class DockerSdkBackend(ExecutionBackend):
         installation_id: str = "",
         ghcr_pull_token: str = "",
         gateway_base_domain: str = "",
+        remote_bind_ip: str = "",
     ) -> None:
         import docker
 
         self._gateway_base_domain = gateway_base_domain
+        # Non-empty marks a REMOTE-host backend: the daemon at socket_url is
+        # not the one Traefik watches, so containers publish their ports on
+        # this address (the remote host's tunnel IP) instead of joining the
+        # proxy network and carrying routing labels.
+        self._remote_bind_ip = remote_bind_ip
         self._client = docker.DockerClient(base_url=socket_url, timeout=timeout)
         self._auth = AuthOps(self._client)
         self._ghcr_credentials = GhcrCredentialResolver(
@@ -301,11 +307,19 @@ class DockerSdkBackend(ExecutionBackend):
         else:
             user = f"{os.getuid()}:{os.getgid()}"
 
-        # Host ports are intentionally NOT published: the Traefik edge reaches
-        # managed containers over the central-deploy-proxy network by
+        # Host ports are intentionally NOT published locally: the Traefik edge
+        # reaches managed containers over the central-deploy-proxy network by
         # container_name:container_port. Publishing host ports caused "port is
         # already allocated" conflicts with existing host-bound services.
+        # On a REMOTE host the proxy network does not exist — the edge dials
+        # ports published on the host's tunnel address instead, so bind them
+        # there (and only there: never on the remote host's LAN interfaces).
         ports: dict[str, Any] = {}
+        if self._remote_bind_ip:
+            ports = {
+                f"{p.container}/{p.protocol}": (self._remote_bind_ip, p.host)
+                for p in config.ports
+            }
         volumes = {
             m.host: {"bind": m.container, "mode": "ro" if m.read_only else "rw"}
             for m in config.mounts
@@ -341,7 +355,15 @@ class DockerSdkBackend(ExecutionBackend):
         # Routing lives on the container, not in central-deploy: Traefik watches
         # the Docker API and picks these up with no reload. A component with no
         # port (or an unconfigured base domain) gets none and Traefik ignores it.
-        labels = traefik_labels(config, self._gateway_base_domain, PROXY_NETWORK)
+        # Remote-host containers get no labels (the edge cannot see that
+        # daemon) and no proxy network (it does not exist there) — their
+        # routing is a file-provider fragment written by the deploy path.
+        if self._remote_bind_ip:
+            labels: dict[str, str] = {}
+            network: str | None = None
+        else:
+            labels = traefik_labels(config, self._gateway_base_domain, PROXY_NETWORK)
+            network = PROXY_NETWORK
 
         return self._client.containers.create(
             image=image_ref,
@@ -357,7 +379,7 @@ class DockerSdkBackend(ExecutionBackend):
             detach=True,
             user=user,
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
-            network=PROXY_NETWORK,
+            network=network,
             mem_limit=config.mem_limit,
             memswap_limit=config.memswap_limit,
         )
