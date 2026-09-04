@@ -155,9 +155,12 @@ async def list_chat_components(
     # The public hostname is derived from the same data the edge routes on, so
     # a component reported at a URL is a component the edge actually carries.
     try:
-        base_domain = (await _get_config(request)).gateway_base_domain
+        _cfg = await _get_config(request)
+        base_domain = _cfg.gateway_base_domain
+        remote_hosts = _cfg.remote_hosts
     except Exception:  # noqa: BLE001 — an unconfigured gateway is not an error here
         base_domain = ""
+        remote_hosts = {}
 
     for comp_cfg in component_config_store.all():
         if not comp_cfg.allow_chat_access:
@@ -177,9 +180,18 @@ async def list_chat_components(
             )
             continue
 
-        base_url = comp_cfg.chat_base_url or (
-            f"http://{comp_cfg.container_name}:{comp_cfg.ports[0].container}"
-        )
+        # A remote-host component has no presence on the local Docker
+        # network — its container name does not resolve here. The chat
+        # agent dials the port the component publishes on the remote
+        # host's tunnel address instead (same trust level: neither path
+        # passes through the edge).
+        remote_entry = remote_hosts.get(comp_cfg.host) if comp_cfg.host else None
+        if comp_cfg.chat_base_url:
+            base_url = comp_cfg.chat_base_url
+        elif remote_entry is not None and remote_entry.reach_host:
+            base_url = f"http://{remote_entry.reach_host}:{comp_cfg.ports[0].host}"
+        else:
+            base_url = f"http://{comp_cfg.container_name}:{comp_cfg.ports[0].container}"
         skill_endpoint = comp_cfg.chat_skill_endpoint
         component_public_url = public_url(comp_cfg, base_domain)
 
