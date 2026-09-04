@@ -467,42 +467,20 @@ async def _run_onboard_deploy_job(
             registry, component_config_store, mill_component_id
         )
 
-        # File port-collision tickets on affected components' boards
+        # Port-collision detections are surfaced only as warnings on the
+        # deploy result. We deliberately do NOT file a mill ticket here:
+        # the mill admits deployment tickets only and the
+        # 'caretaker/port_collision' source tag is on its blocked list, so
+        # any ingest attempt would always be rejected (a permanently-dead
+        # path). Follow-up belongs in the component's own deploy contract.
         port_shift_warnings: list[str] = []
         if port_shifts:
-            from ...caretaker.models import (
-                CaretakerFinding,
-                FindingKind,
-            )
-
             for shift in port_shifts:
-                filed = False
-                if shift.collision_repo_id and mill_url and http_client is not None:
-                    finding = CaretakerFinding(
-                        component_id=shift.collision_component_id,
-                        repo_id=shift.collision_repo_id,
-                        kind=FindingKind.PORT_COLLISION,
-                        title=(
-                            f"Default host port {shift.original_host} collides "
-                            f"\u2014 update deploy/docker-compose.yml"
-                        ),
-                        detail=(
-                            f"Component '{shift.collision_component_id}' declares host port "
-                            f"{shift.original_host} as a default in its deploy/docker-compose.yml. "
-                            f"A new component '{spec_name}' was onboarded and was auto-assigned port "
-                            f"{shift.assigned_host} to avoid the collision. "
-                            f"Update this component's deploy/docker-compose.yml to use a unique "
-                            f"default host port so future onboardings do not collide."
-                        ),
-                        severity="warning",
-                    )
-                    mc_ticket = MillClient(mill_url, http_client)
-                    filed = await mc_ticket.ingest_finding(finding)
-                if not filed and shift.collision_component_id:
+                if shift.collision_component_id:
                     port_shift_warnings.append(
                         f"Port {shift.original_host} \u2192 {shift.assigned_host}: collided with "
-                        f"'{shift.collision_component_id}' \u2014 mill unreachable, "
-                        f"update its deploy/docker-compose.yml manually."
+                        f"'{shift.collision_component_id}' \u2014 update its "
+                        f"deploy/docker-compose.yml to use a unique default host port."
                     )
 
         # Best-effort mill repo registration: when register_with_mill is true the

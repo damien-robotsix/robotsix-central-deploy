@@ -1,9 +1,8 @@
-"""HTTP client for the mill component's ticket-ingest and repo-registration APIs.
+"""HTTP client for the mill component's repo-registration API.
 
-Used ONLY by the onboarding flow (repo registration + the one-time
-port-collision finding). The periodic caretaker no longer talks to the mill:
-it records findings locally and just updates containers (operator decision,
-2026-09-01).
+Used ONLY by the onboarding flow (repo registration). The periodic caretaker
+no longer talks to the mill: it records findings locally and just updates
+containers (operator decision, 2026-09-01).
 """
 
 from __future__ import annotations
@@ -14,8 +13,6 @@ from typing import TYPE_CHECKING
 import httpx
 from robotsix_http import ExternalHTTPError, RetryClient
 
-from .models import CaretakerFinding
-
 if TYPE_CHECKING:
     from ..registry.config_store import ComponentConfigStore
     from ..registry.loader import ComponentRegistry
@@ -24,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class MillClient:
-    """Thin async HTTP wrapper over the mill's ingest and repo endpoints.
+    """Thin async HTTP wrapper over the mill's repo endpoint.
 
     Every method returns a bool (True on 2xx, False on any error) — never
     raises.  This keeps the caretaker scheduler resilient: a mill outage
@@ -68,36 +65,6 @@ class MillClient:
         total = sum(counts.values())
         detail = ", ".join(f"{stage}×{n}" for stage, n in sorted(counts.items()))
         return f"{total} heavy stage(s) in flight: {detail}"
-
-    async def ingest_finding(self, finding: CaretakerFinding) -> bool:
-        """POST {base_url}/tickets/ingest — report a finding to the mill.
-
-        The mill endpoint deduplicates by repo_id + title, so re-reports
-        of a persisting problem do not spawn duplicate tickets.
-        """
-        try:
-            await self._http.post(
-                f"{self._base_url}/tickets/ingest",
-                json={
-                    "repo_id": finding.repo_id,
-                    "title": finding.title,
-                    "body": finding.detail,
-                    "source_tag": f"caretaker/{finding.kind.value}",
-                },
-            )
-            return True
-        except ExternalHTTPError as exc:
-            logger.warning(
-                "mill ingest returned %d for finding %s/%s: %s",
-                exc.status_code,
-                finding.repo_id,
-                finding.title,
-                exc.response.text if exc.response is not None else str(exc),
-            )
-            return False
-        except httpx.HTTPError as exc:
-            logger.warning("mill ingest call failed: %s", exc)
-            return False
 
     async def register_repo(self, repo_id: str, git_url: str) -> bool:
         """POST {base_url}/repos — register a new repo with the mill.
