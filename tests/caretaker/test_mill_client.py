@@ -156,12 +156,48 @@ class TestMillClient:
 
     @pytest.mark.asyncio
     async def test_register_repo_201_returns_true(self):
+        """Real POST /repos shape: 201 with registered=true on first registration."""
         http = MagicMock(spec=RetryClient)
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
+        http.post = AsyncMock(return_value=MagicMock(is_success=True, status_code=201))
         client = MillClient("http://localhost:8080", http)
         assert (
             await client.register_repo("my-repo", "https://github.com/org/my-repo.git")
             is True
+        )
+        http.post.assert_called_once_with(
+            "http://localhost:8080/repos",
+            json={
+                "repo_id": "my-repo",
+                "forge_remote_url": "https://github.com/org/my-repo.git",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_register_repo_200_registered_false_returns_true(self):
+        """Idempotent: an already-registered repo returns 200 registered=false."""
+        http = MagicMock(spec=RetryClient)
+        http.post = AsyncMock(return_value=MagicMock(is_success=True, status_code=200))
+        client = MillClient("http://localhost:8080", http)
+        assert (
+            await client.register_repo("my-repo", "https://github.com/org/my-repo.git")
+            is True
+        )
+
+    @pytest.mark.asyncio
+    async def test_register_repo_403_flag_off_returns_false(self):
+        """allow_runtime_repo_registration disabled → 403, best-effort failure."""
+        http = MagicMock(spec=RetryClient)
+        http.post = AsyncMock(
+            side_effect=ExternalHTTPError(
+                "repo registration disabled",
+                status_code=403,
+                response=MagicMock(text="repo registration disabled"),
+            )
+        )
+        client = MillClient("http://localhost:8080", http)
+        assert (
+            await client.register_repo("my-repo", "https://github.com/org/my-repo.git")
+            is False
         )
 
     @pytest.mark.asyncio
