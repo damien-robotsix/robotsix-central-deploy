@@ -108,7 +108,7 @@ class MillClient:
         try:
             await self._http.post(
                 f"{self._base_url}/repos",
-                json={"repo_id": repo_id, "git_url": git_url},
+                json={"repo_id": repo_id, "forge_remote_url": git_url},
             )
             logger.info("registered repo %s with mill", repo_id)
             return True

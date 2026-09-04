@@ -456,7 +456,8 @@ async def _run_onboard_deploy_job(
         record.previous_image_digest = outcome.previous_digest
         await store.put(record)
 
-        # Best-effort mill repo registration
+        # Resolve the mill base URL once — reused by the port-collision ticket
+        # filing and the best-effort repo registration below.
         from ...caretaker.mill_client import MillClient
 
         mill_component_id = ""
@@ -465,11 +466,6 @@ async def _run_onboard_deploy_job(
         mill_url = MillClient.derive_url_from_registry(
             registry, component_config_store, mill_component_id
         )
-        if config.repo_id and mill_url and http_client is not None:
-            mc = MillClient(mill_url, http_client)
-            ok = await mc.register_repo(config.repo_id, spec.git_url)
-            if not ok:
-                logger.warning("mill repo registration failed for %s", config.repo_id)
 
         # File port-collision tickets on affected components' boards
         port_shift_warnings: list[str] = []
@@ -508,6 +504,21 @@ async def _run_onboard_deploy_job(
                         f"'{shift.collision_component_id}' \u2014 mill unreachable, "
                         f"update its deploy/docker-compose.yml manually."
                     )
+
+        # Best-effort mill repo registration: when register_with_mill is true the
+        # component's repo_id is set, so register the repo with the mill so it gets
+        # a board. Best-effort — a mill outage or disabled flag must NOT fail
+        # onboarding; record the failure in the job warnings instead.
+        if config.repo_id and mill_url and http_client is not None:
+            mc = MillClient(mill_url, http_client)
+            ok = await mc.register_repo(config.repo_id, spec.git_url)
+            if not ok:
+                port_shift_warnings.append(
+                    f"mill repo registration for '{config.repo_id}' failed "
+                    f"(mill unreachable or repo registration disabled) \u2014 "
+                    f"register it manually via POST /repos"
+                )
+                logger.warning("mill repo registration failed for %s", config.repo_id)
 
         # Deploy siblings
         job_registry.update_phase(job_id, OnboardJobPhase.DEPLOYING_SIBLINGS)
