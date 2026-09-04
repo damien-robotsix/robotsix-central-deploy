@@ -135,6 +135,94 @@ class TestChatComponents:
         assert data[0]["base_url"] == "http://chatty:8080"
         assert data[0]["skill"] == "# Chatty Skill\nDo the thing."
 
+    async def test_remote_host_component_gets_tunnel_base_url(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """A remote-host component has no local container to dial — the
+        roster must point the chat agent at the port published on the remote
+        host's reach address (live 2026-09-04: hexarchy moved to bequiet and
+        the agent kept dialing the dead http://hexarchy:8000)."""
+        from robotsix_central_deploy.lifecycle.config import RemoteHostEntry
+
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="hexarchy",
+            image="hexarchy:latest",
+            container_name="hexarchy",
+            host="bequiet",
+            ports=[PortMapping(host=8000, container=8000, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+        monkeypatch.setattr(
+            server_mod.app.state.config,
+            "remote_hosts",
+            {
+                "bequiet": RemoteHostEntry(
+                    docker_url="tcp://10.88.0.2:2375", reach_host="10.88.0.2"
+                )
+            },
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "# Hexarchy Skill"
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        # Tunnel address + HOST-side port (that's what is published there),
+        # not the local-network container address.
+        assert data[0]["base_url"] == "http://10.88.0.2:8000"
+        assert data[0]["skill"] == "# Hexarchy Skill"
+
+    async def test_remote_component_with_unknown_host_keeps_local_url(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch
+    ):
+        """An unconfigured remote host falls back to the local derivation —
+        same fallback the deploy path uses."""
+        config_store = server_mod.app.state.component_config_store
+        cfg = ComponentConfig(
+            id="wanderer",
+            image="wanderer:latest",
+            container_name="wanderer",
+            host="ghost-host",
+            ports=[PortMapping(host=9000, container=8080, protocol="tcp")],
+        )
+        cfg.allow_chat_access = True
+        await config_store.put(cfg)
+        server_mod.app.state.registry.register(cfg)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "# W"
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        monkeypatch.setattr(
+            "robotsix_central_deploy.lifecycle.routers.chat_components.retry_client_context",
+            lambda *a, **kw: _mock_retry_client(mock_client),
+        )
+        import robotsix_central_deploy.lifecycle.routers.chat as chat_mod
+
+        chat_mod._skill_cache.clear()
+
+        resp = await client.get("/chat/components", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["base_url"] == "http://wanderer:8080"
+
     async def test_reports_component_with_failed_probe(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
