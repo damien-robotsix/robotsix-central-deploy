@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Any
 
 from robotsix_central_deploy.lifecycle._yaml_utils import (
@@ -228,6 +229,56 @@ class VolumeOps:
     #: server's hourly audit du of mill-mill-data outlived it by 10+ minutes).
     HELPER_LABEL = "robotsix-central-deploy.one-shot-helper"
 
+    #: Poll cadence for waiting on helper containers.  A single blocking
+    #: ``/containers/{id}/wait`` call stays idle for the helper's whole
+    #: runtime, and the docker socket-proxy (haproxy, ``timeout client/server
+    #: 10m``) cuts any idle stream at 600s — every mill-mill-data measure
+    #: attempt died at ~600s with "Response ended prematurely" despite the
+    #: 1800s deadline (2026-09-04).  Waiting by short inspect polls keeps
+    #: every request sub-second, so no idle timeout can trigger.
+    _WAIT_POLL_START_S = 0.25
+    _WAIT_POLL_MAX_S = 5.0
+    _WAIT_POLL_MAX_CONSECUTIVE_ERRORS = 5
+
+    def _wait_container_exit_sync(self, container: Any, timeout_s: float) -> int:
+        """Wait for *container* to exit; return its exit code.
+
+        Polls short ``inspect`` calls instead of one long-idle ``wait()``
+        so the socket-proxy's 10-minute idle timeout can never cut the
+        wait.  Tolerates a few consecutive transient poll errors (daemon
+        under IO pressure).  Raises :class:`TimeoutError` when *timeout_s*
+        elapses first; the container is NOT removed here — callers own
+        cleanup on every path.
+
+        Runs synchronously — callers must wrap in an executor.
+        """
+        deadline = time.monotonic() + timeout_s
+        delay = self._WAIT_POLL_START_S
+        errors = 0
+        while True:
+            try:
+                container.reload()
+                errors = 0
+                if container.status in ("exited", "dead"):
+                    state = container.attrs.get("State") or {}
+                    return int(state.get("ExitCode") or 0)
+            except Exception as exc:
+                errors += 1
+                if errors >= self._WAIT_POLL_MAX_CONSECUTIVE_ERRORS:
+                    raise
+                logger.warning(
+                    "helper wait poll failed (%d/%d), retrying: %s",
+                    errors,
+                    self._WAIT_POLL_MAX_CONSECUTIVE_ERRORS,
+                    exc,
+                )
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"helper container still running after {timeout_s:.0f}s"
+                )
+            time.sleep(delay)
+            delay = min(delay * 2, self._WAIT_POLL_MAX_S)
+
     async def remove_stale_helpers(self) -> int:
         """Force-remove every labelled one-shot helper container.
 
@@ -277,8 +328,8 @@ class VolumeOps:
         (daemon under IO pressure, "Response ended prematurely") the call
         raises and the helper container is orphaned, still running its du.
         Two such orphans ground mill-mill-data for 40+ minutes on
-        2026-09-02.  Detach + wait(timeout) + finally-remove(force) kills
-        the helper on every exit path.
+        2026-09-02.  Detach + poll-wait + finally-remove(force) kills the
+        helper on every exit path.
 
         Runs synchronously — callers must wrap in an executor.
         """
@@ -290,7 +341,9 @@ class VolumeOps:
             labels={self.HELPER_LABEL: "1"},
         )
         try:
-            container.wait(timeout=timeout_s or self._ONE_SHOT_TIMEOUT_S)
+            self._wait_container_exit_sync(
+                container, timeout_s or self._ONE_SHOT_TIMEOUT_S
+            )
             raw = container.logs(stdout=True, stderr=False)
             return raw if isinstance(raw, bytes) else str(raw).encode()
         finally:
@@ -597,7 +650,7 @@ class VolumeOps:
                 )
                 container.put_archive("/", payload)
                 container.start()
-                container.wait()
+                self._wait_container_exit_sync(container, self._ONE_SHOT_TIMEOUT_S)
                 raw = container.logs(stdout=True, stderr=True)
                 return raw if isinstance(raw, bytes) else raw.encode()
             except (docker.errors.APIError, docker.errors.ContainerError) as exc:
@@ -805,8 +858,7 @@ class VolumeOps:
         #    correct backing path) at /src ro, and target at /dst rw.
         #    ``containers.run()`` does NOT accept a ``timeout`` kwarg
         #    (``timeout`` is forwarded to ``Container.stop()``), so we use
-        #    ``detach=True`` and ``container.wait(timeout=1800)`` for a
-        #    configurable deadline.
+        #    ``detach=True`` and a poll-wait with an 1800s deadline.
         copy_ok = False
         try:
 
@@ -825,7 +877,7 @@ class VolumeOps:
                     detach=True,
                 )
                 try:
-                    exit_info = container.wait(timeout=1800)
+                    exit_code = self._wait_container_exit_sync(container, 1800)
                 except Exception:
                     try:
                         container.remove(force=True)
@@ -833,7 +885,7 @@ class VolumeOps:
                         pass
                     raise
                 container.remove()
-                return bool(exit_info.get("StatusCode", 1) == 0)
+                return exit_code == 0
 
             copy_ok = await loop.run_in_executor(None, _run_copy)
         except Exception:
@@ -871,7 +923,7 @@ class VolumeOps:
                     detach=True,
                 )
                 try:
-                    exit_info = container.wait(timeout=600)
+                    exit_code = self._wait_container_exit_sync(container, 600)
                 except Exception:
                     try:
                         container.remove(force=True)
@@ -879,7 +931,7 @@ class VolumeOps:
                         pass
                     raise
                 container.remove()
-                return bool(exit_info.get("StatusCode", 1) == 0)
+                return exit_code == 0
 
             verify_ok = await loop.run_in_executor(None, _run_verify)
         except Exception:

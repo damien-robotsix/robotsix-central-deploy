@@ -946,7 +946,8 @@ class TestClaudeAuthCredentialCheck:
 def _one_shot_container(output: bytes):
     """Mock of the detached helper container the one-shot runner drives."""
     container = MagicMock()
-    container.wait.return_value = {"StatusCode": 0}
+    container.status = "exited"
+    container.attrs = {"State": {"ExitCode": 0}}
     container.logs.return_value = output
     return container
 
