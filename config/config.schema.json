@@ -31,6 +31,25 @@
       "title": "LangfuseProjectCreds",
       "type": "object"
     },
+    "RemoteHostEntry": {
+      "description": "One remote Docker host that components can be deployed to.\n\nThe host is reached over a private tunnel (e.g. WireGuard): its Docker\nAPI sits behind a socket proxy bound to the tunnel address, and remote\ncomponents publish their ports on that same address so the local\nTraefik edge can dial them.",
+      "properties": {
+        "docker_url": {
+          "default": "",
+          "description": "Docker API endpoint of the remote host, e.g. tcp://10.88.0.2:2375 (a socket proxy bound to the tunnel interface).",
+          "title": "Docker Url",
+          "type": "string"
+        },
+        "reach_host": {
+          "default": "",
+          "description": "Address the local Traefik edge dials to reach ports published on the remote host \u2014 normally the host's tunnel IP.",
+          "title": "Reach Host",
+          "type": "string"
+        }
+      },
+      "title": "RemoteHostEntry",
+      "type": "object"
+    },
     "StoreBackend": {
       "description": "Persistence backend for the lifecycle service store.",
       "enum": [
@@ -134,6 +153,20 @@
       "description": "Client-level timeout (seconds) for every Docker SDK operation (pull, create, start, stop, \u2026). The default accommodates typical image pulls.",
       "title": "Docker Sdk Timeout",
       "type": "integer"
+    },
+    "remote_hosts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RemoteHostEntry"
+      },
+      "description": "Remote Docker hosts components can target via their 'host' field, keyed by host name (e.g. 'bequiet'). Empty = single-host operation.",
+      "title": "Remote Hosts",
+      "type": "object"
+    },
+    "traefik_dynamic_dir": {
+      "default": "/traefik-dynamic",
+      "description": "Directory where Traefik file-provider fragments for remote-host components are written. Must be a volume shared with the Traefik container (mounted under its providers.file.directory).",
+      "title": "Traefik Dynamic Dir",
+      "type": "string"
     },
     "disk_path": {
       "default": "/",

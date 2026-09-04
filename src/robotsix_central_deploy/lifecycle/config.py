@@ -45,6 +45,32 @@ class VirtualComponentEntry(BaseModel):
     auth_header_name: str = Field("", description='header name when auth_type="header"')
 
 
+class RemoteHostEntry(BaseModel):
+    """One remote Docker host that components can be deployed to.
+
+    The host is reached over a private tunnel (e.g. WireGuard): its Docker
+    API sits behind a socket proxy bound to the tunnel address, and remote
+    components publish their ports on that same address so the local
+    Traefik edge can dial them.
+    """
+
+    docker_url: str = Field(
+        "",
+        description=(
+            "Docker API endpoint of the remote host, e.g. "
+            "tcp://10.88.0.2:2375 (a socket proxy bound to the tunnel "
+            "interface)."
+        ),
+    )
+    reach_host: str = Field(
+        "",
+        description=(
+            "Address the local Traefik edge dials to reach ports published "
+            "on the remote host — normally the host's tunnel IP."
+        ),
+    )
+
+
 class LangfuseProjectCreds(BaseModel):
     """Credentials for one Langfuse trace project."""
 
@@ -114,6 +140,25 @@ class LifecycleConfig(BaseModel):
             "Client-level timeout (seconds) for every Docker SDK operation "
             "(pull, create, start, stop, …). The default accommodates "
             "typical image pulls."
+        ),
+    )
+
+    remote_hosts: dict[str, RemoteHostEntry] = Field(
+        default_factory=dict,
+        description=(
+            "Remote Docker hosts components can target via their 'host' "
+            "field, keyed by host name (e.g. 'bequiet'). Empty = "
+            "single-host operation."
+        ),
+    )
+
+    traefik_dynamic_dir: str = Field(
+        "/traefik-dynamic",
+        description=(
+            "Directory where Traefik file-provider fragments for "
+            "remote-host components are written. Must be a volume shared "
+            "with the Traefik container (mounted under its "
+            "providers.file.directory)."
         ),
     )
 
