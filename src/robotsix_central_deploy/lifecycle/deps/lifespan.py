@@ -97,7 +97,34 @@ def _log_ghcr_credential_posture(
         logger.info("ghcr.io: no credential configured — public packages only")
 
 
+def _ensure_traefik_dynamic_mountpoints(cfg: LifecycleConfig) -> None:
+    """Create the fleet/ and host/ mountpoint dirs inside the shared
+    traefik-dynamic volume.
+
+    The volume is mounted read-only at the top of Traefik's watched
+    directory, with the fleet/ and host/ binds overlaid inside it — Docker
+    cannot create those mountpoint dirs through the ro mount, so on a
+    fresh install (empty volume) Traefik fails to start until they exist
+    (bitten 2026-09-04: the edge went down on the mount-layout rollout).
+    central-deploy mounts the same volume read-write and creates them
+    here; Traefik's restart policy then brings the edge up.
+    """
+    base = Path(cfg.traefik_dynamic_dir)
+    if not base.is_dir():
+        return  # volume not mounted (dev / tests) — nothing to prepare
+    for sub in ("fleet", "host"):
+        try:
+            (base / sub).mkdir(exist_ok=True)
+        except OSError:
+            logger.exception(
+                "cannot create traefik mountpoint dir %s — a fresh install's "
+                "Traefik container will fail to start until it exists",
+                base / sub,
+            )
+
+
 def _build_backend(cfg: LifecycleConfig) -> ExecutionBackend:
+    _ensure_traefik_dynamic_mountpoints(cfg)
     if cfg.execution_backend == ExecutionBackendType.DOCKER_SDK:
 
         def _make_sdk(socket_url: str, remote_bind_ip: str = "") -> DockerSdkBackend:
