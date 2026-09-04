@@ -171,8 +171,12 @@ services:
       # Routes for components running on REMOTE hosts (ComponentConfig.host):
       # central-deploy writes one fragment per remote component into this
       # shared volume; the edge dials the port published on the remote host's
-      # tunnel address.
-      - traefik_dynamic_remote:/etc/traefik/dynamic/remote:ro
+      # tunnel address. Mounted at the TOP of the watched directory — not a
+      # subdirectory — because Traefik's file-provider watch only fires for
+      # changes in providers.file.directory itself: fragments written into a
+      # mounted subdir were invisible until a restart (verified 2026-09-04).
+      # The fleet/ and host/ binds below overlay-mount inside it untouched.
+      - traefik_dynamic_remote:/etc/traefik/dynamic:ro
       # Host-level routes for services on this machine that are NOT fleet
       # components — anything the previous ingress served from its own config.
       # Kept outside the checkout so no specific host or service is named in
