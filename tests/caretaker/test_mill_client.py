@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from robotsix_http import RetryClient
+from robotsix_http import ExternalHTTPError, RetryClient
 
 from robotsix_central_deploy.caretaker.mill_client import MillClient
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
