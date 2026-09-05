@@ -35,6 +35,32 @@ _LEGACY_SELF_UPDATE_KEY = "caretaker_self_update_enabled"
 _LEGACY_COMPONENT_KEY = "caretaker_auto_update"
 _UNIFIED_KEY = "auto_update_enabled"
 
+# The values pydantic v2's lax ``bool`` coercion accepts (after strip + lower).
+# The old ``bool`` fields used this coercion, so a legacy config may legitimately
+# carry ``"false"`` / ``"1"`` / ``0`` / ``"yes"`` etc. rather than a raw ``bool``.
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on", "t", "y"})
+_FALSE_VALUES = frozenset({"0", "false", "no", "off", "f", "n"})
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    """Coerce a legacy value to ``bool`` like pydantic v2's lax parsing.
+
+    Returns the coerced ``bool``, or ``None`` when the value is not a
+    recognizable boolean (so the caller can fall back to the default rather
+    than silently dropping an operator's explicit choice).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_VALUES:
+            return True
+        if normalized in _FALSE_VALUES:
+            return False
+    return None
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -53,8 +79,22 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    """Persist ``data`` to ``path``; a failed write is logged, never fatal.
+
+    A read-only config/store file must not crash startup with a raw traceback -
+    the migration is best-effort, and startup should proceed (the un-migrated
+    legacy value is still handled by the in-memory path where possible).
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "auto-update migration: could not write %s - leaving legacy values "
+            "in place (%s)",
+            path,
+            exc,
+        )
 
 
 def _migrate_component_auto_update(raw: dict[str, Any]) -> bool:
@@ -62,7 +102,9 @@ def _migrate_component_auto_update(raw: dict[str, Any]) -> bool:
 
     Returns True if any row changed. ``auto_update_enabled`` already present on
     a row wins (an explicit value is never overwritten); otherwise the legacy
-    value is copied when it is a bool.
+    value is coerced (mirroring the old lax ``bool`` parsing) onto the unified
+    key. A legacy value that is not a recognizable bool is dropped with a
+    warning rather than silently reverting the row to its default.
     """
     changed = False
     for row in raw.values():
@@ -71,8 +113,19 @@ def _migrate_component_auto_update(raw: dict[str, Any]) -> bool:
         if _LEGACY_COMPONENT_KEY not in row:
             continue
         legacy = row.get(_LEGACY_COMPONENT_KEY)
-        if _UNIFIED_KEY not in row and isinstance(legacy, bool):
-            row[_UNIFIED_KEY] = legacy
+        if _UNIFIED_KEY not in row:
+            coerced = _coerce_bool(legacy)
+            if coerced is not None:
+                row[_UNIFIED_KEY] = coerced
+            else:
+                logger.warning(
+                    "auto-update migration: unrecognized %s=%r on %r - "
+                    "dropping it and leaving %s at its default",
+                    _LEGACY_COMPONENT_KEY,
+                    legacy,
+                    row.get("id"),
+                    _UNIFIED_KEY,
+                )
         del row[_LEGACY_COMPONENT_KEY]
         changed = True
     return changed
@@ -85,11 +138,21 @@ def _legacy_self_update_value(
 
     The settings store wins over config.json, mirroring the settings-overlay
     precedence (an entry in the store represents a deliberate operator choice).
+    The value is coerced like the old lax ``bool`` parsing; a value that is not
+    a recognizable bool is logged and skipped in favour of the next source.
     """
     for source in (settings_raw, config_raw):
+        if _LEGACY_SELF_UPDATE_KEY not in source:
+            continue
         value = source.get(_LEGACY_SELF_UPDATE_KEY)
-        if isinstance(value, bool):
-            return value
+        coerced = _coerce_bool(value)
+        if coerced is not None:
+            return coerced
+        logger.warning(
+            "auto-update migration: unrecognized %s=%r in settings - ignoring",
+            _LEGACY_SELF_UPDATE_KEY,
+            value,
+        )
     return None
 
 

@@ -688,7 +688,13 @@ async def _init_component_registry(app: FastAPI) -> None:
 
         _resolved = robotsix_config.resolve_config_path()
         config_path: Path | None = _resolved if isinstance(_resolved, Path) else None
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.warning(
+            "auto-update migration: could not resolve config.json path - "
+            "legacy caretaker_self_update_enabled in config.json will not be "
+            "migrated (relying on the settings store only)",
+            exc_info=True,
+        )
         config_path = None
     legacy_self_update = migrate_legacy_auto_update_settings(
         store_path,
