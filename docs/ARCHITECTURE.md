@@ -337,7 +337,9 @@ Two background `asyncio.Task` loops run in the same process:
 2. **Volume audit** — measures every volume's size, compares against
    the previous snapshot, and reports findings when both absolute and
    percentage growth thresholds are breached. Findings are logged,
-   persisted to disk, and optionally filed as board tickets.
+   persisted to disk, and displayed read-only in the deploy dashboard
+   (`GET /volumes/audit`); the caretaker files no tickets and uses no
+   board integration.
 
 Both are started during app startup and run for the lifetime of the
 process.
