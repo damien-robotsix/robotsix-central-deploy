@@ -47,12 +47,12 @@ def _make_record(name="svc", update_available=True):
     )
 
 
-def _make_config(id="svc", caretaker_auto_update=True, repo_id="test-repo"):
+def _make_config(id="svc", auto_update_enabled=True, repo_id="test-repo"):
     return ComponentConfig(
         id=id,
         image="repo:v1",
         container_name=id,
-        caretaker_auto_update=caretaker_auto_update,
+        auto_update_enabled=auto_update_enabled,
         repo_id=repo_id,
     )
 
@@ -187,7 +187,7 @@ class TestPhaseUpdate:
         backend.deploy = AsyncMock()
         registry = ComponentRegistry([])
         ccs = MagicMock(spec=ComponentConfigStore)
-        ccs.get = MagicMock(return_value=_make_config(caretaker_auto_update=False))
+        ccs.get = MagicMock(return_value=_make_config(auto_update_enabled=False))
         dhs = MagicMock(spec=DeployHistoryStore)
 
         findings = await phase_update(

@@ -37,6 +37,7 @@ from ..config import LangfuseProjectCreds, LifecycleConfig, VirtualComponentEntr
 from ..models import ExecutionBackendType, ServiceRecord, StoreBackend
 from ..store import FileStore, InMemoryStore, ServiceStore
 from ..token_store import TokenStore
+from ._auto_update_migration import migrate_legacy_auto_update_settings
 from .background import _claude_auth_refresh_loop, _registry_check_loop
 from .jobs import JobRegistry
 
@@ -675,6 +676,26 @@ async def _init_component_registry(app: FastAPI) -> None:
     if isinstance(app.state.backend, MultiHostBackend):
         app.state.backend.bind_store(component_config_store)
 
+    # -- Retire the legacy caretaker auto-update settings --------------------
+    # Map any persisted caretaker_auto_update / caretaker_self_update_enabled
+    # values onto the unified per-component auto_update_enabled flag and scrub
+    # the legacy keys from the persisted files, so they are never silently
+    # ignored. The returned operator value (caretaker_self_update_enabled) is
+    # applied to the central-deploy component below — the plane's own self-update
+    # is governed exactly like any other component.
+    try:
+        import robotsix_config
+
+        _resolved = robotsix_config.resolve_config_path()
+        config_path: Path | None = _resolved if isinstance(_resolved, Path) else None
+    except Exception:  # noqa: BLE001
+        config_path = None
+    legacy_self_update = migrate_legacy_auto_update_settings(
+        store_path,
+        _config.effective_system_settings_path,
+        config_path,
+    )
+
     await _seed_component_registry(
         _store, component_config_store, registry, _config.virtual_components
     )
@@ -723,7 +744,11 @@ async def _init_component_registry(app: FastAPI) -> None:
     # -- Self-managed central-deploy service ---------------------------------
     # Register central-deploy itself so it appears in GET /services and the
     # chat agent can restart/update it through the allowlisted chat endpoints.
-    if component_config_store.get("central-deploy") is None:
+    # The legacy caretaker_self_update_enabled operator value (if any) is
+    # applied to the central-deploy component's auto_update_enabled so an
+    # operator who disabled self-update stays disabled after the migration.
+    central_deploy_cfg = component_config_store.get("central-deploy")
+    if central_deploy_cfg is None:
         try:
             self_info = await _backend.inspect_self()
         except NotImplementedError:
@@ -736,6 +761,9 @@ async def _init_component_registry(app: FastAPI) -> None:
                 chat_agent_mutatable=True,
                 is_virtual=False,
                 allow_chat_access=False,
+                auto_update_enabled=(
+                    legacy_self_update if legacy_self_update is not None else True
+                ),
             )
             component_config_store.register(central_deploy_cfg)
             registry.register(central_deploy_cfg)
@@ -749,6 +777,19 @@ async def _init_component_registry(app: FastAPI) -> None:
                     )
                 )
             logger.info("Registered self-managed 'central-deploy' service")
+    elif legacy_self_update is not None and (
+        central_deploy_cfg.auto_update_enabled != legacy_self_update
+    ):
+        component_config_store.register(
+            central_deploy_cfg.model_copy(
+                update={"auto_update_enabled": legacy_self_update}
+            )
+        )
+        logger.info(
+            "central-deploy auto_update_enabled set to %s from migrated "
+            "caretaker_self_update_enabled",
+            legacy_self_update,
+        )
 
     # --- Volume audit subsystem ---
     # Sweep helper containers orphaned by the previous server process (a

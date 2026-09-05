@@ -2325,7 +2325,7 @@ class TestOnboardMillIntegration:
     async def test_mill_component_forced_no_auto_update(
         self, client: AsyncClient, auth_headers: dict, tmp_path
     ):
-        """Component with id=='mill' always gets caretaker_auto_update=False."""
+        """Component with id=='mill' always gets auto_update_enabled=False."""
         ss = SystemSettingsStore(tmp_path / "settings4.json")
         await ss.put(SystemSettings(caretaker_enabled=True, mill_component_id="mill"))
         server_mod.app.state.settings_store = ss
@@ -2342,7 +2342,7 @@ class TestOnboardMillIntegration:
 
         cfg = server_mod.app.state.component_config_store.get("mill")
         assert cfg is not None
-        assert cfg.caretaker_auto_update is False
+        assert cfg.auto_update_enabled is False
 
     @pytest.mark.asyncio
     async def test_background_job_skips_when_untracked(

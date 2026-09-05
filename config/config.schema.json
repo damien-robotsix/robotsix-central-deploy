@@ -388,12 +388,6 @@
       "title": "Image Auto Prune",
       "type": "boolean"
     },
-    "caretaker_self_update_enabled": {
-      "default": true,
-      "description": "At the end of each caretaker pass, if the plane's own image has a pending update, launch the detached self-updater (same path as POST /system/update).",
-      "title": "Caretaker Self Update Enabled",
-      "type": "boolean"
-    },
     "llmio_tier_config": {
       "additionalProperties": true,
       "default": {},
@@ -465,3 +459,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+

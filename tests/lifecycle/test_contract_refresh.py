@@ -212,12 +212,12 @@ async def test_refresh_400_without_git_url(
 async def test_refresh_preserves_operator_fields(
     client_with_component: AsyncClient,
 ) -> None:
-    """repo_id and caretaker_auto_update survive a contract refresh."""
+    """repo_id and auto_update_enabled survive a contract refresh."""
     ccs = server_mod.app.state.component_config_store
     comp = ccs.get("test-comp")
     assert comp is not None
     await ccs.put(
-        comp.model_copy(update={"repo_id": "my-repo", "caretaker_auto_update": False})
+        comp.model_copy(update={"repo_id": "my-repo", "auto_update_enabled": False})
     )
 
     new_spec = _make_derived_spec(image="ghcr.io/org/svc:v2")
@@ -245,7 +245,7 @@ async def test_refresh_preserves_operator_fields(
     updated = ccs.get("test-comp")
     assert updated is not None
     assert updated.repo_id == "my-repo"
-    assert updated.caretaker_auto_update is False
+    assert updated.auto_update_enabled is False
     assert updated.image == "ghcr.io/org/svc:v2"  # contract field still updated
 
 

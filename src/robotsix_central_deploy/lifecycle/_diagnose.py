@@ -304,7 +304,7 @@ async def _fetch_and_compare_contract(
         spec,
         git_url=config.git_url,
         repo_id=config.repo_id,
-        caretaker_auto_update=config.caretaker_auto_update,
+        auto_update_enabled=config.auto_update_enabled,
         mem_limit=config.mem_limit,
         allow_chat_access=config.allow_chat_access,
         claude_mount=config.claude_mount,

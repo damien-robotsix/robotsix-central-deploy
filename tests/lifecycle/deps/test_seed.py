@@ -200,9 +200,9 @@ class TestBuildComponentConfigFromSpec:
         cfg = _build_component_config_from_spec(
             spec,
             git_url="u",
-            caretaker_auto_update=False,
+            auto_update_enabled=False,
         )
-        assert cfg.caretaker_auto_update is False
+        assert cfg.auto_update_enabled is False
 
     def test_config_assist_seeds_preserved(self) -> None:
         """config_assist_seeds from spec are passed through."""

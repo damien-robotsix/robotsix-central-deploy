@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 # Contract-derived fields compared when diffing the refreshed config against
-# the stored one.  Operator-set fields (repo_id, caretaker_auto_update, etc.)
+# the stored one.  Operator-set fields (repo_id, auto_update_enabled, etc.)
 # are deliberately excluded — the manifest cannot know about them.
 _CONTRACT_FIELDS = (
     "image",
@@ -162,7 +162,7 @@ async def refresh_component_contract(
         spec,
         git_url=comp_cfg.git_url,
         repo_id=comp_cfg.repo_id,
-        caretaker_auto_update=comp_cfg.caretaker_auto_update,
+        auto_update_enabled=comp_cfg.auto_update_enabled,
         mem_limit=(spec.mem_limit if spec.mem_limit != "2g" else comp_cfg.mem_limit),
         memswap_limit=spec.memswap_limit or comp_cfg.memswap_limit,
         allow_chat_access=comp_cfg.allow_chat_access,

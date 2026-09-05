@@ -43,7 +43,7 @@ def component_auto_update_enabled(config: ComponentConfig) -> bool:
     central-deploy is governed exactly like any other component (no special
     caretaker case).
     """
-    return config.caretaker_auto_update
+    return config.auto_update_enabled
 
 
 async def phase_update(
@@ -61,7 +61,7 @@ async def phase_update(
 
     Only processes ``ServiceRecord``\\s where ``component_id == ""``
     (primary), ``update_available == True``, and the component config does
-    NOT have ``caretaker_auto_update == False``.  Sibling records are
+    NOT have ``auto_update_enabled == False``.  Sibling records are
     excluded — they are managed by the main deploy path.
 
     The record matching ``self_container_name`` (the container this caretaker
