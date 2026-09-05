@@ -60,6 +60,7 @@ class TestEnvEndpoints:
             "memswap_limit": None,
             "allow_chat_access": False,
             "claude_mount": False,
+            "auto_update_enabled": True,
         }
 
     async def test_put_then_get_returns_env_and_masked_secrets(
@@ -257,6 +258,45 @@ class TestEnvEndpoints:
         assert r.status_code == 200
         data = r.json()
         assert data["mem_limit"] == "512m"
+
+    async def test_put_auto_update_enabled_persists_to_config(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """PUT with auto_update_enabled persists to the unified ComponentConfig flag."""
+        await _seed_store("chat")
+        config_store = server_mod.app.state.component_config_store
+        await _seed_config(config_store, "chat")
+
+        r = await client.put(
+            "/services/chat/env",
+            json={"auto_update_enabled": False},
+            headers=auth_headers,
+        )
+        assert r.status_code == 204
+
+        assert config_store.get("chat").auto_update_enabled is False
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        assert r.json()["auto_update_enabled"] is False
+
+    async def test_put_without_auto_update_preserves_existing(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """PUT that omits auto_update_enabled leaves the stored value unchanged."""
+        await _seed_store("chat")
+        config_store = server_mod.app.state.component_config_store
+        cfg = await _seed_config(config_store, "chat")
+        cfg.auto_update_enabled = False
+        await config_store.put(cfg)
+
+        r = await client.put(
+            "/services/chat/env",
+            json={"env": {"KEY": "val"}},
+            headers=auth_headers,
+        )
+        assert r.status_code == 204
+
+        r = await client.get("/services/chat/env", headers=auth_headers)
+        assert r.json()["auto_update_enabled"] is False  # unchanged
 
 
 class TestEnvScopeEndpoints:
