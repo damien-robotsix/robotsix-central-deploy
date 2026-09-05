@@ -31,7 +31,7 @@ def _register_mill(ccs, mill_id="mill", port=9999):
     mill_cfg.ports = [MagicMock(host=port, container=port)]
     default_cfg = MagicMock()
     default_cfg.repo_id = "my-repo"
-    default_cfg.caretaker_auto_update = True
+    default_cfg.auto_update_enabled = True
     default_cfg.consumed_scopes = []
     ccs.get = MagicMock(
         side_effect=lambda cid: mill_cfg if cid == mill_id else default_cfg
@@ -397,7 +397,7 @@ class TestSelfUpdate:
 
         # Flag OFF for the central-deploy component → no self-update.
         store.list_all = AsyncMock(return_value=[self._self_record()])
-        ccs.get = MagicMock(return_value=MagicMock(caretaker_auto_update=False))
+        ccs.get = MagicMock(return_value=MagicMock(auto_update_enabled=False))
         backend.trigger_self_update = AsyncMock()
         await scheduler.run_once()
         backend.trigger_self_update.assert_not_awaited()
@@ -406,7 +406,7 @@ class TestSelfUpdate:
 
         # Flag ON → self-update triggers through the detached updater.
         store.list_all = AsyncMock(return_value=[self._self_record()])
-        ccs.get = MagicMock(return_value=MagicMock(caretaker_auto_update=True))
+        ccs.get = MagicMock(return_value=MagicMock(auto_update_enabled=True))
         backend.trigger_self_update = AsyncMock(return_value="updater-cid")
         await scheduler.run_once()
         backend.trigger_self_update.assert_awaited_once()

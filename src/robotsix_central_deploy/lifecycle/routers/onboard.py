@@ -650,10 +650,10 @@ async def onboard_confirm(
         repo_id = ""
 
     # Mill canonical opt-out: the mill component must never auto-update itself
-    caretaker_auto_update = config.id != settings.mill_component_id
+    auto_update_enabled = config.id != settings.mill_component_id
 
     config = config.model_copy(
-        update={"repo_id": repo_id, "caretaker_auto_update": caretaker_auto_update}
+        update={"repo_id": repo_id, "auto_update_enabled": auto_update_enabled}
     )
 
     # Create the job so the caller can start polling immediately.

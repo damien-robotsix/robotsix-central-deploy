@@ -329,7 +329,7 @@ class CaretakerScheduler:
         # auto-update flag every other component uses, resolved through the
         # shared predicate in phases.py — central-deploy is just one more
         # component. A missing config falls through to the default-on
-        # behaviour (matching ComponentConfig.caretaker_auto_update's default).
+        # behaviour (matching ComponentConfig.auto_update_enabled's default).
         config = self._component_config_store.get(self_record.name)
         if config is not None and not component_auto_update_enabled(config):
             logger.debug(

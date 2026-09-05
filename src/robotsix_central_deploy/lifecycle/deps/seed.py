@@ -70,7 +70,7 @@ def _build_component_config_from_spec(
     *git_url* is required explicitly because the two callers source it
     differently (onboard uses ``spec.git_url``; refresh preserves the
     existing config's URL).  *overrides* lets the refresh path layer on
-    operator-set fields (``repo_id``, ``caretaker_auto_update``,
+    operator-set fields (``repo_id``, ``auto_update_enabled``,
     ``mem_limit``, ``allow_chat_access``, ``claude_mount``) without
     branching — an override always wins over the spec-derived value, including
     for fields this factory also sets from *spec*.

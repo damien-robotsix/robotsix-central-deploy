@@ -108,7 +108,7 @@ async def refresh_contract(
 
     Contract-derived fields (image, mounts, command, entrypoint, health check,
     siblings, labels, etc.) are refreshed from the repo HEAD.  Operator-set
-    fields (``repo_id``, ``caretaker_auto_update``, ``mem_limit``,
+    fields (``repo_id``, ``auto_update_enabled``, ``mem_limit``,
     ``allow_chat_access``, ``claude_mount``) and environment overrides in the
     EnvStore are left untouched, as are existing host-port assignments —
     the manifest's host ports are only honoured for container ports this

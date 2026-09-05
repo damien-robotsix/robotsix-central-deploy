@@ -188,9 +188,6 @@ class ComponentConfig(BaseModel):
         default_factory=list,
         description="Seed field keys from robotsix.deploy.config-assist-seeds",
     )
-    caretaker_auto_update: bool = Field(
-        True, description="If true, the caretaker may auto-update this component"
-    )
     auto_update_enabled: bool = Field(
         True,
         description=(
