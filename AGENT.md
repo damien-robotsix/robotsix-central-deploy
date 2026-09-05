@@ -70,6 +70,7 @@ A **component** is a managed service defined by a `ComponentConfig` (`registry/m
 - `claude_mount` — if true, mounts `~/.claude` → `/root/.claude`
 - `named_volumes` — volume names to pre-create at deploy time
 - `siblings` — list of `ServiceConfig` for multi-service components (see below)
+- `auto_update_enabled` — if true, the caretaker may automatically update this component; defaults to true
 
 Components can be **single-service** (no siblings) or **multi-service** (one primary + one or more sibling services). Sibling records are named `{component_id}-{service_key}`.
 

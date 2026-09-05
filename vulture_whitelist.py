@@ -9,6 +9,7 @@
 # are populated for JSON responses (or parsed from requests) and never read
 # as attributes by application code.
 # ===========================================================================
+auto_update_enabled  # unused variable (src/robotsix_central_deploy/registry/models.py:194)
 severity  # unused variable (src/robotsix_central_deploy/caretaker/models.py:67)
 prev_size_bytes  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/models.py:36)
 last_scan_at  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/models.py:76)

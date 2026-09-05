@@ -61,6 +61,44 @@ class TestComponentConfig:
         with pytest.raises(ValidationError):
             ComponentConfig(id=bad_id, image="repo:latest", container_name="c")
 
+    def test_auto_update_enabled_default(self):
+        """The unified auto-update flag defaults to True (preserves behaviour)."""
+        c = ComponentConfig(id="my-svc", image="repo:latest", container_name="my-svc")
+        assert c.auto_update_enabled is True
+
+    def test_auto_update_enabled_explicit(self):
+        """The flag accepts and stores an explicit value like any other setting."""
+        c = ComponentConfig(
+            id="my-svc",
+            image="repo:latest",
+            container_name="my-svc",
+            auto_update_enabled=False,
+        )
+        assert c.auto_update_enabled is False
+
+    def test_auto_update_enabled_roundtrip(self):
+        """The flag serializes and deserializes without loss."""
+        original = ComponentConfig(
+            id="my-svc",
+            image="repo:latest",
+            container_name="my-svc",
+            auto_update_enabled=False,
+        )
+        dumped = original.model_dump()
+        assert dumped["auto_update_enabled"] is False
+        restored = ComponentConfig.model_validate(dumped)
+        assert restored.auto_update_enabled is False
+
+    def test_auto_update_enabled_validation(self):
+        """A non-boolean value is rejected by validation."""
+        with pytest.raises(ValidationError):
+            ComponentConfig(
+                id="my-svc",
+                image="repo:latest",
+                container_name="my-svc",
+                auto_update_enabled="not-a-bool",  # type: ignore[arg-type]
+            )
+
 
 class TestConfigAssistSeed:
     """Tests for ConfigAssistSeed back-compat string coercion."""

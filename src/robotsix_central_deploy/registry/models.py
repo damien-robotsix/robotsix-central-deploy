@@ -191,6 +191,16 @@ class ComponentConfig(BaseModel):
     caretaker_auto_update: bool = Field(
         True, description="If true, the caretaker may auto-update this component"
     )
+    auto_update_enabled: bool = Field(
+        True,
+        description=(
+            "Unified per-component auto-update toggle. If true, the caretaker "
+            "may automatically update this component. Applies uniformly to every "
+            "managed component, including central-deploy itself. Defaults to true "
+            "to preserve the historical caretaker auto-update behaviour for configs "
+            "that do not set it."
+        ),
+    )
     repo_id: str = Field(
         "", description="Unique repository identifier in the fleet registry"
     )
