@@ -139,7 +139,7 @@ localhost + API-key restricted),
 
 | File | Role |
 | ------ | ------ |
-| `models.py` | Domain models: `FindingKind` enum (7 kinds — `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`, `PORT_COLLISION`), `CaretakerFinding` Pydantic model for individual issues, and `CaretakerReport` for aggregate pass results. |
+| `models.py` | Domain models: `FindingKind` enum (6 kinds — `UPDATE_APPLIED`, `UPDATE_FAILED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`), `CaretakerFinding` Pydantic model for individual issues, and `CaretakerReport` for aggregate pass results. |
 | `mill_client.py` | `MillClient` — async HTTP wrapper for the mill component (`/tickets/ingest`, `/health`, `/repos`). Every method returns `bool` and never raises, so caretaker passes never fail on mill unavailability. |
 | `phases.py` | Three independent async phase functions: `phase_update` (deploys updated images for opted-in components), `phase_health` (checks container status), and `phase_volumes` (volume growth, orphan detection, disk usage). Each emits `CaretakerFinding` records. |
 | `scheduler.py` | `CaretakerScheduler` — orchestrator that runs the three-phase pass on a configurable `caretaker_interval_hours`. Public methods: `run_once() → CaretakerReport`, `get_status() → dict`, and `loop()` (async infinite loop, cancellable, re-reads settings each iteration). |

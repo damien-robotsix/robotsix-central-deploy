@@ -32,9 +32,6 @@ class FindingKind(str, Enum):
 
     ``disk`` — host disk usage crossed a warning or critical
     threshold.
-
-    ``port_collision`` — two components are configured with the
-    same host port.
     """
 
     UPDATE_APPLIED = "update_applied"
@@ -45,7 +42,6 @@ class FindingKind(str, Enum):
     VOLUME_MEASUREMENT = "volume_measurement"
     VOLUME_ORPHAN = "volume_orphan"
     DISK = "disk"
-    PORT_COLLISION = "port_collision"
 
 
 class CaretakerFinding(BaseModel):
@@ -67,7 +63,7 @@ class CaretakerFinding(BaseModel):
         description="Upstream repository identifier; empty when the finding is untracked",
     )
     kind: FindingKind = Field(
-        description="Category of the finding (update_applied, update_failed, self_update_triggered, health, volume_growth, volume_orphan, disk, port_collision)"
+        description="Category of the finding (update_applied, update_failed, self_update_triggered, health, volume_growth, volume_orphan, disk)"
     )
     title: str = Field(description="Short human-readable summary of the finding")
     detail: str = Field(

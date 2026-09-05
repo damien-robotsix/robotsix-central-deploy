@@ -9,7 +9,6 @@ import pytest
 from robotsix_http import ExternalHTTPError, RetryClient
 
 from robotsix_central_deploy.caretaker.mill_client import MillClient
-from robotsix_central_deploy.caretaker.models import CaretakerFinding, FindingKind
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
@@ -17,29 +16,6 @@ from robotsix_central_deploy.registry.models import ComponentConfig, PortMapping
 
 class TestMillClient:
     """Tests for MillClient HTTP methods."""
-
-    @pytest.mark.asyncio
-    async def test_ingest_2xx_returns_true(self):
-        http = MagicMock(spec=RetryClient)
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
-        client = MillClient("http://localhost:8080", http)
-        finding = CaretakerFinding(
-            component_id="svc",
-            repo_id="my-repo",
-            kind=FindingKind.HEALTH,
-            title="test",
-            detail="detail",
-        )
-        assert await client.ingest_finding(finding) is True
-        http.post.assert_called_once_with(
-            "http://localhost:8080/tickets/ingest",
-            json={
-                "repo_id": "my-repo",
-                "title": "test",
-                "body": "detail",
-                "source_tag": "caretaker/health",
-            },
-        )
 
     @pytest.mark.asyncio
     async def test_active_stage_summary_reports_heavy_stages(self):
@@ -100,59 +76,6 @@ class TestMillClient:
         http.get = AsyncMock(side_effect=httpx.ConnectError("boom"))
         client = MillClient("http://mill:8077", http)
         assert await client.active_stage_summary() is None
-
-    @pytest.mark.asyncio
-    async def test_ingest_payload_includes_source_tag_not_kind(self):
-        """The mill's TicketIngest model requires 'source_tag', not 'kind'."""
-        http = MagicMock(spec=RetryClient)
-        http.post = AsyncMock(return_value=MagicMock(is_success=True))
-        client = MillClient("http://localhost:8080", http)
-        finding = CaretakerFinding(
-            component_id="svc",
-            repo_id="my-repo",
-            kind=FindingKind.UPDATE_FAILED,
-            title="Auto-update failed for chat",
-            detail="ConnectionError: ...",
-            severity="error",
-        )
-        await client.ingest_finding(finding)
-        call_kwargs = http.post.call_args.kwargs
-        assert call_kwargs["json"]["source_tag"] == "caretaker/update_failed"
-        assert "kind" not in call_kwargs["json"]
-
-    @pytest.mark.asyncio
-    async def test_ingest_4xx_returns_false(self):
-        http = MagicMock(spec=RetryClient)
-        http.post = AsyncMock(
-            side_effect=ExternalHTTPError(
-                "validation error",
-                status_code=422,
-                response=MagicMock(text="validation error"),
-            )
-        )
-        client = MillClient("http://localhost:8080", http)
-        finding = CaretakerFinding(
-            component_id="svc",
-            repo_id="my-repo",
-            kind=FindingKind.HEALTH,
-            title="test",
-            detail="detail",
-        )
-        assert await client.ingest_finding(finding) is False
-
-    @pytest.mark.asyncio
-    async def test_ingest_network_error_returns_false(self):
-        http = MagicMock(spec=RetryClient)
-        http.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
-        client = MillClient("http://localhost:8080", http)
-        finding = CaretakerFinding(
-            component_id="svc",
-            repo_id="my-repo",
-            kind=FindingKind.HEALTH,
-            title="test",
-            detail="detail",
-        )
-        assert await client.ingest_finding(finding) is False
 
     @pytest.mark.asyncio
     async def test_register_repo_201_returns_true(self):
