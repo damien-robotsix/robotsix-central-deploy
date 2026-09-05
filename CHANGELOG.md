@@ -4,6 +4,35 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.13.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.12.0...v0.13.0) (2026-09-05)
+
+
+### Features
+
+* Add a unified per-component auto_update_enabled flag to the component configuration model (20260904T195506Z-add-a-unified-per-component-auto-update-23a8) ([#871](https://github.com/damien-robotsix/robotsix-central-deploy/issues/871)) ([4a56db4](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4a56db40b43e87905f1e31f9e93b0349eee8f4ee))
+* **auth:** mobile deep-link login handoff + app token-exchange endpoint ([#843](https://github.com/damien-robotsix/robotsix-central-deploy/issues/843)) ([f7e28f1](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f7e28f11ef980c3021b8166dabf33bac9fccc217))
+* **caretaker:** operator-configured age-based volume file retention ([#849](https://github.com/damien-robotsix/robotsix-central-deploy/issues/849)) ([3147dc1](https://github.com/damien-robotsix/robotsix-central-deploy/commit/3147dc1369f3fb21e03046f8c845b259dfd34c49))
+* deploy components to remote Docker hosts over a private tunnel ([#866](https://github.com/damien-robotsix/robotsix-central-deploy/issues/866)) ([2ac2527](https://github.com/damien-robotsix/robotsix-central-deploy/commit/2ac25276eea76a169c6dffd4ccbea522a63fa553))
+
+
+### Bug Fixes
+
+* **caretaker:** defer component auto-update while mill runs heavy stages ([#841](https://github.com/damien-robotsix/robotsix-central-deploy/issues/841)) ([de5e5b5](https://github.com/damien-robotsix/robotsix-central-deploy/commit/de5e5b522d1d0c439dd18b2275baf98bc207f36e))
+* **caretaker:** stop re-reporting historical volume-audit findings ([#852](https://github.com/damien-robotsix/robotsix-central-deploy/issues/852)) ([893e390](https://github.com/damien-robotsix/robotsix-central-deploy/commit/893e390c3fa0312a2901d0f8eb87396bf82aaaec))
+* copy fetched robotsix-ui assets into site-packages — the header vanished ([#864](https://github.com/damien-robotsix/robotsix-central-deploy/issues/864)) ([e6f0b7e](https://github.com/damien-robotsix/robotsix-central-deploy/commit/e6f0b7e2a7e502c1cdf8bcb6f38a5dc9c5d8b5f3))
+* **edge:** mount traefik's fleet dynamic config as a directory ([#847](https://github.com/damien-robotsix/robotsix-central-deploy/issues/847)) ([5877814](https://github.com/damien-robotsix/robotsix-central-deploy/commit/5877814f239dfb6086a8edc27a9d248691f010a0))
+* **lifecycle:** accept POST /services/{name}/redeploy as a deploy alias ([#854](https://github.com/damien-robotsix/robotsix-central-deploy/issues/854)) ([7ce4349](https://github.com/damien-robotsix/robotsix-central-deploy/commit/7ce4349b5a5d902ae98ce3823c3543dd2b0f514d))
+* **lifecycle:** refuse mill deploys while heavy agent stages run (409, force override) ([#857](https://github.com/damien-robotsix/robotsix-central-deploy/issues/857)) ([699378f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/699378f0df62b6b3decdcf40bad21f08e857241a))
+* mount remote-route volume at the top of Traefik's watched directory ([#867](https://github.com/damien-robotsix/robotsix-central-deploy/issues/867)) ([ac3db6f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/ac3db6f7f47222699c4ea3f4cc4243bcd10b77ff))
+* prepare traefik-dynamic mountpoint dirs at startup ([#868](https://github.com/damien-robotsix/robotsix-central-deploy/issues/868)) ([47252f8](https://github.com/damien-robotsix/robotsix-central-deploy/commit/47252f8112aabc08000f552f18aad7724b523eb5))
+* roster derives remote-host component base_url from the tunnel address ([#869](https://github.com/damien-robotsix/robotsix-central-deploy/issues/869)) ([db197a9](https://github.com/damien-robotsix/robotsix-central-deploy/commit/db197a9164133395102c4f48f9c3319cd11df8d6))
+* volume-audit measure failure is now surfaced as a finding (20260902T103239Z-volume-audit-measure-failure-is-now-surf-25a6) ([#855](https://github.com/damien-robotsix/robotsix-central-deploy/issues/855)) ([2df9549](https://github.com/damien-robotsix/robotsix-central-deploy/commit/2df9549e1f40f365addfb600b597f2608a9a5f50))
+* **volumes:** codespell — unparseable → unparsable ([#851](https://github.com/damien-robotsix/robotsix-central-deploy/issues/851)) ([687acb3](https://github.com/damien-robotsix/robotsix-central-deploy/commit/687acb39577bbc2beac2caa4ea899b85ca4d5931))
+* **volumes:** never leak the one-shot du helper container ([#844](https://github.com/damien-robotsix/robotsix-central-deploy/issues/844)) ([9f7f69a](https://github.com/damien-robotsix/robotsix-central-deploy/commit/9f7f69ad4c1a1260dee2822c715688fd2b808559))
+* **volumes:** never list claude-auth as a prune-safe orphan ([#850](https://github.com/damien-robotsix/robotsix-central-deploy/issues/850)) ([8072292](https://github.com/damien-robotsix/robotsix-central-deploy/commit/8072292e8caf5a7eb9a72ab38953f17b64d548de))
+* **volumes:** poll helper-container exit instead of long-idle wait() — socket-proxy cuts idle docker API calls at 10m ([#870](https://github.com/damien-robotsix/robotsix-central-deploy/issues/870)) ([536638e](https://github.com/damien-robotsix/robotsix-central-deploy/commit/536638e11b832ef74abcffb6376f75f0c00e4fb9))
+* **volumes:** sweep orphaned du helpers at startup, serialize audit scans ([#848](https://github.com/damien-robotsix/robotsix-central-deploy/issues/848)) ([4f1c641](https://github.com/damien-robotsix/robotsix-central-deploy/commit/4f1c6415f4781f8ae8164e4751494e7cf1288a36))
+
 ## [0.12.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.11.0...v0.12.0) (2026-09-02)
 
 
