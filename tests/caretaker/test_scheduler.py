@@ -380,28 +380,37 @@ class TestSelfUpdate:
         assert scheduler._last_self_update_digest == "sha256:new"
 
     @pytest.mark.asyncio
-    async def test_respects_disabled_setting(self, scheduler_fixtures):
-        from robotsix_central_deploy.registry.settings_store import SystemSettings
+    async def test_gated_by_component_auto_update_flag(self, scheduler_fixtures):
+        """Self-update follows the central-deploy component's unified
+        per-component auto-update flag — the SAME predicate every other
+        component's auto-update goes through — with no
+        ``caretaker_self_update_enabled`` special case.
 
-        scheduler, store, backend, _ccs, _http = scheduler_fixtures
-        await scheduler._settings_store.put(
-            SystemSettings(
-                caretaker_enabled=True,
-                caretaker_self_update_enabled=False,
-            )
-        )
-        store.list_all = AsyncMock(return_value=[self._self_record()])
+        Toggling the flag enables/disables the plane's self-update.
+        """
+        scheduler, store, backend, ccs, _http = scheduler_fixtures
         store.put = AsyncMock()
         backend.status = AsyncMock(
             return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
         )
         backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+
+        # Flag OFF for the central-deploy component → no self-update.
+        store.list_all = AsyncMock(return_value=[self._self_record()])
+        ccs.get = MagicMock(return_value=MagicMock(caretaker_auto_update=False))
         backend.trigger_self_update = AsyncMock()
-
         await scheduler.run_once()
-
         backend.trigger_self_update.assert_not_awaited()
         assert scheduler._last_self_update_digest is None
+        ccs.get.assert_any_call("central-deploy")
+
+        # Flag ON → self-update triggers through the detached updater.
+        store.list_all = AsyncMock(return_value=[self._self_record()])
+        ccs.get = MagicMock(return_value=MagicMock(caretaker_auto_update=True))
+        backend.trigger_self_update = AsyncMock(return_value="updater-cid")
+        await scheduler.run_once()
+        backend.trigger_self_update.assert_awaited_once()
+        assert scheduler._last_self_update_digest == "sha256:new"
 
     @pytest.mark.asyncio
     async def test_skipped_without_pending_update(self, scheduler_fixtures):

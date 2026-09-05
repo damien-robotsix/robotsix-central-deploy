@@ -130,3 +130,17 @@ _ = _restore_secrets_from_current  # unused function (src/robotsix_central_deplo
 VolumeGrowthRecord.delta_bytes
 AuditFinding.finding_at
 AuditFinding.delta_bytes
+
+# ===========================================================================
+# caretaker_self_update_enabled: retained operator-config field (persisted in
+# config.json, declared in config.schema.json / config.example.json, and
+# documented in docs/caretaker/overview.md). The caretaker's plane self-update
+# no longer branches on this setting directly — it now routes through the
+# unified per-component auto-update predicate (phases.component_auto_update_enabled),
+# so central-deploy is governed like any other component. The field stays as
+# stable config surface (schema/serialisation, backward compat) and is
+# consumed via pydantic, not by name in this package.
+# ===========================================================================
+_SettingsDefaults.caretaker_self_update_enabled
+LifecycleConfig.caretaker_self_update_enabled
+SystemSettings.caretaker_self_update_enabled
