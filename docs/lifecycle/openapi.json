@@ -9354,6 +9354,12 @@
             "title": "Claude Mount",
             "description": "Whether the Claude code mount is enabled for this component",
             "default": false
+          },
+          "auto_update_enabled": {
+            "type": "boolean",
+            "title": "Auto Update Enabled",
+            "description": "Whether the caretaker may automatically update this component",
+            "default": true
           }
         },
         "type": "object",
@@ -9485,6 +9491,18 @@
             ],
             "title": "Claude Mount",
             "description": "Toggle Claude code mount; None leaves the current value unchanged"
+          },
+          "auto_update_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Update Enabled",
+            "description": "Toggle caretaker auto-update; None leaves the current value unchanged"
           }
         },
         "type": "object",
