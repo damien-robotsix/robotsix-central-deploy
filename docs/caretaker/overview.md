@@ -18,7 +18,7 @@ CaretakerScheduler.loop()  (scheduler.py)
   │      │   └─ auto-prune dangling images (if image_auto_prune == True)
   │      ├─ phase_health()      — probe all container health states
   │      ├─ phase_volumes()     — volume growth scan + orphan detection + disk check
-  │      ├─ phase_self_update() — launch detached self-updater if plane image has update (if central-deploy component's auto_update_enabled == True)
+  │      ├─ phase_self_update() — launch detached self-updater if plane image has update (if the central-deploy component's caretaker_auto_update == True)
   │      └─ Record findings locally (WARNING log + caretaker_findings.jsonl)
   └─ 4. Loop back to step 1; respect CancelledError for graceful shutdown
 ```
