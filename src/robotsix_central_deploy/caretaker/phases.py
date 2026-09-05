@@ -27,10 +27,23 @@ if TYPE_CHECKING:
     from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.env_store import EnvStore
     from ..registry.loader import ComponentRegistry
+    from ..registry.models import ComponentConfig
     from ..registry.settings_store import SystemSettings
     from .volume_audit.scheduler import VolumeAuditScheduler
 
 logger = logging.getLogger(__name__)
+
+
+def component_auto_update_enabled(config: ComponentConfig) -> bool:
+    """Single source of truth for the per-component auto-update decision.
+
+    Every caretaker path that asks "may I auto-update component X?" — both
+    ``phase_update`` for managed components and the plane's own end-of-pass
+    self-update in the scheduler — routes through this one predicate, so
+    central-deploy is governed exactly like any other component (no special
+    caretaker case).
+    """
+    return config.caretaker_auto_update
 
 
 async def phase_update(
@@ -140,7 +153,7 @@ async def phase_update(
             )
             continue
 
-        if not config.caretaker_auto_update:
+        if not component_auto_update_enabled(config):
             logger.debug(
                 "phase_update: component %s opted out of auto-update", record.name
             )

@@ -12,7 +12,12 @@ from robotsix_http import RetryClient
 
 from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport, FindingKind
-from .phases import phase_health, phase_update, phase_volumes
+from .phases import (
+    component_auto_update_enabled,
+    phase_health,
+    phase_update,
+    phase_volumes,
+)
 
 if TYPE_CHECKING:
     from ..lifecycle.backends import ExecutionBackend
@@ -23,7 +28,7 @@ if TYPE_CHECKING:
     from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.env_store import EnvStore
     from ..registry.loader import ComponentRegistry
-    from ..registry.settings_store import SystemSettings, SystemSettingsStore
+    from ..registry.settings_store import SystemSettingsStore
     from .volume_audit.scheduler import VolumeAuditScheduler
 
 logger = logging.getLogger(__name__)
@@ -238,7 +243,6 @@ class CaretakerScheduler:
         # us only after every other phase has finished.
         try:
             self_update_finding = await self._maybe_trigger_self_update(
-                settings=settings,
                 self_info=self_info,
             )
             # Record the phase whenever it ran, matching health/volumes which
@@ -277,7 +281,6 @@ class CaretakerScheduler:
 
     async def _maybe_trigger_self_update(
         self,
-        settings: SystemSettings,
         self_info: SelfInspect | None,
     ) -> CaretakerFinding | None:
         """Launch the detached self-updater when the plane's own image has an update.
@@ -289,18 +292,19 @@ class CaretakerScheduler:
 
         Guards, all of which must pass:
 
-        * ``caretaker_self_update_enabled`` is on (default on).
         * The backend can identify our own container (containerised).
         * A self record exists with ``update_available`` true.
+        * The central-deploy component's unified per-component auto-update
+          flag is on (default on) — evaluated through
+          ``phases.component_auto_update_enabled``, the SAME predicate every
+          other component's auto-update goes through, so central-deploy is
+          just one more component with no caretaker special case.
         * The pending digest differs from the running digest AND from the
           digest of the last self-update attempt this boot — a stale
           ``update_available`` flag (updater lost the race, or the flag
           failed to clear) can then not restart the plane more than once
           per boot.
         """
-        if not settings.caretaker_self_update_enabled:
-            logger.debug("caretaker: self-update disabled by setting")
-            return None
         if self_info is None:
             # Not containerised / backend cannot self-inspect (noop): there
             # is no own container to replace, nothing to update.
@@ -319,6 +323,19 @@ class CaretakerScheduler:
             logger.debug("caretaker: no self record, skipping self-update")
             return None
         if not self_record.update_available:
+            return None
+
+        # Gate the plane's own self-update on the SAME unified per-component
+        # auto-update flag every other component uses, resolved through the
+        # shared predicate in phases.py — central-deploy is just one more
+        # component. A missing config falls through to the default-on
+        # behaviour (matching ComponentConfig.caretaker_auto_update's default).
+        config = self._component_config_store.get(self_record.name)
+        if config is not None and not component_auto_update_enabled(config):
+            logger.debug(
+                "caretaker: self-update disabled for %s (auto-update off)",
+                self_record.name,
+            )
             return None
 
         new_digest = self_record.latest_registry_digest
