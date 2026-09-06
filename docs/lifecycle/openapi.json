@@ -8121,7 +8121,8 @@
         "required": [
           "key"
         ],
-        "title": "ConfigAssistSeed"
+        "title": "ConfigAssistSeed",
+        "description": "Seed data for config field assistance during the onboarding flow."
       },
       "ConfigExportResponse": {
         "properties": {
