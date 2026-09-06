@@ -99,6 +99,8 @@ class ServiceConfig(BaseModel):
 
 
 class ConfigAssistSeed(BaseModel):
+    """Seed data for config field assistance during the onboarding flow."""
+
     key: str = Field(description="Dotted config path, e.g. 'accounts.0.auth.username'")
     label: str | None = Field(
         default=None,
