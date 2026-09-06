@@ -37,6 +37,7 @@ from .deps import lifespan
 from .error_handlers import register_error_handlers
 from .models import ErrorDetail
 from .rate_limiter import RateLimitMiddleware
+from .request_id_middleware import RequestIDMiddleware
 from .routers.auth_token import router as auth_token_router
 from .routers.caretaker import router as caretaker_router
 from .routers.chat import router as chat_router
@@ -97,6 +98,11 @@ app = FastAPI(
 register_error_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
+
+# Assign/propagate a correlation id per request. Added after the rate
+# limiter so it wraps the stack outermost: the id is bound before any
+# other middleware runs, so every log record for the request is stamped.
+app.add_middleware(RequestIDMiddleware)
 
 if _HAS_CSRF:
     _initial_csrf_secret = get_csrf_secret("")
