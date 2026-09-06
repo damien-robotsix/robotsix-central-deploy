@@ -84,6 +84,7 @@ STOP  # unused variable (src/robotsix_central_deploy/lifecycle/models.py:73)
 # token_type OVERRIDES PyGithub's Auth.Token.token_type — PyGithub reads it
 # internally to emit "Authorization: Bearer" (removing it breaks App auth).
 # ===========================================================================
+method_name  # structlog processor signature arg (src/robotsix_central_deploy/lifecycle/_logging.py:21)
 SIDECAR_SUFFIXES  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/growth.py:11)
 _.__class__  # unused attribute (src/robotsix_central_deploy/lifecycle/deps/__init__.py:104)
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/gateway_docs_middleware.py:46)
