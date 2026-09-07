@@ -3,7 +3,7 @@
 central-deploy follows the fleet [config standard][config-standard]: **one
 pydantic model, one JSON file, no environment overlay.**
 
-- The model is `LifecycleConfig` in `lifecycle/config.py` — 54 fields, each
+- The model is `LifecycleConfig` in `lifecycle/config.py` — 55 fields, each
   with a type, a default, and a description.
 - The file is `config/config.json`, located by the single environment variable
   **`ROBOTSIX_CONFIG_FILE`**. That variable only *locates* the file; it never
@@ -57,9 +57,10 @@ A field's effective value comes from the last layer that sets it.
    editing `config.json` and without a redeploy.
 
 Only the keys in `SETTINGS_DEFAULTS` (`lifecycle/_settings_defaults.py`) take
-part in layer 3 — 18 of the 54 fields:
+part in layer 3 — 19 of the 55 fields:
 
-`caretaker_enabled`, `caretaker_interval_hours`,
+`caretaker_auto_rollback_enabled`, `caretaker_enabled`,
+`caretaker_interval_hours`,
 `chat_agent_registration_enabled`, `claude_auth_refresh_interval`,
 `disk_warn_pct`, `gateway_base_domain`, `ghcr_pull_token`, `image_auto_prune`,
 `llmio_tier_config`, `log_level`, `mill_component_id`, `mobile_token_ttl_days`,

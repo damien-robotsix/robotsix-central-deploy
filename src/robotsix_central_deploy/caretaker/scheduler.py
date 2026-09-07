@@ -14,6 +14,7 @@ from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import (
     component_auto_update_enabled,
+    phase_auto_rollback,
     phase_health,
     phase_restart_watchdog,
     phase_update,
@@ -239,6 +240,31 @@ class CaretakerScheduler:
         except Exception as exc:
             logger.exception("phase_restart_watchdog crashed")
             errors.append(f"phase_restart_watchdog: {exc}")
+            watchdog_findings = []
+
+        # 2c. Phase: AUTO-ROLLBACK — opt-in, destructive self-heal.
+        # A CRASH_LOOP finding is a verified failed deploy; when the operator
+        # has explicitly enabled it, roll the affected component back to its
+        # previous image digest. OFF by default (recreates a running container
+        # with a prior image); the flag stays gated until the operator turns
+        # it on. Skips the plane's own container — self-recovery is the
+        # detached updater's job.
+        if settings.caretaker_auto_rollback_enabled and watchdog_findings:
+            try:
+                rollback_findings = await phase_auto_rollback(
+                    watchdog_findings,
+                    self._store,
+                    self._backend,
+                    self._component_config_store,
+                    self._deploy_history_store,
+                    self._env_store,
+                    self_container_name,
+                )
+                findings.extend(rollback_findings)
+                phases_run.append("auto-rollback")
+            except Exception as exc:
+                logger.exception("phase_auto_rollback crashed")
+                errors.append(f"phase_auto_rollback: {exc}")
 
         # 3. Phase: VOLUMES
         if self._volume_audit_scheduler is not None:

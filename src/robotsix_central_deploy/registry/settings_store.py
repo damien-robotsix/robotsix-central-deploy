@@ -42,6 +42,9 @@ class SystemSettings(BaseModel):
     image_auto_prune: bool = SETTINGS_DEFAULTS[
         "image_auto_prune"
     ]  # prune dangling images after updates
+    caretaker_auto_rollback_enabled: bool = SETTINGS_DEFAULTS[
+        "caretaker_auto_rollback_enabled"
+    ]  # roll a crash-looping component back to its previous image (destructive; default OFF)
     llmio_tier_config: dict[str, Any] = SETTINGS_DEFAULTS["llmio_tier_config"]
     claude_auth_refresh_interval: int = SETTINGS_DEFAULTS[
         "claude_auth_refresh_interval"

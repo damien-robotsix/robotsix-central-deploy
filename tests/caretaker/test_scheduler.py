@@ -562,3 +562,89 @@ class TestSelfUpdate:
         assert FindingKind.UPDATE_FAILED in kinds
         # Not recorded as an attempt: a transient launch failure retries next pass.
         assert scheduler._last_self_update_digest is None
+
+
+class TestAutoRollbackWiring:
+    """The opt-in auto-rollback phase is gated on the config flag and fed by
+    the restart watchdog's CRASH_LOOP findings."""
+
+    @staticmethod
+    def _crash_looping_record():
+        return ServiceRecord(
+            name="svc",
+            image="repo:v1",
+            container_name="svc",
+            deployed_image_digest="sha256:bad",
+            previous_image_digest="sha256:good",
+        )
+
+    @staticmethod
+    def _config():
+        from robotsix_central_deploy.registry.models import ComponentConfig
+
+        return ComponentConfig(
+            id="svc",
+            image="repo:v1",
+            container_name="svc",
+            repo_id="my-repo",
+        )
+
+    async def _run_with_flag(self, scheduler_fixtures, *, enabled: bool):
+        from robotsix_central_deploy.lifecycle.models import RollbackOutcome
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        scheduler, store, backend, ccs, _http = scheduler_fixtures
+        await scheduler._settings_store.put(
+            SystemSettings(
+                caretaker_enabled=True, caretaker_auto_rollback_enabled=enabled
+            )
+        )
+        ccs.get = MagicMock(return_value=self._config())
+
+        record = self._crash_looping_record()
+        store.list_all = AsyncMock(return_value=[record])
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+        # Watchdog sees RestartCount grow 1 → 5 → CRASH_LOOP finding.
+        scheduler._restart_counts["svc"] = 1
+        backend.get_container_diagnostics = AsyncMock(
+            return_value={"exists": True, "restart_count": 5}
+        )
+        backend.get_container_logs = AsyncMock(return_value="pydantic crash")
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        backend.rollback = AsyncMock(
+            return_value=RollbackOutcome(
+                deployed_digest="sha256:good", state=ServiceState.RUNNING
+            )
+        )
+        return scheduler, backend, record, await scheduler.run_once()
+
+    @pytest.mark.asyncio
+    async def test_rollback_runs_when_enabled(self, scheduler_fixtures):
+        from robotsix_central_deploy.caretaker.models import FindingKind
+
+        _sched, backend, record, report = await self._run_with_flag(
+            scheduler_fixtures, enabled=True
+        )
+
+        assert "auto-rollback" in report.phases_run
+        backend.rollback.assert_awaited_once()
+        assert FindingKind.ROLLBACK_APPLIED in [f.kind for f in report.findings]
+        # Digests swapped by the rollback.
+        assert record.deployed_image_digest == "sha256:good"
+
+    @pytest.mark.asyncio
+    async def test_rollback_skipped_when_disabled(self, scheduler_fixtures):
+        from robotsix_central_deploy.caretaker.models import FindingKind
+
+        _sched, backend, _record, report = await self._run_with_flag(
+            scheduler_fixtures, enabled=False
+        )
+
+        assert "auto-rollback" not in report.phases_run
+        backend.rollback.assert_not_awaited()
+        # The crash loop is still detected — only the destructive action is gated.
+        assert FindingKind.CRASH_LOOP in [f.kind for f in report.findings]
