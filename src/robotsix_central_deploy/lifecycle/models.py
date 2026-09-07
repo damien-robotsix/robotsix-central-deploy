@@ -160,6 +160,11 @@ class ServiceRecord:
         ""  # sha256 digest of the image before the last deploy (enables rollback)
     )
     update_available: bool = False
+    #: Unix seconds when an available update was first deferred by the mill
+    #: busy-guard (heavy stages in flight). ``None`` when no update is pending
+    #: a busy window. Persisted so a central-deploy restart does not reset the
+    #: bounded-defer clock; cleared on deploy or when the update clears.
+    update_pending_since: float | None = None
     latest_registry_digest: str = ""
     registry_auth_error: bool = (
         False  # True when the last registry check failed due to 401/403
@@ -190,6 +195,7 @@ class ServiceRecord:
             latest_digest=self.latest_registry_digest,
             update_available=(update_state == UpdateState.UPDATE_AVAILABLE),
             update_state=update_state,
+            update_pending_since=self.update_pending_since,
         )
 
     def to_list_item(self) -> ServiceListItem:
@@ -237,6 +243,15 @@ class ServiceStatus(BaseModel):
     )
     latest_digest: str = Field("", description="last known registry manifest digest")
     update_state: UpdateState = UpdateState.UNKNOWN
+    update_pending_since: float | None = Field(
+        None,
+        description=(
+            "Unix seconds when an available update was first deferred by the "
+            "mill busy-guard (heavy stages in flight); null when no update is "
+            "waiting on a busy window. Lets chat/monitor see how long a deploy "
+            "has been pending without reading caretaker logs."
+        ),
+    )
     sibling_health: list[ContainerHealthSummary] = []
     sibling_update_states: list[SiblingUpdateSummary] = []
     overall_health: str = Field("", description='rollup: HealthStatus value or ""')

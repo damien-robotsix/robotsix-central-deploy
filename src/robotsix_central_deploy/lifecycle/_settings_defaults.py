@@ -18,6 +18,8 @@ class _SettingsDefaults(TypedDict):
     gateway_base_domain: str
     caretaker_enabled: bool
     caretaker_interval_hours: int
+    caretaker_mill_max_defer_hours: int
+    caretaker_mill_force_deploy_hours: int
     mill_component_id: str
     image_auto_prune: bool
     caretaker_auto_rollback_enabled: bool
@@ -41,6 +43,8 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "gateway_base_domain": "",
     "caretaker_enabled": False,
     "caretaker_interval_hours": 24,
+    "caretaker_mill_max_defer_hours": 3,
+    "caretaker_mill_force_deploy_hours": 8,
     "mill_component_id": "",
     "image_auto_prune": False,
     "caretaker_auto_rollback_enabled": False,

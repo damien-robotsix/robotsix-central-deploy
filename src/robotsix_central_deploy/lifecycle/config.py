@@ -387,6 +387,20 @@ class LifecycleConfig(BaseModel):
         SETTINGS_DEFAULTS["caretaker_interval_hours"],
         description="Hours between caretaker passes.",
     )
+    caretaker_mill_max_defer_hours: int = Field(
+        SETTINGS_DEFAULTS["caretaker_mill_max_defer_hours"],
+        description=(
+            "Hours the mill busy-guard defers an available update before it "
+            "switches to DRAIN (deploy at the first idle /active poll)."
+        ),
+    )
+    caretaker_mill_force_deploy_hours: int = Field(
+        SETTINGS_DEFAULTS["caretaker_mill_force_deploy_hours"],
+        description=(
+            "Hard ceiling: after this many hours pending, the caretaker "
+            "force-deploys the mill even while heavy stages are in flight."
+        ),
+    )
     mill_component_id: str = Field(
         SETTINGS_DEFAULTS["mill_component_id"],
         description=(

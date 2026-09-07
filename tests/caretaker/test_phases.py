@@ -135,6 +135,34 @@ class TestPhaseUpdate:
         assert args[1].digest == "sha256:def"
 
     @pytest.mark.asyncio
+    async def test_deploy_clears_update_pending_since(self):
+        """A completed deploy resets the mill busy-guard's bounded-defer clock."""
+        store = MagicMock()
+        record = _make_record()
+        record.update_pending_since = 1000.0  # a prior deferral timestamp
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(registry, store, backend, ccs, dhs, _make_env_store())
+
+        backend.deploy.assert_called_once()
+        assert record.update_pending_since is None
+
+    @pytest.mark.asyncio
     async def test_deploys_with_env_store_overrides(self):
         """Auto-update must deploy with EnvStore vars merged into config.env.
 
