@@ -8,7 +8,29 @@ emitting access logs and application logs as JSON to stdout.
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
+from typing import Any
+
 import structlog
+
+from .request_id_middleware import get_request_id
+
+
+def add_request_id(
+    logger: object,
+    method_name: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
+    """structlog processor: stamp the current correlation id onto the record.
+
+    Reads the per-request id bound by
+    :class:`~robotsix_central_deploy.lifecycle.request_id_middleware.RequestIDMiddleware`.
+    Outside any request context (startup/shutdown logs) the value is
+    ``None``, which renders as a null ``request_id`` field.
+    """
+    event_dict["request_id"] = get_request_id()
+    return event_dict
+
 
 # ``dictConfig``'s "()" key resolves a dotted-path string to a class to
 # instantiate, but that resolution does NOT recurse into a formatter's other
@@ -34,6 +56,7 @@ LOGGING_CONFIG: dict[str, object] = {
             "foreign_pre_chain": [
                 structlog.stdlib.add_log_level,
                 structlog.stdlib.add_logger_name,
+                add_request_id,
                 structlog.processors.TimeStamper(fmt="iso"),
             ],
         },

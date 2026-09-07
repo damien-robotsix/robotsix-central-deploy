@@ -126,6 +126,8 @@
 
 ::: robotsix_central_deploy.lifecycle.rate_limiter
 
+::: robotsix_central_deploy.lifecycle.request_id_middleware
+
 ::: robotsix_central_deploy.lifecycle.schemas
 
 ## Caretaker
