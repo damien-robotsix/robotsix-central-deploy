@@ -8,8 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from robotsix_central_deploy.caretaker.models import FindingKind
+from robotsix_central_deploy.caretaker.models import CaretakerFinding, FindingKind
 from robotsix_central_deploy.caretaker.phases import (
+    phase_auto_rollback,
     phase_health,
     phase_restart_watchdog,
     phase_update,
@@ -28,6 +29,8 @@ from robotsix_central_deploy.caretaker.volume_audit.models import (
 from robotsix_central_deploy.lifecycle.models import (
     ComponentInspect,
     DeployOutcome,
+    DeploySource,
+    RollbackOutcome,
     ServiceRecord,
     ServiceState,
 )
@@ -757,6 +760,179 @@ class TestPhaseRestartWatchdog:
         findings = await phase_restart_watchdog(store, backend, counts)
         assert len(findings) == 1
         backend.get_container_diagnostics.assert_awaited_once()
+
+
+def _crash_finding(component_id="svc"):
+    return CaretakerFinding(
+        component_id=component_id,
+        repo_id="test-repo",
+        kind=FindingKind.CRASH_LOOP,
+        title=f"Container {component_id} is crash-looping",
+        detail="RestartCount grew",
+        severity="error",
+    )
+
+
+def _rollback_record(name="svc"):
+    return ServiceRecord(
+        name=name,
+        image="repo:v1",
+        container_name=name,
+        deployed_image_digest="sha256:bad",
+        previous_image_digest="sha256:good",
+    )
+
+
+class TestPhaseAutoRollback:
+    @pytest.mark.asyncio
+    async def test_rollback_applied_swaps_digests_and_records_history(self):
+        record = _rollback_record()
+        store = MagicMock()
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.rollback = AsyncMock(
+            return_value=RollbackOutcome(
+                deployed_digest="sha256:good", state=ServiceState.RUNNING
+            )
+        )
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+        env_store = MagicMock()
+        env_store.get_merged_env = AsyncMock(return_value={})
+
+        findings = await phase_auto_rollback(
+            [_crash_finding()], store, backend, ccs, dhs, env_store
+        )
+
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.ROLLBACK_APPLIED
+        assert findings[0].component_id == "svc"
+        backend.rollback.assert_awaited_once()
+        # Digests swapped: rolled-back-to becomes deployed.
+        assert record.deployed_image_digest == "sha256:good"
+        assert record.previous_image_digest == "sha256:bad"
+        # History recorded as a ROLLBACK entry.
+        dhs.append.assert_awaited_once()
+        entry = dhs.append.await_args.args[1]
+        assert entry.source == DeploySource.ROLLBACK
+        assert entry.digest == "sha256:good"
+
+    @pytest.mark.asyncio
+    async def test_no_previous_digest_emits_rollback_failed(self):
+        record = _rollback_record()
+        record.previous_image_digest = ""
+        store = MagicMock()
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.rollback = AsyncMock()
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        env_store = MagicMock()
+
+        findings = await phase_auto_rollback(
+            [_crash_finding()], store, backend, ccs, dhs, env_store
+        )
+
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.ROLLBACK_FAILED
+        backend.rollback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_self_container_skipped(self):
+        record = _rollback_record(name="central-deploy")
+        store = MagicMock()
+        store.get = AsyncMock(return_value=record)
+        backend = MagicMock()
+        backend.rollback = AsyncMock()
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        env_store = MagicMock()
+
+        findings = await phase_auto_rollback(
+            [_crash_finding("central-deploy")],
+            store,
+            backend,
+            ccs,
+            dhs,
+            env_store,
+            self_container_name="central-deploy",
+        )
+
+        assert findings == []
+        backend.rollback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_config_skipped(self):
+        """A sibling / unregistered name has no primary config — skipped."""
+        record = _rollback_record(name="parent-sib")
+        store = MagicMock()
+        store.get = AsyncMock(return_value=record)
+        backend = MagicMock()
+        backend.rollback = AsyncMock()
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=None)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        env_store = MagicMock()
+
+        findings = await phase_auto_rollback(
+            [_crash_finding("parent-sib")], store, backend, ccs, dhs, env_store
+        )
+
+        assert findings == []
+        backend.rollback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_backend_failure_emits_rollback_failed(self):
+        record = _rollback_record()
+        store = MagicMock()
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.rollback = AsyncMock(side_effect=RuntimeError("boom"))
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        env_store = MagicMock()
+        env_store.get_merged_env = AsyncMock(return_value={})
+
+        findings = await phase_auto_rollback(
+            [_crash_finding()], store, backend, ccs, dhs, env_store
+        )
+
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.ROLLBACK_FAILED
+        assert "boom" in findings[0].detail
+
+    @pytest.mark.asyncio
+    async def test_non_crashloop_finding_ignored(self):
+        store = MagicMock()
+        store.get = AsyncMock()
+        backend = MagicMock()
+        backend.rollback = AsyncMock()
+        ccs = MagicMock(spec=ComponentConfigStore)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        env_store = MagicMock()
+
+        health = CaretakerFinding(
+            component_id="svc",
+            kind=FindingKind.HEALTH,
+            title="unhealthy",
+            detail="x",
+            severity="error",
+        )
+        findings = await phase_auto_rollback(
+            [health], store, backend, ccs, dhs, env_store
+        )
+
+        assert findings == []
+        store.get.assert_not_awaited()
+        backend.rollback.assert_not_awaited()
 
 
 class TestPhaseVolumes:

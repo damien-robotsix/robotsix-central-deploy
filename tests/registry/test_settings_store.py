@@ -21,6 +21,8 @@ class TestSystemSettingsModel:
         s = SystemSettings()
         assert s.log_level == "INFO"
         assert s.registry_check_interval == 300
+        # Destructive auto-rollback is OFF unless the operator enables it.
+        assert s.caretaker_auto_rollback_enabled is False
 
     def test_log_level_validation_valid(self):
         for level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):

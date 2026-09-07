@@ -18,6 +18,7 @@ CaretakerScheduler.loop()  (scheduler.py)
   │      │   └─ auto-prune dangling images (if image_auto_prune == True)
   │      ├─ phase_health()           — probe all container health states
   │      ├─ phase_restart_watchdog() — detect containers restarting repeatedly (crash-loop safety net)
+  │      ├─ phase_auto_rollback()    — roll a crash-looping component back to its previous image (if caretaker_auto_rollback_enabled == True)
   │      ├─ phase_volumes()          — volume growth scan + orphan detection + disk check
   │      ├─ phase_self_update()      — launch detached self-updater if plane image has update (if central-deploy component's auto_update_enabled == True)
   │      └─ Record findings locally (WARNING log + caretaker_findings.jsonl)
@@ -51,7 +52,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 | ------- | ------ | --------- |
 | `component_id` | `str \| None` | Affected component (or `None` for system-wide) |
 | `repo_id` | `str \| None` | Upstream repository identifier (informational) |
-| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `SELF_UPDATE_TRIGGERED`, `HEALTH`, `CRASH_LOOP`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
+| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `SELF_UPDATE_TRIGGERED`, `HEALTH`, `CRASH_LOOP`, `ROLLBACK_APPLIED`, `ROLLBACK_FAILED`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
 | `title` | `str` | Short human-readable summary |
 | `detail` | `str` | Full description |
 | `severity` | `Literal["warning", "error"]` | Severity level |
@@ -71,6 +72,7 @@ Self-contract changes take effect on the next server restart.
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |
 | `mill_component_id` | `str` | `"mill"` | Component id of the mill (used by onboarding repo registration) |
 | `image_auto_prune` | `bool` | `False` | Whether to prune dangling images after successful updates |
+| `caretaker_auto_rollback_enabled` | `bool` | `False` | Whether a verified failed deploy (a crash-looping component) is automatically rolled back to its previous image digest. **Destructive** (recreates the running container with a prior image); OFF by default and must be explicitly enabled |
 | `disk_warn_pct` | `float` | `10.0` | Percent free disk space that triggers a `DISK` finding |
 
 Additionally, per-component `auto_update_enabled: bool` (default `True`) in

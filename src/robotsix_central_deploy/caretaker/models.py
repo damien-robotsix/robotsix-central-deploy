@@ -24,6 +24,13 @@ class FindingKind(str, Enum):
     a caretaker scrape interval: the container is restarting repeatedly
     (crash-looping) whether or not a deploy just happened.
 
+    ``rollback_applied`` — the caretaker automatically rolled a
+    crash-looping component back to its previous image digest (opt-in,
+    ``caretaker_auto_rollback_enabled``).
+
+    ``rollback_failed`` — an automatic rollback of a crash-looping
+    component was attempted but the backend rollback errored.
+
     ``volume_growth`` — a named volume exceeded its configured
     growth threshold.
 
@@ -43,6 +50,8 @@ class FindingKind(str, Enum):
     SELF_UPDATE_TRIGGERED = "self_update_triggered"
     HEALTH = "health"
     CRASH_LOOP = "crash_loop"
+    ROLLBACK_APPLIED = "rollback_applied"
+    ROLLBACK_FAILED = "rollback_failed"
     VOLUME_GROWTH = "volume_growth"
     VOLUME_MEASUREMENT = "volume_measurement"
     VOLUME_ORPHAN = "volume_orphan"

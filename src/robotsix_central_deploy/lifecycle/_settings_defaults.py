@@ -20,6 +20,7 @@ class _SettingsDefaults(TypedDict):
     caretaker_interval_hours: int
     mill_component_id: str
     image_auto_prune: bool
+    caretaker_auto_rollback_enabled: bool
     llmio_tier_config: dict[str, Any]
     claude_auth_refresh_interval: int
     rate_limit_api_per_hour: int
@@ -42,6 +43,7 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "caretaker_interval_hours": 24,
     "mill_component_id": "",
     "image_auto_prune": False,
+    "caretaker_auto_rollback_enabled": False,
     "llmio_tier_config": {},
     "claude_auth_refresh_interval": 1800,
     "rate_limit_api_per_hour": 20000,

@@ -397,6 +397,16 @@ class LifecycleConfig(BaseModel):
         SETTINGS_DEFAULTS["image_auto_prune"],
         description=("After updates, remove dangling images not needed for rollback."),
     )
+    caretaker_auto_rollback_enabled: bool = Field(
+        SETTINGS_DEFAULTS["caretaker_auto_rollback_enabled"],
+        description=(
+            "When True, the caretaker automatically rolls a crash-looping "
+            "component (a verified failed deploy — RestartCount growing across "
+            "a scrape interval) back to its previous image digest. Destructive "
+            "(recreates the running container with a prior image); defaults OFF "
+            "and must be explicitly enabled by the operator."
+        ),
+    )
     llmio_tier_config: dict[str, Any] = Field(
         default=SETTINGS_DEFAULTS["llmio_tier_config"],
         description=(
