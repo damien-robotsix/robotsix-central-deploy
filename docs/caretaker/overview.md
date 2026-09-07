@@ -60,7 +60,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 ## Configuration
 
 These are ordinary `LifecycleConfig` fields, set in `config/config.json`. All
-five are also part of the settings overlay, so they can be changed at runtime
+seven are also part of the settings overlay, so they can be changed at runtime
 through the dashboard's Settings panel or seeded from the self-contract labels
 in `deploy/docker-compose.yml` (prefix `robotsix.deploy.settings.*`) — see
 [Configuration](../lifecycle/configuration.md#the-three-layers-in-order).
@@ -70,6 +70,8 @@ Self-contract changes take effect on the next server restart.
 | ---------- | ------ | --------- | ------------- |
 | `caretaker_enabled` | `bool` | `False` | Master switch for the caretaker loop |
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |
+| `caretaker_mill_max_defer_hours` | `int` | `3` | Hours the mill busy-guard defers an available update before switching to DRAIN (deploy at the first idle poll). Bounds indefinite defer when the mill continuously picks new heavy stages. |
+| `caretaker_mill_force_deploy_hours` | `int` | `8` | Hard ceiling: after this many hours pending, the caretaker force-deploys the mill even while heavy stages are in flight. The mill's `implement` retry-as-transient recovers interrupted stages. Must be ≥ `caretaker_mill_max_defer_hours`. |
 | `mill_component_id` | `str` | `"mill"` | Component id of the mill (used by onboarding repo registration) |
 | `image_auto_prune` | `bool` | `False` | Whether to prune dangling images after successful updates |
 | `caretaker_auto_rollback_enabled` | `bool` | `False` | Whether a verified failed deploy (a crash-looping component) is automatically rolled back to its previous image digest. **Destructive** (recreates the running container with a prior image); OFF by default and must be explicitly enabled |
