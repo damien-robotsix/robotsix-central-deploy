@@ -29,9 +29,7 @@ class _FakeBackend:
         self._logs = logs
         self.logs_requested = False
 
-    async def get_container_diagnostics(
-        self, service: ServiceRecord
-    ) -> dict[str, Any]:
+    async def get_container_diagnostics(self, service: ServiceRecord) -> dict[str, Any]:
         diag = self._diags[min(self._i, len(self._diags) - 1)]
         self._i += 1
         return diag
@@ -106,7 +104,14 @@ async def test_exited_container_is_failed() -> None:
 async def test_unhealthy_healthcheck_is_failed() -> None:
     """A settled 'unhealthy' healthcheck fails verification."""
     backend = _FakeBackend(
-        [{"exists": True, "state": "running", "restart_count": 0, "health": "unhealthy"}]
+        [
+            {
+                "exists": True,
+                "state": "running",
+                "restart_count": 0,
+                "health": "unhealthy",
+            }
+        ]
     )
     result = await verify_post_deploy_health(backend, _record(), **_FAST)  # type: ignore[arg-type]
 

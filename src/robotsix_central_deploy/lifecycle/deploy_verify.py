@@ -104,7 +104,7 @@ async def verify_post_deploy_health(
             await asyncio.sleep(poll_interval)
         try:
             diag = await backend.get_container_diagnostics(record)
-        except Exception:  # noqa: BLE001 — verification must never raise
+        except Exception:
             logger.warning(
                 "post-deploy verify %s: diagnostics poll failed",
                 record.name,
@@ -155,7 +155,7 @@ async def verify_post_deploy_health(
                 crash_log = await backend.get_container_logs(
                     record, tail=log_tail_lines
                 )
-            except Exception:  # noqa: BLE001 — best-effort log capture
+            except Exception:
                 logger.warning(
                     "post-deploy verify %s: could not capture crash logs",
                     record.name,

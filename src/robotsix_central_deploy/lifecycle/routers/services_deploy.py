@@ -606,8 +606,7 @@ async def _run_deploy_job(
         verification = await verify_post_deploy_health(backend, record)
         if not verification.ok:
             reason = (
-                f"Post-deploy verification failed for '{name}': "
-                f"{verification.reason}"
+                f"Post-deploy verification failed for '{name}': {verification.reason}"
             )
             logger.error("deploy %s: %s", _sanitize_log(name), reason)
             record.state = ServiceState.FAILED

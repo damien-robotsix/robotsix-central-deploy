@@ -13,6 +13,7 @@ from robotsix_central_deploy.caretaker.scheduler import CaretakerScheduler
 
 # Import lifecycle.models first to break the circular import through
 # lifecycle → deps → caretaker.scheduler (deps.CaretakerScheduler at module-level).
+from robotsix_central_deploy.lifecycle.deploy_verify import DeployVerification
 from robotsix_central_deploy.lifecycle.models import (
     ComponentInspect,
     SelfInspect,
@@ -22,6 +23,25 @@ from robotsix_central_deploy.lifecycle.models import (
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
+
+
+@pytest.fixture(autouse=True)
+def _stub_post_deploy_verify(monkeypatch):
+    """Stub post-deploy verification for every scheduler test.
+
+    A successful auto-update reaches ``verify_post_deploy_health``, which polls
+    the container for the real 120s window. With a MagicMock backend that would
+    hang each affected test for two minutes. Verification's own behaviour is
+    covered by ``test_deploy_verify.py`` and its wiring by ``test_phases.py``;
+    here it only needs to return a clean pass instantly.
+    """
+    from robotsix_central_deploy.caretaker import phases
+
+    monkeypatch.setattr(
+        phases,
+        "verify_post_deploy_health",
+        AsyncMock(return_value=DeployVerification(ok=True, verified=True)),
+    )
 
 
 def _register_mill(ccs, mill_id="mill", port=9999):
