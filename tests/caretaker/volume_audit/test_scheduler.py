@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -250,6 +251,135 @@ class TestVolumeAuditScheduler:
         assert len(records) == 1
         assert records[0].volume_name == "vol"
         assert records[0].size_bytes == 7_000_000
+
+    @pytest.mark.asyncio
+    async def test_failed_measurement_backs_off_then_resumes(
+        self, tmp_path, monkeypatch
+    ):
+        """Regression (2026-09-07): the hourly scan re-ran the du helper on
+        mill-mill-data every pass right after it had timed out, grinding IO
+        on a loaded host.  After a failed measurement (None) the volume is
+        not measured again inside the backoff window: the previous snapshot
+        is carried forward with no new finding.  Once the window has passed
+        the volume is measured again."""
+        reported = []
+
+        async def _fake_report(finding, path):
+            reported.append(finding)
+
+        monkeypatch.setattr(sched_mod, "report_finding", _fake_report)
+
+        sched, backend, store = _make_scheduler(tmp_path)
+        comp = ComponentConfig(
+            id="svc",
+            image="ghcr.io/test/image:latest",
+            container_name="svc",
+            named_volumes=["vol-big", "vol-ok"],
+        )
+        store.all.return_value = [comp]
+
+        async def _measure(name):
+            if name == "vol-big":
+                return None
+            return 5_000_000
+
+        backend.measure_volume_bytes = AsyncMock(side_effect=_measure)
+        (tmp_path / "snapshots.json").write_text(
+            json.dumps(
+                {
+                    "vol-big": {
+                        "volume_name": "vol-big",
+                        "component_id": "svc",
+                        "measured_at": "2025-01-01T00:00:00+00:00",
+                        "size_bytes": 7_000_000,
+                    }
+                }
+            )
+        )
+
+        # Scan 1: measurement fails -> finding + backoff armed.
+        records = await sched.run_once()
+        assert [f.kind for f in reported] == ["measurement_failed"]
+        assert reported[0].volume_name == "vol-big"
+        assert backend.measure_volume_bytes.await_count == 2
+        assert "vol-big" in sched._measure_backoff_until
+        assert {r.volume_name: r.size_bytes for r in records} == {
+            "vol-big": 7_000_000,
+            "vol-ok": 5_000_000,
+        }
+
+        # Scan 2 (inside the window): vol-big is NOT measured, its previous
+        # snapshot is carried forward, and no second finding is emitted.
+        backend.measure_volume_bytes.reset_mock()
+        records = await sched.run_once()
+        measured = [c.args[0] for c in backend.measure_volume_bytes.await_args_list]
+        assert measured == ["vol-ok"]
+        assert len(reported) == 1
+        assert {r.volume_name: r.size_bytes for r in records} == {
+            "vol-big": 7_000_000,
+            "vol-ok": 5_000_000,
+        }
+        saved = json.loads((tmp_path / "snapshots.json").read_text())
+        assert saved["vol-big"]["size_bytes"] == 7_000_000
+
+        # Scan 3 (window elapsed): the volume is measured again.
+        sched._measure_backoff_until["vol-big"] -= timedelta(
+            seconds=sched._MEASURE_BACKOFF_S + 1
+        )
+        backend.measure_volume_bytes = AsyncMock(return_value=8_000_000)
+        records = await sched.run_once()
+        measured = [c.args[0] for c in backend.measure_volume_bytes.await_args_list]
+        assert sorted(measured) == ["vol-big", "vol-ok"]
+        assert "vol-big" not in sched._measure_backoff_until
+        assert {r.volume_name: r.size_bytes for r in records} == {
+            "vol-big": 8_000_000,
+            "vol-ok": 8_000_000,
+        }
+        # Only the original measurement_failed finding; 7 MB -> 8 MB is under
+        # the 10 MiB min-delta guard.
+        assert len(reported) == 1
+
+    @pytest.mark.asyncio
+    async def test_raising_measurement_backs_off_too(self, tmp_path, monkeypatch):
+        """A measurement that raises arms the same backoff as one that
+        returns None."""
+        monkeypatch.setattr(sched_mod, "report_finding", AsyncMock())
+        sched, backend, store = _make_scheduler(tmp_path)
+        comp = ComponentConfig(
+            id="svc",
+            image="ghcr.io/test/image:latest",
+            container_name="svc",
+            named_volumes=["vol"],
+        )
+        store.all.return_value = [comp]
+        backend.measure_volume_bytes = AsyncMock(side_effect=RuntimeError("boom"))
+
+        await sched.run_once()
+        assert "vol" in sched._measure_backoff_until
+
+        backend.measure_volume_bytes.reset_mock()
+        await sched.run_once()
+        backend.measure_volume_bytes.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_zero_backoff_measures_every_scan(self, tmp_path, monkeypatch):
+        """With the backoff constant disabled, a failed volume is retried on
+        the very next scan (the pre-fix behaviour)."""
+        monkeypatch.setattr(sched_mod, "report_finding", AsyncMock())
+        monkeypatch.setattr(sched_mod.VolumeAuditScheduler, "_MEASURE_BACKOFF_S", 0)
+        sched, backend, store = _make_scheduler(tmp_path)
+        comp = ComponentConfig(
+            id="svc",
+            image="ghcr.io/test/image:latest",
+            container_name="svc",
+            named_volumes=["vol"],
+        )
+        store.all.return_value = [comp]
+        backend.measure_volume_bytes = AsyncMock(return_value=None)
+
+        await sched.run_once()
+        await sched.run_once()
+        assert backend.measure_volume_bytes.await_count == 2
 
     @pytest.mark.asyncio
     async def test_run_once_corrupt_snapshot_file(self, tmp_path):

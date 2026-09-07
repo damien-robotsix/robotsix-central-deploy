@@ -113,9 +113,16 @@ class VolumeOps(ConfigVolumeOpsMixin):
     #: scan silently recorded 0 bytes for that volume.
     _MEASURE_TIMEOUT_S = 1800
 
-    #: Retries for the whole-volume measure.  A Docker API stream cut under
-    #: host IO pressure ("Response ended prematurely") is transient — retry
-    #: rather than surfacing a failed measurement on the first hiccup.
+    #: Retries for the whole-volume measure — Docker API errors ONLY.  A
+    #: Docker API stream cut under host IO pressure ("Response ended
+    #: prematurely") is transient — retry rather than surfacing a failed
+    #: measurement on the first hiccup.  A deadline :class:`TimeoutError` is
+    #: never retried: it is deterministic, not transient — a du that did not
+    #: finish in ``_MEASURE_TIMEOUT_S`` will not finish on an immediate
+    #: re-run of the same volume on the same loaded host.  Retrying it
+    #: tripled the IO grind on 2026-09-07 (mill-mill-data: attempts 1/3 and
+    #: 2/3 each timed out at 1800s, 14:23Z/15:23Z/15:53Z/19:49Z), competing
+    #: with mill's implement sandboxes for the host's disks.
     _MEASURE_ATTEMPTS = 3
     _MEASURE_RETRY_DELAY_S = 5
 
@@ -257,10 +264,13 @@ class VolumeOps(ConfigVolumeOpsMixin):
         transient sidecars (*.db-wal, *.db-shm, *.db-journal).
 
         Robust for large volumes: runs with the longer measure-specific
-        deadline and retries transient Docker API stream cuts ("Response ended
-        prematurely").  Returns ``None`` — not 0 — when the size could not be
-        determined after all attempts, so callers can surface a
-        measurement-failed finding instead of silently recording a bogus 0.
+        deadline and retries transient Docker API errors ("Response ended
+        prematurely").  A deadline timeout is NOT retried — the helper was
+        already killed by the finally-remove, and an immediate re-run of the
+        same du on the same loaded host only repeats the grind (2026-09-07).
+        Returns ``None`` — not 0 — when the size could not be determined, so
+        callers can surface a measurement-failed finding instead of silently
+        recording a bogus 0.
         """
         loop = asyncio.get_running_loop()
         cmd = _DU_BYTES_FN + "du_bytes /vol\n"
@@ -275,6 +285,15 @@ class VolumeOps(ConfigVolumeOpsMixin):
                     ),
                 )
                 return int(raw.strip() or b"0")
+            except TimeoutError as exc:
+                logger.warning(
+                    "measure_volume_bytes(%r) gave up: %s (deadline %ds; "
+                    "not retried — a re-run would only repeat the IO grind)",
+                    volume_name,
+                    exc,
+                    self._MEASURE_TIMEOUT_S,
+                )
+                return None
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "measure_volume_bytes(%r) attempt %d/%d failed: %s",

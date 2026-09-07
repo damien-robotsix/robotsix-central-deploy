@@ -422,7 +422,8 @@ class TestVolumeOpsMeasureVolumeBytes:
 
     async def test_error_returns_none_after_retries(self, client, monkeypatch):
         """A persistent helper failure surfaces None (measurement-failed),
-        not a bogus 0 — the scheduler turns that into a finding."""
+        not a bogus 0 — the scheduler turns that into a finding.  Docker API
+        errors are retried the full ``_MEASURE_ATTEMPTS`` times."""
         monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
         vo = VolumeOps(client)
         client.containers.run.side_effect = RuntimeError("container failed")
@@ -430,6 +431,31 @@ class TestVolumeOpsMeasureVolumeBytes:
         result = await vo.measure_volume_bytes("data-vol")
 
         assert result is None
+        assert client.containers.run.call_count == VolumeOps._MEASURE_ATTEMPTS
+
+    async def test_deadline_timeout_is_not_retried(self, client, monkeypatch):
+        """Regression (2026-09-07): a du that hit the 1800s deadline was
+        immediately re-run up to three times (attempts 1/3 and 2/3 each timed
+        out on mill-mill-data), tripling the IO grind on a loaded host for a
+        size that never arrived.  A deadline TimeoutError is deterministic —
+        the same du will not finish on an immediate re-run — so the measure
+        gives up after exactly ONE helper run and returns None.
+        """
+        monkeypatch.setattr(VolumeOps, "_MEASURE_RETRY_DELAY_S", 0)
+        vo = VolumeOps(client)
+        container = _one_shot_container(b"")
+        client.containers.run.return_value = container
+
+        def _timeout(_container, timeout_s):
+            raise TimeoutError(f"helper container still running after {timeout_s}s")
+
+        monkeypatch.setattr(vo, "_wait_container_exit_sync", _timeout)
+
+        result = await vo.measure_volume_bytes("data-vol")
+
+        assert result is None
+        assert client.containers.run.call_count == 1
+        container.remove.assert_called_once_with(force=True)
 
     async def test_transient_failure_retries_then_succeeds(self, client, monkeypatch):
         """A one-off Docker stream cut must not fail the whole measurement:
