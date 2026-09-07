@@ -330,6 +330,139 @@ async def _health_finding_detail(
     )
 
 
+async def phase_restart_watchdog(
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    previous_restart_counts: dict[str, int],
+) -> list[CaretakerFinding]:
+    """Flag any managed container whose ``RestartCount`` grew since last scrape.
+
+    This is the always-on crash-loop safety net: a component can start
+    restarting repeatedly outside any deploy window (config drift, a
+    dependency outage), and nothing else notices (2026-09-05 incident — a
+    hexarchy crash loop ran ~1.5h on host ``bequiet`` unseen). Each pass reads
+    every managed container's ``RestartCount`` and compares it to the value
+    recorded on the previous pass; a growing count means the container is
+    crash-looping and a ``CRASH_LOOP`` finding is emitted carrying the same
+    last-crash-log excerpt a HEALTH finding carries, for the escalation
+    consumer.
+
+    ``previous_restart_counts`` is the scheduler-owned baseline, keyed by
+    record name and mutated in place across passes:
+
+    * First observation of a container only records a baseline — never a
+      finding — so a stable component is never flagged (no false positive
+      across a normal scrape window).
+    * Growth (``current > previous``) emits a finding; the baseline is then
+      advanced to ``current`` so a container that keeps crash-looping is
+      re-flagged each interval it keeps restarting.
+    * Containers that have gone away are dropped from the baseline, so a
+      later redeploy re-baselines instead of comparing against a stale count.
+
+    Runtime state is read straight from ``get_container_diagnostics``
+    (``RestartCount``), which the multi-host backend routes to the owning
+    host — so remote components (host ``bequiet``) are covered without gating
+    on any cosmetic ``/diagnose`` routing/label verdict field.
+    """
+    findings: list[CaretakerFinding] = []
+    records = await store.list_all()
+    seen: set[str] = set()
+
+    for record in records:
+        try:
+            diag = await backend.get_container_diagnostics(record)
+        except Exception:
+            logger.warning(
+                "phase_restart_watchdog: diagnostics failed for %s",
+                record.name,
+                exc_info=True,
+            )
+            continue
+
+        if not diag.get("exists"):
+            # No container yet (or it was removed): don't baseline, and let
+            # the stale-key prune below forget any prior count.
+            continue
+
+        current = int(diag.get("restart_count", 0) or 0)
+        seen.add(record.name)
+        previous = previous_restart_counts.get(record.name)
+        previous_restart_counts[record.name] = current
+
+        if previous is None or current <= previous:
+            # First observation (baseline only) or a stable/reset count —
+            # not crash-looping.
+            continue
+
+        # RestartCount grew across the interval → crash-looping.
+        repo_id = record.repo_id
+        if not repo_id and record.component_id:
+            parent = await store.get(record.component_id)
+            if parent is not None:
+                repo_id = parent.repo_id
+
+        findings.append(
+            CaretakerFinding(
+                component_id=record.name,
+                repo_id=repo_id,
+                kind=FindingKind.CRASH_LOOP,
+                title=f"Container {record.name} is crash-looping",
+                detail=await _crash_loop_finding_detail(
+                    backend, record, previous, current
+                ),
+                severity="error",
+            )
+        )
+
+    # Forget baselines for containers no longer present, so a fresh redeploy
+    # starts from a clean baseline rather than comparing against a stale count.
+    for stale in set(previous_restart_counts) - seen:
+        del previous_restart_counts[stale]
+
+    return findings
+
+
+async def _crash_loop_finding_detail(
+    backend: ExecutionBackend,
+    record: ServiceRecord,
+    previous_count: int,
+    current_count: int,
+) -> str:
+    """Build a CRASH_LOOP finding body, including recent container logs.
+
+    Mirrors ``_health_finding_detail``: the RestartCount delta names the
+    symptom and the log tail carries the crash cause (a traceback or a
+    repeated startup error), so the escalation consumer gets an actionable
+    signal rather than a bare "restarting" verdict. Log capture is
+    best-effort — a finding without logs is still worth emitting.
+    """
+    header = (
+        f"RestartCount grew from {previous_count} to {current_count} across one "
+        f"caretaker interval — the container is crash-looping."
+    )
+    if record.image:
+        header += f"\nImage: {record.image}"
+
+    try:
+        logs = await backend.get_container_logs(record, tail=_HEALTH_LOG_TAIL_LINES)
+    except Exception:
+        logger.warning(
+            "phase_restart_watchdog: could not read logs for %s",
+            record.name,
+            exc_info=True,
+        )
+        logs = ""
+
+    if not logs.strip():
+        return f"{header}\n\nNo container logs available."
+
+    return (
+        f"{header}\n\n"
+        f"Last {_HEALTH_LOG_TAIL_LINES} log lines:\n\n"
+        f"```\n{logs.strip()}\n```"
+    )
+
+
 async def _apply_volume_retention(
     backend: ExecutionBackend,
     settings: SystemSettings,

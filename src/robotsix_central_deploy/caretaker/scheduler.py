@@ -15,6 +15,7 @@ from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import (
     component_auto_update_enabled,
     phase_health,
+    phase_restart_watchdog,
     phase_update,
     phase_volumes,
 )
@@ -93,6 +94,13 @@ class CaretakerScheduler:
         self._last_self_update_digest: str | None = None
 
         self._last_report: CaretakerReport | None = None
+
+        #: Per-container ``RestartCount`` recorded on the previous pass, keyed
+        #: by service-record name. The crash-loop watchdog (phase 3) compares
+        #: each container's current count to this baseline to detect a
+        #: RestartCount growing across scrape intervals; it mutates the dict in
+        #: place (advancing baselines, dropping vanished containers).
+        self._restart_counts: dict[str, int] = {}
 
     @staticmethod
     def _resolve_findings_path(config: LifecycleConfig) -> Path:
@@ -214,6 +222,23 @@ class CaretakerScheduler:
         except Exception as exc:
             logger.exception("phase_health crashed")
             errors.append(f"phase_health: {exc}")
+
+        # 2b. Phase: RESTART WATCHDOG — always-on crash-loop safety net.
+        # Flags any managed container whose RestartCount grew since the last
+        # pass, whether or not a deploy just happened (config drift, dependency
+        # outages restart a container outside any deploy window). State lives on
+        # the scheduler so growth is detected across passes.
+        try:
+            watchdog_findings = await phase_restart_watchdog(
+                self._store,
+                self._backend,
+                self._restart_counts,
+            )
+            findings.extend(watchdog_findings)
+            phases_run.append("restart-watchdog")
+        except Exception as exc:
+            logger.exception("phase_restart_watchdog crashed")
+            errors.append(f"phase_restart_watchdog: {exc}")
 
         # 3. Phase: VOLUMES
         if self._volume_audit_scheduler is not None:
