@@ -46,6 +46,7 @@
   "openrouter_keys": {},
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
+  "caretaker_auto_rollback_enabled": false,
   "mill_component_id": "",
   "image_auto_prune": false,
   "chat_agent_audit_store_path": "data/chat_agent_audit.json",
