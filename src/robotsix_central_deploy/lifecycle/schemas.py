@@ -206,6 +206,13 @@ class EnvResponse(BaseModel):
         default=False,
         description="Whether the Claude code mount is enabled for this component",
     )
+    auto_update_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether the caretaker may automatically update this component. "
+            "For central-deploy this governs the plane's own self-update."
+        ),
+    )
 
 
 class EnvSyncResponse(BaseModel):
@@ -261,6 +268,14 @@ class EnvUpdate(_EnvSecretsFields):
     claude_mount: bool | None = Field(
         default=None,
         description="Toggle Claude code mount; None leaves the current value unchanged",
+    )
+    auto_update_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Toggle whether the caretaker may automatically update this "
+            "component (for central-deploy, its own self-update); None leaves "
+            "the current value unchanged"
+        ),
     )
 
 

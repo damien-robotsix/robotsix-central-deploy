@@ -137,6 +137,16 @@
         <span class="note-inline-sm">Takes effect on next deploy.</span>
       </div>
     </div>
+    <div class="env-section">
+      <h3>Auto-Update</h3>
+      <div class="env-row">
+        <label>
+          <input type="checkbox" id="auto-update-checkbox" />
+          Let the caretaker auto-update this component
+        </label>
+        <span class="note-inline-sm">When enabled, the caretaker automatically deploys newer images for this component. For central-deploy this governs the plane's own self-update.</span>
+      </div>
+    </div>
     <div class="env-footer">
       <button class="btn-primary" data-action="saveEnvChanges">Save</button>
       <button class="btn-secondary" data-action="closeEnvModal">Close</button>

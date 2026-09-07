@@ -76,6 +76,7 @@ async def get_service_env(
     memswap_limit = comp_cfg.memswap_limit if comp_cfg else None
     allow_chat_access = comp_cfg.allow_chat_access if comp_cfg else False
     claude_mount = comp_cfg.claude_mount if comp_cfg else False
+    auto_update_enabled = comp_cfg.auto_update_enabled if comp_cfg else True
     return EnvResponse(
         env=config.env,
         secrets=secrets_masked,
@@ -85,6 +86,7 @@ async def get_service_env(
         memswap_limit=memswap_limit,
         allow_chat_access=allow_chat_access,
         claude_mount=claude_mount,
+        auto_update_enabled=auto_update_enabled,
     )
 
 
@@ -164,6 +166,12 @@ async def put_service_env(
         comp_cfg = component_config_store.get(name)
         if comp_cfg is not None:
             comp_cfg.claude_mount = body.claude_mount
+            await component_config_store.put(comp_cfg)
+            registry.register(comp_cfg)
+    if body.auto_update_enabled is not None:
+        comp_cfg = component_config_store.get(name)
+        if comp_cfg is not None:
+            comp_cfg.auto_update_enabled = body.auto_update_enabled
             await component_config_store.put(comp_cfg)
             registry.register(comp_cfg)
 

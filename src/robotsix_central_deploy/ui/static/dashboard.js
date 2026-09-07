@@ -917,6 +917,7 @@ async function fetchEnvConfig(name) {
     document.getElementById('mem-limit-input').value = data.mem_limit || '2g';
     document.getElementById('chat-access-checkbox').checked = !!data.allow_chat_access;
     document.getElementById('claude-mount-checkbox').checked = !!data.claude_mount;
+    document.getElementById('auto-update-checkbox').checked = data.auto_update_enabled !== false;
   } catch (err) {
     showEnvModalError(err.message);
   }
@@ -1037,6 +1038,7 @@ async function saveEnvChanges() {
     }
     body.allow_chat_access = document.getElementById('chat-access-checkbox').checked;
     body.claude_mount = document.getElementById('claude-mount-checkbox').checked;
+    body.auto_update_enabled = document.getElementById('auto-update-checkbox').checked;
     const resp = await fetch(`/services/${encodeURIComponent(name)}/env`, {
       method: 'PUT',
       credentials: 'same-origin',
