@@ -14,11 +14,12 @@ CaretakerScheduler.loop()  (scheduler.py)
   ├─ 1. Read current settings (caretaker_enabled, caretaker_interval_hours)
   ├─ 2. Sleep caretaker_interval_hours (min 1 hour)
   ├─ 3. run_once():
-  │      ├─ phase_update()      — deploy updated images for opted-in components
+  │      ├─ phase_update()           — deploy updated images for opted-in components
   │      │   └─ auto-prune dangling images (if image_auto_prune == True)
-  │      ├─ phase_health()      — probe all container health states
-  │      ├─ phase_volumes()     — volume growth scan + orphan detection + disk check
-  │      ├─ phase_self_update() — launch detached self-updater if plane image has update (if central-deploy component's auto_update_enabled == True)
+  │      ├─ phase_health()           — probe all container health states
+  │      ├─ phase_restart_watchdog() — detect containers restarting repeatedly (crash-loop safety net)
+  │      ├─ phase_volumes()          — volume growth scan + orphan detection + disk check
+  │      ├─ phase_self_update()      — launch detached self-updater if plane image has update (if central-deploy component's auto_update_enabled == True)
   │      └─ Record findings locally (WARNING log + caretaker_findings.jsonl)
   └─ 4. Loop back to step 1; respect CancelledError for graceful shutdown
 ```
@@ -50,7 +51,7 @@ A `CaretakerFinding` describes a single issue discovered during a pass:
 | ------- | ------ | --------- |
 | `component_id` | `str \| None` | Affected component (or `None` for system-wide) |
 | `repo_id` | `str \| None` | Upstream repository identifier (informational) |
-| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `SELF_UPDATE_TRIGGERED`, `HEALTH`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
+| `kind` | `FindingKind` | Category: `UPDATE_APPLIED`, `UPDATE_FAILED`, `SELF_UPDATE_TRIGGERED`, `HEALTH`, `CRASH_LOOP`, `VOLUME_GROWTH`, `VOLUME_ORPHAN`, `DISK`. Volume measurement failures are reported as findings with zero delta/growth; failed volumes do not abort the scan. |
 | `title` | `str` | Short human-readable summary |
 | `detail` | `str` | Full description |
 | `severity` | `Literal["warning", "error"]` | Severity level |

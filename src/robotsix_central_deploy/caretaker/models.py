@@ -20,6 +20,10 @@ class FindingKind(str, Enum):
 
     ``health`` — a component health-check is failing.
 
+    ``crash_loop`` — a managed container's ``RestartCount`` grew across
+    a caretaker scrape interval: the container is restarting repeatedly
+    (crash-looping) whether or not a deploy just happened.
+
     ``volume_growth`` — a named volume exceeded its configured
     growth threshold.
 
@@ -38,6 +42,7 @@ class FindingKind(str, Enum):
     UPDATE_FAILED = "update_failed"
     SELF_UPDATE_TRIGGERED = "self_update_triggered"
     HEALTH = "health"
+    CRASH_LOOP = "crash_loop"
     VOLUME_GROWTH = "volume_growth"
     VOLUME_MEASUREMENT = "volume_measurement"
     VOLUME_ORPHAN = "volume_orphan"

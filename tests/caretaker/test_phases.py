@@ -11,6 +11,7 @@ import pytest
 from robotsix_central_deploy.caretaker.models import FindingKind
 from robotsix_central_deploy.caretaker.phases import (
     phase_health,
+    phase_restart_watchdog,
     phase_update,
     phase_volumes,
 )
@@ -588,6 +589,174 @@ class TestPhaseHealth:
         assert findings[0].component_id == "parent-sib"
         # repo_id from parent
         assert findings[0].repo_id == "parent-repo"
+
+
+def _diag(exists=True, restart_count=0):
+    return {"exists": exists, "restart_count": restart_count}
+
+
+class TestPhaseRestartWatchdog:
+    @pytest.mark.asyncio
+    async def test_first_observation_only_baselines(self):
+        """The first scrape records a baseline and never flags — a stable
+        component must not be flagged across a normal scrape window."""
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=3)
+        )
+        counts: dict[str, int] = {}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert findings == []
+        assert counts == {"svc": 3}
+
+    @pytest.mark.asyncio
+    async def test_stable_count_is_never_flagged(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=5)
+        )
+        counts = {"svc": 5}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert findings == []
+        assert counts == {"svc": 5}
+
+    @pytest.mark.asyncio
+    async def test_flags_when_restart_count_grows(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        record.image = "ghcr.io/org/svc:main"
+        record.repo_id = "test-repo"
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=42)
+        )
+        backend.get_container_logs = AsyncMock(
+            return_value="pydantic.ValidationError: 3 validation errors"
+        )
+        counts = {"svc": 40}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.kind == FindingKind.CRASH_LOOP
+        assert f.component_id == "svc"
+        assert f.repo_id == "test-repo"
+        assert f.severity == "error"
+        assert "40 to 42" in f.detail
+        assert "pydantic.ValidationError" in f.detail
+        assert "ghcr.io/org/svc:main" in f.detail
+        # Baseline advanced so continued crash-looping re-flags next interval.
+        assert counts["svc"] == 42
+
+    @pytest.mark.asyncio
+    async def test_reflags_while_still_crash_looping(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=50)
+        )
+        backend.get_container_logs = AsyncMock(return_value="boom")
+        counts = {"svc": 42}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        assert counts["svc"] == 50
+
+    @pytest.mark.asyncio
+    async def test_finding_survives_unreadable_logs(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=2)
+        )
+        backend.get_container_logs = AsyncMock(side_effect=RuntimeError("daemon gone"))
+        counts = {"svc": 1}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        assert "No container logs available" in findings[0].detail
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_failure_is_skipped(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            side_effect=RuntimeError("host unreachable")
+        )
+        counts: dict[str, int] = {}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert findings == []
+        assert counts == {}
+
+    @pytest.mark.asyncio
+    async def test_vanished_container_baseline_forgotten(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(return_value=_diag(exists=False))
+        counts = {"svc": 7}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert findings == []
+        assert "svc" not in counts
+
+    @pytest.mark.asyncio
+    async def test_sibling_repo_id_from_parent(self):
+        store = MagicMock()
+        parent = _make_record(name="parent", update_available=False)
+        parent.repo_id = "parent-repo"
+        sibling = ServiceRecord(
+            name="parent-sib", image="repo:v1", component_id="parent"
+        )
+        store.list_all = AsyncMock(return_value=[sibling])
+        store.get = AsyncMock(return_value=parent)
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=9)
+        )
+        backend.get_container_logs = AsyncMock(return_value="crash")
+        counts = {"parent-sib": 8}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        assert findings[0].component_id == "parent-sib"
+        assert findings[0].repo_id == "parent-repo"
+
+    @pytest.mark.asyncio
+    async def test_uses_diagnostics_not_diagnose_verdict(self):
+        """Remote components are flagged from RestartCount alone — the watchdog
+        never consults cosmetic /diagnose routing/label verdict fields."""
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=11)
+        )
+        backend.get_container_logs = AsyncMock(return_value="crash")
+        # No .status / diagnose report is set up; the phase must not need it.
+        counts = {"svc": 10}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        backend.get_container_diagnostics.assert_awaited_once()
 
 
 class TestPhaseVolumes:
