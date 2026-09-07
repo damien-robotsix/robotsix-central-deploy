@@ -350,7 +350,6 @@ async def test_run_once_passes_are_serialized(tmp_path):
     config.volume_audit_findings_path = str(tmp_path / "findings.json")
     config.volume_audit_growth_threshold_pct = 10.0
     config.volume_audit_min_delta_bytes = 1
-    config.board_api_url = ""
 
     comp = MagicMock()
     comp.id = "svc"
