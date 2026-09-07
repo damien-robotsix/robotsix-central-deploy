@@ -25,6 +25,7 @@ from robotsix_central_deploy.caretaker.volume_audit.models import (
 # By loading lifecycle.models first (which pulls in the full lifecycle package
 # including deps/scheduler), caretaker.phases finds lifecycle already loaded
 # and the chain does not restart.
+from robotsix_central_deploy.lifecycle.deploy_verify import DeployVerification
 from robotsix_central_deploy.lifecycle.models import (
     ComponentInspect,
     DeployOutcome,
@@ -73,6 +74,22 @@ def _make_env_store(overrides=None):
 
 
 class TestPhaseUpdate:
+    @pytest.fixture(autouse=True)
+    def _stub_verify(self, monkeypatch):
+        """Stub post-deploy verification so these wiring tests don't poll.
+
+        ``verify_post_deploy_health`` observes the real 120s post-deploy
+        window; its own behaviour is covered by ``test_deploy_verify.py``.
+        Here we only exercise how ``phase_update`` reacts to its verdict, so
+        default it to a clean pass and let individual tests override the
+        return value to simulate a crash-looping deploy.
+        """
+        from robotsix_central_deploy.caretaker import phases
+
+        stub = AsyncMock(return_value=DeployVerification(ok=True, verified=True))
+        monkeypatch.setattr(phases, "verify_post_deploy_health", stub)
+        return stub
+
     @pytest.mark.asyncio
     async def test_deploys_eligible(self):
         store = MagicMock()
@@ -456,6 +473,57 @@ class TestPhaseUpdate:
         # A non-self component is still deployed even when a self name is set.
         backend.deploy.assert_called_once()
         assert record.update_available is False
+
+    @pytest.mark.asyncio
+    async def test_emits_finding_when_post_deploy_verification_fails(
+        self, _stub_verify
+    ):
+        """A deploy that lands a crash loop yields an UPDATE_FAILED finding.
+
+        The finding must carry the reason and the captured crash-log excerpt,
+        and the record must be marked FAILED — this is the failure signal the
+        escalation path (companion ticket) consumes.
+        """
+        _stub_verify.return_value = DeployVerification(
+            ok=False,
+            verified=True,
+            state="restarting",
+            restart_count=7,
+            reason="RestartCount grew 0→7 during the 120s window — crash loop",
+            crash_log="pydantic.ValidationError: extra_forbidden bonus_influence",
+        )
+
+        store = MagicMock()
+        record = _make_record()
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
+
+        _stub_verify.assert_awaited_once()
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.UPDATE_FAILED
+        assert findings[0].severity == "error"
+        assert "crash loop" in findings[0].detail
+        assert "extra_forbidden" in findings[0].detail
+        assert record.state == ServiceState.FAILED
 
 
 class TestPhaseHealth:

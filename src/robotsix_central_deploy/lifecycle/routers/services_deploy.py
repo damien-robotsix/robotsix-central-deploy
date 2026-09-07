@@ -32,6 +32,7 @@ from ..deploy_lock import (
     set_deploy_lock_job_id,
     try_acquire_deploy_lock,
 )
+from ..deploy_verify import verify_post_deploy_health
 from ..deps import (
     JobRegistry,
     _get_backend,
@@ -593,6 +594,28 @@ async def _run_deploy_job(
                 _sanitize_log(name),
                 exc_info=True,
             )
+
+        # Post-deploy health verification: a container can boot, pass its
+        # startup healthcheck, and then crash-loop under Docker's restart
+        # policy (the 2026-09-05 hexarchy incident: 110 restarts, deploy
+        # reported success). Poll runtime state + RestartCount for a window;
+        # a restarting container or a growing RestartCount is a FAILED deploy.
+        # Applies to remote host: components too — get_container_diagnostics
+        # delegates to the right host, and this reads no cosmetic routing field.
+        job_registry.update_phase(job_id, DeployJobPhase.VERIFYING)
+        verification = await verify_post_deploy_health(backend, record)
+        if not verification.ok:
+            reason = (
+                f"Post-deploy verification failed for '{name}': {verification.reason}"
+            )
+            logger.error("deploy %s: %s", _sanitize_log(name), reason)
+            record.state = ServiceState.FAILED
+            record.last_error = reason
+            await store.put(record)
+            job_registry.mark_failed(
+                job_id, reason, logs=verification.crash_log or None
+            )
+            return
 
         # Verify the edge before calling the deploy done. This is the last
         # step because it needs the replacement container to be up and its

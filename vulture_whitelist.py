@@ -10,6 +10,8 @@
 # as attributes by application code.
 # ===========================================================================
 severity  # unused variable (src/robotsix_central_deploy/caretaker/models.py:67)
+verified  # unused variable (src/robotsix_central_deploy/lifecycle/deploy_verify.py:67)
+baseline_restart_count  # unused variable (src/robotsix_central_deploy/lifecycle/deploy_verify.py:70)
 prev_size_bytes  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/models.py:36)
 last_scan_at  # unused variable (src/robotsix_central_deploy/caretaker/volume_audit/models.py:76)
 restored  # unused variable (src/robotsix_central_deploy/lifecycle/schemas.py:539) — GET /chat/config

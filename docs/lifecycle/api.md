@@ -144,6 +144,10 @@
 
 ::: robotsix_central_deploy.lifecycle.deploy_lock
 
+## Deploy Verify
+
+::: robotsix_central_deploy.lifecycle.deploy_verify
+
 ## Dashboard UI
 
 ::: robotsix_central_deploy.ui.router

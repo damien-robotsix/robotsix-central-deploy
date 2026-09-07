@@ -8432,6 +8432,7 @@
           "deploying",
           "waiting_health",
           "deploying_siblings",
+          "verifying",
           "done",
           "failed"
         ],
