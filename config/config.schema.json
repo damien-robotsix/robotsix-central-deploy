@@ -376,6 +376,18 @@
       "title": "Caretaker Interval Hours",
       "type": "integer"
     },
+    "caretaker_mill_max_defer_hours": {
+      "default": 3,
+      "description": "Hours the mill busy-guard defers an available update before it switches to DRAIN (deploy at the first idle /active poll).",
+      "title": "Caretaker Mill Max Defer Hours",
+      "type": "integer"
+    },
+    "caretaker_mill_force_deploy_hours": {
+      "default": 8,
+      "description": "Hard ceiling: after this many hours pending, the caretaker force-deploys the mill even while heavy stages are in flight.",
+      "title": "Caretaker Mill Force Deploy Hours",
+      "type": "integer"
+    },
     "mill_component_id": {
       "default": "",
       "description": "Component id of the mill instance onboarding registers repos with.",
@@ -465,3 +477,4 @@
   "title": "LifecycleConfig",
   "type": "object"
 }
+
