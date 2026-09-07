@@ -29,6 +29,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .models import HealthStatus, ServiceState
+
 if TYPE_CHECKING:
     from .backends import ExecutionBackend
     from .models import ServiceRecord
@@ -50,7 +52,7 @@ CRASH_LOG_TAIL_LINES = 40
 #: Docker container states that mean the container is not healthily running.
 #: ``restarting`` is a crash loop in progress; ``exited``/``dead`` are a
 #: container that gave up.
-_FAILED_STATES = frozenset({"restarting", "exited", "dead"})
+_FAILED_STATES = frozenset({ServiceState.RESTARTING.value, "exited", "dead"})
 
 
 @dataclass
@@ -143,7 +145,7 @@ async def verify_post_deploy_health(
                 f"RestartCount grew {baseline}→{restart_count} during the "
                 f"{int(window_seconds)}s post-deploy window — crash loop"
             )
-        elif health == "unhealthy":
+        elif health == HealthStatus.UNHEALTHY.value:
             reason = (
                 f"container healthcheck reports 'unhealthy' during the "
                 f"post-deploy window (RestartCount={restart_count})"
