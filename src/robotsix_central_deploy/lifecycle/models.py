@@ -100,6 +100,7 @@ class DeployJobPhase(str, Enum):
     DEPLOYING = "deploying"
     WAITING_HEALTH = "waiting_health"
     DEPLOYING_SIBLINGS = "deploying_siblings"
+    VERIFYING = "verifying"
     DONE = "done"
     FAILED = "failed"
 

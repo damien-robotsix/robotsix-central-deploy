@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from ..lifecycle.deploy_lock import release_deploy_lock, try_acquire_deploy_lock
+from ..lifecycle.deploy_verify import verify_post_deploy_health
 from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
 from .models import CaretakerFinding, FindingKind
 
@@ -220,6 +221,45 @@ async def phase_update(
                 record.name,
                 outcome.deployed_digest,
             )
+
+            # Verify the auto-deployed image actually stays up. An image whose
+            # config schema changed can boot, pass its startup healthcheck,
+            # then crash-loop under Docker's restart policy — the 2026-09-05
+            # hexarchy incident restarted 110 times with nothing noticing.
+            # Poll runtime state + RestartCount for a window; a restarting
+            # container or a growing RestartCount is a FAILED deploy that must
+            # produce a signal carrying the crash-log excerpt.
+            verification = await verify_post_deploy_health(backend, record)
+            if not verification.ok:
+                record.state = ServiceState.FAILED
+                record.last_error = verification.reason
+                await store.put(record)
+                detail = (
+                    f"Auto-update of {record.name} to {outcome.deployed_digest} "
+                    f"landed a crash-looping container: {verification.reason}.\n\n"
+                    f"Last container logs:\n{verification.crash_log}"
+                    if verification.crash_log
+                    else (
+                        f"Auto-update of {record.name} to "
+                        f"{outcome.deployed_digest} landed a crash-looping "
+                        f"container: {verification.reason}."
+                    )
+                )
+                logger.error(
+                    "phase_update: post-deploy verification failed for %s: %s",
+                    record.name,
+                    verification.reason,
+                )
+                findings.append(
+                    CaretakerFinding(
+                        component_id=record.name,
+                        repo_id=config.repo_id,
+                        kind=FindingKind.UPDATE_FAILED,
+                        title=f"Auto-update crash loop: {record.name}",
+                        detail=detail,
+                        severity="error",
+                    )
+                )
         except Exception as exc:  # noqa: BLE001
             logger.error("phase_update: deploy failed for %s: %s", record.name, exc)
             findings.append(
