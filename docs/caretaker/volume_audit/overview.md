@@ -31,6 +31,19 @@ VolumeAuditScheduler (scheduler.py)
   persists the finding to the local findings JSON. Nothing else — no tickets,
   no board integration.
 
+## Measurement Failures
+
+`measure_volume_bytes` runs a one-shot busybox `du` helper with a hard 1800 s
+deadline. Transient Docker API errors are retried (3 attempts); a deadline
+timeout is **not** — a `du` that did not finish in 1800 s will not finish on an
+immediate re-run, and retrying it tripled the IO grind on a loaded host
+(2026-09-07, `mill-mill-data`). Either failure yields one `measurement_failed`
+finding, and the scheduler then backs the volume off for 3 hours
+(`VolumeAuditScheduler._MEASURE_BACKOFF_S`, in-memory): scans inside that window
+skip it (one INFO log line per scan), carry its last-known snapshot forward so
+growth tracking keeps its baseline, and emit no further finding. A restart
+clears the backoff.
+
 ## Threshold Model
 
 A `VolumeGrowthRecord` is flagged as an `AuditFinding` only when **both** guards

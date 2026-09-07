@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 class VolumeAuditScheduler:
     """Periodic background scanner that tracks Docker volume growth."""
 
+    #: Per-volume measurement backoff after a failed attempt.  The hourly
+    #: scan re-measured mill-mill-data (millions of files) every pass even
+    #: though its du helper had just hit the 1800s deadline; under host load
+    #: (2026-09-07, load average 7.7 on 4 cores) that put up to 30 min of
+    #: ``find -exec du`` on the disks every hour, competing with mill's
+    #: implement sandboxes, for a size that never arrived.  A volume that
+    #: could not be measured is left alone for this long; its last-known
+    #: snapshot is carried forward meanwhile.  In-memory: a restart clears it.
+    _MEASURE_BACKOFF_S = 10800
+
     def __init__(
         self,
         config: LifecycleConfig,
@@ -47,6 +57,8 @@ class VolumeAuditScheduler:
         # concurrent du helpers on the same large volume (2026-09-02,
         # mill-mill-data) — each slowing the other toward its timeout.
         self._scan_lock = asyncio.Lock()
+        # vol_name -> instant before which the volume is not re-measured.
+        self._measure_backoff_until: dict[str, datetime] = {}
 
     # ------------------------------------------------------------------
     # Snapshot persistence
@@ -123,6 +135,26 @@ class VolumeAuditScheduler:
         preserved: dict[str, VolumeSizeSnapshot] = {}
         measurement_findings: list[AuditFinding] = []
         for component_id, vol_name in volume_owners:
+            backoff_until = self._measure_backoff_until.get(vol_name)
+            if backoff_until is not None:
+                if now < backoff_until:
+                    # A recent attempt failed (helper deadline / API error);
+                    # re-running the du now would only repeat the IO grind.
+                    # Carry the last-known size forward — same as the
+                    # ``size is None`` path — so growth tracking keeps its
+                    # baseline; the measurement_failed finding was already
+                    # emitted on the failing scan, so none is added here.
+                    logger.info(
+                        "VolumeAudit: skipping %r — measurement backed off "
+                        "until %s after a failed attempt",
+                        vol_name,
+                        backoff_until.isoformat(timespec="seconds"),
+                    )
+                    prev = previous.get(vol_name)
+                    if prev is not None:
+                        current[vol_name] = prev
+                    continue
+                del self._measure_backoff_until[vol_name]
             try:
                 size = await self._backend.measure_volume_bytes(vol_name)
             except Exception as exc:  # noqa: BLE001
@@ -130,6 +162,9 @@ class VolumeAuditScheduler:
                     "VolumeAudit: failed to measure volume %s: %s",
                     vol_name,
                     exc,
+                )
+                self._measure_backoff_until[vol_name] = now + timedelta(
+                    seconds=self._MEASURE_BACKOFF_S
                 )
                 measurement_findings.append(
                     AuditFinding(
@@ -157,6 +192,9 @@ class VolumeAuditScheduler:
                 logger.warning(
                     "VolumeAudit: could not measure %r this scan; surfacing finding",
                     vol_name,
+                )
+                self._measure_backoff_until[vol_name] = now + timedelta(
+                    seconds=self._MEASURE_BACKOFF_S
                 )
                 measurement_findings.append(
                     AuditFinding(
