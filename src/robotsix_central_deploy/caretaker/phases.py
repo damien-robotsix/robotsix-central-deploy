@@ -196,6 +196,10 @@ async def phase_update(
             record.deployed_image_digest = outcome.deployed_digest
             record.previous_image_digest = outcome.previous_digest
             record.update_available = False
+            # The bounded-defer clock (mill busy-guard) is only meaningful while
+            # an update waits; a completed deploy resets it so the next update
+            # starts a fresh window.
+            record.update_pending_since = None
             await store.put(record)
 
             try:

@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from ..lifecycle._settings_defaults import SETTINGS_DEFAULTS
 
@@ -36,6 +36,16 @@ class SystemSettings(BaseModel):
     ]  # e.g. "deploy.robotsix.net"
     caretaker_enabled: bool = SETTINGS_DEFAULTS["caretaker_enabled"]
     caretaker_interval_hours: int = SETTINGS_DEFAULTS["caretaker_interval_hours"]
+    #: Hours the mill busy-guard keeps deferring an available update before it
+    #: switches to DRAIN (deploy at the first idle poll).
+    caretaker_mill_max_defer_hours: int = SETTINGS_DEFAULTS[
+        "caretaker_mill_max_defer_hours"
+    ]
+    #: Hard ceiling: after this many hours pending the caretaker force-deploys
+    #: the mill even while heavy stages run (its retry-as-transient recovers).
+    caretaker_mill_force_deploy_hours: int = SETTINGS_DEFAULTS[
+        "caretaker_mill_force_deploy_hours"
+    ]
     mill_component_id: str = SETTINGS_DEFAULTS[
         "mill_component_id"
     ]  # component id the caretaker reports to
@@ -100,6 +110,24 @@ class SystemSettings(BaseModel):
         if v < 1:
             raise ValueError("caretaker_interval_hours must be >= 1")
         return v
+
+    @field_validator(
+        "caretaker_mill_max_defer_hours", "caretaker_mill_force_deploy_hours"
+    )
+    @classmethod
+    def _validate_mill_defer_hours(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("caretaker mill defer/force hours must be >= 1")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_force_after_defer(self) -> SystemSettings:
+        if self.caretaker_mill_force_deploy_hours < self.caretaker_mill_max_defer_hours:
+            raise ValueError(
+                "caretaker_mill_force_deploy_hours must be >= "
+                "caretaker_mill_max_defer_hours"
+            )
+        return self
 
     @field_validator("mill_component_id")
     @classmethod

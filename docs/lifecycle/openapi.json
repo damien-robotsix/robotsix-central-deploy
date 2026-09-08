@@ -10878,6 +10878,18 @@
             "$ref": "#/components/schemas/UpdateState",
             "default": "unknown"
           },
+          "update_pending_since": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Update Pending Since",
+            "description": "Unix seconds when an available update was first deferred by the mill busy-guard (heavy stages in flight); null when no update is waiting on a busy window. Lets chat/monitor see how long a deploy has been pending without reading caretaker logs."
+          },
           "sibling_health": {
             "items": {
               "$ref": "#/components/schemas/ContainerHealthSummary"

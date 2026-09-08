@@ -648,3 +648,167 @@ class TestAutoRollbackWiring:
         backend.rollback.assert_not_awaited()
         # The crash loop is still detected — only the destructive action is gated.
         assert FindingKind.CRASH_LOOP in [f.kind for f in report.findings]
+
+
+def _busy_http(stages=("implement", "implement")):
+    """RetryClient mock whose GET /active returns *stages* as heavy entries."""
+    http = MagicMock(spec=RetryClient)
+    http.get = AsyncMock(
+        return_value=MagicMock(
+            json=MagicMock(return_value=[{"stage": s} for s in stages])
+        )
+    )
+    return http
+
+
+def _mill_record(update_available=True, pending_since=None):
+    rec = ServiceRecord(
+        name="mill",
+        image="repo:v1",
+        container_name="mill",
+        update_available=update_available,
+        latest_registry_digest="sha256:new",
+        deployed_image_digest="sha256:old",
+    )
+    rec.update_pending_since = pending_since
+    return rec
+
+
+class TestMillBoundedWait:
+    """Bounded defer → drain → force for the mill busy-guard (ticket #841)."""
+
+    @staticmethod
+    def _settings(max_defer=3, force=8):
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        return SystemSettings(
+            mill_component_id="mill",
+            caretaker_mill_max_defer_hours=max_defer,
+            caretaker_mill_force_deploy_hours=force,
+        )
+
+    @pytest.mark.asyncio
+    async def test_defer_starts_pending_clock(self, scheduler_fixtures):
+        scheduler, store, _backend, ccs, _http = scheduler_fixtures
+        _register_mill(ccs)
+        scheduler._http_client = _busy_http()
+        record = _mill_record(pending_since=None)
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+
+        busy = await scheduler._evaluate_mill_busy(self._settings())
+
+        assert "mill" in busy  # still deferred
+        assert record.update_pending_since is not None  # clock started
+        store.put.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_drain_logs_but_still_defers(self, scheduler_fixtures, caplog):
+        import time
+
+        scheduler, store, _backend, ccs, _http = scheduler_fixtures
+        _register_mill(ccs)
+        scheduler._http_client = _busy_http()
+        record = _mill_record(pending_since=time.time() - 4 * 3600)  # 4h > 3h
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+
+        with caplog.at_level("INFO"):
+            busy = await scheduler._evaluate_mill_busy(self._settings())
+
+        assert "mill" in busy  # heavy stages still running → keep deferring
+        assert "mill drain requested" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_force_deploys_at_ceiling(self, scheduler_fixtures, caplog):
+        import time
+
+        scheduler, store, _backend, ccs, _http = scheduler_fixtures
+        _register_mill(ccs)
+        scheduler._http_client = _busy_http()
+        record = _mill_record(pending_since=time.time() - 9 * 3600)  # 9h >= 8h
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+
+        with caplog.at_level("WARNING"):
+            busy = await scheduler._evaluate_mill_busy(self._settings())
+
+        assert busy == {}  # not deferred → phase_update deploys it
+        assert "force-deploy" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_idle_deploys_at_first_poll_and_clears_clock(
+        self, scheduler_fixtures
+    ):
+        import time
+
+        scheduler, store, _backend, ccs, _http = scheduler_fixtures
+        _register_mill(ccs)
+        # Idle mill: /active returns no heavy stages.
+        scheduler._http_client = _busy_http(stages=())
+        record = _mill_record(pending_since=time.time() - 4 * 3600)
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+
+        busy = await scheduler._evaluate_mill_busy(self._settings())
+
+        assert busy == {}  # deploy now
+        assert record.update_pending_since is None  # clock reset
+
+    @pytest.mark.asyncio
+    async def test_no_pending_update_clears_stale_clock(self, scheduler_fixtures):
+        scheduler, store, _backend, ccs, _http = scheduler_fixtures
+        _register_mill(ccs)
+        scheduler._http_client = _busy_http()
+        record = _mill_record(update_available=False, pending_since=123.0)
+        store.get = AsyncMock(return_value=record)
+        store.put = AsyncMock()
+
+        busy = await scheduler._evaluate_mill_busy(self._settings())
+
+        assert busy == {}
+        assert record.update_pending_since is None
+
+    @pytest.mark.asyncio
+    async def test_permanently_busy_mill_force_deploys_via_run_once(
+        self, scheduler_fixtures
+    ):
+        """Acceptance: a permanently busy mill still deploys once pending
+        crosses the force ceiling, and the pending clock is cleared."""
+        import time
+
+        from robotsix_central_deploy.lifecycle.models import DeployOutcome
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        scheduler, store, backend, ccs, _http = scheduler_fixtures
+        await scheduler._settings_store.put(
+            SystemSettings(
+                caretaker_enabled=True,
+                mill_component_id="mill",
+                caretaker_mill_max_defer_hours=3,
+                caretaker_mill_force_deploy_hours=8,
+            )
+        )
+        _register_mill(ccs)
+        scheduler._http_client = _busy_http()  # never idle
+        record = _mill_record(pending_since=time.time() - 9 * 3600)
+        store.get = AsyncMock(return_value=record)
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:new",
+                previous_digest="sha256:old",
+                state=ServiceState.RUNNING,
+            )
+        )
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+
+        await scheduler.run_once()
+
+        backend.deploy.assert_awaited_once()
+        assert record.update_available is False
+        assert record.update_pending_since is None

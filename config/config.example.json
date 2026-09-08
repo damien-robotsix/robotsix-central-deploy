@@ -46,6 +46,8 @@
   "openrouter_keys": {},
   "caretaker_enabled": false,
   "caretaker_interval_hours": 24,
+  "caretaker_mill_max_defer_hours": 3,
+  "caretaker_mill_force_deploy_hours": 8,
   "caretaker_auto_rollback_enabled": false,
   "mill_component_id": "",
   "image_auto_prune": false,

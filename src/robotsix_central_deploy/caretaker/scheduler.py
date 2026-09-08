@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
     from ..registry.deploy_history_store import DeployHistoryStore
     from ..registry.env_store import EnvStore
     from ..registry.loader import ComponentRegistry
-    from ..registry.settings_store import SystemSettingsStore
+    from ..registry.settings_store import SystemSettings, SystemSettingsStore
     from .volume_audit.scheduler import VolumeAuditScheduler
 
 logger = logging.getLogger(__name__)
@@ -153,21 +154,11 @@ class CaretakerScheduler:
             logger.warning("caretaker: inspect_self failed", exc_info=True)
             self_identity_known = False
 
-        # Probe the mill for in-flight stages: recreating its container
-        # mid-implement aborts hour-scale agent runs, so a busy mill keeps
-        # its pending update for the next pass. Fails open — an unreachable
-        # mill is not treated as busy (deploying is then the likely remedy).
-        busy_components: dict[str, str] = {}
-        mill_id = settings.mill_component_id
-        if mill_id:
-            mill_url = MillClient.derive_url_from_registry(
-                self._registry, self._component_config_store, mill_id
-            )
-            if mill_url is not None:
-                mill_client = MillClient(mill_url, self._http_client)
-                busy_reason = await mill_client.active_stage_summary()
-                if busy_reason is not None:
-                    busy_components[mill_id] = busy_reason
+        # Probe the mill for in-flight stages and apply the bounded-wait
+        # busy-guard: defer while heavy stages run, then DRAIN, then FORCE at
+        # the ceiling so a permanently busy mill still gets its update. See
+        # _evaluate_mill_busy.
+        busy_components = await self._evaluate_mill_busy(settings)
 
         try:
             update_findings = await phase_update(
@@ -329,6 +320,87 @@ class CaretakerScheduler:
         )
         self._last_report = report
         return report
+
+    async def _evaluate_mill_busy(self, settings: SystemSettings) -> dict[str, str]:
+        """Probe the mill and decide defer / drain / force for its pending update.
+
+        Recreating the mill container mid-implement aborts hour-scale agent
+        runs, so a busy mill's update is deferred — but an *indefinite* defer
+        never ends when the mill picks a new heavy stage as soon as one
+        finishes (#841: the update stalls for hours). This applies a bounded
+        wait keyed off the mill record's ``update_pending_since`` (persisted, so
+        a central-deploy restart does not reset the clock):
+
+        * mill idle (or unreachable → fail-open): return ``{}`` so phase_update
+          deploys now; the pending clock is cleared.
+        * pending < ``caretaker_mill_max_defer_hours``: plain defer while heavy
+          stages run (mill mapped in the returned busy map).
+        * ``max_defer`` .. ``force_deploy``: DRAIN — keep deferring while busy
+          but log ``mill drain requested`` so a mill that goes idle deploys at
+          the next poll.
+        * pending >= ``caretaker_mill_force_deploy_hours``: FORCE — return
+          ``{}`` so phase_update deploys over the in-flight stages (the mill's
+          implement retry-as-transient recovers them).
+
+        Returns the busy-components map handed to ``phase_update``: the mill id
+        maps to a human-readable reason only when its deploy must still wait.
+        """
+        busy_components: dict[str, str] = {}
+        mill_id = settings.mill_component_id
+        if not mill_id:
+            return busy_components
+        mill_url = MillClient.derive_url_from_registry(
+            self._registry, self._component_config_store, mill_id
+        )
+        if mill_url is None:
+            return busy_components
+
+        mill_client = MillClient(mill_url, self._http_client)
+        busy_reason = await mill_client.active_stage_summary()
+
+        record = await self._store.get(mill_id)
+        # Nothing to wait on: no record, or no pending update. Clear a stale
+        # clock so the next update starts fresh.
+        if record is None or not record.update_available:
+            if record is not None and record.update_pending_since is not None:
+                record.update_pending_since = None
+                await self._store.put(record)
+            return busy_components
+
+        if busy_reason is None:
+            # Mill idle (or unreachable → fail-open): deploy now, reset clock.
+            if record.update_pending_since is not None:
+                record.update_pending_since = None
+                await self._store.put(record)
+            return busy_components
+
+        # Busy with heavy stages AND an update is pending: run the clock.
+        now = time.time()
+        if record.update_pending_since is None:
+            record.update_pending_since = now
+            await self._store.put(record)
+        pending_hours = (now - record.update_pending_since) / 3600.0
+
+        if pending_hours >= settings.caretaker_mill_force_deploy_hours:
+            logger.warning(
+                "phase_update: mill force-deploy (pending %.1fh ≥ %dh ceiling) "
+                "— %s; deploying over in-flight stages, the mill's "
+                "retry-as-transient recovers them",
+                pending_hours,
+                settings.caretaker_mill_force_deploy_hours,
+                busy_reason,
+            )
+            return busy_components
+
+        if pending_hours >= settings.caretaker_mill_max_defer_hours:
+            logger.info(
+                "phase_update: mill drain requested (pending %.1fh) — %s",
+                pending_hours,
+                busy_reason,
+            )
+
+        busy_components[mill_id] = busy_reason
+        return busy_components
 
     async def _maybe_trigger_self_update(
         self,

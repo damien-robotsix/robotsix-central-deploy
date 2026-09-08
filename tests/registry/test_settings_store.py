@@ -47,6 +47,24 @@ class TestSystemSettingsModel:
         ):
             SystemSettings(volume_audit_interval_seconds=0)
 
+    def test_mill_defer_hours_defaults(self):
+        s = SystemSettings()
+        assert s.caretaker_mill_max_defer_hours == 3
+        assert s.caretaker_mill_force_deploy_hours == 8
+
+    def test_mill_defer_hours_must_be_positive(self):
+        with pytest.raises(ValueError, match="defer/force hours must be >= 1"):
+            SystemSettings(caretaker_mill_max_defer_hours=0)
+
+    def test_mill_force_must_be_ge_max_defer(self):
+        with pytest.raises(
+            ValueError, match="caretaker_mill_force_deploy_hours must be >="
+        ):
+            SystemSettings(
+                caretaker_mill_max_defer_hours=6,
+                caretaker_mill_force_deploy_hours=4,
+            )
+
     def test_mill_component_id_empty_accepted(self):
         s = SystemSettings(mill_component_id="   ")
         assert s.mill_component_id == ""
