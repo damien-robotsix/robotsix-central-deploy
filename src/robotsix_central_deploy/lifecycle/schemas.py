@@ -557,6 +557,19 @@ class ComponentSuggestResponse(BaseModel):
     )
 
 
+class ContractRefreshRequest(BaseModel):
+    """Optional body of POST /services/{name}/refresh-contract."""
+
+    allow_env_clear: bool = Field(
+        default=False,
+        description=(
+            "Permit the refresh to blank a non-empty stored env value that the "
+            "compose contract clears. Defaults to false, so such a refresh is "
+            "refused with 409 to prevent silent secret loss."
+        ),
+    )
+
+
 class ContractRefreshResponse(BaseModel):
     """Body of the 200 response from POST /services/{name}/refresh-contract."""
 
@@ -572,6 +585,15 @@ class ContractRefreshResponse(BaseModel):
     current: dict[str, Any] = Field(
         default={},
         description="Snapshot of the contract after refresh",
+    )
+    preserved: dict[str, Any] = Field(
+        default={},
+        description=(
+            "Values kept from the stored config against the compose contract: "
+            "an ``image``/``sibling_images`` tag kept over a digest pin, and "
+            "``sibling_env`` keys whose stored secrets survived compose "
+            "placeholders."
+        ),
     )
 
 

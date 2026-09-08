@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
@@ -28,7 +28,7 @@ from ..deps import (
     refresh_component_contract,
 )
 from ..models import ErrorDetail
-from ..schemas import ContractRefreshResponse
+from ..schemas import ContractRefreshRequest, ContractRefreshResponse
 from ..store import ServiceStore
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,11 @@ async def _delete_component_volumes(
             "model": ErrorDetail,
             "description": "Component not found or repo has no deploy/docker-compose.yml",
         },
+        409: {
+            "model": ErrorDetail,
+            "description": "Refresh would blank a non-empty stored env value "
+            "(re-send with allow_env_clear=true to override)",
+        },
         422: {
             "model": ErrorDetail,
             "description": "Repo fetch failed or compose parse failed",
@@ -98,6 +103,7 @@ async def _delete_component_volumes(
 )
 async def refresh_contract(
     name: str,
+    body: ContractRefreshRequest = Body(default=ContractRefreshRequest()),  # noqa: B008
     component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
     registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
@@ -119,6 +125,14 @@ async def refresh_contract(
     ``config/config.schema.json`` too, and reported as a ``config_schema``
     entry in ``changed_fields`` (the schemas themselves are too large to
     include in the ``previous``/``current`` snapshots).
+
+    Contract reconciliation protects operator/system state: a stored image
+    *tag* (e.g. ``:main``) is kept over a compose ``@sha256:`` digest pin of the
+    same repository, and each sibling's env is *merged* rather than replaced so
+    operator-set secrets survive compose placeholders — the kept values are
+    reported under ``preserved``.  A refresh that would blank a non-empty stored
+    env value is refused with **409** unless the request body carries
+    ``{"allow_env_clear": true}``.
     """
     result = await refresh_component_contract(
         name,
@@ -126,12 +140,14 @@ async def refresh_contract(
         config_yaml_store,
         registry,
         lifecycle_config,
+        allow_env_clear=body.allow_env_clear,
     )
     return ContractRefreshResponse(
         name=name,
         changed_fields=result.changed_fields,
         previous=result.previous,
         current=result.current,
+        preserved=result.preserved,
     )
 
 

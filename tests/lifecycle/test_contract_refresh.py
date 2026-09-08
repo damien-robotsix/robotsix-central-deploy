@@ -14,6 +14,7 @@ from robotsix_central_deploy.onboard.models import DerivedSpec
 from robotsix_central_deploy.registry.models import (
     ComponentConfig,
     PortMapping,
+    ServiceConfig,
     VolumeMount,
 )
 
@@ -559,6 +560,227 @@ async def test_fetch_component_repo_files_uses_github_app_token() -> None:
 
     assert got_cfg is comp and got_files is repo_files
     mock_fetch.assert_called_once_with(comp.git_url, 30, "ghs_token")
+
+
+# ---------------------------------------------------------------------------
+# Regression: refresh must not clobber operator-set sibling secrets or a
+# stored image tag (real memory/memory-hindsight data shape).
+# ---------------------------------------------------------------------------
+
+# The compose pins the primary by digest (an OLD build) and blanks the two
+# sibling secrets with placeholders — the exact shape that crash-looped
+# memory-hindsight.
+MEMORY_DIGEST = (
+    "ghcr.io/damien-robotsix/robotsix-memory"
+    "@sha256:5064000000000000000000000000000000000000000000000000000000000000"
+)
+
+
+async def _seed_memory_component(
+    *,
+    primary_env: dict[str, str] | None = None,
+    sibling_env: dict[str, str] | None = None,
+) -> None:
+    """Seed a memory-like component with one hindsight sibling holding secrets."""
+    store = server_mod.app.state.store
+    component_config_store = server_mod.app.state.component_config_store
+    registry = server_mod.app.state.registry
+
+    comp = ComponentConfig(
+        id="memory",
+        image="ghcr.io/damien-robotsix/robotsix-memory:main",
+        container_name="memory",
+        ports=[PortMapping(host=8300, container=8300, protocol="tcp")],
+        env=primary_env or {},
+        siblings=[
+            ServiceConfig(
+                service_key="hindsight",
+                container_name="memory-hindsight",
+                image="ghcr.io/damien-robotsix/robotsix-hindsight:main",
+                env=sibling_env
+                or {
+                    "HINDSIGHT_API_LLM_API_KEY": "sk-real-llm-secret",
+                    "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": "sk-real-emb-secret",
+                    "HINDSIGHT_API_LOG_LEVEL": "INFO",
+                },
+            )
+        ],
+        git_url="https://github.com/damien-robotsix/robotsix-memory.git",
+    )
+    await component_config_store.put(comp)
+    registry.register(comp)
+    await store.put(ServiceRecord(name="memory", image=comp.image))
+
+
+def _memory_refresh_spec(
+    *,
+    primary_image: str = MEMORY_DIGEST,
+    sibling_image: str = "ghcr.io/damien-robotsix/robotsix-hindsight:main",
+    primary_env: dict[str, str] | None = None,
+    sibling_env: dict[str, str] | None = None,
+) -> DerivedSpec:
+    """A parsed compose whose sibling env carries placeholders for the secrets."""
+    spec = _make_derived_spec(
+        name="memory",
+        image=primary_image,
+        ports=[PortMapping(host=8300, container=8300, protocol="tcp")],
+        volume_mounts=[],
+        command=None,
+    )
+    return spec.model_copy(
+        update={
+            "env": primary_env or {},
+            "siblings": [
+                ServiceConfig(
+                    service_key="hindsight",
+                    container_name="memory-hindsight",
+                    image=sibling_image,
+                    env=sibling_env
+                    or {
+                        "HINDSIGHT_API_LLM_API_KEY": "",
+                        "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY": "",
+                        "HINDSIGHT_API_LOG_LEVEL": "DEBUG",
+                    },
+                )
+            ],
+        }
+    )
+
+
+async def _post_memory_refresh(
+    client: AsyncClient, spec: DerivedSpec, *, json: dict | None = None
+):
+    repo_files = RepoFiles(
+        compose_bytes=b"services: {}",
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=spec,
+        ),
+    ):
+        return await client.post(
+            "/services/memory/refresh-contract", headers=HEADERS, json=json
+        )
+
+
+@pytest.mark.asyncio
+async def test_refresh_preserves_sibling_secrets_and_image_tag(
+    client: AsyncClient,
+) -> None:
+    """Stored sibling secrets survive compose placeholders; :main survives a
+    digest pin — the exact crash-loop the ticket describes."""
+    await _seed_memory_component()
+    spec = _memory_refresh_spec()
+
+    resp = await _post_memory_refresh(client, spec)
+
+    assert resp.status_code == 200
+    body = resp.json()
+
+    updated = server_mod.app.state.component_config_store.get("memory")
+    assert updated is not None
+    # Image tag not clobbered by the digest pin.
+    assert updated.image == "ghcr.io/damien-robotsix/robotsix-memory:main"
+    assert "image" not in body["changed_fields"]
+
+    sib = updated.siblings[0]
+    # Operator secrets preserved against the "" placeholders...
+    assert sib.env["HINDSIGHT_API_LLM_API_KEY"] == "sk-real-llm-secret"
+    assert sib.env["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] == "sk-real-emb-secret"
+    # ...while a genuinely-updated non-empty value is adopted.
+    assert sib.env["HINDSIGHT_API_LOG_LEVEL"] == "DEBUG"
+
+    # Preserved keys are reported back to the operator.
+    preserved_keys = set(body["preserved"]["sibling_env"]["hindsight"])
+    assert preserved_keys == {
+        "HINDSIGHT_API_LLM_API_KEY",
+        "HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY",
+    }
+    assert body["preserved"]["image"] == (
+        "ghcr.io/damien-robotsix/robotsix-memory:main"
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_keeps_sibling_env_key_compose_omits(
+    client: AsyncClient,
+) -> None:
+    """A stored sibling env key the compose does not mention is kept."""
+    await _seed_memory_component()
+    spec = _memory_refresh_spec(
+        sibling_env={"HINDSIGHT_API_LOG_LEVEL": "DEBUG"}  # secrets omitted entirely
+    )
+
+    resp = await _post_memory_refresh(client, spec)
+
+    assert resp.status_code == 200
+    sib = server_mod.app.state.component_config_store.get("memory").siblings[0]
+    assert sib.env["HINDSIGHT_API_LLM_API_KEY"] == "sk-real-llm-secret"
+    assert sib.env["HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY"] == "sk-real-emb-secret"
+
+
+@pytest.mark.asyncio
+async def test_refresh_refuses_blanking_primary_secret(
+    client: AsyncClient,
+) -> None:
+    """Blanking a non-empty primary env value is refused with 409."""
+    await _seed_memory_component(primary_env={"MEMORY_API_KEY": "sk-primary"})
+    spec = _memory_refresh_spec(primary_env={"MEMORY_API_KEY": ""})
+
+    resp = await _post_memory_refresh(client, spec)
+
+    assert resp.status_code == 409
+    assert "MEMORY_API_KEY" in resp.json()["error"]
+    # The stored value is untouched — refusal happens before persistence.
+    stored = server_mod.app.state.component_config_store.get("memory")
+    assert stored.env["MEMORY_API_KEY"] == "sk-primary"
+
+
+@pytest.mark.asyncio
+async def test_refresh_allow_env_clear_overrides_409(
+    client: AsyncClient,
+) -> None:
+    """With allow_env_clear the primary secret may be blanked."""
+    await _seed_memory_component(primary_env={"MEMORY_API_KEY": "sk-primary"})
+    spec = _memory_refresh_spec(primary_env={"MEMORY_API_KEY": ""})
+
+    resp = await _post_memory_refresh(client, spec, json={"allow_env_clear": True})
+
+    assert resp.status_code == 200
+    stored = server_mod.app.state.component_config_store.get("memory")
+    assert stored.env.get("MEMORY_API_KEY", "") == ""
+
+
+@pytest.mark.asyncio
+async def test_refresh_adopts_sibling_digest_when_stored_is_digest(
+    client: AsyncClient,
+) -> None:
+    """The image-tag policy only protects a stored *tag*; a stored digest is
+    replaced by the compose digest as usual."""
+    await _seed_memory_component()
+    # Stored sibling image is a tag → a compose digest pin of the same repo is
+    # rejected in favour of the stored tag.
+    spec = _memory_refresh_spec(
+        sibling_image=(
+            "ghcr.io/damien-robotsix/robotsix-hindsight"
+            "@sha256:"
+            "1111111111111111111111111111111111111111111111111111111111111111"
+        )
+    )
+
+    resp = await _post_memory_refresh(client, spec)
+
+    assert resp.status_code == 200
+    sib = server_mod.app.state.component_config_store.get("memory").siblings[0]
+    assert sib.image == "ghcr.io/damien-robotsix/robotsix-hindsight:main"
 
 
 @pytest.mark.asyncio
