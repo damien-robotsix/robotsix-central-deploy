@@ -952,7 +952,7 @@
           "services"
         ],
         "summary": "Refetch deploy/docker-compose.yml from the repo and update stored contract",
-        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, mounts, command, entrypoint, health check,\nsiblings, labels, etc.) are refreshed from the repo HEAD.  Operator-set\nfields (``repo_id``, ``auto_update_enabled``, ``mem_limit``,\n``allow_chat_access``, ``claude_mount``) and environment overrides in the\nEnvStore are left untouched, as are existing host-port assignments \u2014\nthe manifest's host ports are only honoured for container ports this\ncomponent did not already expose.  The endpoint returns which fields\nchanged so the operator can decide whether a redeploy is needed.\n\nThe stored config *schema* is refreshed from the repo's\n``config/config.schema.json`` too, and reported as a ``config_schema``\nentry in ``changed_fields`` (the schemas themselves are too large to\ninclude in the ``previous``/``current`` snapshots).",
+        "description": "Re-parse the component's deploy/docker-compose.yml and update stored settings.\n\nContract-derived fields (image, mounts, command, entrypoint, health check,\nsiblings, labels, etc.) are refreshed from the repo HEAD.  Operator-set\nfields (``repo_id``, ``auto_update_enabled``, ``mem_limit``,\n``allow_chat_access``, ``claude_mount``) and environment overrides in the\nEnvStore are left untouched, as are existing host-port assignments \u2014\nthe manifest's host ports are only honoured for container ports this\ncomponent did not already expose.  The endpoint returns which fields\nchanged so the operator can decide whether a redeploy is needed.\n\nThe stored config *schema* is refreshed from the repo's\n``config/config.schema.json`` too, and reported as a ``config_schema``\nentry in ``changed_fields`` (the schemas themselves are too large to\ninclude in the ``previous``/``current`` snapshots).\n\nContract reconciliation protects operator/system state: a stored image\n*tag* (e.g. ``:main``) is kept over a compose ``@sha256:`` digest pin of the\nsame repository, and each sibling's env is *merged* rather than replaced so\noperator-set secrets survive compose placeholders \u2014 the kept values are\nreported under ``preserved``.  A refresh that would blank a non-empty stored\nenv value is refused with **409** unless the request body carries\n``{\"allow_env_clear\": true}``.",
         "operationId": "refresh_contract_services__name__refresh_contract_post",
         "parameters": [
           {
@@ -965,6 +965,18 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractRefreshRequest",
+                "default": {
+                  "allow_env_clear": false
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -998,6 +1010,16 @@
           },
           "404": {
             "description": "Component not found or repo has no deploy/docker-compose.yml",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refresh would blank a non-empty stored env value (re-send with allow_env_clear=true to override)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8239,6 +8261,19 @@
         "title": "ContainerHealthSummary",
         "description": "Health snapshot for one sibling container."
       },
+      "ContractRefreshRequest": {
+        "properties": {
+          "allow_env_clear": {
+            "type": "boolean",
+            "title": "Allow Env Clear",
+            "description": "Permit the refresh to blank a non-empty stored env value that the compose contract clears. Defaults to false, so such a refresh is refused with 409 to prevent silent secret loss.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ContractRefreshRequest",
+        "description": "Optional body of POST /services/{name}/refresh-contract."
+      },
       "ContractRefreshResponse": {
         "properties": {
           "name": {
@@ -8267,6 +8302,13 @@
             "type": "object",
             "title": "Current",
             "description": "Snapshot of the contract after refresh",
+            "default": {}
+          },
+          "preserved": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Preserved",
+            "description": "Values kept from the stored config against the compose contract: an ``image``/``sibling_images`` tag kept over a digest pin, and ``sibling_env`` keys whose stored secrets survived compose placeholders.",
             "default": {}
           }
         },
