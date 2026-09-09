@@ -107,6 +107,10 @@ async def _fanout_siblings_deploy_best_effort(
             sib_record.image = sib_cfg.image
             sib_record.deployed_image_digest = sib_outcome.deployed_digest
             sib_record.previous_image_digest = sib_outcome.previous_digest
+            # A fresh deploy means no update is pending for this sibling; the
+            # registry check recomputes it against the new digest next tick.
+            sib_record.update_available = False
+            sib_record.update_pending_since = None
             await store.put(sib_record)
             deployed.append(sib_name)
         except Exception:  # noqa: BLE001
