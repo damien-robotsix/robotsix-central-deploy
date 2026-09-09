@@ -311,6 +311,85 @@ class TestPhaseUpdate:
         backend.deploy.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_stale_sibling_fans_out_without_redeploying_primary(
+        self, monkeypatch
+    ):
+        """A sibling whose registry digest moved makes its parent eligible even
+        when the parent is current; the primary is NOT recreated, the sibling
+        fan-out runs (mail-ingester ran a 4-day-old image behind an up-to-date
+        `mail` for four caretaker passes, 2026-09-09)."""
+        from robotsix_central_deploy.lifecycle.routers import _sibling_utils
+
+        store = MagicMock()
+        primary = _make_record(update_available=False)
+        sibling = ServiceRecord(
+            name="svc-ingester",
+            image="repo:v1",
+            deployed_image_digest="sha256:old",
+            latest_registry_digest="sha256:new",
+            update_available=True,
+            component_id="svc",
+        )
+        store.list_all = AsyncMock(return_value=[primary, sibling])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock()
+        fanout = AsyncMock(return_value=["svc-ingester"])
+        monkeypatch.setattr(
+            _sibling_utils, "_fanout_siblings_deploy_best_effort", fanout
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        cfg = _make_config()
+        ccs.get = MagicMock(return_value=cfg)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+        env_store = _make_env_store()
+
+        findings = await phase_update(registry, store, backend, ccs, dhs, env_store)
+
+        assert findings == []
+        backend.deploy.assert_not_called()
+        fanout.assert_awaited_once()
+        args = fanout.await_args[0]
+        assert args[0] == "svc" and args[1] is cfg and args[5] is env_store
+        dhs.append.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_primary_deploy_also_fans_out_siblings(self, monkeypatch):
+        """The caretaker's primary deploy fans out to siblings like the manual
+        and chat deploy paths do."""
+        from robotsix_central_deploy.lifecycle.routers import _sibling_utils
+
+        store = MagicMock()
+        record = _make_record()
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        fanout = AsyncMock(return_value=[])
+        monkeypatch.setattr(
+            _sibling_utils, "_fanout_siblings_deploy_best_effort", fanout
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(registry, store, backend, ccs, dhs, _make_env_store())
+
+        backend.deploy.assert_called_once()
+        fanout.assert_awaited_once()
+        assert fanout.await_args[0][0] == "svc"
+
+    @pytest.mark.asyncio
     async def test_skips_no_update(self):
         store = MagicMock()
         record = _make_record(update_available=False)

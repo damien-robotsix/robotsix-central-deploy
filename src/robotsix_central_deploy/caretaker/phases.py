@@ -111,9 +111,18 @@ async def phase_update(
         ]
 
     records = await store.list_all()
+    # Sibling records are never deployed on their own: they ride along with
+    # their parent below. But a sibling can be stale while its parent is
+    # current (mail-ingester ran a 4-day-old image behind an up-to-date
+    # `mail` on 2026-09-09 because every caretaker deploy of `mail` since
+    # 09-05 recreated the primary only), so a stale sibling makes its parent
+    # eligible for a pass even when the parent has no update of its own.
+    stale_sibling_parents = {
+        r.component_id for r in records if r.component_id and r.update_available
+    }
 
     for record in records:
-        # Skip sibling records
+        # Skip sibling records (handled via their parent, see above)
         if record.component_id:
             continue
 
@@ -132,7 +141,8 @@ async def phase_update(
             )
             continue
 
-        if not record.update_available:
+        siblings_stale = record.name in stale_sibling_parents
+        if not record.update_available and not siblings_stale:
             continue
 
         # A component the caller marked busy (the mill with implement/ci_fix
@@ -178,91 +188,110 @@ async def phase_update(
             )
             continue
         try:
-            # Recreating the container with only the static registry env would
-            # silently drop EnvStore-provisioned variables (API keys, secrets),
-            # so merge them exactly like the manual deploy path does.
-            merged_env = await env_store.get_merged_env(record.name, config.env)
-            # Resolve credentials shared by other components via scope tags.
-            if config.consumed_scopes:
-                cred_env = await env_store.resolve_consumed_credentials(
-                    record.name, config.consumed_scopes
-                )
-                if cred_env:
-                    merged_env = {**cred_env, **merged_env}
-            deploy_config = config.model_copy(update={"env": merged_env})
-            outcome = await backend.deploy(record, deploy_config, image_ref)
-            record.state = outcome.state
-            record.image_revision = outcome.deployed_digest
-            record.deployed_image_digest = outcome.deployed_digest
-            record.previous_image_digest = outcome.previous_digest
-            record.update_available = False
-            # The bounded-defer clock (mill busy-guard) is only meaningful while
-            # an update waits; a completed deploy resets it so the next update
-            # starts a fresh window.
-            record.update_pending_since = None
-            await store.put(record)
+            if record.update_available:
+                # Recreating the container with only the static registry env would
+                # silently drop EnvStore-provisioned variables (API keys, secrets),
+                # so merge them exactly like the manual deploy path does.
+                merged_env = await env_store.get_merged_env(record.name, config.env)
+                # Resolve credentials shared by other components via scope tags.
+                if config.consumed_scopes:
+                    cred_env = await env_store.resolve_consumed_credentials(
+                        record.name, config.consumed_scopes
+                    )
+                    if cred_env:
+                        merged_env = {**cred_env, **merged_env}
+                deploy_config = config.model_copy(update={"env": merged_env})
+                outcome = await backend.deploy(record, deploy_config, image_ref)
+                record.state = outcome.state
+                record.image_revision = outcome.deployed_digest
+                record.deployed_image_digest = outcome.deployed_digest
+                record.previous_image_digest = outcome.previous_digest
+                record.update_available = False
+                # The bounded-defer clock (mill busy-guard) is only meaningful while
+                # an update waits; a completed deploy resets it so the next update
+                # starts a fresh window.
+                record.update_pending_since = None
+                await store.put(record)
 
-            try:
-                await deploy_history_store.append(
+                try:
+                    await deploy_history_store.append(
+                        record.name,
+                        DeployHistoryEntry(
+                            digest=outcome.deployed_digest,
+                            image_ref=record.latest_registry_digest,
+                            timestamp=time.time(),
+                            source=DeploySource.CARETAKER,
+                            previous_digest=outcome.previous_digest,
+                        ),
+                    )
+                except Exception:
+                    logger.warning(
+                        "phase_update: failed to record history for %s",
+                        record.name,
+                        exc_info=True,
+                    )
+
+                logger.info(
+                    "phase_update: auto-deployed %s → %s",
                     record.name,
-                    DeployHistoryEntry(
-                        digest=outcome.deployed_digest,
-                        image_ref=record.latest_registry_digest,
-                        timestamp=time.time(),
-                        source=DeploySource.CARETAKER,
-                        previous_digest=outcome.previous_digest,
-                    ),
-                )
-            except Exception:
-                logger.warning(
-                    "phase_update: failed to record history for %s",
-                    record.name,
-                    exc_info=True,
+                    outcome.deployed_digest,
                 )
 
-            logger.info(
-                "phase_update: auto-deployed %s → %s",
-                record.name,
-                outcome.deployed_digest,
+                # Verify the auto-deployed image actually stays up. An image whose
+                # config schema changed can boot, pass its startup healthcheck,
+                # then crash-loop under Docker's restart policy — the 2026-09-05
+                # hexarchy incident restarted 110 times with nothing noticing.
+                # Poll runtime state + RestartCount for a window; a restarting
+                # container or a growing RestartCount is a FAILED deploy that must
+                # produce a signal carrying the crash-log excerpt.
+                verification = await verify_post_deploy_health(backend, record)
+                if not verification.ok:
+                    record.state = ServiceState.FAILED
+                    record.last_error = verification.reason
+                    await store.put(record)
+                    detail = (
+                        f"Auto-update of {record.name} to {outcome.deployed_digest} "
+                        f"landed a crash-looping container: {verification.reason}.\n\n"
+                        f"Last container logs:\n{verification.crash_log}"
+                        if verification.crash_log
+                        else (
+                            f"Auto-update of {record.name} to "
+                            f"{outcome.deployed_digest} landed a crash-looping "
+                            f"container: {verification.reason}."
+                        )
+                    )
+                    logger.error(
+                        "phase_update: post-deploy verification failed for %s: %s",
+                        record.name,
+                        verification.reason,
+                    )
+                    findings.append(
+                        CaretakerFinding(
+                            component_id=record.name,
+                            repo_id=config.repo_id,
+                            kind=FindingKind.UPDATE_FAILED,
+                            title=f"Auto-update crash loop: {record.name}",
+                            detail=detail,
+                            severity="error",
+                        )
+                    )
+            # Siblings ride along with the parent's auto-update — and are
+            # refreshed on their own when only they are stale. The manual and
+            # chat deploy paths already fan out; the caretaker path did not
+            # (mail-ingester, 2026-09-09). The helper clears each sibling's
+            # update_available; a failing sibling is logged, never fatal.
+            from ..lifecycle.routers._sibling_utils import (
+                _fanout_siblings_deploy_best_effort,
             )
 
-            # Verify the auto-deployed image actually stays up. An image whose
-            # config schema changed can boot, pass its startup healthcheck,
-            # then crash-loop under Docker's restart policy — the 2026-09-05
-            # hexarchy incident restarted 110 times with nothing noticing.
-            # Poll runtime state + RestartCount for a window; a restarting
-            # container or a growing RestartCount is a FAILED deploy that must
-            # produce a signal carrying the crash-log excerpt.
-            verification = await verify_post_deploy_health(backend, record)
-            if not verification.ok:
-                record.state = ServiceState.FAILED
-                record.last_error = verification.reason
-                await store.put(record)
-                detail = (
-                    f"Auto-update of {record.name} to {outcome.deployed_digest} "
-                    f"landed a crash-looping container: {verification.reason}.\n\n"
-                    f"Last container logs:\n{verification.crash_log}"
-                    if verification.crash_log
-                    else (
-                        f"Auto-update of {record.name} to "
-                        f"{outcome.deployed_digest} landed a crash-looping "
-                        f"container: {verification.reason}."
-                    )
-                )
-                logger.error(
-                    "phase_update: post-deploy verification failed for %s: %s",
+            deployed_sibs = await _fanout_siblings_deploy_best_effort(
+                record.name, config, store, backend, "phase_update", env_store
+            )
+            if deployed_sibs:
+                logger.info(
+                    "phase_update: auto-deployed sibling(s) of %s: %s",
                     record.name,
-                    verification.reason,
-                )
-                findings.append(
-                    CaretakerFinding(
-                        component_id=record.name,
-                        repo_id=config.repo_id,
-                        kind=FindingKind.UPDATE_FAILED,
-                        title=f"Auto-update crash loop: {record.name}",
-                        detail=detail,
-                        severity="error",
-                    )
+                    ", ".join(deployed_sibs),
                 )
         except Exception as exc:  # noqa: BLE001
             logger.error("phase_update: deploy failed for %s: %s", record.name, exc)
