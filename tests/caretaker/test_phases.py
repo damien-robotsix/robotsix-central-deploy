@@ -1095,7 +1095,17 @@ class TestPhaseVolumes:
         backend = MagicMock()
         backend.disk_df = AsyncMock(
             return_value=DockerDfStats(
-                volumes=[VolumeStat(name="orphan_vol", size_bytes=42, in_use=False)]
+                volumes=[
+                    VolumeStat(name="orphan_vol", size_bytes=42, in_use=False),
+                    # Mounted by a container nobody declares (central-deploy's
+                    # own compose volume, an operator side stack): NOT an
+                    # orphan — flagged on every pass before 2026-09-09.
+                    VolumeStat(
+                        name="robotsix-central-deploy_central_deploy_data",
+                        size_bytes=7,
+                        in_use=True,
+                    ),
+                ]
             )
         )
 
@@ -1107,9 +1117,10 @@ class TestPhaseVolumes:
 
         findings = await phase_volumes(vas, backend, ccs, config, settings)
         orphans = [f for f in findings if f.kind == FindingKind.VOLUME_ORPHAN]
-        assert len(orphans) >= 1
+        assert [f.title for f in orphans] == ["Orphan Docker volume: orphan_vol"]
         assert orphans[0].component_id == ""
         assert orphans[0].repo_id == ""
+        assert "not attached to any container" in orphans[0].detail
 
     @pytest.mark.asyncio
     async def test_disk_warning(self, monkeypatch, tmp_path):
