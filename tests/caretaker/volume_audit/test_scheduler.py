@@ -506,3 +506,81 @@ async def test_run_once_passes_are_serialized(tmp_path):
 
     assert backend.measure_volume_bytes.await_count == 2  # both passes ran
     assert max_in_flight == 1  # never concurrently
+
+
+# ---------------------------------------------------------------------------
+# slow-volume cadence
+# ---------------------------------------------------------------------------
+
+
+def _write_snapshot(tmp_path: Path, vol: str, age: timedelta, took: float | None):
+    from datetime import UTC, datetime
+
+    snap = {
+        "volume_name": vol,
+        "component_id": "mycomp",
+        "measured_at": (datetime.now(tz=UTC) - age).isoformat(),
+        "size_bytes": 40_000_000_000,
+    }
+    if took is not None:
+        snap["measured_in_seconds"] = took
+    (tmp_path / "snapshots.json").write_text(json.dumps({vol: snap}), encoding="utf-8")
+
+
+def _one_volume_store(store, vol: str):
+    store.all.return_value = [
+        ComponentConfig(
+            id="mycomp",
+            image="ghcr.io/test/image:latest",
+            container_name="mycomp",
+            named_volumes=[vol],
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_slow_volume_is_not_remeasured_within_the_slow_interval(tmp_path):
+    """A volume whose last du took longer than the slow threshold is carried
+    forward (not re-measured) while its snapshot is younger than the slow
+    interval — including on the scan a restart fires immediately
+    (mill-mill-data, 2026-09-09: 10-30 min of du every hour, 40 % IO stall)."""
+    sched, backend, store = _make_scheduler(tmp_path)
+    _one_volume_store(store, "mill-mill-data")
+    _write_snapshot(tmp_path, "mill-mill-data", timedelta(hours=1), took=900.0)
+
+    records = await sched.run_once()
+
+    backend.measure_volume_bytes.assert_not_called()
+    assert len(records) == 1
+    assert records[0].size_bytes == 40_000_000_000
+    saved = json.loads((tmp_path / "snapshots.json").read_text())
+    assert saved["mill-mill-data"]["measured_in_seconds"] == 900.0
+
+
+@pytest.mark.asyncio
+async def test_slow_volume_is_remeasured_once_the_slow_interval_elapsed(tmp_path):
+    sched, backend, store = _make_scheduler(tmp_path)
+    _one_volume_store(store, "mill-mill-data")
+    _write_snapshot(tmp_path, "mill-mill-data", timedelta(hours=7), took=900.0)
+
+    await sched.run_once()
+
+    backend.measure_volume_bytes.assert_awaited_once_with("mill-mill-data")
+    saved = json.loads((tmp_path / "snapshots.json").read_text())
+    assert saved["mill-mill-data"]["size_bytes"] == 1_000_000
+    assert saved["mill-mill-data"]["measured_in_seconds"] is not None
+
+
+@pytest.mark.asyncio
+async def test_fast_volume_keeps_the_hourly_cadence(tmp_path):
+    """A quick measurement (or a legacy snapshot without the duration field)
+    is re-measured every scan exactly as before."""
+    sched, backend, store = _make_scheduler(tmp_path)
+    _one_volume_store(store, "chat-chat-config")
+    _write_snapshot(tmp_path, "chat-chat-config", timedelta(minutes=30), took=2.5)
+    await sched.run_once()
+    assert backend.measure_volume_bytes.await_count == 1
+
+    _write_snapshot(tmp_path, "chat-chat-config", timedelta(minutes=30), took=None)
+    await sched.run_once()
+    assert backend.measure_volume_bytes.await_count == 2
