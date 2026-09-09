@@ -44,6 +44,15 @@ skip it (one INFO log line per scan), carry its last-known snapshot forward so
 growth tracking keeps its baseline, and emit no further finding. A restart
 clears the backoff.
 
+Slow volumes also get a longer cadence even when they succeed. Every snapshot
+records how long its `du` took (`measured_in_seconds`); a volume whose last
+measurement exceeded 120 s (`_SLOW_MEASURE_S`) is re-measured at most every 6 h
+(`_SLOW_VOLUME_INTERVAL_S`) and carried forward in between. This lives in the
+persisted snapshot, so it survives restarts — including the scan the background
+loop fires immediately at startup, which on 2026-09-09 re-ran a 10–30 min `du`
+over `mill-mill-data` and pinned the disks (`full avg60` IO pressure 40 %) while
+implement sandboxes and the memory reranker waited behind it.
+
 ## Threshold Model
 
 A `VolumeGrowthRecord` is flagged as an `AuditFinding` only when **both** guards

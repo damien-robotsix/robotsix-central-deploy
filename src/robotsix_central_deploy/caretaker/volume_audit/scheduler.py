@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -38,6 +39,19 @@ class VolumeAuditScheduler:
     #: could not be measured is left alone for this long; its last-known
     #: snapshot is carried forward meanwhile.  In-memory: a restart clears it.
     _MEASURE_BACKOFF_S = 10800
+
+    #: Slow-volume cadence.  A du over mill-mill-data (40 GB, millions of
+    #: workspace files) takes 10-30 min and pins the disks the whole time
+    #: (2026-09-09 02:55Z: IO pressure ``full avg60`` 40 % right after the
+    #: hourly scan re-measured it on a restart, sandboxes and the memory
+    #: reranker stalling behind it) — for a growth signal that is meaningful
+    #: at a daily, not hourly, grain.  A volume whose LAST measurement took
+    #: longer than ``_SLOW_MEASURE_S`` is re-measured at most every
+    #: ``_SLOW_VOLUME_INTERVAL_S``; its snapshot is carried forward between.
+    #: The duration lives in the persisted snapshot, so unlike the failure
+    #: backoff this survives a restart (and the restart-time scan).
+    _SLOW_MEASURE_S = 120.0
+    _SLOW_VOLUME_INTERVAL_S = 21600
 
     def __init__(
         self,
@@ -155,6 +169,25 @@ class VolumeAuditScheduler:
                         current[vol_name] = prev
                     continue
                 del self._measure_backoff_until[vol_name]
+            prev_snap = previous.get(vol_name)
+            if (
+                prev_snap is not None
+                and prev_snap.measured_in_seconds is not None
+                and prev_snap.measured_in_seconds > self._SLOW_MEASURE_S
+                and (now - prev_snap.measured_at).total_seconds()
+                < self._SLOW_VOLUME_INTERVAL_S
+            ):
+                logger.info(
+                    "VolumeAudit: skipping %r — last measurement took %.0fs, "
+                    "re-measured at most every %ds (last at %s)",
+                    vol_name,
+                    prev_snap.measured_in_seconds,
+                    self._SLOW_VOLUME_INTERVAL_S,
+                    prev_snap.measured_at.isoformat(timespec="seconds"),
+                )
+                current[vol_name] = prev_snap
+                continue
+            measure_started = time.monotonic()
             try:
                 size = await self._backend.measure_volume_bytes(vol_name)
             except Exception as exc:  # noqa: BLE001
@@ -221,6 +254,7 @@ class VolumeAuditScheduler:
                 component_id=component_id,
                 measured_at=now,
                 size_bytes=size,
+                measured_in_seconds=time.monotonic() - measure_started,
             )
 
         # 4. Compute growth

@@ -20,6 +20,13 @@ class VolumeSizeSnapshot(BaseModel):
     size_bytes: int = Field(
         description="Total bytes consumed by the volume at measurement time"
     )
+    measured_in_seconds: float | None = Field(
+        default=None,
+        description=(
+            "Wall-clock seconds the du helper took for this measurement; None "
+            "for snapshots written before the field existed or carried forward"
+        ),
+    )
 
 
 class VolumeGrowthRecord(BaseModel):
