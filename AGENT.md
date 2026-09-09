@@ -213,6 +213,8 @@ src/robotsix_central_deploy/
 
 **Rule:** When adding, renaming, or deleting a public FastAPI route or Pydantic response model, regenerate `docs/lifecycle/openapi.json` in the SAME commit via `uv run python _gen_openapi.py` — never rely on the `openapi-drift` CI gate to catch the drift.
 
+**Rule:** When adding, removing, or renaming a setting in `LifecycleConfig` (`src/robotsix_central_deploy/lifecycle/config.py`), regenerate `config/config.schema.json` and sync `config/config.example.json` in the SAME commit. Regenerate the schema via the documented command (`uv run python -c "from robotsix_central_deploy.lifecycle.config import LifecycleConfig; import robotsix_config; print(robotsix_config.config_schema_json(LifecycleConfig))" > config/config.schema.json`), ensure it ends with exactly one trailing newline (no blank line), and verify `config/config.example.json`'s top-level keys match the updated model. Never rely on the `config-schema-drift` CI gate to catch the drift — this extends the openapi.json discipline above to the configuration data plane (see Code Gotcha 11).
+
 ## Code Gotchas
 
 1. **Sibling fan-out is best-effort** — failures are logged but don't fail the primary operation.
