@@ -78,10 +78,20 @@ Self-contract changes take effect on the next server restart.
 | `disk_warn_pct` | `float` | `10.0` | Percent free disk space that triggers a `DISK` finding |
 
 Additionally, per-component `auto_update_enabled: bool` (default `True`) in
-`ComponentConfig` lets individual services opt out of automatic image updates.
-The plane's own self-update is governed by the same flag on the
-`central-deploy` component — central-deploy is just one more component, with no
-separate caretaker self-update setting.
+`ComponentConfig` lets individual services opt out of automatic image updates,
+surfaced as the per-component auto-update checkbox in the dashboard. The
+plane's own self-update is governed by the same flag on the `central-deploy`
+component — central-deploy is just one more component with its own checkbox,
+with no separate caretaker self-update setting.
+
+!!! note "Migration from `caretaker_self_update_enabled`"
+    The former operator-level `caretaker_self_update_enabled` setting has been
+    removed. On first startup of a version that includes this change, any
+    persisted value is migrated automatically onto the `central-deploy`
+    component's `auto_update_enabled` flag and the legacy key is scrubbed from
+    the settings store and `config.json`. No operator action is required; the
+    plane's self-update now follows the same per-component checkbox as every
+    other component.
 
 ## API
 
