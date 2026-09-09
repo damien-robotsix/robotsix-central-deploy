@@ -814,7 +814,14 @@ async def phase_volumes(
 
         df = await backend.disk_df()
         for vol in df.volumes:
-            if vol.name and vol.name not in declared:
+            # A volume mounted by ANY container (``in_use`` = docker's
+            # ``RefCount > 0``) is not an orphan, whoever owns the
+            # container: central-deploy's own compose volumes
+            # (central_deploy_data, traefik_letsencrypt, tinyauth_data),
+            # sibling volumes and operator side stacks are not in
+            # ``named_volumes`` and were flagged on every pass
+            # (2026-09-09). Same rule as ``lifecycle.deps.volume``.
+            if vol.name and not vol.in_use and vol.name not in declared:
                 findings.append(
                     CaretakerFinding(
                         component_id="",
@@ -823,7 +830,8 @@ async def phase_volumes(
                         title=f"Orphan Docker volume: {vol.name}",
                         detail=(
                             f"Volume '{vol.name}' ({vol.size_bytes} bytes) "
-                            f"is not declared by any component"
+                            f"is not declared by any component and is not "
+                            f"attached to any container"
                         ),
                         severity="warning",
                     )
