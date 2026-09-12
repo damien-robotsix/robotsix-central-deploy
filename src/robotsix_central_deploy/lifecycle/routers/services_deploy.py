@@ -51,9 +51,11 @@ from ..models import (
     DeployHistoryEntry,
     DeployHistoryResponse,
     DeployJobPhase,
+    DeployOutcome,
     DeployRequest,
     DeploySource,
     ErrorDetail,
+    RollbackOutcome,
     RollbackRequest,
     RollbackResponse,
     ServiceRecord,
@@ -706,6 +708,84 @@ async def deploy_job_status(
 # ---------------------------------------------------------------------------
 
 
+async def _execute_rollback_staging(
+    name: str,
+    record: ServiceRecord,
+    config: ComponentConfig,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    deploy_history_store: DeployHistoryStore,
+    *,
+    image_ref: str | None = None,
+) -> tuple[str, ServiceState, list[str]]:
+    """Run one rollback staging step: backend op, digest swap, persist, history.
+
+    Shared by both ``rollback_service`` branches and the sibling fan-out so
+    the rollback bookkeeping lives in exactly one place (mirroring how
+    ``_run_deploy_job`` centralizes deploy staging).
+
+    *image_ref*: digest-pinned repo ref for a multi-entry (target-digest)
+    rollback — the backend deploys that ref and the outcome's deployed /
+    previous digests are recorded verbatim, and a ``DeployHistoryEntry`` with
+    ``source=ROLLBACK`` is appended (best-effort — a history-store failure
+    never fails the rollback). When None, the original one-step swap applies:
+    the backend rolls the container back to ``record.previous_image_digest``
+    and the two stored digests are exchanged in place.
+
+    Returns ``(rolled_back_to_digest, current_state, warnings)``. On backend
+    failure the record is marked FAILED and an HTTP 500 is raised.
+    """
+    outcome: DeployOutcome | RollbackOutcome
+    try:
+        if image_ref is not None:
+            deploy_outcome = await backend.deploy(record, config, image_ref)
+            deployed_digest = deploy_outcome.deployed_digest
+            previous_digest = deploy_outcome.previous_digest
+            outcome = deploy_outcome
+        else:
+            # One-step: snapshot the current digests, then swap them in place.
+            deployed_digest = record.previous_image_digest
+            previous_digest = record.deployed_image_digest
+            outcome = await backend.rollback(record, config)
+    except Exception as exc:
+        logger.exception("rollback %s failed", _sanitize_log(name))
+        record.state = ServiceState.FAILED
+        record.last_error = str(exc)
+        await store.put(record)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Rollback failed: {exc}",
+        )
+
+    record.state = outcome.state
+    record.deployed_image_digest = deployed_digest
+    record.previous_image_digest = previous_digest
+    record.image_revision = deployed_digest
+    record.last_error = ""
+    await store.put(record)
+
+    if image_ref is not None:
+        try:
+            await deploy_history_store.append(
+                name,
+                DeployHistoryEntry(
+                    digest=deployed_digest,
+                    image_ref=image_ref,
+                    timestamp=time.time(),
+                    source=DeploySource.ROLLBACK,
+                    previous_digest=previous_digest,
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "rollback %s: failed to record history entry",
+                _sanitize_log(name),
+                exc_info=True,
+            )
+
+    return deployed_digest, record.state, outcome.warnings
+
+
 @router.post(
     "/services/{name}/rollback",
     response_model=RollbackResponse,
@@ -789,17 +869,17 @@ async def rollback_service(
                 _sanitize_log(sib_config.service_key),
             )
             return
-        sib_outcome = await backend.rollback(sib_record, effective_sib)
-        old_dep_sib = sib_record.deployed_image_digest
-        old_prev_sib = sib_record.previous_image_digest
-        sib_record.state = sib_outcome.state
-        sib_record.deployed_image_digest = old_prev_sib
-        sib_record.previous_image_digest = old_dep_sib
-        sib_record.image_revision = old_prev_sib
-        await store.put(sib_record)
+        await _execute_rollback_staging(
+            sib_name,
+            sib_record,
+            effective_sib,
+            store,
+            backend,
+            deploy_history_store,
+        )
 
-    # -- Target-digest rollback (multi-entry history) -----------------------
     if body.digest is not None:
+        # -- Target-digest rollback (multi-entry history) ------------------
         target_digest = body.digest
         history = await deploy_history_store.list(name)
         recorded_digests = {e.digest for e in history}
@@ -815,100 +895,41 @@ async def rollback_service(
         # mistaken for tags, then strip the :tag from the name portion.
         bare = config.image.split("@", 1)[0]
         if "/" in bare:
-            prefix, name = bare.rsplit("/", 1)
-            name = name.rsplit(":", 1)[0] if ":" in name else name
-            repo = f"{prefix}/{name}"
+            prefix, image_name = bare.rsplit("/", 1)
+            image_name = (
+                image_name.rsplit(":", 1)[0] if ":" in image_name else image_name
+            )
+            repo = f"{prefix}/{image_name}"
         else:
             repo = bare.rsplit(":", 1)[0] if ":" in bare else bare
         image_ref = f"{repo}@{target_digest}"
 
-        try:
-            deploy_outcome = await backend.deploy(record, config, image_ref)
-        except Exception as exc:
-            logger.exception("rollback %s failed", _sanitize_log(name))
-            record.state = ServiceState.FAILED
-            record.last_error = str(exc)
-            await store.put(record)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Rollback failed: {exc}",
-            )
-
-        record.state = deploy_outcome.state
-        record.deployed_image_digest = deploy_outcome.deployed_digest
-        record.previous_image_digest = deploy_outcome.previous_digest
-        record.image_revision = deploy_outcome.deployed_digest
-        record.last_error = ""
-        await store.put(record)
-
-        try:
-            await deploy_history_store.append(
-                name,
-                DeployHistoryEntry(
-                    digest=deploy_outcome.deployed_digest,
-                    image_ref=image_ref,
-                    timestamp=time.time(),
-                    source=DeploySource.ROLLBACK,
-                    previous_digest=deploy_outcome.previous_digest,
-                ),
-            )
-        except Exception:
-            logger.warning(
-                "rollback %s: failed to record history entry",
-                _sanitize_log(name),
-                exc_info=True,
-            )
-
-        # Fan out siblings (one-step; current behaviour)
-        await _fanout_sibling_action(
+        rolled_back_to, state, warnings = await _execute_rollback_staging(
             name,
+            record,
+            config,
             store,
-            registry,
-            env_store,
-            action=_do_rollback_sibling,
-            action_label="rollback",
-            consumed_scopes=config.consumed_scopes,
+            backend,
+            deploy_history_store,
+            image_ref=image_ref,
+        )
+    else:
+        # -- Original one-step rollback -----------------------------------
+        if not record.previous_image_digest:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No prior image digest recorded for '{name}' — run a deploy first",
+            )
+        rolled_back_to, state, warnings = await _execute_rollback_staging(
+            name,
+            record,
+            config,
+            store,
+            backend,
+            deploy_history_store,
         )
 
-        return RollbackResponse(
-            name=name,
-            rolled_back_to_digest=deploy_outcome.deployed_digest,
-            current_state=record.state,
-            warnings=deploy_outcome.warnings,
-        )
-
-    # -- Original one-step rollback -----------------------------------------
-    if not record.previous_image_digest:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"No prior image digest recorded for '{name}' — run a deploy first",
-        )
-
-    # Snapshot current digests before mutating
-    old_deployed = record.deployed_image_digest
-    old_previous = record.previous_image_digest
-
-    try:
-        outcome = await backend.rollback(record, config)
-    except Exception as exc:
-        logger.exception("rollback %s failed", _sanitize_log(name))
-        record.state = ServiceState.FAILED
-        record.last_error = str(exc)
-        await store.put(record)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Rollback failed: {exc}",
-        )
-
-    # Swap digests: rolled-back-to becomes deployed; what-we-had becomes previous
-    record.state = outcome.state
-    record.deployed_image_digest = old_previous
-    record.previous_image_digest = old_deployed
-    record.image_revision = old_previous
-    record.last_error = ""
-    await store.put(record)
-
-    # Rollback siblings using each sibling's previous_image_digest
+    # Fan out siblings (one-step; current behaviour)
     await _fanout_sibling_action(
         name,
         store,
@@ -921,9 +942,9 @@ async def rollback_service(
 
     return RollbackResponse(
         name=name,
-        rolled_back_to_digest=old_previous,
-        current_state=record.state,
-        warnings=outcome.warnings,
+        rolled_back_to_digest=rolled_back_to,
+        current_state=state,
+        warnings=warnings,
     )
 
 
