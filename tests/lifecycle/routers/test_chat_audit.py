@@ -1,10 +1,9 @@
-"""Tests for the chat agent scoped write-surface endpoints.
+"""Tests for the chat-agent audit-log endpoint (chat_audit.py).
 
-The deploy/update/register/env/audit/mutation cases that used to live
-here were migrated out to per-module mirror files (``test_chat_deploy.py``,
-``test_chat_register.py``, ``test_chat_env.py``, ``test_chat_audit.py``,
-``test_chat_mutation.py``).  This file now keeps the config-access,
-restart, and auth-removal coverage that predates the source-side split.
+Mirrors the source-side module split: chat_audit.py owns ``GET
+/chat/audit-log``.  These cases were migrated out of the flat
+``test_chat_agent.py`` aggregate so the test side maps 1:1 to the
+modular chat routers.
 """
 
 from __future__ import annotations
@@ -232,213 +231,59 @@ def auth_headers() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Config write endpoints — retired (410 Gone)
+# Audit log — GET /chat/audit-log
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_chat_config_put_is_retired(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    config_yaml_store: ConfigYamlStore,
-):
-    """The write path rebuilt the document from the stored schema template."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    resp = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 410
-
-
-@pytest.mark.asyncio
-async def test_chat_config_rollback_is_retired(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    config_yaml_store: ConfigYamlStore,
-):
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    resp = await client.post("/chat/config/chat/rollback", headers=auth_headers)
-    assert resp.status_code == 410
-
-
-# ---------------------------------------------------------------------------
-# Config read — allowlist gating
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_chat_config_read_follows_restart_access(
+async def test_chat_audit_log(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
     backend: NoopBackend,
 ):
-    """Services the chat agent can restart are also config-readable.
-
-    Restart and config access are coupled through the same per-component
-    flags: an allowlisted service returns 200 on both, a non-allowlisted
-    one returns 403 on both.
-    """
+    """GET /chat/audit-log returns recent audit entries."""
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
-    resp_restart = await client.post(
-        "/chat/services/chat/restart", headers=auth_headers
+    # Perform a restart to generate an audit entry.
+    await client.post("/chat/services/chat/restart", headers=auth_headers)
+
+    # Read the audit log.
+    resp = await client.get(
+        "/chat/audit-log",
+        headers=auth_headers,
     )
-    assert resp_restart.status_code == 200
-    resp_read = await client.get("/chat/config/chat", headers=auth_headers)
-    assert resp_read.status_code == 200
-
-    resp_denied = await client.get("/chat/config/other-svc", headers=auth_headers)
-    assert resp_denied.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_chat_access_allowed_via_allow_chat_access_flag(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    component_config_store: ComponentConfigStore,
-):
-    """``allow_chat_access`` alone (operator toggle) grants access."""
-    cfg = _make_config("chat-access-only", "ghcr.io/test/access-only:main")
-    cfg.allow_chat_access = True
-    cfg.chat_agent_mutatable = False
-    component_config_store.register(cfg)
-
-    await config_yaml_store.save_template("chat-access-only", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat-access-only", state=ServiceState.RUNNING))
-
-    resp = await client.get("/chat/config/chat-access-only", headers=auth_headers)
     assert resp.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_chat_access_denied_when_both_flags_are_false(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    component_config_store: ComponentConfigStore,
-):
-    """Both flags false → 403, even when the service record exists."""
-    cfg = _make_config("no-access", "ghcr.io/test/no-access:main")
-    cfg.allow_chat_access = False
-    cfg.chat_agent_mutatable = False
-    component_config_store.register(cfg)
-
-    await config_yaml_store.save_template("no-access", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="no-access", state=ServiceState.RUNNING))
-
-    resp = await client.get("/chat/config/no-access", headers=auth_headers)
-    assert resp.status_code == 403
-
-
-# ---------------------------------------------------------------------------
-# Restart
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_chat_restart_happy_path(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """POST /chat/services/chat/restart succeeds."""
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp = await client.post(
-        "/chat/services/chat/restart",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["name"] == "chat"
-    assert data["action"] == "restart"
-    assert data["previous_state"] == "running"
-    # NoopBackend restart transitions to RUNNING.
-    assert data["current_state"] == "running"
+    assert len(data["entries"]) >= 1
+    entry = data["entries"][0]
+    assert entry["component"] == "chat"
+    assert entry["action"] == "restart"
 
 
 @pytest.mark.asyncio
-async def test_chat_restart_not_allowlisted(
+async def test_chat_audit_log_filtered(
     client: AsyncClient,
     auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """POST /chat/services/other-svc/restart returns 403."""
-    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
-
-    resp = await client.post(
-        "/chat/services/other-svc/restart",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_chat_restart_rate_limited(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """Second restart within cooldown window returns 429."""
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    # First restart succeeds.
-    resp1 = await client.post(
-        "/chat/services/chat/restart",
-        headers=auth_headers,
-    )
-    assert resp1.status_code == 200
-
-    # Second restart within cooldown fails.
-    resp2 = await client.post(
-        "/chat/services/chat/restart",
-        headers=auth_headers,
-    )
-    assert resp2.status_code == 429
-    assert "Rate limit" in resp2.json()["error"]
-
-
-# ---------------------------------------------------------------------------
-# Auth required
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_chat_endpoints_no_longer_401(
-    client: AsyncClient,
     store: InMemoryStore,
     config_yaml_store: ConfigYamlStore,
     backend: NoopBackend,
 ):
-    """All chat write endpoints no longer return 401 — app-level auth was removed."""
+    """GET /chat/audit-log?component=cognee filters by component."""
+    await config_yaml_store.save_template("cognee", _CONFIG_TEMPLATE)
     await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+    await store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
 
-    endpoints = [
-        ("PUT", "/chat/config/chat", {"values": {"debug": True}}),
-        ("POST", "/chat/config/chat/rollback", None),
-        ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
-        ("POST", "/chat/services/chat/restart", None),
-        ("POST", "/chat/services/chat/update", None),
-        (
-            "POST",
-            "/chat/deploy",
-            {"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
-        ),
-        ("POST", "/chat/services/chat/enable-mutation", {"ttl_seconds": 60}),
-        ("POST", "/chat/services/chat/disable-mutation", None),
-    ]
-    for method, path, body in endpoints:
-        if body is not None:
-            resp = await client.request(method, path, json=body)
-        else:
-            resp = await client.request(method, path)
-        assert resp.status_code != 401, f"{method} {path} returned 401"
+    await client.post("/chat/services/cognee/restart", headers=auth_headers)
+
+    resp = await client.get(
+        "/chat/audit-log?component=cognee",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    for entry in data["entries"]:
+        assert entry["component"] == "cognee"

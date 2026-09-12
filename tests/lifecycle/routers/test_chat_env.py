@@ -1,10 +1,9 @@
-"""Tests for the chat agent scoped write-surface endpoints.
+"""Tests for the chat-agent env/secret provisioning endpoint (chat_env.py).
 
-The deploy/update/register/env/audit/mutation cases that used to live
-here were migrated out to per-module mirror files (``test_chat_deploy.py``,
-``test_chat_register.py``, ``test_chat_env.py``, ``test_chat_audit.py``,
-``test_chat_mutation.py``).  This file now keeps the config-access,
-restart, and auth-removal coverage that predates the source-side split.
+Mirrors the source-side module split: chat_env.py owns
+``PUT /chat/env/{name}``.  These cases were migrated out of the flat
+``test_chat_agent.py`` aggregate so the test side maps 1:1 to the
+modular chat routers.
 """
 
 from __future__ import annotations
@@ -64,32 +63,6 @@ def _make_config(
         ),
         config_volume="test-config-vol",
     )
-
-
-# A minimal JSON Schema template for config testing.
-_CONFIG_TEMPLATE: dict = {
-    "type": "object",
-    "properties": {
-        "debug": {"type": "boolean", "default": False},
-        "log_level": {"type": "string", "default": "info"},
-        "api_token": {
-            "type": "string",
-            "format": "password",
-            "writeOnly": True,
-        },
-        "nested": {
-            "type": "object",
-            "properties": {
-                "host": {"type": "string", "default": "localhost"},
-                "secret_key": {
-                    "type": "string",
-                    "format": "password",
-                    "writeOnly": True,
-                },
-            },
-        },
-    },
-}
 
 
 # ---------------------------------------------------------------------------
@@ -232,213 +205,203 @@ def auth_headers() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Config write endpoints — retired (410 Gone)
+# Env / secret provisioning — PUT /chat/env/{name}
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_chat_config_put_is_retired(
+async def test_chat_env_upsert_secrets_happy_path(
     client: AsyncClient,
     auth_headers: dict[str, str],
-    config_yaml_store: ConfigYamlStore,
+    store: InMemoryStore,
+    env_store: EnvStore,
 ):
-    """The write path rebuilt the document from the stored schema template."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    """PUT /chat/env/chat upserts secrets and returns masked keys."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
     resp = await client.put(
-        "/chat/config/chat",
-        json={"values": {"debug": True}},
+        "/chat/env/chat",
+        json={"secrets": {"SOME_SECRET": "test_value_123"}},
         headers=auth_headers,
     )
-    assert resp.status_code == 410
-
-
-@pytest.mark.asyncio
-async def test_chat_config_rollback_is_retired(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    config_yaml_store: ConfigYamlStore,
-):
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    resp = await client.post("/chat/config/chat/rollback", headers=auth_headers)
-    assert resp.status_code == 410
-
-
-# ---------------------------------------------------------------------------
-# Config read — allowlist gating
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_chat_config_read_follows_restart_access(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
-):
-    """Services the chat agent can restart are also config-readable.
-
-    Restart and config access are coupled through the same per-component
-    flags: an allowlisted service returns 200 on both, a non-allowlisted
-    one returns 403 on both.
-    """
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
-
-    resp_restart = await client.post(
-        "/chat/services/chat/restart", headers=auth_headers
-    )
-    assert resp_restart.status_code == 200
-    resp_read = await client.get("/chat/config/chat", headers=auth_headers)
-    assert resp_read.status_code == 200
-
-    resp_denied = await client.get("/chat/config/other-svc", headers=auth_headers)
-    assert resp_denied.status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_chat_access_allowed_via_allow_chat_access_flag(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    component_config_store: ComponentConfigStore,
-):
-    """``allow_chat_access`` alone (operator toggle) grants access."""
-    cfg = _make_config("chat-access-only", "ghcr.io/test/access-only:main")
-    cfg.allow_chat_access = True
-    cfg.chat_agent_mutatable = False
-    component_config_store.register(cfg)
-
-    await config_yaml_store.save_template("chat-access-only", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="chat-access-only", state=ServiceState.RUNNING))
-
-    resp = await client.get("/chat/config/chat-access-only", headers=auth_headers)
     assert resp.status_code == 200
+    body = resp.json()
+    assert body["component"] == "chat"
+    assert body["secret_keys"] == ["SOME_SECRET"]
+    assert body["env_keys"] == []
+    assert "SOME_SECRET" not in str(body).lower()  # value never in response
+    # Verify the value was actually stored (encrypted, decrypted on read).
+    stored = await env_store.get("chat")
+    assert "SOME_SECRET" in stored.secret_tokens
 
 
 @pytest.mark.asyncio
-async def test_chat_access_denied_when_both_flags_are_false(
+async def test_chat_env_upsert_plain_env(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    component_config_store: ComponentConfigStore,
+    env_store: EnvStore,
 ):
-    """Both flags false → 403, even when the service record exists."""
-    cfg = _make_config("no-access", "ghcr.io/test/no-access:main")
-    cfg.allow_chat_access = False
-    cfg.chat_agent_mutatable = False
-    component_config_store.register(cfg)
-
-    await config_yaml_store.save_template("no-access", _CONFIG_TEMPLATE)
-    await store.put(ServiceRecord(name="no-access", state=ServiceState.RUNNING))
-
-    resp = await client.get("/chat/config/no-access", headers=auth_headers)
-    assert resp.status_code == 403
-
-
-# ---------------------------------------------------------------------------
-# Restart
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_chat_restart_happy_path(
-    client: AsyncClient,
-    auth_headers: dict[str, str],
-    store: InMemoryStore,
-):
-    """POST /chat/services/chat/restart succeeds."""
+    """PUT /chat/env/chat upserts plain env vars."""
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
-    resp = await client.post(
-        "/chat/services/chat/restart",
+    resp = await client.put(
+        "/chat/env/chat",
+        json={"env": {"LOG_LEVEL": "debug"}},
         headers=auth_headers,
     )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["name"] == "chat"
-    assert data["action"] == "restart"
-    assert data["previous_state"] == "running"
-    # NoopBackend restart transitions to RUNNING.
-    assert data["current_state"] == "running"
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["component"] == "chat"
+    assert body["env_keys"] == ["LOG_LEVEL"]
+    assert body["secret_keys"] == []
+
+    stored = await env_store.get("chat")
+    assert stored.env["LOG_LEVEL"] == "debug"
 
 
 @pytest.mark.asyncio
-async def test_chat_restart_not_allowlisted(
+async def test_chat_env_upsert_both_env_and_secrets(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    env_store: EnvStore,
+):
+    """PUT /chat/env/chat upserts both env and secrets in one call."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    resp = await client.put(
+        "/chat/env/chat",
+        json={
+            "env": {"NODE_ENV": "production"},
+            "secrets": {"DB_PASSWORD": "s3cret"},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "NODE_ENV" in body["env_keys"]
+    assert "DB_PASSWORD" in body["secret_keys"]
+    assert "s3cret" not in str(body)
+
+    stored = await env_store.get("chat")
+    assert stored.env["NODE_ENV"] == "production"
+    assert "DB_PASSWORD" in stored.secret_tokens
+
+
+@pytest.mark.asyncio
+async def test_chat_env_not_allowlisted(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
 ):
-    """POST /chat/services/other-svc/restart returns 403."""
+    """PUT /chat/env/other-svc returns 403 for non-allowlisted service."""
     await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
 
-    resp = await client.post(
-        "/chat/services/other-svc/restart",
+    resp = await client.put(
+        "/chat/env/other-svc",
+        json={"secrets": {"TOKEN": "secret"}},
         headers=auth_headers,
     )
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_chat_restart_rate_limited(
+async def test_chat_env_empty_body(
     client: AsyncClient,
     auth_headers: dict[str, str],
     store: InMemoryStore,
 ):
-    """Second restart within cooldown window returns 429."""
+    """PUT /chat/env/chat with empty body returns 200 with no-op detail."""
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
-    # First restart succeeds.
-    resp1 = await client.post(
-        "/chat/services/chat/restart",
+    resp = await client.put(
+        "/chat/env/chat",
+        json={},
         headers=auth_headers,
     )
-    assert resp1.status_code == 200
-
-    # Second restart within cooldown fails.
-    resp2 = await client.post(
-        "/chat/services/chat/restart",
-        headers=auth_headers,
-    )
-    assert resp2.status_code == 429
-    assert "Rate limit" in resp2.json()["error"]
-
-
-# ---------------------------------------------------------------------------
-# Auth required
-# ---------------------------------------------------------------------------
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["env_keys"] == []
+    assert body["secret_keys"] == []
+    assert "nothing to do" in body["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_chat_endpoints_no_longer_401(
+async def test_chat_env_audit_log_redacted(
     client: AsyncClient,
+    auth_headers: dict[str, str],
     store: InMemoryStore,
-    config_yaml_store: ConfigYamlStore,
-    backend: NoopBackend,
+    audit_store: ChatAgentAuditStore,
 ):
-    """All chat write endpoints no longer return 401 — app-level auth was removed."""
-    await config_yaml_store.save_template("chat", _CONFIG_TEMPLATE)
+    """Secret values are never written to the audit log."""
     await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
 
-    endpoints = [
-        ("PUT", "/chat/config/chat", {"values": {"debug": True}}),
-        ("POST", "/chat/config/chat/rollback", None),
-        ("PUT", "/chat/env/chat", {"secrets": {"TOKEN": "secret"}}),
-        ("POST", "/chat/services/chat/restart", None),
-        ("POST", "/chat/services/chat/update", None),
-        (
-            "POST",
-            "/chat/deploy",
-            {"name": "chat", "repo": "https://github.com/org/robotsix-chat.git"},
-        ),
-        ("POST", "/chat/services/chat/enable-mutation", {"ttl_seconds": 60}),
-        ("POST", "/chat/services/chat/disable-mutation", None),
-    ]
-    for method, path, body in endpoints:
-        if body is not None:
-            resp = await client.request(method, path, json=body)
-        else:
-            resp = await client.request(method, path)
-        assert resp.status_code != 401, f"{method} {path} returned 401"
+    await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"SUPER_SECRET": "my-password"}},
+        headers=auth_headers,
+    )
+    entries = await audit_store.list()
+    secret_entries = [e for e in entries if e.key == "SUPER_SECRET"]
+    assert len(secret_entries) == 1
+    entry = secret_entries[0]
+    assert entry.new_value == "***"
+    assert entry.old_value is None
+    assert "my-password" not in str(entry.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_env_write_follows_restart_access(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+):
+    """Services with chat_agent_mutatable=True can be env-written.
+
+    Verifies that the env write surface is gated by the same
+    ``chat_agent_mutatable`` flag as restart and config-write.
+    """
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+    await store.put(ServiceRecord(name="other-svc", state=ServiceState.RUNNING))
+
+    # Allowlisted
+    r = await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"T": "v"}},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    # Non-allowlisted
+    r = await client.put(
+        "/chat/env/other-svc",
+        json={"secrets": {"T": "v"}},
+        headers=auth_headers,
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_chat_env_upsert_is_idempotent(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    store: InMemoryStore,
+    env_store: EnvStore,
+):
+    """Repeated PUTs with the same key overwrite, not duplicate."""
+    await store.put(ServiceRecord(name="chat", state=ServiceState.RUNNING))
+
+    await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"TOKEN": "first"}},
+        headers=auth_headers,
+    )
+    await client.put(
+        "/chat/env/chat",
+        json={"secrets": {"TOKEN": "second"}},
+        headers=auth_headers,
+    )
+    stored = await env_store.get("chat")
+    assert len(stored.secret_tokens) == 1
+    assert "TOKEN" in stored.secret_tokens
