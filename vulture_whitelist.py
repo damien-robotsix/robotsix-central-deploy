@@ -115,6 +115,7 @@ _.revoked_count  # unused method (src/robotsix_central_deploy/lifecycle/token_st
 # Factory / loader methods — called by external consumers or tests.
 # ===========================================================================
 _.from_yaml  # unused method (src/robotsix_central_deploy/registry/loader.py:28)
+_ = get_request_id  # unused function (src/robotsix_central_deploy/lifecycle/request_id_middleware.py:38) — public correlation-id accessor, read by tests
 
 # ===========================================================================
 # Hashing / serialisation utilities — called by config-drift detection
