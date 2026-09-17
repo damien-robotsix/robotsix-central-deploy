@@ -13,34 +13,47 @@ from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # structlog may not be installed in lightweight test environments (e.g.
-# sandbox CI).  The lifecycle server's _logging.py does a top-level
-# ``import structlog`` that cannot be avoided once *any* module under
-# ``robotsix_central_deploy.lifecycle`` is imported.  Inject a minimal
-# mock before the first real import so conftest and all downstream tests
-# can load without a ModuleNotFoundError.
+# sandbox CI).  ``request_id_middleware`` does a top-level
+# ``from structlog.contextvars import ...`` that cannot be avoided once the
+# lifecycle app (which registers ``RequestIDMiddleware``) is imported.
+# Inject a minimal mock before the first real import so conftest and all
+# downstream tests can load without a ModuleNotFoundError.  The
+# ``structlog.contextvars`` shim is functional (dict-backed) so the
+# middleware binds/reads the per-request id correctly under the mock.
 # ---------------------------------------------------------------------------
 try:
     __import__("structlog")
     _STRUCTLOG_REAL = True
 except ImportError:
     _STRUCTLOG_REAL = False
+    import contextvars as _contextvars
+
     _s = MagicMock()
-    # Classes that LOGGING_CONFIG instantiates at module level
-    _s.processors.JSONRenderer = MagicMock
-    _s.processors.TimeStamper = MagicMock
 
-    # Attributes referenced but not called at import time
-    # Use a dedicated local class so we don't mutate the global
-    # MagicMock class when setting remove_processors_meta below.
-    class _MockProcessorFormatter:
-        remove_processors_meta = MagicMock()
+    _structlog_ctx: _contextvars.ContextVar[dict | None] = _contextvars.ContextVar(
+        "structlog_contextvars", default=None
+    )
 
-    _s.stdlib.ProcessorFormatter = _MockProcessorFormatter
-    _s.stdlib.add_log_level = MagicMock()
-    _s.stdlib.add_logger_name = MagicMock()
+    class _ContextvarsShim:
+        @staticmethod
+        def bind_contextvars(**kwargs):
+            _structlog_ctx.set({**(_structlog_ctx.get() or {}), **kwargs})
+            return {}
+
+        @staticmethod
+        def unbind_contextvars(*keys):
+            data = dict(_structlog_ctx.get() or {})
+            for key in keys:
+                data.pop(key, None)
+            _structlog_ctx.set(data)
+
+        @staticmethod
+        def get_contextvars():
+            return dict(_structlog_ctx.get() or {})
+
+    _s.contextvars = _ContextvarsShim()
     sys.modules["structlog"] = _s
-    sys.modules["structlog.stdlib"] = _s.stdlib
-    sys.modules["structlog.processors"] = _s.processors
+    sys.modules["structlog.contextvars"] = _s.contextvars
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------

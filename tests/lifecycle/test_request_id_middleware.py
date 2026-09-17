@@ -1,31 +1,22 @@
 """Tests for request-ID / correlation-ID tracking.
 
 Covers the middleware (header read/generate + response echo + context
-binding) and the structlog processor that stamps ``request_id`` onto JSON
-log records.
+binding) and the ``get_request_id`` accessor that reads the id bound onto
+``structlog.contextvars``.
 """
 
 from __future__ import annotations
 
-import json
-import logging
-import logging.config
 import uuid
 
-import pytest
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from robotsix_central_deploy.lifecycle._logging import (
-    LOGGING_CONFIG,
-    add_request_id,
-)
 from robotsix_central_deploy.lifecycle.request_id_middleware import (
     REQUEST_ID_HEADER,
     RequestIDMiddleware,
-    _request_id_ctx,
     get_request_id,
 )
 
@@ -75,44 +66,8 @@ class TestRequestIDMiddleware:
         second = client.get("/echo").headers[REQUEST_ID_HEADER]
         assert first != second
 
-    def test_context_reset_after_request(self) -> None:
+    def test_context_cleared_after_request(self) -> None:
         client = TestClient(_build_app())
         client.get("/echo")
-        # Outside any request the context var falls back to its default.
+        # Outside any request the id is unbound.
         assert get_request_id() is None
-
-
-# ---------------------------------------------------------------------------
-# Logging processor / integration
-# ---------------------------------------------------------------------------
-
-
-class TestRequestIdLogging:
-    def test_processor_stamps_current_id(self) -> None:
-        token = _request_id_ctx.set("abc-123")
-        try:
-            out = add_request_id(None, "info", {"event": "hi"})
-        finally:
-            _request_id_ctx.reset(token)
-        assert out["request_id"] == "abc-123"
-
-    def test_processor_null_outside_request(self) -> None:
-        out = add_request_id(None, "info", {"event": "hi"})
-        assert out["request_id"] is None
-
-    def test_json_log_includes_request_id(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        logging.config.dictConfig(LOGGING_CONFIG)
-        logging.getLogger().setLevel("INFO")
-        logger = logging.getLogger("robotsix_central_deploy.test_request_id_middleware")
-
-        token = _request_id_ctx.set("corr-999")
-        try:
-            logger.info("hello")
-        finally:
-            _request_id_ctx.reset(token)
-
-        record = json.loads(capsys.readouterr().out.strip())
-        assert record["request_id"] == "corr-999"
-        assert record["event"] == "hello"

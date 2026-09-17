@@ -20,8 +20,9 @@ dependencies = [
     "secure>=2.0",
     "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@bed0a5b3a7b77f01bd4a16a4e6753dc92982e8f9",
     "robotsix-github-auth @ git+https://github.com/damien-robotsix/robotsix-github-auth.git@e6214c41fd743120aa987bacb4e9b2bc88e73943",
-    "robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@483eae9b02b0a78aa6734fb64c299d44a34c5411",
+    "robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@c57947232685f4e4798a61e2bc53d747d3dbc75d",
     "robotsix-ui @ git+https://github.com/damien-robotsix/robotsix-ui.git@b2bdbf5082c208162f31480442487dab3772c518",
+    "robotsix-llmio @ git+https://github.com/damien-robotsix/robotsix-llmio.git@d82bf43a4de36acf5b8ef3ce9442c5cf9a6621c9",
 ]
 
 # Dev tooling as a PEP 735 dependency-group (the fleet convention), pulled
