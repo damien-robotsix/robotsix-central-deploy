@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> None:
     ``--host``, ``--port``, ``--store-backend``, ``--execution-backend``,
     and ``--target-disk``.
 
-    The :mod:`uvicorn` and :data:`LOGGING_CONFIG` imports are deferred
+    The :mod:`uvicorn` and :mod:`._logging` imports are deferred
     so that ``--help`` and argument-parsing failures respond quickly
     without pulling in the full server runtime.
     """
@@ -66,14 +66,16 @@ def main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
-    from ._logging import LOGGING_CONFIG
+    from ._logging import UVICORN_LOG_CONFIG, configure_logging
+
+    configure_logging(cfg.log_level)
 
     uvicorn.run(
         "robotsix_central_deploy.lifecycle.app:app",
         host=cfg.host,
         port=cfg.port,
         reload=False,
-        log_config=LOGGING_CONFIG,
+        log_config=UVICORN_LOG_CONFIG,
     )
 
 

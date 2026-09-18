@@ -1,64 +1,74 @@
-"""Shared structured-logging configuration.
+"""Structured-logging configuration for the lifecycle server.
 
-Provides ``LOGGING_CONFIG`` — a stdlib ``dictConfig``-compatible dictionary
-that bridges structlog's ``ProcessorFormatter`` into uvicorn's ``log_config``
-parameter.  This keeps the uvicorn startup banner human-readable while
-emitting access logs and application logs as JSON to stdout.
+The structlog + stdlib ``ProcessorFormatter`` JSON bridge is no longer
+hand-rolled here: it is delegated to the shared
+:func:`robotsix_llmio.logging.setup_structlog` helper (which every other
+structlog consumer in the fleet already uses).  ``setup_structlog`` wires a
+single root ``ProcessorFormatter`` so structlog-native *and* foreign stdlib
+records (e.g. ``uvicorn.access``) render through one JSON renderer, stamps
+the active OpenTelemetry trace id, and — with ``correlation_id=True`` —
+merges any value bound through :mod:`structlog.contextvars` onto every
+event.
+
+Two pieces stay central-deploy-specific because the helper does not provide
+them:
+
+* the per-request ``request_id`` field, bound onto ``structlog.contextvars``
+  by :class:`~robotsix_central_deploy.lifecycle.request_id_middleware.RequestIDMiddleware`
+  and merged onto every record via ``correlation_id=True``; and
+* :data:`UVICORN_LOG_CONFIG`, a minimal uvicorn ``log_config`` that keeps the
+  human-readable startup banner on stderr while letting access logs
+  propagate to the shared JSON root bridge.
 """
 
 from __future__ import annotations
 
-from collections.abc import MutableMapping
-from typing import Any
+from typing import TextIO
 
-import structlog
-
-from .request_id_middleware import get_request_id
+from robotsix_llmio.logging import setup_structlog
 
 
-def add_request_id(
-    logger: object,
-    method_name: str,
-    event_dict: MutableMapping[str, Any],
-) -> MutableMapping[str, Any]:
-    """structlog processor: stamp the current correlation id onto the record.
+def configure_logging(
+    level: str | int | None = None,
+    *,
+    stream: TextIO | None = None,
+) -> None:
+    """Configure structlog + stdlib logging via the shared llmio helper.
 
-    Reads the per-request id bound by
-    :class:`~robotsix_central_deploy.lifecycle.request_id_middleware.RequestIDMiddleware`.
-    Outside any request context (startup/shutdown logs) the value is
-    ``None``, which renders as a null ``request_id`` field.
+    ``correlation_id=True`` enables ``structlog.contextvars.merge_contextvars``
+    so the per-request id bound by
+    :class:`~robotsix_central_deploy.lifecycle.request_id_middleware.RequestIDMiddleware`
+    under the ``request_id`` key is stamped onto every JSON log record — the
+    same field the previous bespoke ``ProcessorFormatter`` chain emitted.
+
+    Args:
+        level: Explicit log level (name or int). Falls back to the
+            ``LOG_LEVEL`` env var, then ``"INFO"``.
+        stream: Target stream for the JSON handler. Defaults to
+            :data:`sys.stdout`.
     """
-    event_dict["request_id"] = get_request_id()
-    return event_dict
+    setup_structlog(
+        fmt="json",
+        level=level,
+        loggers=("robotsix_central_deploy",),
+        stream=stream,
+        correlation_id=True,
+    )
 
 
-# ``dictConfig``'s "()" key resolves a dotted-path string to a class to
-# instantiate, but that resolution does NOT recurse into a formatter's other
-# keys — ``processors``/``foreign_pre_chain`` must be actual callables here,
-# not dotted-path strings. Passing strings makes ProcessorFormatter.format()
-# try to call the string itself as a processor, raising "TypeError: 'str'
-# object is not callable" on every single log record (silently swallowing
-# the real message — see structlog/stdlib.py's ProcessorFormatter.format).
-LOGGING_CONFIG: dict[str, object] = {
+# Minimal uvicorn ``log_config``.  ``setup_structlog`` installs the JSON
+# handler on the *root* logger, so this config deliberately carries no
+# ``"root"`` key: ``dictConfig`` must not replace that handler.  The startup
+# banner (emitted on ``uvicorn.error``) stays human-readable on stderr and
+# does NOT reach the root bridge, while access logs (``uvicorn.access``)
+# carry no own handler and propagate up to the root JSON bridge.
+UVICORN_LOG_CONFIG: dict[str, object] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
         "default": {
             "()": "uvicorn.logging.DefaultFormatter",
             "fmt": "%(levelprefix)s %(message)s",
-        },
-        "json": {
-            "()": "structlog.stdlib.ProcessorFormatter",
-            "processors": [
-                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                structlog.processors.JSONRenderer(),
-            ],
-            "foreign_pre_chain": [
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.add_logger_name,
-                add_request_id,
-                structlog.processors.TimeStamper(fmt="iso"),
-            ],
         },
     },
     "handlers": {
@@ -67,28 +77,14 @@ LOGGING_CONFIG: dict[str, object] = {
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stderr",
         },
-        "structured": {
-            "formatter": "json",
-            "class": "logging.StreamHandler",
-            "stream": "ext://sys.stdout",
-        },
     },
     "loggers": {
-        "uvicorn": {
+        "uvicorn": {"handlers": [], "level": "INFO", "propagate": True},
+        "uvicorn.error": {
             "handlers": ["default"],
             "level": "INFO",
             "propagate": False,
         },
-        "uvicorn.error": {"level": "INFO"},
-        "uvicorn.access": {
-            "handlers": ["structured"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        "robotsix_central_deploy": {
-            "handlers": ["structured"],
-            "level": "NOTSET",
-            "propagate": False,
-        },
+        "uvicorn.access": {"handlers": [], "level": "INFO", "propagate": True},
     },
 }
