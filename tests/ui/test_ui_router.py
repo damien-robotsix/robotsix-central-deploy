@@ -11,6 +11,8 @@ from __future__ import annotations
 import base64
 import re
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -265,6 +267,47 @@ class TestRobotsixUiAssets:
         assert robotsix_ui_assets._VERSION_RE.fullmatch(
             robotsix_ui_assets.ROBOTSIX_UI_VERSION
         )
+
+    def test_fetch_retries_transient_5xx(self, monkeypatch):
+        """A transient 500 on the release-asset host must not fail the build."""
+        calls = {"n": 0}
+        monkeypatch.setattr(robotsix_ui_assets.time, "sleep", lambda s: None)
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return b"body"
+
+        def _flaky_urlopen(request, timeout=60):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise urllib.error.HTTPError(
+                    request.full_url, 500, "Internal Server Error", {}, None
+                )
+            return _Resp()
+
+        monkeypatch.setattr(urllib.request, "urlopen", _flaky_urlopen)
+        assert robotsix_ui_assets._fetch("https://example.invalid/x") == b"body"
+        assert calls["n"] == 2
+
+    def test_fetch_does_not_retry_4xx(self, monkeypatch):
+        """A 4xx is permanent and must raise without retrying."""
+        calls = {"n": 0}
+        monkeypatch.setattr(robotsix_ui_assets.time, "sleep", lambda s: None)
+
+        def _urlopen(request, timeout=60):
+            calls["n"] += 1
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+        monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+        with pytest.raises(urllib.error.HTTPError):
+            robotsix_ui_assets._fetch("https://example.invalid/x")
+        assert calls["n"] == 1
 
 
 # ---------------------------------------------------------------------------
