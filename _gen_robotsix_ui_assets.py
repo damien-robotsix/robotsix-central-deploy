@@ -52,11 +52,17 @@ def _fetch(url: str) -> bytes:
         try:
             with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
                 return response.read()
-        except urllib.error.HTTPError:
-            raise
+        except urllib.error.HTTPError as exc:
+            # A 5xx from GitHub's release-asset host is transient (the
+            # sibling asset typically fetches fine moments earlier); retry
+            # with backoff rather than aborting the whole image build. 4xx
+            # is a permanent client/asset error and is not retried.
+            if exc.code < 500:
+                raise
+            last_error = exc
         except (urllib.error.URLError, OSError) as exc:
             last_error = exc
-            time.sleep(2**attempt)
+        time.sleep(2**attempt)
     raise RuntimeError(f"failed to fetch {url}: {last_error}") from last_error
 
 
