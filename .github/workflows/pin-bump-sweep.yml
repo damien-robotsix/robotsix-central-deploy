@@ -33,5 +33,10 @@ jobs:
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/pin-bump-sweep.yml@99d6b3da069f81ddc7194520c5b1dca4347154a2  # uv 0.12.5 default — Python 3.14 locks
     with:
       app-id: ${{ vars.RELEASE_APP_ID }}
+      # Override the shared workflow's 0.12.5 default: a fleet repo pins
+      # `required-version == 0.12.9` in its uv.toml, so `uv lock` refuses to
+      # run under an older uv and the sweep fails on that repo. Run the newest
+      # required uv so every repo's lock resolves under one coherent version.
+      uv-version: "0.12.9"
     secrets:
       app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
