@@ -24,6 +24,12 @@ _NOT_A_DIR = "\x01robotsix-not-a-dir"
 _IS_A_DIR = "\x01robotsix-is-a-dir"
 _FILE_EXISTS = "\x01robotsix-file-exists"
 
+#: Result vocabulary for volume lifecycle operations (relocate, prune, ...).
+#: Consumers parse ``payload["status"]`` on these exact strings across the
+#: backends and routers, so the vocabulary has a single definition point here.
+STATUS_OK = "ok"
+STATUS_FAILED = "failed"
+
 #: Shell function printing the apparent-bytes recursive size of its argument,
 #: excluding SQLite transient sidecars.  Shared by the whole-volume measure and
 #: the per-directory browser sizes so the two always agree.
@@ -660,7 +666,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
         try:
             attrs = await loop.run_in_executor(None, _inspect_volume)
         except RuntimeError as exc:
-            return {"status": "failed", "detail": str(exc)}
+            return {"status": STATUS_FAILED, "detail": str(exc)}
 
         # For a bind-mount volume the data lives at Options.device;
         # for a regular Docker volume it's at the Mountpoint.
@@ -668,7 +674,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
         source_path = options.get("device") or attrs.get("Mountpoint", "")
         if not source_path:
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": f"Could not determine source path for volume {volume_name!r}",
             }
 
@@ -679,7 +685,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
         #    so we don't waste I/O on an unsupported volume type.
         if options.get("type") != "none":
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": (
                     f"Volume {volume_name!r} is not a bind-mount volume "
                     "and cannot be relocated. Only bind-mount volumes "
@@ -698,7 +704,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
             )
         except OSError as exc:
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": f"Failed to create target directory {target_volume_path!r}: {exc}",
             }
 
@@ -724,7 +730,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
             await loop.run_in_executor(None, _write_probe)
         except OSError as exc:
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": (
                     f"Target directory {target_volume_path!r} is not writable: {exc}"
                 ),
@@ -750,7 +756,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
             )
             if probe_text != "robotsix-probe":
                 return {
-                    "status": "failed",
+                    "status": STATUS_FAILED,
                     "detail": (
                         f"Target directory {target_volume_path!r} is not reachable "
                         "at the same path on the Docker host. The target disk must "
@@ -759,7 +765,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 }
         except docker.errors.APIError as exc:
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": (
                     f"Failed to probe target directory {target_volume_path!r}: {exc}"
                 ),
@@ -819,7 +825,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
             except OSError:  # best-effort cleanup; ignore if dir is already gone
                 pass
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": f"Data copy failed for volume {volume_name!r}",
             }
 
@@ -866,7 +872,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
             except OSError:  # best-effort cleanup; ignore if dir is already gone
                 pass
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": (f"Content verification failed for volume {volume_name!r}"),
             }
 
@@ -947,19 +953,19 @@ class VolumeOps(ConfigVolumeOpsMixin):
                             restore_exc,
                         )
                     return {
-                        "status": "failed",
+                        "status": STATUS_FAILED,
                         "detail": (
                             f"Failed to recreate volume {volume_name!r}: {retry_exc}"
                         ),
                     }
             else:
                 return {
-                    "status": "failed",
+                    "status": STATUS_FAILED,
                     "detail": f"Failed to create new volume: {exc.explanation or exc}",
                 }
         except docker.errors.DockerException as exc:
             return {
-                "status": "failed",
+                "status": STATUS_FAILED,
                 "detail": f"Docker daemon unreachable: {exc}",
             }
 
@@ -997,7 +1003,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 )
 
         return {
-            "status": "ok",
+            "status": STATUS_OK,
             "detail": (
                 f"Volume {volume_name!r} relocated to {target_volume_path!r} "
                 f"(content verified)"

@@ -15,6 +15,7 @@ from .._config_utils import _sanitize_log
 from .._disk_utils import resolve_target_disk
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from ..backends._volume_ops import STATUS_FAILED, STATUS_OK
 from ..config import LifecycleConfig
 from ..deploy_lock import (
     release_deploy_lock,
@@ -376,11 +377,11 @@ async def relocate_volume(
         outcome = await backend.relocate_volume(name, target_disk_path, config.user)
     except NotImplementedError:
         # The DockerBackend (docker-cli) does not support relocation.
-        outcome = {"status": "failed", "detail": "Not supported by this backend"}
+        outcome = {"status": STATUS_FAILED, "detail": "Not supported by this backend"}
     except Exception as exc:  # noqa: BLE001
-        outcome = {"status": "failed", "detail": f"Backend error: {exc}"}
+        outcome = {"status": STATUS_FAILED, "detail": f"Backend error: {exc}"}
 
-    if outcome.get("status") != "ok":
+    if outcome.get("status") != STATUS_OK:
         # Rollback the config change on every owner.
         for oid, prev in previous_target_disks.items():
             ocfg = component_config_store.get(oid)
