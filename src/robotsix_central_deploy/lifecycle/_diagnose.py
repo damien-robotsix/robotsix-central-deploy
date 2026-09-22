@@ -21,7 +21,7 @@ from ..registry.traefik_labels import traefik_labels
 from ..registry_check import RegistryChecker
 from .backends import ExecutionBackend
 from .config import LifecycleConfig
-from .deps._contract_refresh import _CONTRACT_FIELDS
+from .deps._contract_refresh import _diff_contract_fields
 from .models import HealthStatus, ServiceRecord
 from .schemas import (
     DiagnoseEdgeProbe,
@@ -310,34 +310,7 @@ async def _fetch_and_compare_contract(
         claude_mount=config.claude_mount,
     )
 
-    changed: list[str] = []
-    previous: dict[str, Any] = {}
-    current: dict[str, Any] = {}
-    for cfg_field in _CONTRACT_FIELDS:
-        old_val = getattr(config, cfg_field)
-        new_val = getattr(new_config, cfg_field)
-        if old_val != new_val:
-            changed.append(cfg_field)
-            if hasattr(old_val, "model_dump"):
-                previous[cfg_field] = old_val.model_dump()
-            elif (
-                isinstance(old_val, list)
-                and old_val
-                and hasattr(old_val[0], "model_dump")
-            ):
-                previous[cfg_field] = [v.model_dump() for v in old_val]
-            else:
-                previous[cfg_field] = old_val
-            if hasattr(new_val, "model_dump"):
-                current[cfg_field] = new_val.model_dump()
-            elif (
-                isinstance(new_val, list)
-                and new_val
-                and hasattr(new_val[0], "model_dump")
-            ):
-                current[cfg_field] = [v.model_dump() for v in new_val]
-            else:
-                current[cfg_field] = new_val
+    changed, previous, current = _diff_contract_fields(config, new_config)
 
     return DiagnoseRepoContract(
         fetched=True,
