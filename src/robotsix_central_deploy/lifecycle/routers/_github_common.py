@@ -6,6 +6,8 @@ Provides:
 - ``_get_client_or_503`` — acquire a GitHub App installation token or raise 503
 - ``_get_client_or_503_with_pat_fallback`` — App token first, PAT fallback
 - ``_reraise_github_errors`` — map PyGithub exceptions to HTTP status codes
+- ``_require_installation_token`` — verify the App is configured and mint a
+  raw installation token (raises 503/404 on failure)
 - ``_call_github_endpoint`` — client acquisition + thread dispatch + error mapping
   + optional audit logging
 """
@@ -107,6 +109,39 @@ def _reraise_github_errors(exc: Exception, owner: str, repo: str) -> None:
             detail=f"GitHub API error: {exc}",
         ) from exc
     raise exc
+
+
+async def _require_installation_token(
+    config: LifecycleConfig, owner: str, repo: str
+) -> str:
+    """Acquire a raw GitHub App installation token, raising 503/404 on failure.
+
+    Verifies the App credentials are configured (503 "GitHub App not
+    configured" otherwise), mints the installation token in a thread, and
+    maps the common PyGithub errors via :func:`_reraise_github_errors`.
+    """
+    from ..github_app import get_installation_token_sync
+
+    if (
+        not config.github_app_id.get_secret_value()
+        or not config.github_app_private_key.get_secret_value()
+        or not config.installation_id.get_secret_value()
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="GitHub App not configured",
+        )
+
+    try:
+        return await asyncio.to_thread(
+            get_installation_token_sync,
+            config.github_app_id.get_secret_value(),
+            config.github_app_private_key.get_secret_value(),
+            config.installation_id.get_secret_value(),
+        )
+    except Exception as exc:
+        _reraise_github_errors(exc, owner, repo)
+        raise  # pragma: no cover — _reraise_github_errors always raises
 
 
 async def _call_github_endpoint(
