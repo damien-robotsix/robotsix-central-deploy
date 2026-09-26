@@ -31,6 +31,7 @@ from robotsix_http import ExternalHTTPError
 from ..._http import retry_client_context
 from ..auth import verify_auth
 from ..backends import ExecutionBackend
+from ..backends._volume_ops import STATUS_FAILED, STATUS_OK
 from ..deps import _get_backend, get_claude_auth_refresh_state
 from ..models import CLAUDE_AUTH_VOLUME
 from ..schemas import (
@@ -114,9 +115,9 @@ async def get_claude_auth_status(
     refresh_state = get_claude_auth_refresh_state()
     if refresh_state["last_refresh"] is not None:
         if refresh_state["last_error"] is None:
-            result["refresh_status"] = "ok"
+            result["refresh_status"] = STATUS_OK
         else:
-            result["refresh_status"] = "failed"
+            result["refresh_status"] = STATUS_FAILED
             result["last_refresh_error"] = refresh_state["last_error"]
     else:
         result["refresh_status"] = "never"

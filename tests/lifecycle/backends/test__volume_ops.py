@@ -10,8 +10,32 @@ import pytest
 from robotsix_central_deploy.lifecycle._yaml_utils import YamlParseError
 from robotsix_central_deploy.lifecycle.backends._volume_ops import (
     _DU_BYTES_FN,
+    STATUS_FAILED,
+    STATUS_OK,
     VolumeOps,
 )
+
+# ---------------------------------------------------------------------------
+# result-status vocabulary constants
+# ---------------------------------------------------------------------------
+
+
+class TestVolumeResultStatusConstants:
+    """Pin the shared ``{"status": ...}`` result vocabulary.
+
+    Backends and routers consuming volume-operation results must all use
+    the exact same strings, so the vocabulary lives as module constants in
+    ``_volume_ops`` and is imported at each call site rather than spelled
+    inline.  These tests pin the canonical values so no caller can silently
+    drift.
+    """
+
+    def test_status_ok(self):
+        assert STATUS_OK == "ok"
+
+    def test_status_failed(self):
+        assert STATUS_FAILED == "failed"
+
 
 # ---------------------------------------------------------------------------
 # resolve_user_to_uid_gid (static)
