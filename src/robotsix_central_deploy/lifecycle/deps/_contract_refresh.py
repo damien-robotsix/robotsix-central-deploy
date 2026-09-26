@@ -72,6 +72,48 @@ _CONTRACT_FIELDS = (
 )
 
 
+def _diff_contract_fields(
+    old_cfg: ComponentConfig, new_cfg: ComponentConfig
+) -> tuple[list[str], dict[str, Any], dict[str, Any]]:
+    """Diff the ``_CONTRACT_FIELDS`` between two component configs.
+
+    Returns ``(changed, previous, current)``: the field names that differ,
+    and the old/new values serialized the same way consumers expect —
+    pydantic models via ``model_dump()``, lists of pydantic models as a list
+    of dumps, and raw values as-is (matching field equality, so a deeply
+    equal-but-differently-typed value still counts as changed).
+    """
+    changed: list[str] = []
+    previous: dict[str, Any] = {}
+    current: dict[str, Any] = {}
+    for cfg_field in _CONTRACT_FIELDS:
+        old_val = getattr(old_cfg, cfg_field)
+        new_val = getattr(new_cfg, cfg_field)
+        if old_val != new_val:
+            changed.append(cfg_field)
+            if hasattr(old_val, "model_dump"):
+                previous[cfg_field] = old_val.model_dump()
+            elif (
+                isinstance(old_val, list)
+                and old_val
+                and hasattr(old_val[0], "model_dump")
+            ):
+                previous[cfg_field] = [v.model_dump() for v in old_val]
+            else:
+                previous[cfg_field] = old_val
+            if hasattr(new_val, "model_dump"):
+                current[cfg_field] = new_val.model_dump()
+            elif (
+                isinstance(new_val, list)
+                and new_val
+                and hasattr(new_val[0], "model_dump")
+            ):
+                current[cfg_field] = [v.model_dump() for v in new_val]
+            else:
+                current[cfg_field] = new_val
+    return changed, previous, current
+
+
 @dataclass
 class ContractRefreshResult:
     """Outcome of a contract refresh."""
@@ -334,34 +376,7 @@ async def refresh_component_contract(
         )
 
     # Diff: collect which contract-derived fields changed.
-    changed: list[str] = []
-    previous: dict[str, Any] = {}
-    current: dict[str, Any] = {}
-    for cfg_field in _CONTRACT_FIELDS:
-        old_val = getattr(comp_cfg, cfg_field)
-        new_val = getattr(new_config, cfg_field)
-        if old_val != new_val:
-            changed.append(cfg_field)
-            if hasattr(old_val, "model_dump"):
-                previous[cfg_field] = old_val.model_dump()
-            elif (
-                isinstance(old_val, list)
-                and old_val
-                and hasattr(old_val[0], "model_dump")
-            ):
-                previous[cfg_field] = [v.model_dump() for v in old_val]
-            else:
-                previous[cfg_field] = old_val
-            if hasattr(new_val, "model_dump"):
-                current[cfg_field] = new_val.model_dump()
-            elif (
-                isinstance(new_val, list)
-                and new_val
-                and hasattr(new_val[0], "model_dump")
-            ):
-                current[cfg_field] = [v.model_dump() for v in new_val]
-            else:
-                current[cfg_field] = new_val
+    changed, previous, current = _diff_contract_fields(comp_cfg, new_config)
 
     # Persist the updated config
     await component_config_store.put(new_config)
