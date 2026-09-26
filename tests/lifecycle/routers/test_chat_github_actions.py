@@ -537,8 +537,7 @@ class TestGetWorkflowRunLogs:
         enable_github_app,
     ):
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -574,8 +573,7 @@ class TestGetWorkflowRunLogs:
             return "filtered logs"
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -606,8 +604,7 @@ class TestGetWorkflowRunLogs:
             raise UnknownObjectException(404, data={"message": "Not Found"})
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             _raise_not_found,
         )
 
@@ -630,8 +627,7 @@ class TestGetWorkflowRunLogs:
             raise HTTPException(status_code=404, detail="Run 9999 not found")
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -657,8 +653,7 @@ class TestGetWorkflowRunLogs:
             raise RuntimeError("connection reset")
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -682,8 +677,7 @@ class TestGetWorkflowRunLogs:
     ):
         """``/log`` (singular) is an alias for ``/logs`` and returns the same output."""
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -732,8 +726,7 @@ class TestGetJobLogs:
         enable_github_app,
     ):
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -769,8 +762,7 @@ class TestGetJobLogs:
             return "log text"
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -800,8 +792,7 @@ class TestGetJobLogs:
             raise HTTPException(status_code=404, detail="Job 9999 not found")
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(
@@ -827,8 +818,7 @@ class TestGetJobLogs:
             raise RuntimeError("connection reset")
 
         monkeypatch.setattr(
-            "robotsix_central_deploy.lifecycle.routers.chat_github_actions."
-            "get_installation_token_sync",
+            "robotsix_central_deploy.lifecycle.github_app.get_installation_token_sync",
             lambda app_id, private_key, installation_id: "fake-token",
         )
         monkeypatch.setattr(

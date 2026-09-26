@@ -33,11 +33,10 @@ from ...registry.chat_agent_audit_store import ChatAgentAuditEntry, ChatAgentAud
 from ..auth import verify_auth
 from ..config import LifecycleConfig
 from ..deps import _get_chat_agent_audit_store, _get_config
-from ..github_app import get_installation_token_sync
 from ._github_common import (
     _call_github_endpoint,
     _get_client_or_503,
-    _reraise_github_errors,
+    _require_installation_token,
 )
 
 router = APIRouter(tags=["chat-github"])
@@ -651,26 +650,7 @@ async def get_workflow_run_logs(
     # the repo is covered by an installation).
     from fastapi import HTTPException
 
-    if (
-        not config.github_app_id.get_secret_value()
-        or not config.github_app_private_key.get_secret_value()
-        or not config.installation_id.get_secret_value()
-    ):
-        raise HTTPException(
-            status_code=503,
-            detail="GitHub App not configured",
-        )
-
-    try:
-        token = await asyncio.to_thread(
-            get_installation_token_sync,
-            config.github_app_id.get_secret_value(),
-            config.github_app_private_key.get_secret_value(),
-            config.installation_id.get_secret_value(),
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    token = await _require_installation_token(config, owner, repo)
 
     try:
         log_text = await asyncio.to_thread(
@@ -770,26 +750,7 @@ async def get_job_logs(
     """
     from fastapi import HTTPException
 
-    if (
-        not config.github_app_id.get_secret_value()
-        or not config.github_app_private_key.get_secret_value()
-        or not config.installation_id.get_secret_value()
-    ):
-        raise HTTPException(
-            status_code=503,
-            detail="GitHub App not configured",
-        )
-
-    try:
-        token = await asyncio.to_thread(
-            get_installation_token_sync,
-            config.github_app_id.get_secret_value(),
-            config.github_app_private_key.get_secret_value(),
-            config.installation_id.get_secret_value(),
-        )
-    except Exception as exc:
-        _reraise_github_errors(exc, owner, repo)
-        raise  # pragma: no cover — _reraise_github_errors always raises
+    token = await _require_installation_token(config, owner, repo)
 
     try:
         log_text = await asyncio.to_thread(
