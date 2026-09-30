@@ -552,6 +552,18 @@ jobs:
           fi
       - name: Lint OpenAPI spec with Redocly
         run: npx --yes @redocly/cli@1.27.0 lint docs/lifecycle/openapi.json
+      - name: Check for OpenAPI breaking changes
+        # Compare the regenerated spec against the committed baseline and fail
+        # on backward-incompatible changes (removed endpoints, newly-required
+        # fields, changed parameter types / status codes, …). Update the
+        # baseline in the same commit as an intentional breaking change.
+        uses: oasdiff/oasdiff-action/breaking@5e81b5c380accc6b523f9d32a637ca630e33620b  # v0.1.17
+        with:
+          base: docs/lifecycle/openapi.json.baseline
+          revision: docs/lifecycle/openapi.json
+          fail-on: ERR
+          # Keep the spec inside CI — do not upload it to oasdiff.com.
+          review: "false"
 
   dependency-review:
     name: Dependency Review
