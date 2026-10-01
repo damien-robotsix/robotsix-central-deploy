@@ -82,7 +82,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
 
@@ -133,7 +133,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
 
@@ -169,7 +169,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
 
@@ -200,7 +200,7 @@ jobs:
 
   python-security:
     name: Security scan (shared)
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@f343f5ca84b1d54bb4c2fdcb83568724aa9f743c  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@188518bece972d7d5f1c4e2a0f2226d2526dc0fa  # main
     permissions:
       contents: read
     with:
@@ -219,7 +219,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build Docker image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           load: true
@@ -236,7 +236,7 @@ jobs:
           severity: CRITICAL,HIGH
           trivyignores: .trivyignore
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
         if: always()
         with:
           sarif_file: trivy-results.sarif
@@ -253,7 +253,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - name: Install dev deps
@@ -276,7 +276,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - name: Build docs (strict)
@@ -302,7 +302,7 @@ jobs:
           output-file: hadolint.sarif
           no-fail: true
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4
         if: always()
         with:
           sarif_file: hadolint.sarif
@@ -318,7 +318,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - name: Install dependencies
@@ -431,7 +431,7 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Run actionlint
         run: '"$(go env GOPATH)/bin/actionlint"'
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - name: Run zizmor
@@ -447,7 +447,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - name: Install dependencies
@@ -467,7 +467,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - name: Install dependencies
@@ -531,7 +531,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: true
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0

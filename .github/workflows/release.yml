@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@70e26f3a214a20b601e2b415a41bad743a871e22  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@188518bece972d7d5f1c4e2a0f2226d2526dc0fa  # main
     permissions:
       contents: read
       packages: write       # push image to GHCR
