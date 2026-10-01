@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
       security-events: write  # SARIF upload to Code Scanning
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@7314c9b6c2b536ca81023e8841f272b72733262e  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@188518bece972d7d5f1c4e2a0f2226d2526dc0fa  # main
     with:
       languages: python
       config-file: .github/codeql/codeql-config.yml
