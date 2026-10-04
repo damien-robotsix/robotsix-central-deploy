@@ -175,6 +175,16 @@ class ServiceRecord:
     repo_id: str = ""
 
     def to_status(self) -> ServiceStatus:
+        """Convert the internal service record to an API-ready status response.
+
+        Derives the image update state (UNKNOWN, UP_TO_DATE, UPDATE_AVAILABLE,
+        or AUTH_ERROR) from registry authentication errors and deployed vs.
+        latest registry image digest comparison.
+
+        Returns:
+            ServiceStatus: API response model with state, image info, and
+                update availability derived from this record.
+        """
         if self.registry_auth_error:
             update_state = UpdateState.AUTH_ERROR
         elif not self.deployed_image_digest or not self.latest_registry_digest:
