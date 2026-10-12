@@ -86,9 +86,14 @@ async def verify_post_deploy_health(
     """Poll *record*'s container for *window_seconds* and judge the deploy.
 
     The deploy is FAILED as soon as any poll observes the container
-    ``restarting``/``exited``/``dead``, a ``RestartCount`` above the value seen
-    on the first poll, or a Docker healthcheck reporting ``unhealthy``. When no
-    poll trips within the window the deploy passes.
+    ``restarting``/``exited``/``dead`` or a ``RestartCount`` above the value
+    seen on the first poll. A Docker healthcheck reporting ``unhealthy`` only
+    fails the deploy when it is still ``unhealthy`` on the LAST poll of the
+    window: a probe that times out while the freshly booted service is busy
+    (chat on 2026-10-11, twice: ``unhealthy`` for one poll, healthy for the
+    next 30 h with ``RestartCount=0``) is a transient, and judging it a crash
+    loop left the record ``failed`` and raised a bogus ``update_failed``
+    finding. When no poll trips within the window the deploy passes.
 
     Never raises: a diagnostics or log-capture error is logged and treated as
     "could not verify" rather than a deploy failure — this check exists to add
@@ -145,11 +150,23 @@ async def verify_post_deploy_health(
                 f"RestartCount grew {baseline}→{restart_count} during the "
                 f"{int(window_seconds)}s post-deploy window — crash loop"
             )
-        elif health == HealthStatus.UNHEALTHY.value:
+        elif health == HealthStatus.UNHEALTHY.value and i == polls - 1:
             reason = (
-                f"container healthcheck reports 'unhealthy' during the "
-                f"post-deploy window (RestartCount={restart_count})"
+                f"container healthcheck reports 'unhealthy' at the end of the "
+                f"{int(window_seconds)}s post-deploy window "
+                f"(RestartCount={restart_count})"
             )
+        elif health == HealthStatus.UNHEALTHY.value:
+            # Not terminal on its own: keep polling and only fail when the
+            # healthcheck is still 'unhealthy' on the last poll.
+            logger.info(
+                "post-deploy verify %s: healthcheck 'unhealthy' on poll %d/%d "
+                "— waiting for it to settle",
+                record.name,
+                i + 1,
+                polls,
+            )
+            continue
 
         if reason:
             crash_log = ""
