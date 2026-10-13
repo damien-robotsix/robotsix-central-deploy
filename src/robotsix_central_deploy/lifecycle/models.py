@@ -166,6 +166,12 @@ class ServiceRecord:
     #: bounded-defer clock; cleared on deploy or when the update clears.
     update_pending_since: float | None = None
     latest_registry_digest: str = ""
+    #: Registry digest of the last auto-update that crash-looped and was rolled
+    #: back. While this equals ``latest_registry_digest`` the caretaker will not
+    #: re-pull the same known-bad image every pass; it is cleared on the next
+    #: successful deploy and effectively reset once the registry publishes a
+    #: newer digest (``latest_registry_digest`` no longer matches).
+    failed_update_digest: str = ""
     registry_auth_error: bool = (
         False  # True when the last registry check failed due to 401/403
     )

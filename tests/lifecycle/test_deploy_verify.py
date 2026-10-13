@@ -7,9 +7,17 @@ from typing import Any
 import pytest
 
 from robotsix_central_deploy.lifecycle.deploy_verify import (
+    rollback_after_failed_deploy,
     verify_post_deploy_health,
 )
-from robotsix_central_deploy.lifecycle.models import ServiceRecord
+from robotsix_central_deploy.lifecycle.models import (
+    ComponentInspect,
+    DeploySource,
+    RollbackOutcome,
+    ServiceRecord,
+    ServiceState,
+)
+from robotsix_central_deploy.registry.models import ComponentConfig
 
 # Fast poll settings so the tests don't actually sleep for a real window.
 _FAST = {"window_seconds": 0.05, "poll_interval": 0.01}
@@ -170,3 +178,143 @@ async def test_diagnostics_error_never_raises() -> None:
     result = await verify_post_deploy_health(_Boom(), _record(), **_FAST)  # type: ignore[arg-type]
 
     assert result.ok is True
+
+
+# ---------------------------------------------------------------------------
+# rollback_after_failed_deploy
+# ---------------------------------------------------------------------------
+
+
+class _RollbackBackend:
+    """Backend stub exposing the methods rollback_after_failed_deploy calls."""
+
+    def __init__(
+        self,
+        outcome: RollbackOutcome | None = None,
+        rollback_error: Exception | None = None,
+        inspect: ComponentInspect | None = None,
+    ) -> None:
+        self._outcome = outcome
+        self._rollback_error = rollback_error
+        self._inspect = inspect
+        self.rollback_called = False
+
+    async def rollback(self, service: ServiceRecord, config: Any) -> RollbackOutcome:
+        self.rollback_called = True
+        if self._rollback_error is not None:
+            raise self._rollback_error
+        assert self._outcome is not None
+        return self._outcome
+
+    async def status(self, service: ServiceRecord) -> ComponentInspect:
+        if self._inspect is None:
+            raise RuntimeError("no status")
+        return self._inspect
+
+
+class _FakeStore:
+    def __init__(self) -> None:
+        self.put_calls = 0
+
+    async def put(self, record: ServiceRecord) -> None:
+        self.put_calls += 1
+
+
+class _FakeHistory:
+    def __init__(self) -> None:
+        self.entries: list[Any] = []
+
+    async def append(self, name: str, entry: Any) -> None:
+        self.entries.append(entry)
+
+
+def _rb_record() -> ServiceRecord:
+    return ServiceRecord(
+        name="hexarchy",
+        image="ghcr.io/org/hexarchy:main",
+        deployed_image_digest="sha256:bad",
+        previous_image_digest="sha256:good",
+    )
+
+
+def _rb_config() -> ComponentConfig:
+    return ComponentConfig(
+        id="hexarchy", image="ghcr.io/org/hexarchy:main", container_name="hexarchy"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rollback_restores_prior_image_and_syncs_state() -> None:
+    backend = _RollbackBackend(
+        outcome=RollbackOutcome(
+            deployed_digest="sha256:good", state=ServiceState.RUNNING
+        ),
+        inspect=ComponentInspect(state=ServiceState.RUNNING, health="healthy"),
+    )
+    store = _FakeStore()
+    history = _FakeHistory()
+    record = _rb_record()
+
+    recovery = await rollback_after_failed_deploy(
+        backend,
+        record,
+        _rb_config(),
+        store,
+        history,  # type: ignore[arg-type]
+    )
+
+    assert recovery.rolled_back is True
+    assert recovery.rolled_back_to == "sha256:good"
+    assert recovery.failed_digest == "sha256:bad"
+    # Digests swapped and state/health synced with the live container.
+    assert record.deployed_image_digest == "sha256:good"
+    assert record.previous_image_digest == "sha256:bad"
+    assert record.state == ServiceState.RUNNING
+    assert record.health == "healthy"
+    assert store.put_calls == 1
+    # A ROLLBACK history entry was recorded.
+    assert len(history.entries) == 1
+    assert history.entries[0].source == DeploySource.ROLLBACK
+    assert history.entries[0].digest == "sha256:good"
+
+
+@pytest.mark.asyncio
+async def test_rollback_without_prior_digest_reports_error() -> None:
+    backend = _RollbackBackend()
+    store = _FakeStore()
+    history = _FakeHistory()
+    record = _rb_record()
+    record.previous_image_digest = ""
+
+    recovery = await rollback_after_failed_deploy(
+        backend,
+        record,
+        _rb_config(),
+        store,
+        history,  # type: ignore[arg-type]
+    )
+
+    assert recovery.rolled_back is False
+    assert "no prior image digest" in recovery.error
+    assert backend.rollback_called is False
+
+
+@pytest.mark.asyncio
+async def test_rollback_backend_failure_reports_error() -> None:
+    backend = _RollbackBackend(rollback_error=RuntimeError("boom"))
+    store = _FakeStore()
+    history = _FakeHistory()
+    record = _rb_record()
+
+    recovery = await rollback_after_failed_deploy(
+        backend,
+        record,
+        _rb_config(),
+        store,
+        history,  # type: ignore[arg-type]
+    )
+
+    assert recovery.rolled_back is False
+    assert "boom" in recovery.error
+    # The original failed digest is still the deployed one — not corrupted.
+    assert record.deployed_image_digest == "sha256:bad"
