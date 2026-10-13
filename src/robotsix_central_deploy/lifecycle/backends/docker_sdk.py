@@ -15,6 +15,7 @@ from ...registry.constants import PROXY_NETWORK
 from ...registry.traefik_labels import traefik_labels
 from ..models import (
     ComponentInspect,
+    DeployHealthError,
     DeployOutcome,
     DockerDfStats,
     HealthStatus,
@@ -835,7 +836,19 @@ class DockerSdkBackend(ExecutionBackend):
 
             # Step 4 — health wait (if configured and not disabled)
             if config.health_check and not config.health_check.disable:
-                await self._wait_healthy(name, timeout=60.0)
+                try:
+                    await self._wait_healthy(name, timeout=60.0)
+                except Exception as exc:
+                    # The replacement container is already running the new
+                    # image — surface the digests so the record reflects what
+                    # is actually deployed (new) and what it replaced (old).
+                    # Without this, a later rollback would target a stale,
+                    # possibly-pruned digest (2026-10-12 linkedin incident).
+                    raise DeployHealthError(
+                        str(exc),
+                        deployed_digest=new_digest,
+                        previous_digest=prior_digest,
+                    ) from exc
         finally:
             release_inflight_image_refs(inflight_refs)
 
@@ -845,6 +858,65 @@ class DockerSdkBackend(ExecutionBackend):
             state=ServiceState.RUNNING,
             warnings=deploy_warnings,
         )
+
+    @staticmethod
+    def _digest_pull_ref(image: str, digest: str) -> str:
+        """Build a registry-pullable ``repo@digest`` ref from *image*.
+
+        *digest* is a bare ``sha256:...`` that Docker can only pull when
+        paired with its repository. Strips any ``@digest`` / ``:tag`` from
+        *image* to recover the repo, mirroring the router's rollback ref
+        derivation.  A *digest* that is already a full ref (contains ``@`` or
+        ``/``) is returned unchanged.
+        """
+        if "@" in digest or "/" in digest:
+            return digest
+        bare = image.split("@", 1)[0]
+        if "/" in bare:
+            prefix, image_name = bare.rsplit("/", 1)
+            image_name = (
+                image_name.rsplit(":", 1)[0] if ":" in image_name else image_name
+            )
+            repo = f"{prefix}/{image_name}"
+        else:
+            repo = bare.rsplit(":", 1)[0] if ":" in bare else bare
+        return f"{repo}@{digest}"
+
+    async def _ensure_image_present(self, target_digest: str, image: str) -> None:
+        """Ensure *target_digest* exists locally, pulling repo@digest if absent.
+
+        Raises ``RuntimeError`` when the image is not present locally and the
+        registry pull fails — callers MUST NOT stop/remove the running
+        container in that case.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, self._client.images.get, target_digest)
+            return
+        except docker.errors.ImageNotFound:
+            pass
+        except docker.errors.APIError as exc:
+            raise RuntimeError(
+                f"Could not check for rollback target image {target_digest!r}: {exc}"
+            ) from exc
+
+        pull_ref = self._digest_pull_ref(image, target_digest)
+        logger.info(
+            "rollback target %s not present locally — pulling %s",
+            target_digest,
+            pull_ref,
+        )
+        auth_configs = await self._build_auth_configs(pull_ref)
+        try:
+            await self._pull_with_fallback(pull_ref, auth_configs, loop, docker)
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Rollback target image {target_digest!r} is absent locally and "
+                f"could not be pulled as {pull_ref!r}: {exc}. Leaving the running "
+                "container untouched."
+            ) from exc
 
     async def rollback(
         self, service: ServiceRecord, config: ComponentConfig
@@ -859,6 +931,13 @@ class DockerSdkBackend(ExecutionBackend):
         loop = asyncio.get_running_loop()
 
         rollback_warnings: list[str] = []
+
+        # Ensure the rollback target image is present BEFORE touching the
+        # running container — pulling repo@digest from the registry when it is
+        # absent locally. A pruned rollback target must never leave the
+        # component with no container at all (2026-10-12 linkedin incident):
+        # if the pull fails we raise here, leaving the container untouched.
+        await self._ensure_image_present(target_digest, config.image)
 
         # Stop + remove current container
         existing = await self._get_container(name)

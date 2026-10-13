@@ -322,6 +322,24 @@ class RollbackOutcome:
     warnings: list[str] = field(default_factory=list)
 
 
+class DeployHealthError(RuntimeError):
+    """A deploy that recreated the container but then failed its health wait.
+
+    The replacement container is already running the *new* image, so the
+    record must be updated to reflect what is actually deployed
+    (``deployed_digest``) and the image it replaced (``previous_digest``) —
+    otherwise a later rollback targets a stale, possibly-pruned digest
+    (the 2026-10-12 linkedin incident).
+    """
+
+    def __init__(
+        self, message: str, *, deployed_digest: str, previous_digest: str
+    ) -> None:
+        super().__init__(message)
+        self.deployed_digest = deployed_digest
+        self.previous_digest = previous_digest
+
+
 class DeployRequest(BaseModel):
     """Optional overrides for a deploy request."""
 
