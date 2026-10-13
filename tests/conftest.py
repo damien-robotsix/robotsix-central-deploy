@@ -198,6 +198,32 @@ async def client(app):
         yield c
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_background_tasks():
+    """Cancel all pending asyncio tasks after the test session completes.
+
+    The FastAPI lifespan context manager starts background tasks (caretaker
+    and volume audit loops) when the app is initialized. If tests use the
+    app or client fixtures, these tasks run in the background. Without
+    explicit cleanup, they can consume resources and cause subsequent
+    test runs to hang or timeout. This fixture ensures all background
+    tasks are cancelled at session teardown.
+    """
+    yield
+    import asyncio
+    import logging
+
+    try:
+        loop = asyncio.get_event_loop()
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    except Exception as exc:  # noqa: BLE001 - best-effort session teardown
+        # asyncio loop may not exist in non-async test contexts
+        logging.getLogger(__name__).debug("Background task cleanup skipped: %s", exc)
+
+
 def pytest_ignore_collect(collection_path, config):
     return bool(
         (
