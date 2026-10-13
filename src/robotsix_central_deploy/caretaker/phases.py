@@ -211,6 +211,12 @@ async def phase_update(
                 # an update waits; a completed deploy resets it so the next update
                 # starts a fresh window.
                 record.update_pending_since = None
+                # A successful deploy supersedes whatever the previous attempt
+                # left behind; a stale verifier reason otherwise sticks to a
+                # healthy record for days (chat/cost-monitor still carried the
+                # 2026-10-11 "unhealthy during the post-deploy window" text on
+                # 2026-10-13 after two clean auto-deploys).
+                record.last_error = ""
                 await store.put(record)
 
                 try:
