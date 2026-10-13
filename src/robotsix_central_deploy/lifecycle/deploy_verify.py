@@ -26,14 +26,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .models import HealthStatus, ServiceState
+from .models import DeployHistoryEntry, DeploySource, HealthStatus, ServiceState
 
 if TYPE_CHECKING:
+    from ..registry.deploy_history_store import DeployHistoryStore
+    from ..registry.models import ComponentConfig
     from .backends import ExecutionBackend
     from .models import ServiceRecord
+    from .store import ServiceStore
 
 logger = logging.getLogger(__name__)
 
@@ -198,4 +202,135 @@ async def verify_post_deploy_health(
         health=last_health,
         baseline_restart_count=baseline or 0,
         restart_count=last_restart,
+    )
+
+
+@dataclass
+class RollbackRecovery:
+    """Outcome of an automatic rollback after a failed deploy.
+
+    ``rolled_back`` is the headline verdict. On failure ``error`` carries the
+    reason (no prior digest, or a backend error) so the caller can surface it
+    in the finding/job it already emits for the original deploy failure.
+    """
+
+    rolled_back: bool
+    rolled_back_to: str = ""
+    failed_digest: str = ""
+    state: ServiceState = ServiceState.UNKNOWN
+    error: str = ""
+
+
+async def rollback_after_failed_deploy(
+    backend: ExecutionBackend,
+    record: ServiceRecord,
+    config: ComponentConfig,
+    store: ServiceStore,
+    deploy_history_store: DeployHistoryStore,
+    *,
+    source: DeploySource = DeploySource.ROLLBACK,
+    log_context: str = "deploy",
+) -> RollbackRecovery:
+    """Roll a just-deployed, crash-looping container back to its prior image.
+
+    When :func:`verify_post_deploy_health` judges a deploy FAILED the new
+    container is still in place, crash-looping under Docker's restart policy
+    (hexarchy stayed down 6 days, 2026-10-06, because the auto-update path only
+    logged the failure). This restores ``record.previous_image_digest`` via the
+    same one-step swap ``POST /services/{name}/rollback`` performs, then
+    re-reads the live container so the stored ``deployed_image_digest`` / state
+    / health match the image actually running again.
+
+    Never raises: a missing prior digest or a backend error is reported in the
+    result so the caller can still surface the original deploy failure. The
+    ``DeploySource.ROLLBACK`` history entry is best-effort.
+    """
+    failed_digest = record.deployed_image_digest
+    if not record.previous_image_digest:
+        logger.error(
+            "%s %s: cannot auto-rollback a failed deploy — no prior image "
+            "digest recorded",
+            log_context,
+            record.name,
+        )
+        return RollbackRecovery(
+            rolled_back=False,
+            failed_digest=failed_digest,
+            error="no prior image digest recorded",
+        )
+
+    # backend.rollback reads record.previous_image_digest, so recreate the
+    # prior container BEFORE we swap the stored digests below.
+    try:
+        outcome = await backend.rollback(record, config)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "%s %s: auto-rollback after failed deploy failed: %s",
+            log_context,
+            record.name,
+            exc,
+        )
+        return RollbackRecovery(
+            rolled_back=False,
+            failed_digest=failed_digest,
+            error=str(exc),
+        )
+
+    # Swap digests (mirrors the router's one-step rollback): the restored prior
+    # image becomes deployed, the failed image becomes previous.
+    record.state = outcome.state
+    record.deployed_image_digest = outcome.deployed_digest
+    record.previous_image_digest = failed_digest
+    record.image_revision = outcome.deployed_digest
+    record.last_error = ""
+
+    # Keep lifecycle state in sync with the container actually running now —
+    # the bug this fixes left deployed_digest/health pointing at an image that
+    # was never running. Best-effort: a status probe error must not undo the
+    # rollback we just performed.
+    try:
+        inspect = await backend.status(record)
+        record.state = inspect.state
+        record.health = inspect.health
+    except Exception:
+        logger.warning(
+            "%s %s: could not refresh status after rollback",
+            log_context,
+            record.name,
+            exc_info=True,
+        )
+
+    await store.put(record)
+
+    try:
+        await deploy_history_store.append(
+            record.name,
+            DeployHistoryEntry(
+                digest=outcome.deployed_digest,
+                image_ref=record.image,
+                timestamp=time.time(),
+                source=source,
+                previous_digest=failed_digest,
+            ),
+        )
+    except Exception:
+        logger.warning(
+            "%s %s: failed to record rollback history entry",
+            log_context,
+            record.name,
+            exc_info=True,
+        )
+
+    logger.warning(
+        "%s %s: rolled back %s → %s after a failed deploy",
+        log_context,
+        record.name,
+        failed_digest or "unknown",
+        outcome.deployed_digest,
+    )
+    return RollbackRecovery(
+        rolled_back=True,
+        rolled_back_to=outcome.deployed_digest,
+        failed_digest=failed_digest,
+        state=record.state,
     )

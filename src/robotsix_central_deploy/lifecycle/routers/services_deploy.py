@@ -32,7 +32,7 @@ from ..deploy_lock import (
     set_deploy_lock_job_id,
     try_acquire_deploy_lock,
 )
-from ..deploy_verify import verify_post_deploy_health
+from ..deploy_verify import rollback_after_failed_deploy, verify_post_deploy_health
 from ..deps import (
     JobRegistry,
     _get_backend,
@@ -614,6 +614,30 @@ async def _run_deploy_job(
             record.state = ServiceState.FAILED
             record.last_error = reason
             await store.put(record)
+
+            # Roll the crash-looping container back to its last-good image
+            # instead of leaving it restarting with no running image recorded
+            # (hexarchy-2, 2026-10-12: a failed manual deploy left the broken
+            # container restarting with deployed_image_digest=None).
+            recovery = await rollback_after_failed_deploy(
+                backend,
+                record,
+                config,
+                store,
+                deploy_history_store,
+                source=DeploySource.ROLLBACK,
+                log_context="deploy",
+            )
+            if recovery.rolled_back:
+                reason += (
+                    f" — rolled back to the previous image {recovery.rolled_back_to}."
+                )
+            elif recovery.error:
+                reason += (
+                    f" — automatic rollback failed ({recovery.error}); the "
+                    f"container is still in a failed state."
+                )
+
             job_registry.mark_failed(
                 job_id, reason, logs=verification.crash_log or None
             )

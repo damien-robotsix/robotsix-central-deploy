@@ -13,7 +13,10 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from ..lifecycle.deploy_lock import release_deploy_lock, try_acquire_deploy_lock
-from ..lifecycle.deploy_verify import verify_post_deploy_health
+from ..lifecycle.deploy_verify import (
+    rollback_after_failed_deploy,
+    verify_post_deploy_health,
+)
 from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
 from .models import CaretakerFinding, FindingKind
 
@@ -145,6 +148,24 @@ async def phase_update(
         if not record.update_available and not siblings_stale:
             continue
 
+        # Don't re-pull a registry digest that already crash-looped and was
+        # rolled back: retry only once the registry publishes a newer digest.
+        # (hexarchy, 2026-10-06 — the caretaker re-deployed the same broken
+        # :main image every pass.) A stale sibling still makes the parent
+        # eligible for a sibling-only refresh below.
+        update_is_known_bad = bool(
+            record.failed_update_digest
+            and record.latest_registry_digest == record.failed_update_digest
+        )
+        if update_is_known_bad and not siblings_stale:
+            logger.info(
+                "phase_update: skipping %s — registry digest %s already "
+                "crash-looped and was rolled back; waiting for a newer image",
+                record.name,
+                record.failed_update_digest,
+            )
+            continue
+
         # A component the caller marked busy (the mill with implement/ci_fix
         # stages in flight — see the scheduler's /active probe) keeps its
         # pending update for the next pass: recreating it mid-stage aborts
@@ -188,7 +209,7 @@ async def phase_update(
             )
             continue
         try:
-            if record.update_available:
+            if record.update_available and not update_is_known_bad:
                 # Recreating the container with only the static registry env would
                 # silently drop EnvStore-provisioned variables (API keys, secrets),
                 # so merge them exactly like the manual deploy path does.
@@ -207,6 +228,9 @@ async def phase_update(
                 record.deployed_image_digest = outcome.deployed_digest
                 record.previous_image_digest = outcome.previous_digest
                 record.update_available = False
+                # A fresh deploy clears any prior known-bad marker — if this
+                # image also fails verification the failure block re-sets it.
+                record.failed_update_digest = ""
                 # The bounded-defer clock (mill busy-guard) is only meaningful while
                 # an update waits; a completed deploy resets it so the next update
                 # starts a fresh window.
@@ -254,23 +278,52 @@ async def phase_update(
                 if not verification.ok:
                     record.state = ServiceState.FAILED
                     record.last_error = verification.reason
+                    # Remember this registry digest as known-bad so we don't
+                    # re-pull it every pass (requirement: retry only on a newer
+                    # image). Recorded before the rollback swaps the digests.
+                    record.failed_update_digest = record.latest_registry_digest
                     await store.put(record)
-                    detail = (
-                        f"Auto-update of {record.name} to {outcome.deployed_digest} "
-                        f"landed a crash-looping container: {verification.reason}.\n\n"
-                        f"Last container logs:\n{verification.crash_log}"
-                        if verification.crash_log
-                        else (
-                            f"Auto-update of {record.name} to "
-                            f"{outcome.deployed_digest} landed a crash-looping "
-                            f"container: {verification.reason}."
-                        )
-                    )
                     logger.error(
                         "phase_update: post-deploy verification failed for %s: %s",
                         record.name,
                         verification.reason,
                     )
+
+                    # Roll the crash-looping container back to its last-good
+                    # image instead of leaving it restarting indefinitely
+                    # (hexarchy was down 6 days, 2026-10-06). Uses the same
+                    # one-step swap POST /services/{name}/rollback performs and
+                    # re-syncs the stored digest/health with the live container.
+                    recovery = await rollback_after_failed_deploy(
+                        backend,
+                        record,
+                        deploy_config,
+                        store,
+                        deploy_history_store,
+                        source=DeploySource.ROLLBACK,
+                        log_context="phase_update",
+                    )
+
+                    detail = (
+                        f"Auto-update of {record.name} to {outcome.deployed_digest} "
+                        f"landed a crash-looping container: {verification.reason}."
+                    )
+                    if recovery.rolled_back:
+                        detail += (
+                            f"\n\nRolled back to the previous image "
+                            f"{recovery.rolled_back_to}; the broken "
+                            f"{outcome.deployed_digest} will not be retried until "
+                            f"the registry publishes a newer digest."
+                        )
+                    elif recovery.error:
+                        detail += (
+                            f"\n\nAutomatic rollback FAILED ({recovery.error}); the "
+                            f"container is still crash-looping and needs manual "
+                            f"intervention."
+                        )
+                    if verification.crash_log:
+                        detail += f"\n\nLast container logs:\n{verification.crash_log}"
+
                     findings.append(
                         CaretakerFinding(
                             component_id=record.name,

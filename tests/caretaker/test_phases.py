@@ -668,6 +668,132 @@ class TestPhaseUpdate:
         assert "extra_forbidden" in findings[0].detail
         assert record.state == ServiceState.FAILED
 
+    @pytest.mark.asyncio
+    async def test_rolls_back_to_previous_image_on_verification_failure(
+        self, _stub_verify
+    ):
+        """A crash-looping auto-update is rolled back to the last-good image.
+
+        The UPDATE_FAILED finding is still emitted (and notes the rollback),
+        the stored digests/health are re-synced with the restored container,
+        the failed registry digest is remembered, and a ROLLBACK history entry
+        is recorded.
+        """
+        _stub_verify.return_value = DeployVerification(
+            ok=False,
+            verified=True,
+            state="restarting",
+            reason="exec /app/.venv/bin/uvicorn: no such file — crash loop",
+            crash_log="exec /app/.venv/bin/uvicorn: no such file",
+        )
+
+        store = MagicMock()
+        record = _make_record()
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        backend.rollback = AsyncMock(
+            return_value=RollbackOutcome(
+                deployed_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
+
+        backend.rollback.assert_awaited_once()
+        # Digests re-synced with the restored container: deployed is the prior
+        # image, the failed image becomes previous.
+        assert record.deployed_image_digest == "sha256:abc"
+        assert record.previous_image_digest == "sha256:def"
+        assert record.state == ServiceState.RUNNING
+        assert record.health == "healthy"
+        # The failed registry digest is remembered so it is not retried.
+        assert record.failed_update_digest == "sha256:def"
+        # Finding kept, and it records the rollback.
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.UPDATE_FAILED
+        assert "Rolled back" in findings[0].detail
+        # A ROLLBACK history entry was appended (plus the forward deploy entry).
+        sources = [c.args[1].source for c in dhs.append.call_args_list]
+        assert DeploySource.ROLLBACK in sources
+
+    @pytest.mark.asyncio
+    async def test_skips_known_bad_registry_digest(self, _stub_verify):
+        """A registry digest that already crash-looped is not re-deployed."""
+        store = MagicMock()
+        record = _make_record()
+        # The pending update matches the digest we already rolled back from.
+        record.failed_update_digest = record.latest_registry_digest
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+
+        backend = MagicMock()
+        backend.deploy = AsyncMock()
+
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        findings = await phase_update(
+            registry, store, backend, ccs, dhs, _make_env_store()
+        )
+
+        backend.deploy.assert_not_called()
+        assert findings == []
+
+    @pytest.mark.asyncio
+    async def test_retries_once_registry_digest_advances(self, _stub_verify):
+        """A newer registry digest clears the known-bad marker and re-deploys."""
+        store = MagicMock()
+        record = _make_record()
+        # Previously failed on an older digest; the registry has moved on.
+        record.failed_update_digest = "sha256:oldbad"
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(registry, store, backend, ccs, dhs, _make_env_store())
+
+        backend.deploy.assert_called_once()
+        # A successful deploy clears the stale known-bad marker.
+        assert record.failed_update_digest == ""
+
 
 class TestPhaseHealth:
     @pytest.mark.asyncio
