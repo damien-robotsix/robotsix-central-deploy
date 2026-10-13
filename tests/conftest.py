@@ -211,6 +211,7 @@ def _cleanup_background_tasks():
     """
     yield
     import asyncio
+    import logging
 
     try:
         loop = asyncio.get_event_loop()
@@ -218,9 +219,9 @@ def _cleanup_background_tasks():
         for task in pending:
             task.cancel()
         loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - best-effort session teardown
         # asyncio loop may not exist in non-async test contexts
-        pass
+        logging.getLogger(__name__).debug("Background task cleanup skipped: %s", exc)
 
 
 def pytest_ignore_collect(collection_path, config):
