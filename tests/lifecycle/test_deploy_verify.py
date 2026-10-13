@@ -117,6 +117,31 @@ async def test_unhealthy_healthcheck_is_failed() -> None:
 
     assert result.ok is False
     assert "unhealthy" in result.reason
+    assert backend.logs_requested
+
+
+@pytest.mark.asyncio
+async def test_transient_unhealthy_that_recovers_passes() -> None:
+    """'unhealthy' on an early poll, healthy by the last poll → not a failure.
+
+    chat 2026-10-11 (twice): a healthcheck probe timed out while the freshly
+    booted service was busy, the caretaker judged the deploy a crash loop and
+    left the record ``failed`` although the container stayed up for 30 h with
+    ``RestartCount=0``.
+    """
+    unhealthy = {
+        "exists": True,
+        "state": "running",
+        "restart_count": 0,
+        "health": "unhealthy",
+    }
+    healthy = {**unhealthy, "health": "healthy"}
+    backend = _FakeBackend([healthy, unhealthy, unhealthy, healthy])
+    result = await verify_post_deploy_health(backend, _record(), **_FAST)  # type: ignore[arg-type]
+
+    assert result.ok is True
+    assert result.health == "healthy"
+    assert not backend.logs_requested
 
 
 @pytest.mark.asyncio
