@@ -356,6 +356,64 @@ class TestDeployEndpoint:
         assert rec.previous_image_digest == "sha256:noop"  # what was running
         assert rec.image_revision == "sha256:old456"
 
+    async def test_failed_health_deploy_then_rollback_targets_last_good(
+        self, client: AsyncClient, auth_headers: dict, registry
+    ):
+        """Models the 2026-10-12 linkedin incident: a deploy recreates the
+        container but fails its health wait. The record must then show the new
+        (bad) digest as running and the image it replaced as previous — so a
+        subsequent one-step rollback targets the last-good image, not a stale
+        digest two deploys back."""
+        from robotsix_central_deploy.lifecycle.models import DeployHealthError
+
+        class _UnhealthyDeployBackend(NoopBackend):
+            async def deploy(self, service, config, image_ref):  # type: ignore[override]
+                raise DeployHealthError(
+                    "Container is unhealthy after deploy (failing streak: 0)",
+                    deployed_digest="sha256:newbad",
+                    previous_digest="sha256:lastgood",
+                )
+
+        server_mod.app.state.backend = _UnhealthyDeployBackend()
+
+        store = server_mod.app.state.store
+        # Record carries a STALE previous (two deploys back), like the incident.
+        await store.put(
+            ServiceRecord(
+                name="svc-a",
+                state=ServiceState.RUNNING,
+                image="repo:v1",
+                deployed_image_digest="sha256:lastgood",
+                previous_image_digest="sha256:ancient",
+            )
+        )
+
+        resp = await client.post("/services/svc-a/deploy", headers=auth_headers)
+        assert resp.status_code == 202
+
+        # Let the background deploy job run to completion.
+        await asyncio.sleep(0)
+
+        rec = await store.get("svc-a")
+        assert rec is not None
+        assert rec.state == ServiceState.FAILED
+        # The failed deploy persisted what is now running + what it replaced.
+        assert rec.deployed_image_digest == "sha256:newbad"
+        assert rec.previous_image_digest == "sha256:lastgood"
+
+        # Restore a working backend so the rollback itself can execute.
+        server_mod.app.state.backend = NoopBackend()
+
+        resp2 = await client.post("/services/svc-a/rollback", headers=auth_headers)
+        assert resp2.status_code == 200
+        # The rollback targets the last-good image, not the stale 'ancient' one.
+        assert resp2.json()["rolled_back_to_digest"] == "sha256:lastgood"
+
+        rec = await store.get("svc-a")
+        assert rec is not None
+        assert rec.deployed_image_digest == "sha256:lastgood"
+        assert rec.previous_image_digest == "sha256:newbad"
+
     async def test_rollback_404_on_unknown_service(
         self, client: AsyncClient, auth_headers: dict, registry
     ):

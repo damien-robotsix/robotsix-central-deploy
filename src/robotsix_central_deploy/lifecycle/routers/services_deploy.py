@@ -48,6 +48,7 @@ from ..deps import (
     _get_store,
 )
 from ..models import (
+    DeployHealthError,
     DeployHistoryEntry,
     DeployHistoryResponse,
     DeployJobPhase,
@@ -673,6 +674,15 @@ async def _run_deploy_job(
         logger.exception("deploy %s failed", _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)
+        # A deploy that recreated the container but then failed its health
+        # wait leaves the new (bad) image running; persist that so a later
+        # rollback targets the image it actually replaced, not a stale pair
+        # two deploys back (2026-10-12 linkedin incident).
+        if isinstance(exc, DeployHealthError):
+            record.image = image_ref
+            record.image_revision = exc.deployed_digest
+            record.deployed_image_digest = exc.deployed_digest
+            record.previous_image_digest = exc.previous_digest
         await store.put(record)
         # Capture container logs so the operator can diagnose the failure.
         captured_logs: str | None = None

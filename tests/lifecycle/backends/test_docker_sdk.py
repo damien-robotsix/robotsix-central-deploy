@@ -14,6 +14,7 @@ import pytest
 from robotsix_central_deploy.lifecycle.backends.base import ExecutionBackend
 from robotsix_central_deploy.lifecycle.backends.docker_sdk import DockerSdkBackend
 from robotsix_central_deploy.lifecycle.models import (
+    DeployHealthError,
     DeployOutcome,
     DockerDfStats,
     RollbackOutcome,
@@ -415,6 +416,47 @@ class TestDockerSdkBackendDeploy:
 
         assert outcome.state == ServiceState.RUNNING
         new_container.start.assert_called_once()
+
+    async def test_deploy_unhealthy_raises_deploy_health_error_with_digests(
+        self, backend
+    ):
+        """A deploy that recreates the container but fails its health wait raises
+        DeployHealthError carrying the new + replaced digests, so the record can
+        record what is actually running (2026-10-12 linkedin incident)."""
+        b, client, _dm = backend
+        config = self._make_config(
+            health_check=HealthCheck(
+                test=["CMD", "check"],
+                interval_seconds=10,
+                timeout_seconds=5,
+                retries=3,
+                start_period_seconds=0,
+            )
+        )
+        record = ServiceRecord(
+            name="test-svc", container_name="test-svc", state=ServiceState.RUNNING
+        )
+
+        image = self._make_image_mock(["ghcr.io/o/img@sha256:newbad"], "sha256:newid")
+        client.images.pull.return_value = image
+
+        old = MagicMock()
+        old.image.id = "sha256:lastgood"
+
+        new_container = MagicMock()
+        new_container.attrs = {
+            "State": {"Health": {"Status": "unhealthy", "FailingStreak": 0}}
+        }
+        client.containers.create.return_value = new_container
+
+        # First get → old container lookup; second get → health poll (unhealthy).
+        client.containers.get.side_effect = [old, new_container]
+
+        with pytest.raises(DeployHealthError) as excinfo:
+            await b.deploy(record, config, "ghcr.io/o/img:main")
+
+        assert excinfo.value.deployed_digest == "sha256:newbad"
+        assert excinfo.value.previous_digest == "sha256:lastgood"
 
     async def test_deploy_image_pull_fails_raises_runtime_error(self, backend):
         """When image pull fails, RuntimeError is raised."""
@@ -934,6 +976,70 @@ class TestDockerSdkBackendRollback:
 
         outcome = await b.rollback(record, config)
         assert outcome.state == ServiceState.RUNNING
+
+    async def test_rollback_pulls_pruned_target_before_removing_container(
+        self, backend
+    ):
+        """A rollback target absent locally is pulled (repo@digest) BEFORE the
+        running container is stopped/removed (2026-10-12 linkedin incident)."""
+        b, client, dm = backend
+        config = ComponentConfig(
+            id="test-svc", image="ghcr.io/o/img:main", container_name="test-svc"
+        )
+        record = ServiceRecord(
+            name="test-svc",
+            container_name="test-svc",
+            state=ServiceState.RUNNING,
+            previous_image_digest="sha256:target",
+        )
+
+        # Target image is NOT present locally → must be pulled.
+        client.images.get.side_effect = dm.errors.ImageNotFound("not here")
+        client.images.pull.return_value = MagicMock()
+
+        old = MagicMock()
+        client.containers.get.return_value = old
+        new_container = MagicMock()
+        client.containers.create.return_value = new_container
+
+        outcome = await b.rollback(record, config)
+
+        # Pulled by repo@digest derived from config.image.
+        client.images.pull.assert_called_once()
+        assert client.images.pull.call_args[0][0] == "ghcr.io/o/img@sha256:target"
+
+        # Only after a successful pull is the running container replaced.
+        old.remove.assert_called_once_with(force=True)
+        new_container.start.assert_called_once()
+        assert outcome.deployed_digest == "sha256:target"
+
+    async def test_rollback_pull_failure_leaves_container_untouched(self, backend):
+        """When the pruned target cannot be pulled, the running container is
+        left untouched and a clear error is raised — never removed first."""
+        b, client, dm = backend
+        config = ComponentConfig(
+            id="test-svc", image="ghcr.io/o/img:main", container_name="test-svc"
+        )
+        record = ServiceRecord(
+            name="test-svc",
+            container_name="test-svc",
+            state=ServiceState.RUNNING,
+            previous_image_digest="sha256:pruned",
+        )
+
+        client.images.get.side_effect = dm.errors.ImageNotFound("not here")
+        client.images.pull.side_effect = dm.errors.APIError("404 No such image")
+
+        old = MagicMock()
+        client.containers.get.return_value = old
+
+        with pytest.raises(RuntimeError, match="could not be pulled"):
+            await b.rollback(record, config)
+
+        # The crash-looping container must still exist.
+        old.stop.assert_not_called()
+        old.remove.assert_not_called()
+        client.containers.create.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
