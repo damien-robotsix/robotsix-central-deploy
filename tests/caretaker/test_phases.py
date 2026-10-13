@@ -163,6 +163,39 @@ class TestPhaseUpdate:
         assert record.update_pending_since is None
 
     @pytest.mark.asyncio
+    async def test_deploy_clears_stale_last_error(self):
+        """A clean auto-deploy wipes the previous attempt's verifier reason.
+
+        Live: chat and cost-monitor kept `container healthcheck reports
+        'unhealthy' during the post-deploy window` from 2026-10-11 through two
+        successful caretaker deploys on 2026-10-13.
+        """
+        store = MagicMock()
+        record = _make_record()
+        record.last_error = "container healthcheck reports 'unhealthy' (stale)"
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=_make_config())
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(registry, store, backend, ccs, dhs, _make_env_store())
+
+        backend.deploy.assert_called_once()
+        assert record.last_error == ""
+
+    @pytest.mark.asyncio
     async def test_deploys_with_env_store_overrides(self):
         """Auto-update must deploy with EnvStore vars merged into config.env.
 
