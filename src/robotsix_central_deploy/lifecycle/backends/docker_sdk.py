@@ -464,8 +464,8 @@ class DockerSdkBackend(ExecutionBackend):
 
         Returns a dict with keys: ``exists``, ``labels``, ``networks``,
         ``state``, ``health``, ``started_at``, ``restart_count``,
-        ``image_digest``.  When the container is not found, only
-        ``exists=False`` is returned.
+        ``exit_code``, ``image_digest``.  When the container is not found,
+        only ``exists=False`` is returned.
         """
         name = self._container_name(service)
         container = await self._get_container(name)
@@ -518,6 +518,7 @@ class DockerSdkBackend(ExecutionBackend):
                 "health": health,
                 "started_at": state_obj.get("StartedAt", ""),
                 "restart_count": attrs.get("RestartCount", 0),
+                "exit_code": state_obj.get("ExitCode", 0),
                 "image_digest": image_digest,
             }
 

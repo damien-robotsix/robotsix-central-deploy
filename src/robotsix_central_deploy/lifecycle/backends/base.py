@@ -320,6 +320,6 @@ class ExecutionBackend(ABC):
 
         Default implementation returns ``{"exists": False}``.
         Backends with Docker access should override to provide labels,
-        networks, health, restart count, and image digest.
+        networks, health, restart count, exit code, and image digest.
         """
         return {"exists": False}
