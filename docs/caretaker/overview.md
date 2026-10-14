@@ -17,7 +17,7 @@ CaretakerScheduler.loop()  (scheduler.py)
   │      ├─ phase_update()           — deploy updated images for opted-in components
   │      │   └─ auto-prune dangling images (if image_auto_prune == True)
   │      ├─ phase_health()           — probe all container health states
-  │      ├─ phase_restart_watchdog() — detect containers restarting repeatedly (crash-loop safety net)
+  │      ├─ phase_restart_watchdog() — detect containers (primary and sibling) showing crash-loop signals: RestartCount growth, restarting state, or non-zero exit code (crash-loop safety net)
   │      ├─ phase_auto_rollback()    — roll a crash-looping component back to its previous image (if caretaker_auto_rollback_enabled == True)
   │      ├─ phase_volumes()          — volume growth scan + orphan detection + disk check
   │      ├─ phase_self_update()      — launch detached self-updater if plane image has update (if central-deploy component's auto_update_enabled == True)
