@@ -766,11 +766,47 @@ class TestDockerSdkBackendBuildAuthConfig:
 
     @pytest.mark.asyncio
     async def test_ghcr_image_partial_creds_returns_none(self, backend):
-        """ghcr.io image with only some GitHub App creds yields no credentials."""
+        """ghcr.io image with only some GitHub App creds yields no credentials.
+
+        The installation_id is optional now, but the app id and private key
+        are still both required — missing the private key leaves the App
+        unconfigured.
+        """
+        b = backend(
+            github_app_id="123", github_app_private_key="", installation_id="456"
+        )
+        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
+
+    @pytest.mark.asyncio
+    async def test_ghcr_image_empty_installation_id_resolves_per_repo(
+        self, backend, monkeypatch
+    ):
+        """Empty installation_id resolves the installation from the image ref."""
+        fake_token = MagicMock()
+        fake_token.token = "ghs_resolved"
+        mock_mint = MagicMock(return_value=fake_token)
+        monkeypatch.setattr(
+            "robotsix_central_deploy._ghcr_auth.mint_installation_token",
+            mock_mint,
+        )
+        monkeypatch.setattr(
+            "robotsix_central_deploy._ghcr_auth._HAS_GITHUB_AUTH",
+            True,
+        )
         b = backend(
             github_app_id="123", github_app_private_key="key", installation_id=""
         )
-        assert await b._build_auth_configs("ghcr.io/owner/repo:tag") == []
+        result = await b._build_auth_configs("ghcr.io/owner/repo:tag")
+        assert result == [
+            {
+                "username": "x-access-token",
+                "password": "ghs_resolved",
+                "serveraddress": "ghcr.io",
+            }
+        ]
+        mock_mint.assert_called_once_with(
+            "123", "key", None, owner="owner", repo="repo"
+        )
 
     @pytest.mark.asyncio
     async def test_ghcr_image_whitespace_creds_returns_none(self, backend):
