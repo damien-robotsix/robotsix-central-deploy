@@ -75,7 +75,12 @@ def _bearer_client(token: str) -> object:
 
 
 def get_installation_token_sync(
-    app_id: str, private_key: str, installation_id: str
+    app_id: str,
+    private_key: str,
+    installation_id: str,
+    *,
+    owner: str | None = None,
+    repo: str | None = None,
 ) -> str:
     """Return a raw GitHub App installation access token.
 
@@ -83,6 +88,10 @@ def get_installation_token_sync(
     ``x-access-token`` git credential.  It is never cached — callers
     should minimise calls (the preflight handler calls this once per
     onboarding request).
+
+    When *installation_id* is empty, the installation is resolved per
+    repository from *owner*/*repo* via ``robotsix-github-auth`` (which calls
+    ``/repos/{owner}/{repo}/installation``).
 
     Delegates to the shared ``robotsix-github-auth`` library.
     """
@@ -92,7 +101,10 @@ def get_installation_token_sync(
             "Install it with 'pip install robotsix-github-auth'."
         )
     return cast(
-        str, _mint_installation_token(app_id, private_key, installation_id).token
+        str,
+        _mint_installation_token(
+            app_id, private_key, installation_id or None, owner=owner, repo=repo
+        ).token,
     )
 
 

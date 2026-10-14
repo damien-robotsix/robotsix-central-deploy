@@ -7,6 +7,7 @@ import shutil
 
 from fastapi import APIRouter, Depends
 
+from ..._ghcr_auth import MINT_FAILURE_THRESHOLD
 from .._disk_utils import discover_mounted_disks
 from ..auth import verify_auth
 from ..backends import ExecutionBackend, collect_protected_image_refs
@@ -19,7 +20,34 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health", include_in_schema=False)
-async def health() -> dict[str, str]:
+async def health(
+    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+) -> dict[str, object]:
+    """Unauthenticated Traefik liveness probe — always HTTP 200 / ``"ok"``.
+
+    When the backend's shared GHCR credential resolver reports
+    ``MINT_FAILURE_THRESHOLD`` or more consecutive GitHub App token mint
+    failures, an informational ``github_app_mint_failure`` finding is added.
+    The finding is additive: ``status`` stays ``"ok"`` and the route stays a
+    liveness signal, not a readiness flip.
+    """
+    resolver = getattr(backend, "ghcr_credentials", None)
+    if (
+        resolver is not None
+        and resolver.consecutive_mint_failures >= MINT_FAILURE_THRESHOLD
+    ):
+        return {
+            "status": "ok",
+            "findings": [
+                {
+                    "kind": "github_app_mint_failure",
+                    "detail": (
+                        f"{resolver.consecutive_mint_failures} consecutive "
+                        "GitHub App token mint failures"
+                    ),
+                }
+            ],
+        }
     return {"status": "ok"}
 
 

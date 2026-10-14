@@ -14,6 +14,7 @@ was healthy — and ``refresh-contract`` / deploy-time refresh failed with
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -21,7 +22,22 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..config import LifecycleConfig
 
+try:
+    from robotsix_github_auth import TokenMintError
+
+    _HAS_GITHUB_AUTH = True
+except ImportError:  # pragma: no cover
+
+    class TokenMintError(Exception):  # type: ignore[no-redef]
+        """Fallback when ``robotsix-github-auth`` is not installed."""
+
+    _HAS_GITHUB_AUTH = False
+
 logger = logging.getLogger(__name__)
+
+# Set once a pinned ``installation_id`` is rejected by GitHub so subsequent
+# clones go straight to per-repository resolution (per-process memory only).
+_pinned_id_rejected = False
 
 _GITHUB_URL_RE = re.compile(
     r"^https://(?:www\.)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$"
@@ -45,32 +61,74 @@ async def github_token_for_repo(
     minting fails (logged; the caller then clones unauthenticated, which
     still works for public repos).
     """
+    global _pinned_id_rejected
     parsed = parse_github_owner_repo(git_url)
     if parsed is None:
         return None
-    if not (
-        lifecycle_config.github_app_id.get_secret_value()
-        and lifecycle_config.github_app_private_key.get_secret_value()
-        and lifecycle_config.installation_id.get_secret_value()
-    ):
+    app_id = lifecycle_config.github_app_id.get_secret_value()
+    private_key = lifecycle_config.github_app_private_key.get_secret_value()
+    if not (app_id and private_key):
         return None
+    installation_id = lifecycle_config.installation_id.get_secret_value()
     owner, repo = parsed
+    # owner/repo come from a regex match on a user-supplied URL; sanitise
+    # to prevent log-injection (newline forgery) before any logging.
+    safe_owner = owner.replace("\n", "_").replace("\r", "_")
+    safe_repo = repo.replace("\n", "_").replace("\r", "_")
     loop = loop or asyncio.get_running_loop()
     try:
         from ..github_app import get_installation_token_sync
 
+        use_pinned = bool(installation_id) and not _pinned_id_rejected
+        if use_pinned:
+            try:
+                return await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        get_installation_token_sync,
+                        app_id,
+                        private_key,
+                        installation_id,
+                    ),
+                )
+            except TokenMintError as exc:
+                # Pinned id rejected — resolve the installation per repository
+                # once and remember it for subsequent clones.
+                token = await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        get_installation_token_sync,
+                        app_id,
+                        private_key,
+                        "",
+                        owner=owner,
+                        repo=repo,
+                    ),
+                )
+                _pinned_id_rejected = True
+                logger.warning(
+                    "GitHub App pinned installation_id was rejected by GitHub; "
+                    "resolved the installation per repository %s/%s instead "
+                    "(subsequent clones skip the pinned id). Original error: %s",
+                    safe_owner,
+                    safe_repo,
+                    exc,
+                )
+                return token
+        # No usable pinned id (empty, or one GitHub already rejected) —
+        # resolve the installation per repository.
         return await loop.run_in_executor(
             None,
-            get_installation_token_sync,
-            lifecycle_config.github_app_id.get_secret_value(),
-            lifecycle_config.github_app_private_key.get_secret_value(),
-            lifecycle_config.installation_id.get_secret_value(),
+            functools.partial(
+                get_installation_token_sync,
+                app_id,
+                private_key,
+                "",
+                owner=owner,
+                repo=repo,
+            ),
         )
     except Exception:  # noqa: BLE001
-        # owner/repo come from a regex match on a user-supplied URL;
-        # sanitise to prevent log-injection (newline forgery).
-        safe_owner = owner.replace("\n", "_").replace("\r", "_")
-        safe_repo = repo.replace("\n", "_").replace("\r", "_")
         logger.warning(
             "Cannot get GitHub App installation token for %s/%s; "
             "cloning unauthenticated (public repos only)",
