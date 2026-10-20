@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING, Any
 
 from robotsix_http import RetryClient
 
+from ..lifecycle.deps.background import get_claude_auth_refresh_state
 from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import (
     component_auto_update_enabled,
     phase_auto_rollback,
+    phase_claude_auth,
     phase_health,
     phase_restart_watchdog,
     phase_update,
@@ -214,6 +216,21 @@ class CaretakerScheduler:
         except Exception as exc:
             logger.exception("phase_health crashed")
             errors.append(f"phase_health: {exc}")
+
+        # 2a. Phase: CLAUDE AUTH — the one credential every Claude-backed
+        # component shares. Unusable or unrenewable means a fleet-wide outage
+        # that no per-container health check reports (the containers stay
+        # "healthy" while every agent turn 401s — 2026-10-16..20).
+        try:
+            auth_findings = await phase_claude_auth(
+                self._backend,
+                get_claude_auth_refresh_state(),
+            )
+            findings.extend(auth_findings)
+            phases_run.append("claude-auth")
+        except Exception as exc:
+            logger.exception("phase_claude_auth crashed")
+            errors.append(f"phase_claude_auth: {exc}")
 
         # 2b. Phase: RESTART WATCHDOG — always-on crash-loop safety net.
         # Flags any managed container whose RestartCount grew since the last

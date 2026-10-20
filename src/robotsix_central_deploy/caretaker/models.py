@@ -43,6 +43,11 @@ class FindingKind(str, Enum):
 
     ``disk`` — host disk usage crossed a warning or critical
     threshold.
+
+    ``claude_auth`` — the shared ``claude-auth`` credential is not
+    usable or cannot be renewed (expired, no refresh token, refresh
+    grant rejected). Every Claude-backed component fails together on
+    this one, so it is a fleet-wide outage the moment it trips.
     """
 
     UPDATE_APPLIED = "update_applied"
@@ -56,6 +61,7 @@ class FindingKind(str, Enum):
     VOLUME_MEASUREMENT = "volume_measurement"
     VOLUME_ORPHAN = "volume_orphan"
     DISK = "disk"
+    CLAUDE_AUTH = "claude_auth"
 
 
 class CaretakerFinding(BaseModel):

@@ -11,6 +11,7 @@ import pytest
 from robotsix_central_deploy.caretaker.models import CaretakerFinding, FindingKind
 from robotsix_central_deploy.caretaker.phases import (
     phase_auto_rollback,
+    phase_claude_auth,
     phase_health,
     phase_restart_watchdog,
     phase_update,
@@ -793,6 +794,97 @@ class TestPhaseUpdate:
         backend.deploy.assert_called_once()
         # A successful deploy clears the stale known-bad marker.
         assert record.failed_update_digest == ""
+
+
+class TestPhaseClaudeAuth:
+    """The shared credential's state becomes a finding the fleet can read."""
+
+    @pytest.mark.asyncio
+    async def test_expired_without_refresh_token_is_an_error(self):
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(
+            return_value={
+                "status": "not-authenticated",
+                "detail": "Credentials have expired and carry no refresh token",
+                "refresh_capable": False,
+            }
+        )
+        findings = await phase_claude_auth(
+            backend,
+            {
+                "last_refresh": 1.0,
+                "last_error": 'Refresh rejected (400): {"error": "invalid_grant"}',
+            },
+        )
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.kind == FindingKind.CLAUDE_AUTH
+        assert f.severity == "error"
+        assert f.component_id == ""
+        assert "status=not-authenticated" in f.detail
+        assert "invalid_grant" in f.detail
+        assert "claude-auth/login" in f.detail
+
+    @pytest.mark.asyncio
+    async def test_healthy_refreshable_credential_is_silent(self):
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(
+            return_value={"status": "authenticated", "refresh_capable": True}
+        )
+        findings = await phase_claude_auth(
+            backend, {"last_refresh": None, "last_error": None}
+        )
+        assert findings == []
+
+    @pytest.mark.asyncio
+    async def test_authenticated_but_unrenewable_is_a_warning(self):
+        """Still works today; dies when the access token expires."""
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(
+            return_value={
+                "status": "expiring",
+                "detail": "Credentials expire in 3.2 hours and carry no refresh token",
+                "refresh_capable": False,
+            }
+        )
+        findings = await phase_claude_auth(
+            backend, {"last_refresh": None, "last_error": None}
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "error"  # status != authenticated
+        assert "expiring" in findings[0].detail
+
+    @pytest.mark.asyncio
+    async def test_authenticated_with_stale_refresh_error_is_a_warning(self):
+        """The live 2026-10-20 shape after the panel re-login: the credential
+        is good again but the loop still reports its last rejected grant."""
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(
+            return_value={"status": "authenticated", "refresh_capable": True}
+        )
+        findings = await phase_claude_auth(
+            backend,
+            {"last_refresh": 1.0, "last_error": "Refresh rejected (400): expired"},
+        )
+        assert len(findings) == 1
+        assert findings[0].severity == "warning"
+        assert findings[0].kind == FindingKind.CLAUDE_AUTH
+
+    @pytest.mark.asyncio
+    async def test_backend_without_claude_auth_support_is_skipped(self):
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(side_effect=NotImplementedError)
+        findings = await phase_claude_auth(backend, {"last_error": None})
+        assert findings == []
+
+    @pytest.mark.asyncio
+    async def test_probe_failure_is_itself_a_finding(self):
+        backend = MagicMock()
+        backend.check_claude_auth = AsyncMock(side_effect=RuntimeError("docker down"))
+        findings = await phase_claude_auth(backend, {"last_error": None})
+        assert len(findings) == 1
+        assert findings[0].severity == "warning"
+        assert "docker down" in findings[0].detail
 
 
 class TestPhaseHealth:
