@@ -10,14 +10,19 @@ import logging
 import shutil
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..lifecycle.deploy_lock import release_deploy_lock, try_acquire_deploy_lock
 from ..lifecycle.deploy_verify import (
     rollback_after_failed_deploy,
     verify_post_deploy_health,
 )
-from ..lifecycle.models import DeployHistoryEntry, DeploySource, ServiceState
+from ..lifecycle.models import (
+    CLAUDE_AUTH_VOLUME,
+    DeployHistoryEntry,
+    DeploySource,
+    ServiceState,
+)
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
@@ -368,6 +373,72 @@ async def phase_update(
             release_deploy_lock(record.name)
 
     return findings
+
+
+async def phase_claude_auth(
+    backend: ExecutionBackend,
+    refresh_state: dict[str, Any],
+) -> list[CaretakerFinding]:
+    """Flag a shared Claude credential that is unusable or cannot be renewed.
+
+    Reads ``backend.check_claude_auth`` for the ``claude-auth`` volume and
+    the background refresh loop's last outcome. Emits one ``CLAUDE_AUTH``
+    finding when the credential is not ``authenticated``, carries no
+    refresh token, or the last refresh grant was rejected.
+
+    2026-10-16 → 10-20: the refresh token expired (``invalid_grant``), the
+    access token died four hours later, and mill, chat and invest 401'd on
+    every Claude call for four days. ``/claude-auth/status`` had the exact
+    reason the whole time; nothing read it. This phase puts that reason
+    where the fleet's own escalation reads.
+    """
+    try:
+        status = await backend.check_claude_auth(CLAUDE_AUTH_VOLUME)
+    except NotImplementedError:
+        return []
+    except Exception as exc:  # noqa: BLE001 — a probe failure is itself the finding
+        return [
+            CaretakerFinding(
+                kind=FindingKind.CLAUDE_AUTH,
+                title="Claude credential check failed",
+                detail=f"check_claude_auth({CLAUDE_AUTH_VOLUME}) raised: {exc}",
+                severity="warning",
+            )
+        ]
+
+    state = str(status.get("status", "error"))
+    detail_parts: list[str] = []
+    severity: Literal["warning", "error"] = "warning"
+
+    if state != "authenticated":
+        severity = "error"
+        detail_parts.append(f"status={state}: {status.get('detail') or 'no detail'}")
+    elif status.get("refresh_capable") is False:
+        detail_parts.append(
+            "credential carries no refresh token, so it stops working when "
+            "the access token expires: " + str(status.get("detail") or "")
+        )
+
+    last_error = refresh_state.get("last_error")
+    if last_error:
+        detail_parts.append(f"last refresh attempt failed: {last_error}")
+
+    if not detail_parts:
+        return []
+
+    return [
+        CaretakerFinding(
+            kind=FindingKind.CLAUDE_AUTH,
+            title=(
+                "Claude credential unusable — every Claude-backed component is down"
+                if severity == "error"
+                else "Claude credential cannot be renewed automatically"
+            ),
+            detail="; ".join(detail_parts)
+            + ". Log in again from the Claude Auth panel (POST /claude-auth/login).",
+            severity=severity,
+        )
+    ]
 
 
 async def phase_health(
