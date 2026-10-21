@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 import shlex
-from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -17,23 +16,22 @@ from ..models import (
     ComponentInspect,
     DeployHealthError,
     DeployOutcome,
-    DockerDfStats,
     HealthStatus,
     RollbackOutcome,
     SelfInspect,
     ServiceRecord,
     ServiceState,
-    VolumeStat,
 )
 from ._auth_ops import CLAUDE_AUTH_VOLUME, AuthOps
+from ._logs_ops import LogsOpsMixin
+from ._prune_ops import PruneOpsMixin
 from ._self_mgmt_ops import SelfMgmtOps
 from ._util import (
-    PruneImagesResult,
     docker_status_to_service_state,
-    inflight_image_refs,
     register_inflight_image_refs,
     release_inflight_image_refs,
 )
+from ._volume_delegates import VolumeDelegatesMixin
 from ._volume_ops import VolumeOps
 from .base import ExecutionBackend
 
@@ -56,7 +54,9 @@ def _image_registry_host(image_ref: str) -> str | None:
     return image_ref.split("/")[0] if "/" in image_ref else None
 
 
-class DockerSdkBackend(ExecutionBackend):
+class DockerSdkBackend(
+    VolumeDelegatesMixin, LogsOpsMixin, PruneOpsMixin, ExecutionBackend
+):
     """Executes lifecycle actions via the Docker Python SDK against the local socket."""
 
     def __init__(
@@ -987,85 +987,6 @@ class DockerSdkBackend(ExecutionBackend):
             warnings=rollback_warnings,
         )
 
-    # -- config volume helpers (delegated to VolumeOps) ---------------------
-
-    async def write_config_to_volume(
-        self, volume_name: str, config_dict: dict[str, Any]
-    ) -> None:
-        """Write *config_dict* as JSON into a Docker named volume."""
-        await self._volume.write_config_to_volume(volume_name, config_dict)
-
-    async def write_llmio_tier_config_to_volume(
-        self, volume_name: str, tier_config: dict[str, Any]
-    ) -> None:
-        """Write *tier_config* as ``llmio_tier_config.json`` into a Docker named volume."""
-        await self._volume.write_llmio_tier_config_to_volume(volume_name, tier_config)
-
-    async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
-        """Read /config/config.json from a named volume."""
-        return await self._volume.read_config_from_volume(volume_name)
-
-    # -- volume inspection (delegated to VolumeOps) -------------------------
-
-    async def prune_volume_files(
-        self,
-        volume_name: str,
-        rel_path: str,
-        glob: str,
-        max_age_days: int,
-    ) -> dict[str, int]:
-        """See :meth:`VolumeOps.prune_volume_files`."""
-        return await self._volume.prune_volume_files(
-            volume_name, rel_path, glob, max_age_days
-        )
-
-    async def remove_stale_helpers(self) -> int:
-        """See :meth:`VolumeOps.remove_stale_helpers`."""
-        return await self._volume.remove_stale_helpers()
-
-    async def measure_volume_bytes(self, volume_name: str) -> int | None:
-        """Return effective total bytes for *volume_name*, excluding SQLite sidecars."""
-        return await self._volume.measure_volume_bytes(volume_name)
-
-    async def list_volume_dir(
-        self, volume_name: str, rel_path: str
-    ) -> list[dict[str, Any]]:
-        """List immediate children of /vol/<rel_path>."""
-        return await self._volume.list_volume_dir(volume_name, rel_path)
-
-    async def read_volume_file(
-        self, volume_name: str, rel_path: str, max_bytes: int
-    ) -> dict[str, Any]:
-        """Read ``/vol/<rel_path>`` via a one-shot busybox container."""
-        return await self._volume.read_volume_file(volume_name, rel_path, max_bytes)
-
-    async def write_volume_file(
-        self,
-        volume_name: str,
-        rel_path: str,
-        content: str,
-        overwrite: bool,
-    ) -> dict[str, Any]:
-        """Create-or-overwrite ``/vol/<rel_path>`` via a one-shot busybox container."""
-        return await self._volume.write_volume_file(
-            volume_name, rel_path, content, overwrite
-        )
-
-    async def remove_volume(self, volume_name: str) -> None:
-        """Remove the Docker named volume *volume_name* (best-effort)."""
-        await self._volume.remove_volume(volume_name)
-
-    async def relocate_volume(
-        self,
-        volume_name: str,
-        target_disk_path: str,
-        container_user: str | None = None,
-    ) -> dict[str, Any]:
-        """Relocate a named volume's data to *target_disk_path*."""
-        return await self._volume.relocate_volume(
-            volume_name, target_disk_path, container_user
-        )
-
     async def run_config_assist(
         self,
         image: str,
@@ -1115,286 +1036,6 @@ class DockerSdkBackend(ExecutionBackend):
                     pass
 
         return await loop.run_in_executor(None, _run)
-
-    async def stream_logs(
-        self,
-        service: ServiceRecord,
-        tail: int = 100,
-        since: str | None = None,
-        follow: bool = False,
-    ) -> AsyncIterator[bytes]:
-        """Stream container logs. Returns an async iterator of text chunks."""
-        import docker
-
-        loop = asyncio.get_running_loop()
-        name = self._container_name(service)
-
-        try:
-            container = await self._get_container(name)
-        except docker.errors.APIError as exc:
-            yield f"[docker error: {exc}]\n".encode()
-            return
-
-        if container is None:
-            yield b"[container not found]\n"
-            return
-
-        kwargs: dict[str, object] = {"stream": True, "follow": follow, "tail": tail}
-        if since is not None:
-            kwargs["since"] = since
-
-        log_iter = None
-        try:
-            log_iter = await loop.run_in_executor(
-                None, lambda: container.logs(**kwargs)
-            )
-            while True:
-
-                def _next_chunk() -> tuple[bytes | None, bool]:
-                    try:
-                        return next(log_iter), False
-                    except StopIteration:
-                        return None, True
-
-                chunk, exhausted = await loop.run_in_executor(None, _next_chunk)
-                if exhausted:
-                    break
-                yield (
-                    chunk
-                    if isinstance(chunk, bytes)
-                    else (chunk.encode() if chunk is not None else b"")
-                )
-        except asyncio.CancelledError:
-            raise
-        except docker.errors.APIError as exc:
-            yield f"[docker error: {exc}]\n".encode()
-        finally:
-            if log_iter is not None:
-                try:
-                    log_iter.close()
-                except (
-                    Exception  # noqa: BLE001
-                ):  # Best-effort close; iterator may already be exhausted
-                    pass
-
-    async def get_container_logs(
-        self,
-        service: ServiceRecord,
-        tail: int = 200,
-    ) -> str:
-        """Return the last *tail* lines of a container's logs as a string.
-
-        Returns an empty string if the container is not found or an error
-        occurs.
-        """
-        import docker
-
-        loop = asyncio.get_running_loop()
-        name = self._container_name(service)
-
-        try:
-            container = await self._get_container(name)
-        except docker.errors.APIError:
-            return ""
-
-        if container is None:
-            return ""
-
-        try:
-            raw = await loop.run_in_executor(
-                None,
-                lambda: container.logs(stdout=True, stderr=True, tail=tail),
-            )
-            return raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
-        except Exception:
-            logger.warning(
-                "get_container_logs: failed to read logs for %s", name, exc_info=True
-            )
-            return ""
-
-    async def disk_df(self) -> DockerDfStats:
-        """Return Docker disk usage statistics."""
-        import docker
-
-        loop = asyncio.get_running_loop()
-        try:
-            result = await loop.run_in_executor(None, self._client.api.df)
-        except docker.errors.APIError as exc:
-            logger.warning("docker df failed: %s", exc)
-            return DockerDfStats()
-        images = result.get("Images") or []
-        build_cache = result.get("BuildCache") or []
-        # ``LayersSize`` is the de-duplicated total image disk (matches
-        # ``docker system df``); summing each image's ``Size`` double-counts
-        # shared layers and over-reports.
-        images_size = result.get("LayersSize", 0) or sum(
-            img.get("Size", 0) for img in images
-        )
-        # ``BuilderSize`` is the legacy pre-BuildKit builder cache (0 on modern
-        # Docker); the real build cache is the sum of the ``BuildCache`` records.
-        build_cache_size = sum(item.get("Size", 0) for item in build_cache)
-        reclaimable = sum(
-            item.get("Size", 0) for item in build_cache if not item.get("InUse", True)
-        )
-        # Per-volume sizes from ``docker system df`` (``Volumes`` carries
-        # ``UsageData.Size`` and ``RefCount``); skip the -1 "unknown" sentinel.
-        volumes = [
-            VolumeStat(
-                name=v.get("Name", ""),
-                size_bytes=(v.get("UsageData") or {}).get("Size", 0),
-                in_use=(v.get("UsageData") or {}).get("RefCount", 0) > 0,
-            )
-            for v in (result.get("Volumes") or [])
-            if (v.get("UsageData") or {}).get("Size", 0) >= 0
-        ]
-        # Dangling images — use the same ``images.list(dangling=True)``
-        # source as ``prune_images()`` so the metric matches what the
-        # reclaim endpoint can actually remove.  Only leaf dangling images
-        # (those not referenced as a parent by any other image) are
-        # actually prunable — intermediate parent layers fail with a 409
-        # "image has dependent child images" at prune time.
-        try:
-            all_non_intermediate = await loop.run_in_executor(
-                None, self._client.images.list
-            )
-        except docker.errors.APIError as exc:
-            logger.warning("docker image list failed: %s", exc)
-            all_non_intermediate = []
-        parent_ids: set[str] = set()
-        for img in all_non_intermediate:
-            pid = img.attrs.get("ParentId", "")
-            if pid:
-                parent_ids.add(pid)
-        try:
-            dangling_images = await loop.run_in_executor(
-                None,
-                lambda: self._client.images.list(filters={"dangling": True}),
-            )
-        except docker.errors.APIError as exc:
-            logger.warning("docker image list (dangling) failed: %s", exc)
-            dangling_images = []
-        dangling_size = sum(int(img.attrs.get("Size", 0)) for img in dangling_images)
-        reclaimable_dangling_size = sum(
-            int(img.attrs.get("Size", 0))
-            for img in dangling_images
-            if img.id not in parent_ids
-        )
-        return DockerDfStats(
-            images_size_bytes=images_size,
-            dangling_images_bytes=dangling_size,
-            dangling_images_reclaimable_bytes=reclaimable_dangling_size,
-            build_cache_size_bytes=build_cache_size,
-            build_cache_reclaimable_bytes=reclaimable,
-            volumes=volumes,
-        )
-
-    async def prune_builds(self) -> int:
-        """Call Docker builder prune API and return bytes reclaimed."""
-        loop = asyncio.get_running_loop()
-        # all=True prunes the full build cache (not just dangling) so the button
-        # frees the reclaimable space the disk panel reports, not just a few KB.
-        result = await loop.run_in_executor(
-            None, lambda: self._client.api.prune_builds(all=True)
-        )
-        return int(result.get("SpaceReclaimed", 0))
-
-    async def prune_images(
-        self, protected_refs: set[str], *, force: bool = False
-    ) -> PruneImagesResult:
-        """Remove dangling (untagged) images one by one, skipping protected refs.
-
-        Docker's bulk prune API has no exclusion list, so images are removed
-        individually. An image is protected when its id or any of its repo
-        digests appears in *protected_refs*; images still used by a container
-        fail removal with a 409, which is tracked in the result.
-
-        When *force* is ``True``, stopped containers are removed first so
-        that images they hold references to can be pruned.
-        """
-        import docker
-
-        loop = asyncio.get_running_loop()
-
-        def _prune() -> PruneImagesResult:
-            result = PruneImagesResult()
-
-            # -- force: remove stopped containers first -----------------------
-            if force:
-                try:
-                    stopped = self._client.containers.list(
-                        all=True,
-                        filters={"status": "exited"},
-                    )
-                except docker.errors.APIError as exc:
-                    logger.warning(
-                        "image prune: list stopped containers failed: %s", exc
-                    )
-                    stopped = []
-                for c in stopped:
-                    try:
-                        c.remove()
-                        result.stopped_containers_removed += 1
-                    except docker.errors.APIError as exc:
-                        logger.debug(
-                            "image prune: skip stopped container %s: %s",
-                            c.id,
-                            exc,
-                        )
-
-            # -- list dangling images ----------------------------------------
-            try:
-                dangling = self._client.images.list(filters={"dangling": True})
-            except docker.errors.APIError as exc:
-                logger.warning("image prune: list failed: %s", exc)
-                return result
-
-            errors: list[str] = []
-
-            for img in dangling:
-                digests = {
-                    rd.split("@")[1]
-                    for rd in img.attrs.get("RepoDigests", [])
-                    if "@" in rd
-                }
-                # Re-check in-flight refs per image: *protected_refs* is a
-                # snapshot from before this loop, but a deploy may pull (and
-                # register) an image while the prune is running.
-                live_refs = protected_refs | inflight_image_refs()
-                if img.id in live_refs or digests & live_refs:
-                    result.skipped_protected += 1
-                    continue
-                size = int(img.attrs.get("Size", 0))
-                try:
-                    assert (  # noqa: S101
-                        img.id is not None
-                    )  # Docker images always have an id
-                    self._client.images.remove(img.id)
-                    result.space_reclaimed_bytes += size
-                    result.removed_count += 1
-                except docker.errors.APIError as exc:
-                    msg = str(exc)
-                    if "dependent child images" in msg:
-                        result.skipped_intermediate += 1
-                    elif (
-                        "image is being used" in msg
-                        or "image is referenced" in msg
-                        or "conflict" in msg.lower()
-                    ):
-                        result.skipped_in_use += 1
-                    else:
-                        result.skipped_error += 1
-                        if len(errors) < 3:
-                            short_id = (img.id or "???")[:19]
-                            errors.append(f"{short_id}: {msg}")
-                    logger.debug("image prune: skipped %s: %s", img.id, exc)
-
-            if errors:
-                result.error_summary = "; ".join(errors)
-            return result
-
-        return await loop.run_in_executor(None, _prune)
-
-    # ── self-management delegation (→ SelfMgmtOps) ──────────────────────
 
     async def inspect_self(self) -> SelfInspect | None:
         """Resolve the server's own container via the container-id hostname."""

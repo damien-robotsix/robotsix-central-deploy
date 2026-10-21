@@ -61,6 +61,7 @@ from .routers.services_diagnose import router as services_diagnose_router
 from .routers.services_env import router as services_env_router
 from .routers.services_lifecycle import router as services_lifecycle_router
 from .routers.services_maintenance import router as services_maintenance_router
+from .routers.services_rollback import router as services_rollback_router
 from .routers.system import router as system_router
 from .routers.volumes import router as volumes_router
 
@@ -136,6 +137,7 @@ app.include_router(volumes_router)
 app.include_router(services_router)
 app.include_router(services_maintenance_router)
 app.include_router(services_deploy_router)
+app.include_router(services_rollback_router)
 app.include_router(services_diagnose_router)
 app.include_router(services_config_router)
 app.include_router(services_env_router)

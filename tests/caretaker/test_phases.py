@@ -1508,7 +1508,9 @@ class TestApplyVolumeRetention:
     async def test_valid_rule_is_applied_with_defaults(self):
         from unittest.mock import AsyncMock, MagicMock
 
-        from robotsix_central_deploy.caretaker.phases import _apply_volume_retention
+        from robotsix_central_deploy.caretaker.phases_volumes import (
+            _apply_volume_retention,
+        )
 
         backend = MagicMock()
         backend.prune_volume_files = AsyncMock(return_value={"removed": 3, "bytes": 99})
@@ -1525,7 +1527,9 @@ class TestApplyVolumeRetention:
     async def test_invalid_rules_are_skipped(self):
         from unittest.mock import AsyncMock, MagicMock
 
-        from robotsix_central_deploy.caretaker.phases import _apply_volume_retention
+        from robotsix_central_deploy.caretaker.phases_volumes import (
+            _apply_volume_retention,
+        )
 
         backend = MagicMock()
         backend.prune_volume_files = AsyncMock(return_value={"removed": 0, "bytes": 0})
@@ -1545,7 +1549,9 @@ class TestApplyVolumeRetention:
     async def test_one_failing_rule_does_not_abort_the_rest(self):
         from unittest.mock import AsyncMock, MagicMock
 
-        from robotsix_central_deploy.caretaker.phases import _apply_volume_retention
+        from robotsix_central_deploy.caretaker.phases_volumes import (
+            _apply_volume_retention,
+        )
 
         backend = MagicMock()
         backend.prune_volume_files = AsyncMock(

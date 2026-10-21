@@ -76,6 +76,8 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.services_deploy
 
+::: robotsix_central_deploy.lifecycle.routers.services_rollback
+
 ::: robotsix_central_deploy.lifecycle.routers.services_env
 
 ::: robotsix_central_deploy.lifecycle.routers.system
@@ -138,11 +140,19 @@
 
 ::: robotsix_central_deploy.caretaker.phases
 
+::: robotsix_central_deploy.caretaker.phases_rollback
+
+::: robotsix_central_deploy.caretaker.phases_volumes
+
 ::: robotsix_central_deploy.caretaker.scheduler
 
 ## Deploy Lock
 
 ::: robotsix_central_deploy.lifecycle.deploy_lock
+
+## Deploy Jobs
+
+::: robotsix_central_deploy.lifecycle.deploy_jobs
 
 ## Deploy Verify
 
