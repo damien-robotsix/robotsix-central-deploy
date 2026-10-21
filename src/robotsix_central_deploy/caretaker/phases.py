@@ -23,11 +23,6 @@ from ..lifecycle.models import (
 )
 from .models import CaretakerFinding, FindingKind
 
-# Explicit re-exports: these phases live in their own modules but callers
-# (the scheduler, tests) keep importing them from here.
-from .phases_rollback import phase_auto_rollback as phase_auto_rollback  # noqa: PLC0414
-from .phases_volumes import phase_volumes as phase_volumes  # noqa: PLC0414
-
 if TYPE_CHECKING:
     from collections.abc import Mapping
 

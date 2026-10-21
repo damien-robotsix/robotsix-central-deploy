@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ._util import PruneImagesResult, inflight_image_refs
+
+if TYPE_CHECKING:
+    from docker import DockerClient
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 class PruneOpsMixin:
     """Mixin providing ``prune_builds`` and ``prune_images``."""
 
-    _client: Any
+    _client: DockerClient
 
     async def prune_builds(self) -> int:
         """Call Docker builder prune API and return bytes reclaimed."""

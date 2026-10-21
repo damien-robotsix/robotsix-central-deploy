@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from ..models import DockerDfStats, ServiceRecord, VolumeStat
+
+if TYPE_CHECKING:
+    from docker import DockerClient
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +22,10 @@ logger = logging.getLogger(__name__)
 class LogsOpsMixin:
     """Mixin providing ``stream_logs``, ``get_container_logs`` and ``disk_df``."""
 
-    _client: Any
-
-    if TYPE_CHECKING:
-
-        def _container_name(self, service: ServiceRecord) -> str: ...
-
-        async def _get_container(self, name: str) -> Any: ...
+    # Provided by the concrete backend (``DockerSdkBackend``).
+    _client: DockerClient
+    _container_name: Callable[[ServiceRecord], str]
+    _get_container: Callable[[str], Awaitable[Any]]
 
     async def stream_logs(
         self,

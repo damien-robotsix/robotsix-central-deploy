@@ -16,13 +16,13 @@ from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport, FindingKind
 from .phases import (
     component_auto_update_enabled,
-    phase_auto_rollback,
     phase_claude_auth,
     phase_health,
     phase_restart_watchdog,
     phase_update,
-    phase_volumes,
 )
+from .phases_rollback import phase_auto_rollback
+from .phases_volumes import phase_volumes
 
 if TYPE_CHECKING:
     from ..lifecycle.backends import ExecutionBackend

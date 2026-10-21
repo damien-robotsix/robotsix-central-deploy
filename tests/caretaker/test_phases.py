@@ -10,13 +10,13 @@ import pytest
 
 from robotsix_central_deploy.caretaker.models import CaretakerFinding, FindingKind
 from robotsix_central_deploy.caretaker.phases import (
-    phase_auto_rollback,
     phase_claude_auth,
     phase_health,
     phase_restart_watchdog,
     phase_update,
-    phase_volumes,
 )
+from robotsix_central_deploy.caretaker.phases_rollback import phase_auto_rollback
+from robotsix_central_deploy.caretaker.phases_volumes import phase_volumes
 from robotsix_central_deploy.caretaker.volume_audit.models import (
     AuditFinding,
     VolumeAuditResponse,
