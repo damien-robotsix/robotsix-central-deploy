@@ -166,7 +166,7 @@ per_rule_ignores = { "DEP001" = ["hatchling", "tomli"], "DEP002" = ["pytest", "p
 
 [tool.codespell]
 skip = "*.lock,*.css,*.map,*.min.*,.git/,node_modules/,uv.lock,LICENSE,site/,vendor/"
-ignore-words-list = "hist,ist,te,nd,vas"
+ignore-words-list = "hist,ist,te,nd,vas,unparseable"
 check-filenames = true
 
 [tool.vulture]
