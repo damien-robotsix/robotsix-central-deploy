@@ -538,34 +538,53 @@ async def phase_restart_watchdog(
     backend: ExecutionBackend,
     previous_restart_counts: dict[str, int],
 ) -> list[CaretakerFinding]:
-    """Flag any managed container whose ``RestartCount`` grew since last scrape.
+    """Flag any managed container (primary **or** sibling) that shows a
+    crash-loop signal since the last scrape.
 
     This is the always-on crash-loop safety net: a component can start
     restarting repeatedly outside any deploy window (config drift, a
     dependency outage), and nothing else notices (2026-09-05 incident — a
-    hexarchy crash loop ran ~1.5h on host ``bequiet`` unseen). Each pass reads
-    every managed container's ``RestartCount`` and compares it to the value
-    recorded on the previous pass; a growing count means the container is
-    crash-looping and a ``CRASH_LOOP`` finding is emitted carrying the same
-    last-crash-log excerpt a HEALTH finding carries, for the escalation
+    hexarchy crash loop ran ~1.5h on host ``bequiet`` unseen; 2026-10-07 — a
+    ``memory-hindsight`` sibling crash-looped ~10,920 times over 5.5 days
+    unseen). ``store.list_all()`` returns every managed record including
+    siblings, so each pass covers them with no component_id filter.
+
+    A container is treated as crash-looping when **any** of these hold — the
+    three signals the original sibling-monitoring ticket asked for, so a
+    point-in-time scrape that happens to catch the container momentarily
+    ``running`` between restarts is not the only thing that can flag it:
+
+    * **RestartCount grew** since the previous pass (``current > previous``) —
+      the classic Docker restart-policy loop.
+    * **State is ``restarting``** — the container is in Docker's restart
+      backoff right now, which a pure RestartCount delta misses when the
+      count was reset by a container recreate.
+    * **State is ``exited`` with a non-zero exit code** — the container
+      crashed and is down.
+
+    A ``CRASH_LOOP`` finding is emitted naming the record and carrying the
+    same last-crash-log excerpt a HEALTH finding carries, for the escalation
     consumer.
 
     ``previous_restart_counts`` is the scheduler-owned baseline, keyed by
     record name and mutated in place across passes:
 
-    * First observation of a container only records a baseline — never a
-      finding — so a stable component is never flagged (no false positive
-      across a normal scrape window).
-    * Growth (``current > previous``) emits a finding; the baseline is then
-      advanced to ``current`` so a container that keeps crash-looping is
-      re-flagged each interval it keeps restarting.
+    * First observation of a container records a baseline and only the
+      count-growth signal is suppressed — so a stable component is never
+      flagged on the growth signal across a normal scrape window (the
+      ``restarting`` / ``exited``-non-zero signals still apply immediately,
+      being point-in-time rather than delta-based).
+    * Count growth emits a finding; the baseline is then advanced to
+      ``current`` so a container that keeps crash-looping is re-flagged each
+      interval it keeps restarting.
     * Containers that have gone away are dropped from the baseline, so a
       later redeploy re-baselines instead of comparing against a stale count.
 
     Runtime state is read straight from ``get_container_diagnostics``
-    (``RestartCount``), which the multi-host backend routes to the owning
-    host — so remote components (host ``bequiet``) are covered without gating
-    on any cosmetic ``/diagnose`` routing/label verdict field.
+    (``restart_count``, ``state``, ``exit_code``), which the multi-host
+    backend routes to the owning host — so remote components (host
+    ``bequiet``) are covered without gating on any cosmetic ``/diagnose``
+    routing/label verdict field.
     """
     findings: list[CaretakerFinding] = []
     records = await store.list_all()
@@ -592,12 +611,20 @@ async def phase_restart_watchdog(
         previous = previous_restart_counts.get(record.name)
         previous_restart_counts[record.name] = current
 
-        if previous is None or current <= previous:
-            # First observation (baseline only) or a stable/reset count —
-            # not crash-looping.
+        state = str(diag.get("state", "") or "").lower()
+        exit_code = int(diag.get("exit_code", 0) or 0)
+
+        reasons = _crash_loop_reasons(
+            previous=previous,
+            current=current,
+            state=state,
+            exit_code=exit_code,
+        )
+        if not reasons:
+            # First observation (baseline only), a stable/reset count, and no
+            # restarting / exited-non-zero signal — not crash-looping.
             continue
 
-        # RestartCount grew across the interval → crash-looping.
         repo_id = record.repo_id
         if not repo_id and record.component_id:
             parent = await store.get(record.component_id)
@@ -610,9 +637,7 @@ async def phase_restart_watchdog(
                 repo_id=repo_id,
                 kind=FindingKind.CRASH_LOOP,
                 title=f"Container {record.name} is crash-looping",
-                detail=await _crash_loop_finding_detail(
-                    backend, record, previous, current
-                ),
+                detail=await _crash_loop_finding_detail(backend, record, reasons),
                 severity="error",
             )
         )
@@ -625,23 +650,52 @@ async def phase_restart_watchdog(
     return findings
 
 
+def _crash_loop_reasons(
+    *,
+    previous: int | None,
+    current: int,
+    state: str,
+    exit_code: int,
+) -> list[str]:
+    """Return the human-readable crash-loop signals that fired this pass.
+
+    An empty list means the container is healthy. ``state`` is expected
+    already lower-cased. The count-growth signal is delta-based (needs a
+    prior baseline), while the ``restarting`` and ``exited``-non-zero signals
+    are point-in-time and apply even on the first observation.
+    """
+    reasons: list[str] = []
+    if previous is not None and current > previous:
+        reasons.append(
+            f"RestartCount grew from {previous} to {current} across one "
+            f"caretaker interval"
+        )
+    if state == "restarting":
+        reasons.append(
+            "the container is in Docker's restart backoff (state=restarting)"
+        )
+    if state == "exited" and exit_code != 0:
+        reasons.append(f"the container exited with a non-zero code ({exit_code})")
+    return reasons
+
+
 async def _crash_loop_finding_detail(
     backend: ExecutionBackend,
     record: ServiceRecord,
-    previous_count: int,
-    current_count: int,
+    reasons: list[str],
 ) -> str:
     """Build a CRASH_LOOP finding body, including recent container logs.
 
-    Mirrors ``_health_finding_detail``: the RestartCount delta names the
+    Mirrors ``_health_finding_detail``: the crash-loop ``reasons`` name the
     symptom and the log tail carries the crash cause (a traceback or a
     repeated startup error), so the escalation consumer gets an actionable
     signal rather than a bare "restarting" verdict. Log capture is
     best-effort — a finding without logs is still worth emitting.
     """
     header = (
-        f"RestartCount grew from {previous_count} to {current_count} across one "
-        f"caretaker interval — the container is crash-looping."
+        "Crash-loop signal(s) detected — "
+        + "; ".join(reasons)
+        + " — the container is crash-looping."
     )
     if record.image:
         header += f"\nImage: {record.image}"

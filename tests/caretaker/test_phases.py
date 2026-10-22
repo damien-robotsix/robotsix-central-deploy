@@ -1020,8 +1020,13 @@ class TestPhaseHealth:
         assert findings[0].repo_id == "parent-repo"
 
 
-def _diag(exists=True, restart_count=0):
-    return {"exists": exists, "restart_count": restart_count}
+def _diag(exists=True, restart_count=0, state="running", exit_code=0):
+    return {
+        "exists": exists,
+        "restart_count": restart_count,
+        "state": state,
+        "exit_code": exit_code,
+    }
 
 
 class TestPhaseRestartWatchdog:
@@ -1186,6 +1191,85 @@ class TestPhaseRestartWatchdog:
         findings = await phase_restart_watchdog(store, backend, counts)
         assert len(findings) == 1
         backend.get_container_diagnostics.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_flags_when_state_restarting_even_on_first_pass(self):
+        """A container stuck in Docker's restart backoff is crash-looping even
+        when RestartCount shows no growth (reset by a container recreate) and
+        even on the very first observation."""
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=0, state="restarting")
+        )
+        backend.get_container_logs = AsyncMock(return_value="ImportError: boom")
+        counts: dict[str, int] = {}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.kind == FindingKind.CRASH_LOOP
+        assert f.component_id == "svc"
+        assert "restart backoff" in f.detail
+        assert "ImportError" in f.detail
+
+    @pytest.mark.asyncio
+    async def test_flags_when_exited_non_zero(self):
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=0, state="exited", exit_code=137)
+        )
+        backend.get_container_logs = AsyncMock(return_value="killed")
+        counts: dict[str, int] = {}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        assert findings[0].kind == FindingKind.CRASH_LOOP
+        assert "137" in findings[0].detail
+
+    @pytest.mark.asyncio
+    async def test_exited_zero_is_not_flagged(self):
+        """A container that exited cleanly (code 0) is not crash-looping."""
+        store = MagicMock()
+        record = _make_record(update_available=False)
+        store.list_all = AsyncMock(return_value=[record])
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=0, state="exited", exit_code=0)
+        )
+        counts: dict[str, int] = {}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert findings == []
+
+    @pytest.mark.asyncio
+    async def test_sibling_restarting_flagged_with_parent_repo(self):
+        """A restarting sibling (RestartCount reset by recreate) is flagged and
+        carries the parent's repo_id — the memory-hindsight crash-loop case."""
+        store = MagicMock()
+        parent = _make_record(name="memory", update_available=False)
+        parent.repo_id = "robotsix-memory"
+        sibling = ServiceRecord(
+            name="memory-hindsight", image="repo:v1", component_id="memory"
+        )
+        store.list_all = AsyncMock(return_value=[sibling])
+        store.get = AsyncMock(return_value=parent)
+        backend = MagicMock()
+        backend.get_container_diagnostics = AsyncMock(
+            return_value=_diag(restart_count=0, state="restarting")
+        )
+        backend.get_container_logs = AsyncMock(return_value="crash")
+        counts: dict[str, int] = {}
+
+        findings = await phase_restart_watchdog(store, backend, counts)
+        assert len(findings) == 1
+        assert findings[0].component_id == "memory-hindsight"
+        assert findings[0].repo_id == "robotsix-memory"
 
 
 def _crash_finding(component_id="svc"):
