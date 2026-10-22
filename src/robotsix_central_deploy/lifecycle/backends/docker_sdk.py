@@ -704,7 +704,7 @@ class DockerSdkBackend(ExecutionBackend):
             return []
 
         try:
-            candidates = await self._ghcr_credentials.resolve_all()
+            candidates = await self._ghcr_credentials.resolve_all(image_ref)
         except RuntimeError as exc:
             raise RuntimeError(f"{exc} (pull of {image_ref!r})") from exc
         return [

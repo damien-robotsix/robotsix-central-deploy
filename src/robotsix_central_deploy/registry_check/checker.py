@@ -237,7 +237,7 @@ class RegistryChecker:
         """
         try:
             candidates = (
-                await self._ghcr_credentials.resolve_all()
+                await self._ghcr_credentials.resolve_all(f"{GHCR_HOST}/{repo}")
                 if self._ghcr_credentials is not None
                 else []
             )

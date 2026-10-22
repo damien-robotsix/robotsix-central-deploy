@@ -319,7 +319,10 @@ class LifecycleConfig(BaseModel):
         description=(
             "GitHub App installation ID for the fleet's shared installation. "
             "Used together with github_app_id and github_app_private_key to "
-            "mint short-lived installation access tokens."
+            "mint short-lived installation access tokens. Leave empty to "
+            "resolve the installation per repository via "
+            "/repos/{owner}/{repo}/installation; a pinned ID that GitHub "
+            "rejects falls back to per-repository resolution automatically."
         ),
     )
     github_repo_create_token: SecretStr = Field(

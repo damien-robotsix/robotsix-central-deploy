@@ -318,7 +318,7 @@
     },
     "installation_id": {
       "default": "",
-      "description": "GitHub App installation ID for the fleet's shared installation. Used together with github_app_id and github_app_private_key to mint short-lived installation access tokens.",
+      "description": "GitHub App installation ID for the fleet's shared installation. Used together with github_app_id and github_app_private_key to mint short-lived installation access tokens. Leave empty to resolve the installation per repository via /repos/{owner}/{repo}/installation; a pinned ID that GitHub rejects falls back to per-repository resolution automatically.",
       "format": "password",
       "title": "Installation Id",
       "type": "string",

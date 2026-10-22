@@ -75,10 +75,12 @@ def _log_ghcr_credential_posture(
     2026-08-24.  Naming the source at startup makes that state greppable.
     """
     token = cfg.ghcr_pull_token.get_secret_value()
+    # The installation_id is optional: when empty the installation is
+    # resolved per repository at mint time, so an App is "configured" with
+    # just the app id and private key.
     app_configured = bool(
         cfg.github_app_id.get_secret_value()
         and cfg.github_app_private_key.get_secret_value()
-        and cfg.installation_id.get_secret_value()
     )
 
     if token and not pre_overlay_pull_token:
