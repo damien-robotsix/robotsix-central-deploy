@@ -64,8 +64,15 @@ RUN apt-get update && apt-get upgrade -y \
 COPY --from=builder /usr/local/lib/python3.14/site-packages/ /usr/local/lib/python3.14/site-packages/
 COPY --from=builder /usr/local/bin/robotsix-lifecycle /usr/local/bin/robotsix-lifecycle
 
-# Ensure setuptools is at the patched version (CVE-2026-59890).
-RUN python -m pip install --no-cache-dir 'setuptools>=83.0.0'
+# setuptools>=83 (CVE-2026-59890) is already installed by the builder stage
+# and arrives with the site-packages copy above. The base image's own pip
+# (26.x) vendors an old certifi under pip/_vendor, which Trivy reports as a
+# CRITICAL under the bare "Python" target (GHSA-6q48-6c7w-9gw2, Release image
+# run 39769849092 on 2026-10-22) even though uv.lock pins the fixed certifi.
+# Nothing uses pip at runtime (deps are installed by uv in the builder), so
+# strip it — a lock bump cannot touch pip's vendored copy.
+RUN python -m pip uninstall -y pip \
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip* /usr/local/bin/pip*
 
 # Non-root runtime user. /data is the state-volume mount point; a named
 # volume created empty inherits this ownership on first use (pre-existing
