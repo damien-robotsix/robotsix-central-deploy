@@ -32,6 +32,10 @@ component_env.json
 .DS_Store
 *.swp
 
+# Captured CI job-log dumps from download-job-logs tooling
+.joblog.txt
+*.joblog.txt
+
 # Build artifacts
 _gen_openapi_tmp.py
 # Fetched from the robotsix-ui GitHub Release at build time
