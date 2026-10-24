@@ -4,6 +4,13 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.13.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.13.0...v0.13.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* CI failure: CI on main (20261023T153513Z-ci-failure-ci-on-main-16d9) ([#930](https://github.com/damien-robotsix/robotsix-central-deploy/issues/930)) ([55cec7b](https://github.com/damien-robotsix/robotsix-central-deploy/commit/55cec7b0705057df2779ca0ddb8f4b291330cf92))
+
 ## [0.13.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.12.0...v0.13.0) (2026-10-22)
 
 
