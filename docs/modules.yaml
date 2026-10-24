@@ -53,7 +53,6 @@ modules:
       - pyproject.toml
       - uv.lock
       - vulture_whitelist.py
-      - scripts/**/*
 
   - id: registry
     description: >
