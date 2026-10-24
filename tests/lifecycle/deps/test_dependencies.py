@@ -158,7 +158,7 @@ class TestGetOrCreateRecord:
 class TestKnownServiceNames:
     """Tests for ``_known_service_names`` — the store read behind the 404 hint.
 
-    The matching itself is covered by ``tests/lifecycle/test_name_suggest.py``;
+    The matching itself is covered by ``tests/lifecycle/utils/test_name_suggest.py``;
     what matters here is that a store failure degrades to "no suggestions"
     instead of masking the 404 it decorates.
     """
