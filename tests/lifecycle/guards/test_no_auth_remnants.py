@@ -4,7 +4,7 @@ Component-level authentication was deleted (auth-removal epic): the fleet
 edge — Traefik plus tinyauth — is the only gate, and central-deploy holds
 itself to the same fleet-wide rule it enforces on every other component.
 
-``tests/lifecycle/test_app.py`` already guards the *runtime* surface: no route
+``tests/lifecycle/app/test_app.py`` already guards the *runtime* surface: no route
 may carry a real auth dependency.  This module guards what that test cannot
 see — the committed configuration files and the configuration models — because
 a reintroduced ``api_key`` key costs the same credential-provisioning mistakes
@@ -28,7 +28,7 @@ import pytest
 from robotsix_central_deploy.lifecycle.config import LifecycleConfig
 from robotsix_central_deploy.registry.settings_store import SystemSettings
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 #: Config keys that carried component-level credentials.  Matched
 #: case-insensitively as whole key names, so ``board_api_token`` and

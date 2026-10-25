@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 #: A concrete variable name — `ROBOTSIX_LIFECYCLE_` followed by at least one
 #: name character. The bare `ROBOTSIX_LIFECYCLE_*` glob does not match, so
