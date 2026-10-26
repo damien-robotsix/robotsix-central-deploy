@@ -213,10 +213,12 @@ jobs:
   # gates on fixable CRITICAL/HIGH CVEs (blocking — unlike the former inline
   # report-only job) and uploads SARIF to Code Scanning. Known base-image
   # findings are suppressed via `.trivyignore`.
+  # Fork PRs get an empty GITHUB_TOKEN build secret; fleet repos accept PRs
+  # only from mill/dependabot/operator branches, so this is accepted.
   trivy:
     name: Trivy
     if: github.event_name == 'pull_request'
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@92c11fd2be7a9ce80bd60208616271326e0fb08a  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@92c11fd2be7a9ce80bd60208616271326e0fb08a  # main 2026-10-26 (post-v1.3.0, re-pin to v1.4.0 when ghwf #243 is released)
     permissions:
       contents: read
       security-events: write  # Trivy SARIF upload to Code Scanning
