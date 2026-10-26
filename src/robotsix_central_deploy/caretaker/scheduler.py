@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from robotsix_http import RetryClient
 
+from ..lifecycle.deploy_lock import get_deploy_lock_info
 from ..lifecycle.deps.background import get_claude_auth_refresh_state
 from .mill_client import MillClient
 from .models import CaretakerFinding, CaretakerReport, FindingKind
@@ -114,6 +115,11 @@ class CaretakerScheduler:
         self._mill_deferred_since: float | None = None
         #: When the last short-cadence mill recheck ran (exposed by get_status).
         self._last_mill_recheck_at: datetime | None = None
+        #: Registry digest of the last mill update a pass or recheck tried to
+        #: deploy. ``_arm_pending_mill_update`` never re-arms for it, so a
+        #: deploy that raises (leaving ``update_available`` set) is retried
+        #: once per full pass, not every recheck slice.
+        self._mill_attempted_digest: str | None = None
 
     @staticmethod
     def _resolve_findings_path(config: LifecycleConfig) -> Path:
@@ -150,6 +156,10 @@ class CaretakerScheduler:
         # _evaluate_mill_busy.
         busy_components = await self._evaluate_mill_busy(settings)
         self._track_mill_deferral(settings, busy_components)
+        if settings.mill_component_id and (
+            settings.mill_component_id not in busy_components
+        ):
+            await self._note_mill_attempt(settings.mill_component_id)
 
         try:
             update_findings = await phase_update(
@@ -372,10 +382,60 @@ class CaretakerScheduler:
         else:
             self._mill_deferred_since = None
 
-    async def recheck_deferred_mill(self) -> list[CaretakerFinding] | None:
-        """Re-evaluate a mill update deferred as busy, outside the full pass.
+    async def _note_mill_attempt(self, mill_id: str) -> None:
+        """Remember the mill digest a deploy attempt is about to target."""
+        record = await self._store.get(mill_id)
+        if record is not None and record.update_available:
+            self._mill_attempted_digest = record.latest_registry_digest
 
-        Runs only while a deferral is outstanding. Re-probes the mill through
+    async def _arm_pending_mill_update(self) -> None:
+        """Start a deferral for a mill update that appeared between passes.
+
+        ``_track_mill_deferral`` only arms the recheck when a full pass saw the
+        mill busy. An update the digest-refresh tick flags *after* the pass
+        (``record.update_available`` turning true) would otherwise wait for the
+        next full pass, so treat it as a deferral that starts now. Skipped
+        while a deploy of the mill is already in progress, when the mill has
+        auto-update turned off, when the pending digest is one that already
+        crash-looped and was rolled back, or when a pass or recheck already
+        tried to deploy that digest (a failed deploy retries once per full
+        pass, not every recheck slice).
+        """
+        if self._mill_deferred_since is not None:
+            return
+        settings = await self._settings_store.get()
+        mill_id = settings.mill_component_id
+        if not mill_id or not settings.caretaker_enabled:
+            return
+        record = await self._store.get(mill_id)
+        if record is None or not record.update_available:
+            return
+        config = self._component_config_store.get(mill_id)
+        if config is not None and not component_auto_update_enabled(config):
+            return
+        if (
+            self._mill_attempted_digest is not None
+            and record.latest_registry_digest == self._mill_attempted_digest
+        ):
+            return
+        if (
+            record.failed_update_digest
+            and record.latest_registry_digest == record.failed_update_digest
+        ):
+            return
+        if get_deploy_lock_info(mill_id) is not None:
+            return
+        logger.info(
+            "phase_update: mill update pending since last pass — arming recheck"
+        )
+        self._mill_deferred_since = time.time()
+
+    async def recheck_deferred_mill(self) -> list[CaretakerFinding] | None:
+        """Re-evaluate a pending mill update outside the full pass.
+
+        Runs while a deferral is outstanding — either set by a full pass that
+        found the mill busy, or armed here when the mill record turned
+        ``update_available`` after the last pass. Re-probes the mill through
         ``_evaluate_mill_busy`` (the bounded max-defer / force-deploy clock is
         unchanged); when it no longer reports the mill busy, runs just the
         mill step of ``phase_update`` (pull + recreate + post-deploy verify).
@@ -383,6 +443,7 @@ class CaretakerScheduler:
         Returns the findings of the mill deploy, an empty list when the mill
         is still busy, or ``None`` when no deferral was outstanding.
         """
+        await self._arm_pending_mill_update()
         deferred_since = self._mill_deferred_since
         if deferred_since is None:
             return None
@@ -405,6 +466,7 @@ class CaretakerScheduler:
         record = await self._store.get(mill_id)
         if record is None or not record.update_available:
             return []
+        self._mill_attempted_digest = record.latest_registry_digest
 
         logger.info(
             "phase_update: mill idle — deploying deferred update (deferred since %s)",
@@ -687,22 +749,23 @@ class CaretakerScheduler:
     async def _wait_for_next_pass(self, interval: float) -> None:
         """Sleep until the next full pass, rechecking a deferred mill meanwhile.
 
-        Without a deferred mill this is a single sleep of *interval*. While a
-        mill update is deferred as busy, the wait is cut into
-        ``caretaker_mill_recheck_minutes`` slices and ``recheck_deferred_mill``
-        runs after each, so an idle mill deploys within one recheck interval
-        while the full pass keeps its own cadence.
+        Without a configured mill this is a single sleep of *interval*.
+        Otherwise the wait is cut into ``caretaker_mill_recheck_minutes``
+        slices and ``recheck_deferred_mill`` runs after each — it deploys a
+        deferred mill that went idle and arms itself for a mill update that
+        appeared after the last pass — so an idle mill deploys within one
+        recheck interval while the full pass keeps its own cadence.
         """
         deadline = time.monotonic() + interval
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return
-            if self._mill_deferred_since is None:
-                await asyncio.sleep(remaining)
-                return
             try:
                 settings = await self._settings_store.get()
+                if not settings.mill_component_id or not settings.caretaker_enabled:
+                    await asyncio.sleep(remaining)
+                    return
                 recheck_seconds = max(settings.caretaker_mill_recheck_minutes, 1) * 60
             except Exception as exc:  # noqa: BLE001
                 logger.error("CaretakerScheduler: failed to read settings: %s", exc)
