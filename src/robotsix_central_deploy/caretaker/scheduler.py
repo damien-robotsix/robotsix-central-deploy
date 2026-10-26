@@ -115,6 +115,11 @@ class CaretakerScheduler:
         self._mill_deferred_since: float | None = None
         #: When the last short-cadence mill recheck ran (exposed by get_status).
         self._last_mill_recheck_at: datetime | None = None
+        #: Registry digest of the last mill update a pass or recheck tried to
+        #: deploy. ``_arm_pending_mill_update`` never re-arms for it, so a
+        #: deploy that raises (leaving ``update_available`` set) is retried
+        #: once per full pass, not every recheck slice.
+        self._mill_attempted_digest: str | None = None
 
     @staticmethod
     def _resolve_findings_path(config: LifecycleConfig) -> Path:
@@ -151,6 +156,10 @@ class CaretakerScheduler:
         # _evaluate_mill_busy.
         busy_components = await self._evaluate_mill_busy(settings)
         self._track_mill_deferral(settings, busy_components)
+        if settings.mill_component_id and (
+            settings.mill_component_id not in busy_components
+        ):
+            await self._note_mill_attempt(settings.mill_component_id)
 
         try:
             update_findings = await phase_update(
@@ -373,6 +382,12 @@ class CaretakerScheduler:
         else:
             self._mill_deferred_since = None
 
+    async def _note_mill_attempt(self, mill_id: str) -> None:
+        """Remember the mill digest a deploy attempt is about to target."""
+        record = await self._store.get(mill_id)
+        if record is not None and record.update_available:
+            self._mill_attempted_digest = record.latest_registry_digest
+
     async def _arm_pending_mill_update(self) -> None:
         """Start a deferral for a mill update that appeared between passes.
 
@@ -380,8 +395,11 @@ class CaretakerScheduler:
         mill busy. An update the digest-refresh tick flags *after* the pass
         (``record.update_available`` turning true) would otherwise wait for the
         next full pass, so treat it as a deferral that starts now. Skipped
-        while a deploy of the mill is already in progress, or when the pending
-        digest is one that already crash-looped and was rolled back.
+        while a deploy of the mill is already in progress, when the mill has
+        auto-update turned off, when the pending digest is one that already
+        crash-looped and was rolled back, or when a pass or recheck already
+        tried to deploy that digest (a failed deploy retries once per full
+        pass, not every recheck slice).
         """
         if self._mill_deferred_since is not None:
             return
@@ -391,6 +409,14 @@ class CaretakerScheduler:
             return
         record = await self._store.get(mill_id)
         if record is None or not record.update_available:
+            return
+        config = self._component_config_store.get(mill_id)
+        if config is not None and not component_auto_update_enabled(config):
+            return
+        if (
+            self._mill_attempted_digest is not None
+            and record.latest_registry_digest == self._mill_attempted_digest
+        ):
             return
         if (
             record.failed_update_digest
@@ -440,6 +466,7 @@ class CaretakerScheduler:
         record = await self._store.get(mill_id)
         if record is None or not record.update_available:
             return []
+        self._mill_attempted_digest = record.latest_registry_digest
 
         logger.info(
             "phase_update: mill idle — deploying deferred update (deferred since %s)",

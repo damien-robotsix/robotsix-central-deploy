@@ -927,6 +927,56 @@ class TestDeferredMillRecheck:
         backend.deploy.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_recheck_not_armed_when_mill_auto_update_off(
+        self, scheduler_fixtures
+    ):
+        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        scheduler._component_config_store.get("mill").auto_update_enabled = False
+        http = _busy_http(stages=())
+        scheduler._http_client = http
+
+        assert await scheduler.recheck_deferred_mill() is None
+        backend.deploy.assert_not_awaited()
+        http.get.assert_not_awaited()
+        assert scheduler._mill_deferred_since is None
+
+    @pytest.mark.asyncio
+    async def test_failed_recheck_deploy_not_retried_every_slice(
+        self, scheduler_fixtures
+    ):
+        """A recheck deploy that raises leaves update_available set; later
+        slices must not re-arm for the same digest — only a new digest does."""
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        scheduler._component_config_store.get("mill").repo_id = "mill-repo"
+        backend.deploy = AsyncMock(side_effect=RuntimeError("pull failed"))
+        scheduler._http_client = _busy_http(stages=())
+
+        assert await scheduler.recheck_deferred_mill() is not None
+        backend.deploy.assert_awaited_once()
+        assert record.update_available is True
+
+        assert await scheduler.recheck_deferred_mill() is None
+        assert await scheduler.recheck_deferred_mill() is None
+        backend.deploy.assert_awaited_once()
+
+        record.latest_registry_digest = "sha256:newer"
+        assert await scheduler.recheck_deferred_mill() is not None
+        assert backend.deploy.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_failed_pass_deploy_not_retried_by_recheck(self, scheduler_fixtures):
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        scheduler._component_config_store.get("mill").repo_id = "mill-repo"
+        backend.deploy = AsyncMock(side_effect=RuntimeError("pull failed"))
+        scheduler._http_client = _busy_http(stages=())
+        await scheduler.run_once()
+        backend.deploy.assert_awaited_once()
+        assert record.update_available is True
+
+        assert await scheduler.recheck_deferred_mill() is None
+        backend.deploy.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_recheck_keeps_deferring_while_busy(self, scheduler_fixtures):
         scheduler, record, backend = await self._setup(scheduler_fixtures)
         scheduler._http_client = _busy_http()
