@@ -106,6 +106,15 @@ class CaretakerScheduler:
         #: place (advancing baselines, dropping vanished containers).
         self._restart_counts: dict[str, int] = {}
 
+        #: Wall-clock time (epoch seconds) since which the mill's pending update
+        #: has been deferred as busy, or ``None`` when no deferral is
+        #: outstanding. While set, ``loop`` runs a lightweight
+        #: ``recheck_deferred_mill`` every ``caretaker_mill_recheck_minutes``
+        #: so an idle mill deploys without waiting for the next full pass.
+        self._mill_deferred_since: float | None = None
+        #: When the last short-cadence mill recheck ran (exposed by get_status).
+        self._last_mill_recheck_at: datetime | None = None
+
     @staticmethod
     def _resolve_findings_path(config: LifecycleConfig) -> Path:
         """Derive the findings path from the config's data directory convention."""
@@ -129,38 +138,18 @@ class CaretakerScheduler:
         settings = await self._settings_store.get()
 
         # 1. Phase: UPDATE
-        # Identify our own container so phase_update never tries to auto-deploy
-        # (and thereby kill) the process running this pass — see phase_update.
-        self_container_name = ""
-        # Kept beyond the block below: the end-of-pass self-update step hands
-        # it to the detached updater (POST /system/update path).
-        self_info: SelfInspect | None = None
-        # Distinguishes "this backend has no self container to protect" from
-        # "it has one but we could not name it". Only the latter is dangerous:
-        # phase_update fails closed on it rather than risk deploying over the
-        # management plane.
-        self_identity_known = True
-        try:
-            self_info = await self._backend.inspect_self()
-            if self_info is not None:
-                self_container_name = self_info.container_name
-            else:
-                # The backend supports self-inspection but found nothing —
-                # a transient API error, or not running in a container.
-                self_identity_known = False
-        except NotImplementedError:
-            # Backend cannot self-inspect at all (noop/non-containerised):
-            # there is no own container to accidentally deploy over.
-            pass
-        except Exception:
-            logger.warning("caretaker: inspect_self failed", exc_info=True)
-            self_identity_known = False
+        (
+            self_info,
+            self_container_name,
+            self_identity_known,
+        ) = await self._resolve_self_identity()
 
         # Probe the mill for in-flight stages and apply the bounded-wait
         # busy-guard: defer while heavy stages run, then DRAIN, then FORCE at
         # the ceiling so a permanently busy mill still gets its update. See
         # _evaluate_mill_busy.
         busy_components = await self._evaluate_mill_busy(settings)
+        self._track_mill_deferral(settings, busy_components)
 
         try:
             update_findings = await phase_update(
@@ -337,6 +326,115 @@ class CaretakerScheduler:
         )
         self._last_report = report
         return report
+
+    async def _resolve_self_identity(self) -> tuple[SelfInspect | None, str, bool]:
+        """Identify the container this caretaker runs inside.
+
+        Returns ``(self_info, self_container_name, self_identity_known)`` so
+        phase_update never tries to auto-deploy (and thereby kill) the process
+        running the pass — see phase_update.
+        """
+        self_container_name = ""
+        # Returned to the caller: the end-of-pass self-update step hands
+        # it to the detached updater (POST /system/update path).
+        self_info: SelfInspect | None = None
+        # Distinguishes "this backend has no self container to protect" from
+        # "it has one but we could not name it". Only the latter is dangerous:
+        # phase_update fails closed on it rather than risk deploying over the
+        # management plane.
+        self_identity_known = True
+        try:
+            self_info = await self._backend.inspect_self()
+            if self_info is not None:
+                self_container_name = self_info.container_name
+            else:
+                # The backend supports self-inspection but found nothing —
+                # a transient API error, or not running in a container.
+                self_identity_known = False
+        except NotImplementedError:
+            # Backend cannot self-inspect at all (noop/non-containerised):
+            # there is no own container to accidentally deploy over.
+            pass
+        except Exception:
+            logger.warning("caretaker: inspect_self failed", exc_info=True)
+            self_identity_known = False
+
+        return self_info, self_container_name, self_identity_known
+
+    def _track_mill_deferral(
+        self, settings: SystemSettings, busy_components: dict[str, str]
+    ) -> None:
+        """Start or clear the deferred-mill marker that drives the recheck."""
+        mill_id = settings.mill_component_id
+        if mill_id and mill_id in busy_components:
+            if self._mill_deferred_since is None:
+                self._mill_deferred_since = time.time()
+        else:
+            self._mill_deferred_since = None
+
+    async def recheck_deferred_mill(self) -> list[CaretakerFinding] | None:
+        """Re-evaluate a mill update deferred as busy, outside the full pass.
+
+        Runs only while a deferral is outstanding. Re-probes the mill through
+        ``_evaluate_mill_busy`` (the bounded max-defer / force-deploy clock is
+        unchanged); when it no longer reports the mill busy, runs just the
+        mill step of ``phase_update`` (pull + recreate + post-deploy verify).
+
+        Returns the findings of the mill deploy, an empty list when the mill
+        is still busy, or ``None`` when no deferral was outstanding.
+        """
+        deferred_since = self._mill_deferred_since
+        if deferred_since is None:
+            return None
+        settings = await self._settings_store.get()
+        self._last_mill_recheck_at = datetime.now(tz=UTC)
+        mill_id = settings.mill_component_id
+        if not mill_id or not settings.caretaker_enabled:
+            self._mill_deferred_since = None
+            return None
+
+        busy_components = await self._evaluate_mill_busy(settings)
+        if mill_id in busy_components:
+            logger.debug(
+                "phase_update: mill still busy on recheck — %s",
+                busy_components[mill_id],
+            )
+            return []
+
+        self._mill_deferred_since = None
+        record = await self._store.get(mill_id)
+        if record is None or not record.update_available:
+            return []
+
+        logger.info(
+            "phase_update: mill idle — deploying deferred update (deferred since %s)",
+            datetime.fromtimestamp(deferred_since, tz=UTC).isoformat(),
+        )
+        (
+            _self_info,
+            self_container_name,
+            self_identity_known,
+        ) = await self._resolve_self_identity()
+        findings = await phase_update(
+            self._registry,
+            self._store,
+            self._backend,
+            self._component_config_store,
+            self._deploy_history_store,
+            self._env_store,
+            self_container_name,
+            self_identity_known,
+            only_components={mill_id},
+        )
+        for f in findings:
+            logger.warning(
+                "caretaker finding [%s] %s: %s",
+                f.kind.value,
+                f.component_id or "host",
+                f.title,
+            )
+            self._append_local(f)
+        return findings
 
     async def _evaluate_mill_busy(self, settings: SystemSettings) -> dict[str, str]:
         """Probe the mill and decide defer / drain / force for its pending update.
@@ -574,7 +672,48 @@ class CaretakerScheduler:
                 if self._last_report is not None
                 else None
             ),
+            "last_mill_recheck_at": (
+                self._last_mill_recheck_at.isoformat()
+                if self._last_mill_recheck_at is not None
+                else None
+            ),
+            "mill_deferred_since": (
+                datetime.fromtimestamp(self._mill_deferred_since, tz=UTC).isoformat()
+                if self._mill_deferred_since is not None
+                else None
+            ),
         }
+
+    async def _wait_for_next_pass(self, interval: float) -> None:
+        """Sleep until the next full pass, rechecking a deferred mill meanwhile.
+
+        Without a deferred mill this is a single sleep of *interval*. While a
+        mill update is deferred as busy, the wait is cut into
+        ``caretaker_mill_recheck_minutes`` slices and ``recheck_deferred_mill``
+        runs after each, so an idle mill deploys within one recheck interval
+        while the full pass keeps its own cadence.
+        """
+        deadline = time.monotonic() + interval
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            if self._mill_deferred_since is None:
+                await asyncio.sleep(remaining)
+                return
+            try:
+                settings = await self._settings_store.get()
+                recheck_seconds = max(settings.caretaker_mill_recheck_minutes, 1) * 60
+            except Exception as exc:  # noqa: BLE001
+                logger.error("CaretakerScheduler: failed to read settings: %s", exc)
+                recheck_seconds = 60
+            await asyncio.sleep(min(remaining, recheck_seconds))
+            if time.monotonic() >= deadline:
+                return
+            try:
+                await self.recheck_deferred_mill()
+            except Exception:
+                logger.exception("CaretakerScheduler: mill recheck crashed")
 
     async def loop(self) -> None:
         """Run the periodic caretaker loop.
@@ -602,7 +741,7 @@ class CaretakerScheduler:
                         )
 
                 interval = max(settings.caretaker_interval_hours, 1) * 3600
-                await asyncio.sleep(interval)
+                await self._wait_for_next_pass(interval)
         except asyncio.CancelledError:
             logger.info("CaretakerScheduler: background loop cancelled")
             raise

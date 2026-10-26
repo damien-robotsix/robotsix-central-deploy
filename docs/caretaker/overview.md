@@ -72,6 +72,7 @@ Self-contract changes take effect on the next server restart.
 | `caretaker_interval_hours` | `int` | `24` | Hours between passes (minimum 1) |
 | `caretaker_mill_max_defer_hours` | `int` | `3` | Hours the mill busy-guard defers an available update before switching to DRAIN (deploy at the first idle poll). Bounds indefinite defer when the mill continuously picks new heavy stages. |
 | `caretaker_mill_force_deploy_hours` | `int` | `8` | Hard ceiling: after this many hours pending, the caretaker force-deploys the mill even while heavy stages are in flight. The mill's `implement` retry-as-transient recovers interrupted stages. Must be ≥ `caretaker_mill_max_defer_hours`. |
+| `caretaker_mill_recheck_minutes` | `int` | `10` | Minutes between lightweight rechecks of a mill update deferred as busy. When the mill goes idle the deferred update (pull + recreate + post-deploy verify of the mill only) deploys within this window instead of at the next full pass. The last recheck time is exposed as `last_mill_recheck_at` in `GET /caretaker/status`. |
 | `mill_component_id` | `str` | `"mill"` | Component id of the mill (used by onboarding repo registration) |
 | `image_auto_prune` | `bool` | `False` | Whether to prune dangling images after successful updates |
 | `caretaker_auto_rollback_enabled` | `bool` | `False` | Whether a verified failed deploy (a crash-looping component) is automatically rolled back to its previous image digest. **Destructive** (recreates the running container with a prior image); OFF by default and must be explicitly enabled |
@@ -97,7 +98,7 @@ with no separate caretaker self-update setting.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/caretaker/status` | Yes | Returns `{enabled, last_run_at, last_report}` |
+| GET | `/caretaker/status` | Yes | Returns `{enabled, last_run_at, last_report, last_mill_recheck_at, mill_deferred_since}` |
 
 ## Reporting
 

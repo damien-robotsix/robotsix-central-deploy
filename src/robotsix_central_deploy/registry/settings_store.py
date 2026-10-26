@@ -46,6 +46,12 @@ class SystemSettings(BaseModel):
     caretaker_mill_force_deploy_hours: int = SETTINGS_DEFAULTS[
         "caretaker_mill_force_deploy_hours"
     ]
+    #: Minutes between lightweight rechecks of a mill update deferred as busy:
+    #: once the mill goes idle the deferred update deploys within this window
+    #: instead of waiting for the next full caretaker pass.
+    caretaker_mill_recheck_minutes: int = SETTINGS_DEFAULTS[
+        "caretaker_mill_recheck_minutes"
+    ]
     mill_component_id: str = SETTINGS_DEFAULTS[
         "mill_component_id"
     ]  # component id the caretaker reports to
@@ -118,6 +124,13 @@ class SystemSettings(BaseModel):
     def _validate_mill_defer_hours(cls, v: int) -> int:
         if v < 1:
             raise ValueError("caretaker mill defer/force hours must be >= 1")
+        return v
+
+    @field_validator("caretaker_mill_recheck_minutes")
+    @classmethod
+    def _validate_mill_recheck_minutes(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("caretaker_mill_recheck_minutes must be >= 1")
         return v
 
     @model_validator(mode="after")

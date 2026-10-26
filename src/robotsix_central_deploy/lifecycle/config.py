@@ -404,6 +404,14 @@ class LifecycleConfig(BaseModel):
             "force-deploys the mill even while heavy stages are in flight."
         ),
     )
+    caretaker_mill_recheck_minutes: int = Field(
+        SETTINGS_DEFAULTS["caretaker_mill_recheck_minutes"],
+        description=(
+            "Minutes between lightweight rechecks of a mill update deferred "
+            "as busy; an idle mill deploys within this window instead of at "
+            "the next full caretaker pass."
+        ),
+    )
     mill_component_id: str = Field(
         SETTINGS_DEFAULTS["mill_component_id"],
         description=(

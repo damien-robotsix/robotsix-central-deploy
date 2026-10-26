@@ -26,7 +26,7 @@ from ..lifecycle.models import (
 from .models import CaretakerFinding, FindingKind
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Collection, Mapping
 
     from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
@@ -65,6 +65,7 @@ async def phase_update(
     self_container_name: str = "",
     self_identity_known: bool = True,
     busy_components: Mapping[str, str] | None = None,
+    only_components: Collection[str] | None = None,
 ) -> list[CaretakerFinding]:
     """Deploy updated images for opted-in primary components.
 
@@ -88,6 +89,10 @@ async def phase_update(
     ``busy_components`` maps component names to a human-readable reason why
     their deploy must wait (the mill with heavy stages in flight); those
     records keep ``update_available`` and are retried next pass.
+
+    ``only_components`` restricts the phase to the named primary components
+    (the scheduler's short-cadence mill recheck deploys just the mill outside
+    the full pass); ``None`` processes every eligible record.
     """
     findings: list[CaretakerFinding] = []
 
@@ -132,6 +137,9 @@ async def phase_update(
     for record in records:
         # Skip sibling records (handled via their parent, see above)
         if record.component_id:
+            continue
+
+        if only_components is not None and record.name not in only_components:
             continue
 
         # Never auto-deploy the container this caretaker runs inside. The

@@ -388,6 +388,12 @@
       "title": "Caretaker Mill Force Deploy Hours",
       "type": "integer"
     },
+    "caretaker_mill_recheck_minutes": {
+      "default": 10,
+      "description": "Minutes between lightweight rechecks of a mill update deferred as busy; an idle mill deploys within this window instead of at the next full caretaker pass.",
+      "title": "Caretaker Mill Recheck Minutes",
+      "type": "integer"
+    },
     "mill_component_id": {
       "default": "",
       "description": "Component id of the mill instance onboarding registers repos with.",
