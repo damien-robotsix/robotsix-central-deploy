@@ -208,6 +208,10 @@ jobs:
       trufflehog-pr-diff: true
       trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
 
+  # Intentionally report-only: no `exit-code` is set, so CRITICAL/HIGH
+  # findings are uploaded to Code Scanning (SARIF) without failing CI.
+  # Replace with a pinned `uses:` call to the shared docker-pr-scan.yml
+  # once it supports build secrets.
   trivy:
     name: Trivy
     runs-on: ubuntu-latest
