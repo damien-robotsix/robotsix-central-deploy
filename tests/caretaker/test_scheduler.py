@@ -864,8 +864,66 @@ class TestDeferredMillRecheck:
 
     @pytest.mark.asyncio
     async def test_recheck_noop_without_deferral(self, scheduler_fixtures):
-        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        record.update_available = False
         assert await scheduler.recheck_deferred_mill() is None
+        backend.deploy.assert_not_awaited()
+        assert scheduler._mill_deferred_since is None
+
+    @pytest.mark.asyncio
+    async def test_recheck_arms_for_update_flagged_after_pass(self, scheduler_fixtures):
+        """A mill update flagged after the pass (no busy deferral recorded)
+        deploys on the next recheck once the mill is idle."""
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        record.update_available = False
+        scheduler._http_client = _busy_http(stages=())
+        await scheduler.run_once()  # nothing pending at pass time
+        backend.deploy.assert_not_awaited()
+        assert scheduler._mill_deferred_since is None
+
+        record.update_available = True  # digest-refresh tick flips the flag
+        findings = await scheduler.recheck_deferred_mill()
+
+        assert findings is not None
+        backend.deploy.assert_awaited_once()
+        assert record.update_available is False
+        assert scheduler._mill_deferred_since is None
+        status = await scheduler.get_status()
+        assert status["last_mill_recheck_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_recheck_arms_but_defers_busy_mill(self, scheduler_fixtures):
+        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        scheduler._http_client = _busy_http()
+
+        assert await scheduler.recheck_deferred_mill() == []
+
+        backend.deploy.assert_not_awaited()
+        assert scheduler._mill_deferred_since is not None
+
+    @pytest.mark.asyncio
+    async def test_recheck_not_armed_for_known_bad_digest(self, scheduler_fixtures):
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        record.failed_update_digest = record.latest_registry_digest
+        scheduler._http_client = _busy_http(stages=())
+
+        assert await scheduler.recheck_deferred_mill() is None
+        backend.deploy.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_recheck_not_armed_while_deploy_in_progress(self, scheduler_fixtures):
+        from robotsix_central_deploy.lifecycle.deploy_lock import (
+            release_deploy_lock,
+            try_acquire_deploy_lock,
+        )
+
+        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        scheduler._http_client = _busy_http(stages=())
+        assert await try_acquire_deploy_lock("mill", source="manual")
+        try:
+            assert await scheduler.recheck_deferred_mill() is None
+        finally:
+            release_deploy_lock("mill")
         backend.deploy.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -949,20 +1007,87 @@ class TestDeferredMillRecheck:
 
         await scheduler._wait_for_next_pass(4 * 3600)
 
-        # First slice is one recheck interval; the mill deploys there, then
-        # the remainder of the 4 h wait is slept in one go.
+        # The wait is sliced into recheck intervals; the mill deploys after
+        # the first one and later slices find nothing pending.
         assert sleeps[0] == 600
         backend.deploy.assert_awaited_once()
-        assert sleeps == [600, 4 * 3600 - 600]
+        assert all(s == 600 for s in sleeps)
         assert clock[0] == 4 * 3600
 
     @pytest.mark.asyncio
-    async def test_wait_single_sleep_without_deferral(
+    async def test_wait_deploys_update_flagged_after_pass(
+        self, scheduler_fixtures, monkeypatch
+    ):
+        """Pass at T finds nothing pending; the update is flagged later and
+        the mill is idle — it deploys within one recheck interval of the
+        flag, without a second full pass."""
+        from robotsix_central_deploy.caretaker import scheduler as sched_mod
+
+        scheduler, record, backend = await self._setup(
+            scheduler_fixtures, recheck_minutes=10
+        )
+        record.update_available = False
+        scheduler._http_client = _busy_http(stages=())
+        await scheduler.run_once()
+        assert scheduler._mill_deferred_since is None
+
+        clock = [0.0]
+        sleeps: list[float] = []
+
+        async def _fake_sleep(seconds):
+            sleeps.append(seconds)
+            clock[0] += seconds
+            if clock[0] == 3600:  # update published at T+1h
+                record.update_available = True
+
+        monkeypatch.setattr(sched_mod.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(sched_mod.asyncio, "sleep", _fake_sleep)
+        run_once = AsyncMock()
+        monkeypatch.setattr(scheduler, "run_once", run_once)
+
+        await scheduler._wait_for_next_pass(4 * 3600)
+
+        backend.deploy.assert_awaited_once()
+        assert record.update_available is False
+        assert all(s == 600 for s in sleeps)
+        assert clock[0] == 4 * 3600
+        run_once.assert_not_awaited()
+        status = await scheduler.get_status()
+        assert status["last_mill_recheck_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_wait_no_deploy_without_pending_update(
         self, scheduler_fixtures, monkeypatch
     ):
         from robotsix_central_deploy.caretaker import scheduler as sched_mod
 
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        record.update_available = False
+        clock = [0.0]
+
+        async def _fake_sleep(seconds):
+            clock[0] += seconds
+
+        monkeypatch.setattr(sched_mod.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(sched_mod.asyncio, "sleep", _fake_sleep)
+
+        await scheduler._wait_for_next_pass(4 * 3600)
+
+        assert clock[0] == 4 * 3600
+        backend.deploy.assert_not_awaited()
+        assert scheduler._mill_deferred_since is None
+
+    @pytest.mark.asyncio
+    async def test_wait_single_sleep_without_mill(
+        self, scheduler_fixtures, monkeypatch
+    ):
+        from robotsix_central_deploy.caretaker import scheduler as sched_mod
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
         scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        await scheduler._settings_store.put(
+            SystemSettings(caretaker_enabled=True, caretaker_interval_hours=4)
+        )
         sleeps: list[float] = []
 
         async def _fake_sleep(seconds):
