@@ -57,11 +57,11 @@ A field's effective value comes from the last layer that sets it.
    editing `config.json` and without a redeploy.
 
 Only the keys in `SETTINGS_DEFAULTS` (`lifecycle/_settings_defaults.py`) take
-part in layer 3 — 21 of the 57 fields:
+part in layer 3 — 22 of the 58 fields:
 
 `caretaker_auto_rollback_enabled`, `caretaker_enabled`,
 `caretaker_interval_hours`, `caretaker_mill_max_defer_hours`,
-`caretaker_mill_force_deploy_hours`,
+`caretaker_mill_force_deploy_hours`, `caretaker_mill_recheck_minutes`,
 `chat_agent_registration_enabled`, `claude_auth_refresh_interval`,
 `disk_warn_pct`, `gateway_base_domain`, `ghcr_pull_token`, `image_auto_prune`,
 `llmio_tier_config`, `log_level`, `mill_component_id`, `mobile_token_ttl_days`,

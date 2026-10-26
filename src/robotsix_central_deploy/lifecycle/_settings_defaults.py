@@ -20,6 +20,7 @@ class _SettingsDefaults(TypedDict):
     caretaker_interval_hours: int
     caretaker_mill_max_defer_hours: int
     caretaker_mill_force_deploy_hours: int
+    caretaker_mill_recheck_minutes: int
     mill_component_id: str
     image_auto_prune: bool
     caretaker_auto_rollback_enabled: bool
@@ -45,6 +46,7 @@ SETTINGS_DEFAULTS: _SettingsDefaults = {
     "caretaker_interval_hours": 24,
     "caretaker_mill_max_defer_hours": 3,
     "caretaker_mill_force_deploy_hours": 8,
+    "caretaker_mill_recheck_minutes": 10,
     "mill_component_id": "",
     "image_auto_prune": False,
     "caretaker_auto_rollback_enabled": False,

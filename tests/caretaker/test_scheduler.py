@@ -812,3 +812,166 @@ class TestMillBoundedWait:
         backend.deploy.assert_awaited_once()
         assert record.update_available is False
         assert record.update_pending_since is None
+
+
+class TestDeferredMillRecheck:
+    """Short-cadence recheck of a mill update deferred as busy."""
+
+    @staticmethod
+    async def _setup(scheduler_fixtures, *, recheck_minutes=10):
+        from robotsix_central_deploy.lifecycle.models import DeployOutcome
+        from robotsix_central_deploy.registry.settings_store import SystemSettings
+
+        scheduler, store, backend, ccs, _http = scheduler_fixtures
+        await scheduler._settings_store.put(
+            SystemSettings(
+                caretaker_enabled=True,
+                caretaker_interval_hours=4,
+                mill_component_id="mill",
+                caretaker_mill_recheck_minutes=recheck_minutes,
+            )
+        )
+        _register_mill(ccs)
+        record = _mill_record()
+        store.get = AsyncMock(return_value=record)
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:new",
+                previous_digest="sha256:old",
+                state=ServiceState.RUNNING,
+            )
+        )
+        backend.status = AsyncMock(
+            return_value=ComponentInspect(state=ServiceState.RUNNING, health="healthy")
+        )
+        backend.disk_df = AsyncMock(return_value=MagicMock(volumes=[]))
+        return scheduler, record, backend
+
+    @pytest.mark.asyncio
+    async def test_busy_pass_marks_mill_deferred(self, scheduler_fixtures):
+        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        scheduler._http_client = _busy_http()
+
+        await scheduler.run_once()
+
+        backend.deploy.assert_not_awaited()
+        assert scheduler._mill_deferred_since is not None
+        status = await scheduler.get_status()
+        assert status["mill_deferred_since"] is not None
+        assert status["last_mill_recheck_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_recheck_noop_without_deferral(self, scheduler_fixtures):
+        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        assert await scheduler.recheck_deferred_mill() is None
+        backend.deploy.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_recheck_keeps_deferring_while_busy(self, scheduler_fixtures):
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        scheduler._http_client = _busy_http()
+        await scheduler.run_once()
+
+        findings = await scheduler.recheck_deferred_mill()
+
+        assert findings == []
+        backend.deploy.assert_not_awaited()
+        assert record.update_available is True
+        assert scheduler._mill_deferred_since is not None
+        status = await scheduler.get_status()
+        assert status["last_mill_recheck_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_recheck_deploys_once_mill_idle(self, scheduler_fixtures, caplog):
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        scheduler._http_client = _busy_http()
+        await scheduler.run_once()
+        backend.deploy.assert_not_awaited()
+
+        scheduler._http_client = _busy_http(stages=())  # mill went idle
+        with caplog.at_level("INFO"):
+            await scheduler.recheck_deferred_mill()
+
+        backend.deploy.assert_awaited_once()
+        assert record.update_available is False
+        assert scheduler._mill_deferred_since is None
+        assert "mill idle — deploying deferred update (deferred since" in caplog.text
+        status = await scheduler.get_status()
+        assert status["last_mill_recheck_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_recheck_deploys_only_the_mill(self, scheduler_fixtures):
+        scheduler, record, backend = await self._setup(scheduler_fixtures)
+        other = ServiceRecord(
+            name="other",
+            image="other:v1",
+            container_name="other",
+            update_available=True,
+            latest_registry_digest="sha256:o2",
+            deployed_image_digest="sha256:o1",
+        )
+        scheduler._store.list_all = AsyncMock(return_value=[record, other])
+        scheduler._mill_deferred_since = 1.0
+        scheduler._http_client = _busy_http(stages=())
+
+        await scheduler.recheck_deferred_mill()
+
+        backend.deploy.assert_awaited_once()
+        assert backend.deploy.await_args.args[0].name == "mill"
+        assert other.update_available is True
+
+    @pytest.mark.asyncio
+    async def test_wait_deploys_within_one_recheck_interval(
+        self, scheduler_fixtures, monkeypatch
+    ):
+        """A deferred mill that goes idle deploys after one recheck slice,
+        while the full pass still waits its 4 h interval."""
+        from robotsix_central_deploy.caretaker import scheduler as sched_mod
+
+        scheduler, _record, backend = await self._setup(
+            scheduler_fixtures, recheck_minutes=10
+        )
+        scheduler._http_client = _busy_http()
+        await scheduler.run_once()
+        scheduler._http_client = _busy_http(stages=())
+
+        clock = [0.0]
+        sleeps: list[float] = []
+
+        async def _fake_sleep(seconds):
+            sleeps.append(seconds)
+            clock[0] += seconds
+
+        monkeypatch.setattr(sched_mod.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(sched_mod.asyncio, "sleep", _fake_sleep)
+
+        await scheduler._wait_for_next_pass(4 * 3600)
+
+        # First slice is one recheck interval; the mill deploys there, then
+        # the remainder of the 4 h wait is slept in one go.
+        assert sleeps[0] == 600
+        backend.deploy.assert_awaited_once()
+        assert sleeps == [600, 4 * 3600 - 600]
+        assert clock[0] == 4 * 3600
+
+    @pytest.mark.asyncio
+    async def test_wait_single_sleep_without_deferral(
+        self, scheduler_fixtures, monkeypatch
+    ):
+        from robotsix_central_deploy.caretaker import scheduler as sched_mod
+
+        scheduler, _record, backend = await self._setup(scheduler_fixtures)
+        sleeps: list[float] = []
+
+        async def _fake_sleep(seconds):
+            sleeps.append(seconds)
+
+        monkeypatch.setattr(sched_mod.asyncio, "sleep", _fake_sleep)
+
+        await scheduler._wait_for_next_pass(4 * 3600)
+
+        assert len(sleeps) == 1
+        assert sleeps[0] == pytest.approx(4 * 3600, abs=1)
+        backend.deploy.assert_not_awaited()
