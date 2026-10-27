@@ -4,6 +4,18 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.14.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.13.1...v0.14.0) (2026-10-26)
+
+
+### Features
+
+* Caretaker: re-check a deferred mill update every few minutes instead of waiting for the next 4-hour pass (20261026T154751Z-caretaker-re-check-a-deferred-mill-updat-4d0d) ([#935](https://github.com/damien-robotsix/robotsix-central-deploy/issues/935)) ([f738ce0](https://github.com/damien-robotsix/robotsix-central-deploy/commit/f738ce0e70269ed89476dfdf4259083e74a58cf1))
+
+
+### Bug Fixes
+
+* Caretaker mill recheck ([#935](https://github.com/damien-robotsix/robotsix-central-deploy/issues/935)) only arms after a pass deferred the mill — an update that appears between passes still waits for the next 4-hour pass (20261026T205605Z-caretaker-mill-recheck-935-only-arms-aft-7c66) ([#937](https://github.com/damien-robotsix/robotsix-central-deploy/issues/937)) ([2eda06c](https://github.com/damien-robotsix/robotsix-central-deploy/commit/2eda06c5bc0a39d8a9b498543db695f552e12566))
+
 ## [0.13.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.13.0...v0.13.1) (2026-10-23)
 
 
