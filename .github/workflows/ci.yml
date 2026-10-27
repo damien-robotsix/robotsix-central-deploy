@@ -557,13 +557,12 @@ jobs:
     # dependency-review-action diffs base..head and only supports
     # pull_request events; on push to main it fails unconditionally.
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v4
-        with:
-          fail-on-severity: high
+      pull-requests: write  # PR summary comment from dependency-review
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependency-review.yml@47523e8aa2d34d41da060d29b57f75ab262cb840  # v1.4.0
+    # central-deploy had no deny/allow-licenses policy inline, so
+    # deny-licenses / allow-licenses are intentionally left at the
+    # shared workflow's defaults (none).
+    with:
+      fail-on-severity: moderate
