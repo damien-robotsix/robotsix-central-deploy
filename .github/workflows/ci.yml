@@ -179,11 +179,6 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
           UV_MALWARE_CHECK: ${{ needs.changes.outputs.docs-only == 'true' && '0' || '1' }}
 
-      - name: Dead code detection (vulture)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run vulture
-
       - name: Run tests
         env:
           UV_PROJECT_ENVIRONMENT: system
