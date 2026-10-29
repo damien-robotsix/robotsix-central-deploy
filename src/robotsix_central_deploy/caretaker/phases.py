@@ -207,12 +207,15 @@ async def phase_update(
         # Pull by repo@digest: a bare "sha256:…" digest is not a valid image
         # reference (docker resolves it as repository "sha256"), so anchor it
         # to the record's repository. Falls back to the plain tag when no
-        # digest is recorded.
-        repo = (record.image or config.image).rsplit(":", 1)[0]
+        # digest is recorded. The configured image is the source of truth: a
+        # stale ``record.image`` (e.g. an old tag nothing publishes any more)
+        # must never win over the component config.
+        configured_image = config.image
+        repo = configured_image.rsplit(":", 1)[0]
         if record.latest_registry_digest:
             image_ref = f"{repo}@{record.latest_registry_digest}"
         else:
-            image_ref = record.image or config.image
+            image_ref = configured_image
 
         # Serialise concurrent deploys of the same component (operator + caretaker).
         if not await try_acquire_deploy_lock(record.name, source="caretaker"):
@@ -237,6 +240,7 @@ async def phase_update(
                 deploy_config = config.model_copy(update={"env": merged_env})
                 outcome = await backend.deploy(record, deploy_config, image_ref)
                 record.state = outcome.state
+                record.image = configured_image
                 record.image_revision = outcome.deployed_digest
                 record.deployed_image_digest = outcome.deployed_digest
                 record.previous_image_digest = outcome.previous_digest

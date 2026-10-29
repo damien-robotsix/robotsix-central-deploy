@@ -108,6 +108,7 @@ async def refresh_contract(
     config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
     registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
     lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),  # noqa: B008
     _auth: None = Depends(verify_auth),
 ) -> ContractRefreshResponse:
     """Re-parse the component's deploy/docker-compose.yml and update stored settings.
@@ -141,6 +142,7 @@ async def refresh_contract(
         registry,
         lifecycle_config,
         allow_env_clear=body.allow_env_clear,
+        store=store,
     )
     return ContractRefreshResponse(
         name=name,

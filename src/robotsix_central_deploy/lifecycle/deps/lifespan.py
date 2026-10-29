@@ -543,6 +543,18 @@ async def _seed_component_registry(
                     image=dyn_config.image,
                 )
             )
+        elif dyn_config.image and existing.image != dyn_config.image:
+            # The component config is the source of truth for the tracked
+            # image; a stale record (e.g. ``:latest`` after the publish
+            # pipeline moved to ``:main``) would otherwise win forever.
+            logger.info(
+                "Syncing image for '%s' from component config: %s -> %s",
+                dyn_config.id,
+                existing.image,
+                dyn_config.image,
+            )
+            existing.image = dyn_config.image
+            await store.put(existing)
         # Seed sibling records
         for sib in dyn_config.siblings:
             sib_name = f"{dyn_config.id}-{sib.service_key}"
