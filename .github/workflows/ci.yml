@@ -305,7 +305,13 @@ jobs:
           curl -sSfL "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz" \
             | sudo tar xz -C /usr/local/bin trufflehog
       - name: Run pre-commit hooks
-        run: pre-commit run --all-files --show-diff-on-failure
+        # Put the project's uv venv (Python >= 3.14) first on PATH so
+        # `language: script` hooks such as check-secret-str (python3 shebang)
+        # run on the project's Python (PEP 758 syntax) instead of the
+        # runner's older system python3.
+        run: |
+          export PATH="$PWD/.venv/bin:$PATH"
+          pre-commit run --all-files --show-diff-on-failure
       - name: Flag raw health/state/backend strings outside enum definition
         run: |
           set -euo pipefail
