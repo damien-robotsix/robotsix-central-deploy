@@ -238,6 +238,38 @@ class TestPhaseUpdate:
         assert cfg.env == {"STATIC": "yaml", "SHARED": "yaml"}
 
     @pytest.mark.asyncio
+    async def test_deploys_configured_tag_over_stale_record_tag(self):
+        """The configured image wins over a stale record tag (``:latest`` →
+        ``:main``), both for the tag fallback and the repo@digest anchor."""
+        store = MagicMock()
+        record = _make_record()
+        record.image = "ghcr.io/org/robotsix-invest:latest"
+        record.latest_registry_digest = ""
+        store.list_all = AsyncMock(return_value=[record])
+        store.put = AsyncMock()
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:def",
+                previous_digest="sha256:abc",
+                state=ServiceState.RUNNING,
+            )
+        )
+        registry = ComponentRegistry([])
+        ccs = MagicMock(spec=ComponentConfigStore)
+        cfg = _make_config()
+        cfg.image = "ghcr.io/org/robotsix-invest:main"
+        ccs.get = MagicMock(return_value=cfg)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+
+        await phase_update(registry, store, backend, ccs, dhs, _make_env_store())
+
+        backend.deploy.assert_called_once()
+        assert backend.deploy.call_args[0][2] == "ghcr.io/org/robotsix-invest:main"
+        assert record.image == "ghcr.io/org/robotsix-invest:main"
+
+    @pytest.mark.asyncio
     async def test_deploy_falls_back_to_tag_without_digest(self):
         store = MagicMock()
         record = _make_record()

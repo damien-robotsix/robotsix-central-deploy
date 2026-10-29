@@ -153,6 +153,59 @@ async def test_refresh_updates_image_and_command(
 
 
 @pytest.mark.asyncio
+async def test_refresh_syncs_primary_record_image_tag(
+    client_with_component: AsyncClient,
+) -> None:
+    """A refreshed tag change (``:latest`` → ``:main``) reaches the primary
+    ServiceRecord, so ``GET /services/<name>`` shows it without a deploy."""
+    ccs = server_mod.app.state.component_config_store
+    store = server_mod.app.state.store
+    comp = ccs.get("test-comp").model_copy(update={"image": "ghcr.io/org/svc:latest"})
+    await ccs.put(comp)
+    server_mod.app.state.registry.register(comp)
+    await store.put(
+        ServiceRecord(
+            name="test-comp",
+            image="ghcr.io/org/svc:latest",
+            deployed_image_digest="sha256:abc",
+        )
+    )
+
+    new_spec = _make_derived_spec(image="ghcr.io/org/svc:main", command=["run"])
+    repo_files = RepoFiles(
+        compose_bytes=UPDATED_COMPOSE,
+        config_json=None,
+        config_json_template=None,
+        config_schema_json=None,
+    )
+    with (
+        patch(
+            "robotsix_central_deploy.onboard.fetcher.fetch_repo_files",
+            return_value=repo_files,
+        ),
+        patch(
+            "robotsix_central_deploy.onboard.parser.parse_compose",
+            return_value=new_spec,
+        ),
+    ):
+        resp = await client_with_component.post(
+            "/services/test-comp/refresh-contract", headers=HEADERS
+        )
+
+    assert resp.status_code == 200
+    record = await store.get("test-comp")
+    assert record is not None
+    assert record.image == "ghcr.io/org/svc:main"
+    assert record.deployed_image_digest == "sha256:abc"
+
+    status_resp = await client_with_component.get(
+        "/services/test-comp", headers=HEADERS
+    )
+    assert status_resp.status_code == 200
+    assert status_resp.json()["image"] == "ghcr.io/org/svc:main"
+
+
+@pytest.mark.asyncio
 async def test_refresh_no_changes_returns_empty(
     client_with_component: AsyncClient,
 ) -> None:

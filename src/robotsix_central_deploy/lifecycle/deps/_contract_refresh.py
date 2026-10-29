@@ -34,6 +34,7 @@ from ...registry.loader import ComponentRegistry
 from ...registry.models import ComponentConfig
 from .._config_utils import _sanitize_log
 from ..config import LifecycleConfig
+from ..store import ServiceStore
 from .seed import (
     _build_component_config_from_spec,
     _fetch_component_repo_files,
@@ -228,6 +229,7 @@ async def refresh_component_contract(
     lifecycle_config: LifecycleConfig,
     *,
     allow_env_clear: bool = False,
+    store: ServiceStore | None = None,
 ) -> ContractRefreshResult:
     """Re-fetch a component's deploy contract and update the stored config.
 
@@ -236,6 +238,10 @@ async def refresh_component_contract(
     parsed contract (preserving operator-set fields and existing host-port
     assignments), persists it via *component_config_store*, and re-registers it
     in *registry*.  Returns which contract-derived fields changed.
+
+    When *store* is given and the refreshed primary image differs from the
+    primary ``ServiceRecord``'s tracked image, the record's ``image`` is
+    synced to the config so update checks follow the configured tag.
 
     Contract-derived fields are reconciled so a refresh cannot clobber
     operator/system state: a stored image *tag* is kept over a compose
@@ -381,6 +387,20 @@ async def refresh_component_contract(
     # Persist the updated config
     await component_config_store.put(new_config)
     registry.register(new_config)
+
+    # Keep the primary ServiceRecord's tracked image in sync with the config:
+    # otherwise the stale record tag keeps winning in update checks.
+    if store is not None and new_config.image:
+        record = await store.get(name)
+        if record is not None and record.image != new_config.image:
+            logger.info(
+                "Syncing image for %s from refreshed contract: %s -> %s",
+                _sanitize_log(name),
+                _sanitize_log(record.image or ""),
+                _sanitize_log(new_config.image),
+            )
+            record.image = new_config.image
+            await store.put(record)
 
     # If the config schema changed (new or removed), refresh the stored template.
     if spec.config_schema is not None:

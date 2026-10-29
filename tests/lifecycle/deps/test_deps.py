@@ -396,6 +396,35 @@ class TestSeedComponentRegistry:
         assert record is not None
         assert record.container_name == "mail"
 
+    async def test_existing_record_image_synced_to_config(self, tmp_path) -> None:
+        """A stale record tag (``:latest``) is synced to the configured tag
+        (``:main``) on restart; every other record field is kept."""
+        store = InMemoryStore()
+        config_store = ComponentConfigStore(tmp_path / "config_store.json")
+        registry = ComponentRegistry([])
+        config_store.register(
+            ComponentConfig(
+                id="invest",
+                image="ghcr.io/org/robotsix-invest:main",
+                container_name="invest",
+            )
+        )
+        await store.put(
+            ServiceRecord(
+                name="invest",
+                container_name="invest",
+                image="ghcr.io/org/robotsix-invest:latest",
+                deployed_image_digest="sha256:abc",
+            )
+        )
+
+        await deps_mod._seed_component_registry(store, config_store, registry, [])
+
+        record = await store.get("invest")
+        assert record is not None
+        assert record.image == "ghcr.io/org/robotsix-invest:main"
+        assert record.deployed_image_digest == "sha256:abc"
+
     async def test_stale_service_record_for_virtual_component_is_removed(
         self, tmp_path
     ) -> None:
