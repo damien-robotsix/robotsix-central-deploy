@@ -39,7 +39,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -58,7 +58,7 @@ class LangfuseProjectEntry(BaseModel):
 
     alias: str = Field(description="Langfuse project name (the `projects` key)")
     public_key: str = Field(description="Langfuse public key for the project")
-    secret_key: str = Field(description="Langfuse secret key for the project")
+    secret_key: SecretStr = Field(description="Langfuse secret key for the project")
     project_id: str | None = Field(
         default=None,
         description="Langfuse project id, when the component records it",
@@ -102,7 +102,7 @@ def extract_langfuse_block(
                 LangfuseProjectEntry(
                     alias=str(alias),
                     public_key=str(public_key),
-                    secret_key=str(secret_key),
+                    secret_key=SecretStr(str(secret_key)),
                     project_id=str(raw_pid) if raw_pid else None,
                 )
             )

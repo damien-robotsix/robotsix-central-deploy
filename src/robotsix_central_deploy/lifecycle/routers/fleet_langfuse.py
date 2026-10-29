@@ -26,7 +26,7 @@ Exposes:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr, field_serializer
 
 from ...registry.loader import ComponentRegistry
 from .._config_utils import read_component_config
@@ -58,7 +58,7 @@ class FleetLangfuseProject(BaseModel):
 
     alias: str = Field(description="Langfuse project name (the `projects` key)")
     public_key: str = Field(description="Langfuse public key (read-only)")
-    secret_key: str = Field(description="Langfuse secret key (read-only)")
+    secret_key: SecretStr = Field(description="Langfuse secret key (read-only)")
     project_id: str | None = Field(
         default=None,
         description="Langfuse project id, when the component records it",
@@ -70,6 +70,11 @@ class FleetLangfuseProject(BaseModel):
             "consumer reconcile provider-billed spend against traced spend."
         ),
     )
+
+    @field_serializer("secret_key")
+    def _reveal_secret_key(self, value: SecretStr) -> str:
+        """Serialize the key in plaintext: handing it out is this endpoint's job."""
+        return value.get_secret_value()
 
 
 class FleetLangfuseComponent(BaseModel):
@@ -145,7 +150,7 @@ def _operator_projects(config: LifecycleConfig) -> dict[str, FleetLangfuseProjec
         out[alias] = FleetLangfuseProject(
             alias=alias,
             public_key=creds.public_key,
-            secret_key=secret,
+            secret_key=SecretStr(secret),
         )
     return out
 

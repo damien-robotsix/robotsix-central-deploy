@@ -40,6 +40,11 @@ repos:
       - id: codespell
         args: ["--ignore-words-list", "hist,ist,te,nd,vas,unparseable", "--skip", "*.lock,uv.lock,*.css,*.map,*.min.*,.git/,node_modules/,site/,vendor/"]
 
+  - repo: https://github.com/damien-robotsix/robotsix-standards
+    rev: v0.10.0
+    hooks:
+      - id: check-secret-str
+
   - repo: local
     hooks:
       - id: mypy

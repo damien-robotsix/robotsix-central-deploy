@@ -188,8 +188,9 @@ class LifecycleConfig(BaseModel):
         "component_env.json",
         description="Path of the per-component env/secret store.",
     )
-    secret_key_path: str = Field(
+    secret_key_path: SecretStr = Field(
         "secrets.key",
+        validate_default=True,
         description="Path of the Fernet key encrypting stored secrets.",
     )
 
@@ -497,8 +498,9 @@ class LifecycleConfig(BaseModel):
         ),
     )
 
-    mobile_token_revocation_path: str = Field(
+    mobile_token_revocation_path: SecretStr = Field(
         "data/mobile_token_revocations.json",
+        validate_default=True,
         description="Path of the mobile-token revocation list.",
     )
 
