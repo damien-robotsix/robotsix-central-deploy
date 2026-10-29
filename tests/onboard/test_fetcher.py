@@ -205,7 +205,7 @@ class TestFetchRepoFiles:
                 fetch_repo_files("https://example.com/bogus.git")
 
     def test_timeout_raises_subprocess_timeout(self):
-        """A tiny timeout triggers ``subprocess.TimeoutExpired``, propagated upward."""
+        """A clone timeout is reported as a FetchError (callers map it to 4xx)."""
         with mock.patch("subprocess.run") as m_run:
             m_run.side_effect = subprocess.TimeoutExpired(
                 cmd=[
@@ -218,7 +218,7 @@ class TestFetchRepoFiles:
                 ],
                 timeout=0.001,
             )
-            with pytest.raises(subprocess.TimeoutExpired):
+            with pytest.raises(FetchError, match="timed out"):
                 fetch_repo_files("https://example.com/repo.git", timeout_sec=0.001)
 
 
@@ -548,3 +548,33 @@ class TestFetchRepoFilesGitHubToken:
             result = fetch_repo_files("https://github.com/owner/repo.git")
 
         assert result.compose_bytes == compose_bytes
+
+
+# ---------------------------------------------------------------------------
+# clone timeout must not leak the token
+# ---------------------------------------------------------------------------
+
+
+def test_clone_timeout_raises_fetch_error_without_token():
+    """A clone timeout becomes a FetchError whose text (and chain) carries no
+    token — the raw TimeoutExpired embeds the tokenised clone URL."""
+    token = "ghs_SECRETTOKEN123"
+
+    def _timeout(args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=kwargs.get("timeout"))
+
+    with (
+        mock.patch("subprocess.run", side_effect=_timeout),
+        pytest.raises(FetchError) as excinfo,
+    ):
+        fetch_repo_files(
+            "https://github.com/damien-robotsix/robotsix-invest",
+            timeout_sec=30,
+            github_token=token,
+        )
+
+    err = excinfo.value
+    assert "timed out after 30s" in str(err)
+    assert token not in str(err)
+    assert err.__cause__ is None
+    assert err.__suppress_context__ is True

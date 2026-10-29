@@ -80,12 +80,23 @@ def fetch_repo_files(
         )
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        proc = subprocess.run(
-            ["git", "clone", "--depth", "1", clone_url, tmpdir],
-            check=False,
-            capture_output=True,
-            timeout=timeout_sec,
-        )
+        try:
+            proc = subprocess.run(
+                ["git", "clone", "--depth", "1", clone_url, tmpdir],
+                check=False,
+                capture_output=True,
+                timeout=timeout_sec,
+            )
+        except subprocess.TimeoutExpired:
+            # ``TimeoutExpired`` carries the full command line — clone URL
+            # with the installation token — in its message, and escaped
+            # unhandled: a 500 whose traceback logged a live token (invest
+            # refresh-contract during the 10:00Z IO storm, 2026-10-29).
+            # Raise a clean, token-free FetchError instead (``from None``
+            # drops the chained exception and its args).
+            raise FetchError(
+                f"git clone of {git_url} timed out after {timeout_sec}s"
+            ) from None
         if proc.returncode != 0:
             stderr_tail = proc.stderr.decode(errors="replace")[:500]
             if github_token:
