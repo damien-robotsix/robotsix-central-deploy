@@ -4,6 +4,14 @@ All notable changes to robotsix-central-deploy.
 
 <!-- towncrier release notes start -->
 
+## [0.14.1](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.14.0...v0.14.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* Caretaker and startup: sync the primary ServiceRecord.image from the component config when the configured image changes (20261029T100815Z-caretaker-and-startup-sync-the-primary-s-3ba6) ([#945](https://github.com/damien-robotsix/robotsix-central-deploy/issues/945)) ([c277422](https://github.com/damien-robotsix/robotsix-central-deploy/commit/c277422d994aa244b2954e97c58ce42be235f9d8))
+* **onboard:** turn a git clone timeout into a token-free FetchError ([#943](https://github.com/damien-robotsix/robotsix-central-deploy/issues/943)) ([357ef5f](https://github.com/damien-robotsix/robotsix-central-deploy/commit/357ef5f9fc6946cbc40153d2cc4212590e33386b))
+
 ## [0.14.0](https://github.com/damien-robotsix/robotsix-central-deploy/compare/v0.13.1...v0.14.0) (2026-10-26)
 
 
