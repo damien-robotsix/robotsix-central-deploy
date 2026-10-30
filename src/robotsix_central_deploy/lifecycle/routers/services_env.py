@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import SecretStr
 
 from ...registry.config_store import ComponentConfigStore
 from ...registry.config_yaml_store import ConfigYamlStore
@@ -126,7 +127,7 @@ async def put_service_env(
     ghcr_token = body.secrets.pop("ghcr_pull_token", None)
     if name == "central-deploy" and ghcr_token is not None:
         stored = await settings_store.get()
-        stored.ghcr_pull_token = ghcr_token
+        stored.ghcr_pull_token = SecretStr(ghcr_token)
         await settings_store.put(stored)
         # Propagate to the running backend immediately so the next pull
         # authenticates without a restart.
@@ -276,7 +277,7 @@ async def delete_service_env_key(
     # from system settings and the running backend.
     if name == "central-deploy" and key == "ghcr_pull_token":
         stored = await settings_store.get()
-        stored.ghcr_pull_token = ""
+        stored.ghcr_pull_token = SecretStr("")
         await settings_store.put(stored)
         if hasattr(backend, "ghcr_pull_token"):
             backend.ghcr_pull_token = ""

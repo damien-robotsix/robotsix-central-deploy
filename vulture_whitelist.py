@@ -92,6 +92,10 @@ _.__class__  # unused attribute (src/robotsix_central_deploy/lifecycle/deps/__in
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/gateway_docs_middleware.py:46)
 _.dispatch  # unused method (src/robotsix_central_deploy/lifecycle/rate_limiter.py:178)
 _.token_type  # PyGithub Auth.Token override (src/robotsix_central_deploy/lifecycle/github_app.py:70)
+# Pydantic calls @field_serializer methods when dumping SecretStr fields.
+_._reveal  # unused method (src/robotsix_central_deploy/lifecycle/routers/auth_token.py:92)
+_._reveal_secret_key  # unused method (src/robotsix_central_deploy/lifecycle/routers/fleet_langfuse.py:74)
+_._serialize_ghcr_pull_token  # unused method (src/robotsix_central_deploy/registry/settings_store.py:102)
 
 # ===========================================================================
 # Backend interface methods — defined in abstract base, implemented in all

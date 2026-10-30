@@ -9632,8 +9632,10 @@
           },
           "secret_key": {
             "type": "string",
+            "format": "password",
             "title": "Secret Key",
-            "description": "Langfuse secret key (read-only)"
+            "description": "Langfuse secret key (read-only)",
+            "writeOnly": true
           },
           "project_id": {
             "anyOf": [
@@ -9798,8 +9800,10 @@
         "properties": {
           "token": {
             "type": "string",
+            "format": "password",
             "title": "Token",
-            "description": "Bearer token obtained via the login handoff."
+            "description": "Bearer token obtained via the login handoff.",
+            "writeOnly": true
           }
         },
         "type": "object",
@@ -10985,14 +10989,15 @@
         "properties": {
           "access_token": {
             "type": "string",
+            "format": "password",
             "title": "Access Token",
-            "description": "Bearer token for mobile API calls."
+            "description": "Bearer token for mobile API calls.",
+            "writeOnly": true
           },
           "token_type": {
             "type": "string",
             "title": "Token Type",
-            "description": "Always 'Bearer'.",
-            "default": "Bearer"
+            "description": "Always 'Bearer'."
           },
           "scope": {
             "type": "string",

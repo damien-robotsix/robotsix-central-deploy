@@ -17,7 +17,7 @@ from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr, field_serializer
 
 from ..auth import verify_auth
 from ..deps import _get_token_store
@@ -77,13 +77,22 @@ def _validate_deep_link(redirect_to: str) -> str:
 class TokenResponse(BaseModel):
     """Bearer token returned to the mobile app after SSO exchange."""
 
-    access_token: str = Field(..., description="Bearer token for mobile API calls.")
-    token_type: str = Field("Bearer", description="Always 'Bearer'.")
+    access_token: SecretStr = Field(
+        ..., description="Bearer token for mobile API calls."
+    )
+    token_type: SecretStr = Field(
+        "Bearer", validate_default=True, description="Always 'Bearer'."
+    )
     scope: str = Field("chat", description="Token scope — chat access only.")
     expires_in: int = Field(
         ...,
         description="Seconds until expiry (approximate).",
     )
+
+    @field_serializer("access_token", "token_type")
+    def _reveal(self, value: SecretStr) -> str:
+        """Serialize in plaintext: handing the token to the app is the point."""
+        return value.get_secret_value()
 
 
 class RevokeUserRequest(BaseModel):
@@ -144,7 +153,7 @@ async def exchange_token(
         expires_in,
     )
     return TokenResponse(
-        access_token=token,
+        access_token=SecretStr(token),
         expires_in=expires_in,
     )
 
@@ -240,7 +249,9 @@ async def complete_mobile_login(
 class MobileTokenExchangeRequest(BaseModel):
     """Body of the mobile app's token-exchange call."""
 
-    token: str = Field(..., description="Bearer token obtained via the login handoff.")
+    token: SecretStr = Field(
+        ..., description="Bearer token obtained via the login handoff."
+    )
 
 
 @router.post("/chat/auth/mobile-token", response_model=TokenResponse)
@@ -257,7 +268,8 @@ async def exchange_mobile_token(
     lifetime.  Reachable WITHOUT an SSO session: it only ever returns a
     token that the caller already holds and that is still valid.
     """
-    payload = token_store.validate(body.token)
+    token = body.token.get_secret_value()
+    payload = token_store.validate(token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -267,7 +279,7 @@ async def exchange_mobile_token(
     import time
 
     return TokenResponse(
-        access_token=body.token,
+        access_token=SecretStr(token),
         scope=str(payload.get("scope", "chat")),
         expires_in=max(0, int(payload["exp"] - time.time())),
     )

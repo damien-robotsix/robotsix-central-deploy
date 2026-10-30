@@ -73,7 +73,7 @@ class TestProjects:
         entry = projects[0]
         assert entry.alias == "robotsix-chat"
         assert entry.public_key == "pk-lf-1"
-        assert entry.secret_key == "sk-lf-1"
+        assert entry.secret_key.get_secret_value() == "sk-lf-1"
         assert entry.project_id == "cm-1"
 
     def test_project_id_is_optional(self):

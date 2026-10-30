@@ -195,8 +195,10 @@
     "secret_key_path": {
       "default": "secrets.key",
       "description": "Path of the Fernet key encrypting stored secrets.",
+      "format": "password",
       "title": "Secret Key Path",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "config_yaml_store_path": {
       "default": "data/component_config_yaml.json",
@@ -460,8 +462,10 @@
     "mobile_token_revocation_path": {
       "default": "data/mobile_token_revocations.json",
       "description": "Path of the mobile-token revocation list.",
+      "format": "password",
       "title": "Mobile Token Revocation Path",
-      "type": "string"
+      "type": "string",
+      "writeOnly": true
     },
     "chat_agent_deployable_components": {
       "description": "Component names the chat agent is allowed to deploy via the generic POST /chat/deploy endpoint. Each entry must match ^[a-z0-9][a-z0-9-]*$. Distinct from chat_agent_mutatable (per-component flag) \u2014 this is a server-level allowlist for components that may not have a persisted ComponentConfig yet.",

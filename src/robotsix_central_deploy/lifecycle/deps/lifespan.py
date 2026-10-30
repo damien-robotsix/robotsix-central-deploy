@@ -323,7 +323,7 @@ async def _init_config(app: FastAPI) -> None:
 
     _config = robotsix_config.load_config(LifecycleConfig)
     _store = _build_store(_config)
-    _key_manager = SecretKeyManager(Path(_config.secret_key_path))
+    _key_manager = SecretKeyManager(Path(_config.secret_key_path.get_secret_value()))
     _env_store = EnvStore(Path(_config.env_store_path), _key_manager)
     _config_yaml_store = ConfigYamlStore(Path(_config.config_yaml_store_path))
     _deploy_history_store = DeployHistoryStore(
@@ -342,7 +342,9 @@ async def _init_config(app: FastAPI) -> None:
     app.state.chat_agent_rate_limits = {}
 
     # -- Mobile token store --------------------------------------------------
-    _token_revocation_path = Path(_config.mobile_token_revocation_path)
+    _token_revocation_path = Path(
+        _config.mobile_token_revocation_path.get_secret_value()
+    )
     _token_store = TokenStore(
         key_manager=_key_manager,
         revocation_path=_token_revocation_path,

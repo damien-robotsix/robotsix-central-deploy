@@ -12,7 +12,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    SecretStr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from ..lifecycle._settings_defaults import SETTINGS_DEFAULTS
 
@@ -76,9 +82,9 @@ class SystemSettings(BaseModel):
     volume_audit_min_delta_bytes: int = SETTINGS_DEFAULTS[
         "volume_audit_min_delta_bytes"
     ]
-    ghcr_pull_token: str = SETTINGS_DEFAULTS[
-        "ghcr_pull_token"
-    ]  # read:packages PAT for private GHCR pulls
+    ghcr_pull_token: SecretStr = SecretStr(
+        SETTINGS_DEFAULTS["ghcr_pull_token"]
+    )  # read:packages PAT for private GHCR pulls
     chat_agent_registration_enabled: bool = SETTINGS_DEFAULTS[
         "chat_agent_registration_enabled"
     ]  # allow chat agent to register components via POST /chat/services
@@ -92,6 +98,11 @@ class SystemSettings(BaseModel):
     volume_retention_rules: list[dict[str, Any]] = SETTINGS_DEFAULTS[
         "volume_retention_rules"
     ]  # mobile bearer-token lifetime in days
+
+    @field_serializer("ghcr_pull_token")
+    def _serialize_ghcr_pull_token(self, value: SecretStr) -> str:
+        """Dump the plain value so the persisted settings file keeps its format."""
+        return value.get_secret_value()
 
     @field_validator("volume_audit_interval_seconds")
     @classmethod
