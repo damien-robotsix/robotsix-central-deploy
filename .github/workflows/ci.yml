@@ -195,7 +195,7 @@ jobs:
 
   python-security:
     name: Security scan (shared)
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@188518bece972d7d5f1c4e2a0f2226d2526dc0fa  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     permissions:
       contents: read
     with:
@@ -213,7 +213,7 @@ jobs:
   trivy:
     name: Trivy
     if: github.event_name == 'pull_request'
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@92c11fd2be7a9ce80bd60208616271326e0fb08a  # main 2026-10-26 (post-v1.3.0, re-pin to v1.4.0 when ghwf #243 is released)
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     permissions:
       contents: read
       security-events: write  # Trivy SARIF upload to Code Scanning
