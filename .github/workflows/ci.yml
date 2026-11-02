@@ -18,6 +18,7 @@ jobs:
   docs-dedup:
     name: Docs Dedup
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -50,6 +51,7 @@ jobs:
   changes:
     name: Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.filter.outputs.docs-only }}
     steps:
@@ -74,6 +76,7 @@ jobs:
     name: lint
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -126,6 +129,7 @@ jobs:
     name: typecheck
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -161,6 +165,7 @@ jobs:
     name: test
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -229,6 +234,7 @@ jobs:
     name: Vulture
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -252,6 +258,7 @@ jobs:
     name: Docs
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -284,6 +291,7 @@ jobs:
     name: Grep Lint
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -399,6 +407,7 @@ jobs:
   lint-actions:
     name: Lint Actions
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -419,6 +428,7 @@ jobs:
     name: Module Taxonomy
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -439,6 +449,7 @@ jobs:
     name: Config Schema Drift
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -503,6 +514,7 @@ jobs:
     name: OpenAPI Drift
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
