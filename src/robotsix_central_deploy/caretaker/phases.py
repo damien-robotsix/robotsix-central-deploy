@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from ..lifecycle.backends import ExecutionBackend
     from ..lifecycle.config import LifecycleConfig
-    from ..lifecycle.models import ComponentInspect, ServiceRecord
+    from ..lifecycle.models import ComponentInspect, DeployOutcome, ServiceRecord
     from ..lifecycle.store import ServiceStore
     from ..registry.config_store import ComponentConfigStore
     from ..registry.deploy_history_store import DeployHistoryStore
@@ -53,6 +53,367 @@ def component_auto_update_enabled(config: ComponentConfig) -> bool:
     caretaker case).
     """
     return config.auto_update_enabled
+
+
+# Skip reasons returned by ``_update_skip_reason``. ``_log_update_skip`` maps
+# each to the log line it emits (sibling / not-selected / no-update are silent).
+SKIP_SIBLING = "sibling"
+SKIP_NOT_SELECTED = "not-selected"
+SKIP_SELF = "self"
+SKIP_NO_UPDATE = "no-update"
+SKIP_KNOWN_BAD = "known-bad-digest"
+SKIP_BUSY = "busy"
+SKIP_NO_CONFIG = "no-config"
+SKIP_OPTED_OUT = "opted-out"
+
+
+def _is_known_bad_update(record: ServiceRecord) -> bool:
+    """True when the pending registry digest already crash-looped and was rolled back."""
+    return bool(
+        record.failed_update_digest
+        and record.latest_registry_digest == record.failed_update_digest
+    )
+
+
+def _update_skip_reason(
+    record: ServiceRecord,
+    config: ComponentConfig | None,
+    *,
+    self_container_name: str,
+    only_components: Collection[str] | None,
+    busy_components: Mapping[str, str] | None,
+    stale_sibling_parents: Collection[str],
+) -> str | None:
+    """Return why ``phase_update`` must skip *record* this pass, or ``None``.
+
+    Pure: no I/O, no logging. Rules are evaluated in order and the first
+    match wins; the returned value is one of the ``SKIP_*`` constants.
+    """
+    # Skip sibling records (handled via their parent, see phase_update)
+    if record.component_id:
+        return SKIP_SIBLING
+
+    if only_components is not None and record.name not in only_components:
+        return SKIP_NOT_SELECTED
+
+    # Never auto-deploy the container this caretaker runs inside. The
+    # deploy would replace our own container before this pass can persist
+    # ``update_available=False``, so every replacement boots, still sees
+    # the update as pending, and self-updates again — an unbreakable loop
+    # that took down deploy.robotsix.net on 2026-07-21. Self-update is
+    # instead driven by the detached updater: POST /system/update or the
+    # caretaker's end-of-pass self-update step (same path).
+    if self_container_name and record.container_name == self_container_name:
+        return SKIP_SELF
+
+    siblings_stale = record.name in stale_sibling_parents
+    if not record.update_available and not siblings_stale:
+        return SKIP_NO_UPDATE
+
+    # Don't re-pull a registry digest that already crash-looped and was
+    # rolled back: retry only once the registry publishes a newer digest.
+    # (hexarchy, 2026-10-06 — the caretaker re-deployed the same broken
+    # :main image every pass.) A stale sibling still makes the parent
+    # eligible for a sibling-only refresh below.
+    if _is_known_bad_update(record) and not siblings_stale:
+        return SKIP_KNOWN_BAD
+
+    # A component the caller marked busy (the mill with implement/ci_fix
+    # stages in flight — see the scheduler's /active probe) keeps its
+    # pending update for the next pass: recreating it mid-stage aborts
+    # hour-scale agent runs whose work is then redone from scratch.
+    if busy_components and record.name in busy_components:
+        return SKIP_BUSY
+
+    if config is None:
+        return SKIP_NO_CONFIG
+
+    if not component_auto_update_enabled(config):
+        return SKIP_OPTED_OUT
+
+    return None
+
+
+def _log_update_skip(
+    record: ServiceRecord,
+    reason: str,
+    busy_components: Mapping[str, str] | None,
+) -> None:
+    """Emit the log line for a ``phase_update`` skip *reason*."""
+    if reason == SKIP_SELF:
+        logger.debug(
+            "phase_update: skipping self-component %s "
+            "(self-update handled by the detached updater)",
+            record.name,
+        )
+    elif reason == SKIP_KNOWN_BAD:
+        logger.info(
+            "phase_update: skipping %s — registry digest %s already "
+            "crash-looped and was rolled back; waiting for a newer image",
+            record.name,
+            record.failed_update_digest,
+        )
+    elif reason == SKIP_BUSY and busy_components:
+        logger.info(
+            "phase_update: deferring %s — %s",
+            record.name,
+            busy_components[record.name],
+        )
+    elif reason == SKIP_NO_CONFIG:
+        logger.warning(
+            "phase_update: no config for component %s, skipping", record.name
+        )
+    elif reason == SKIP_OPTED_OUT:
+        logger.debug("phase_update: component %s opted out of auto-update", record.name)
+
+
+def _resolve_update_image_ref(
+    config: ComponentConfig, record: ServiceRecord
+) -> tuple[str, str]:
+    """Return ``(image_ref, configured_image)`` for an auto-update deploy."""
+    # Pull by repo@digest: a bare "sha256:…" digest is not a valid image
+    # reference (docker resolves it as repository "sha256"), so anchor it
+    # to the record's repository. Falls back to the plain tag when no
+    # digest is recorded. The configured image is the source of truth: a
+    # stale ``record.image`` (e.g. an old tag nothing publishes any more)
+    # must never win over the component config.
+    configured_image = config.image
+    repo = configured_image.rsplit(":", 1)[0]
+    if record.latest_registry_digest:
+        image_ref = f"{repo}@{record.latest_registry_digest}"
+    else:
+        image_ref = configured_image
+    return image_ref, configured_image
+
+
+async def _build_update_deploy_config(
+    env_store: EnvStore, record: ServiceRecord, config: ComponentConfig
+) -> ComponentConfig:
+    """Return *config* with the EnvStore-merged environment applied."""
+    # Recreating the container with only the static registry env would
+    # silently drop EnvStore-provisioned variables (API keys, secrets),
+    # so merge them exactly like the manual deploy path does.
+    merged_env = await env_store.get_merged_env(record.name, config.env)
+    # Resolve credentials shared by other components via scope tags.
+    if config.consumed_scopes:
+        cred_env = await env_store.resolve_consumed_credentials(
+            record.name, config.consumed_scopes
+        )
+        if cred_env:
+            merged_env = {**cred_env, **merged_env}
+    return config.model_copy(update={"env": merged_env})
+
+
+def _apply_successful_deploy(
+    record: ServiceRecord, outcome: DeployOutcome, configured_image: str
+) -> None:
+    """Reset *record*'s fields after ``backend.deploy`` returned *outcome*."""
+    record.state = outcome.state
+    record.image = configured_image
+    record.image_revision = outcome.deployed_digest
+    record.deployed_image_digest = outcome.deployed_digest
+    record.previous_image_digest = outcome.previous_digest
+    record.update_available = False
+    # A fresh deploy clears any prior known-bad marker — if this
+    # image also fails verification the failure block re-sets it.
+    record.failed_update_digest = ""
+    # The bounded-defer clock (mill busy-guard) is only meaningful while
+    # an update waits; a completed deploy resets it so the next update
+    # starts a fresh window.
+    record.update_pending_since = None
+    # A successful deploy supersedes whatever the previous attempt
+    # left behind; a stale verifier reason otherwise sticks to a
+    # healthy record for days (chat/cost-monitor still carried the
+    # 2026-10-11 "unhealthy during the post-deploy window" text on
+    # 2026-10-13 after two clean auto-deploys).
+    record.last_error = ""
+
+
+async def _append_update_history(
+    deploy_history_store: DeployHistoryStore,
+    record: ServiceRecord,
+    outcome: DeployOutcome,
+) -> None:
+    """Record a caretaker deploy in the history store (failures are logged)."""
+    try:
+        await deploy_history_store.append(
+            record.name,
+            DeployHistoryEntry(
+                digest=outcome.deployed_digest,
+                image_ref=record.latest_registry_digest,
+                timestamp=time.time(),
+                source=DeploySource.CARETAKER,
+                previous_digest=outcome.previous_digest,
+            ),
+        )
+    except Exception:
+        logger.warning(
+            "phase_update: failed to record history for %s",
+            record.name,
+            exc_info=True,
+        )
+
+
+async def _verify_or_rollback(
+    backend: ExecutionBackend,
+    store: ServiceStore,
+    deploy_history_store: DeployHistoryStore,
+    record: ServiceRecord,
+    config: ComponentConfig,
+    deploy_config: ComponentConfig,
+    outcome: DeployOutcome,
+) -> CaretakerFinding | None:
+    """Verify an auto-deployed image stays up; roll back and report if not."""
+    # Verify the auto-deployed image actually stays up. An image whose
+    # config schema changed can boot, pass its startup healthcheck,
+    # then crash-loop under Docker's restart policy — the 2026-09-05
+    # hexarchy incident restarted 110 times with nothing noticing.
+    # Poll runtime state + RestartCount for a window; a restarting
+    # container or a growing RestartCount is a FAILED deploy that must
+    # produce a signal carrying the crash-log excerpt.
+    verification = await verify_post_deploy_health(backend, record)
+    if verification.ok:
+        return None
+
+    record.state = ServiceState.FAILED
+    record.last_error = verification.reason
+    # Remember this registry digest as known-bad so we don't
+    # re-pull it every pass (requirement: retry only on a newer
+    # image). Recorded before the rollback swaps the digests.
+    record.failed_update_digest = record.latest_registry_digest
+    await store.put(record)
+    logger.error(
+        "phase_update: post-deploy verification failed for %s: %s",
+        record.name,
+        verification.reason,
+    )
+
+    # Roll the crash-looping container back to its last-good
+    # image instead of leaving it restarting indefinitely
+    # (hexarchy was down 6 days, 2026-10-06). Uses the same
+    # one-step swap POST /services/{name}/rollback performs and
+    # re-syncs the stored digest/health with the live container.
+    recovery = await rollback_after_failed_deploy(
+        backend,
+        record,
+        deploy_config,
+        store,
+        deploy_history_store,
+        source=DeploySource.ROLLBACK,
+        log_context="phase_update",
+    )
+
+    detail = (
+        f"Auto-update of {record.name} to {outcome.deployed_digest} "
+        f"landed a crash-looping container: {verification.reason}."
+    )
+    if recovery.rolled_back:
+        detail += (
+            f"\n\nRolled back to the previous image "
+            f"{recovery.rolled_back_to}; the broken "
+            f"{outcome.deployed_digest} will not be retried until "
+            f"the registry publishes a newer digest."
+        )
+    elif recovery.error:
+        detail += (
+            f"\n\nAutomatic rollback FAILED ({recovery.error}); the "
+            f"container is still crash-looping and needs manual "
+            f"intervention."
+        )
+    if verification.crash_log:
+        detail += f"\n\nLast container logs:\n{verification.crash_log}"
+
+    return CaretakerFinding(
+        component_id=record.name,
+        repo_id=config.repo_id,
+        kind=FindingKind.UPDATE_FAILED,
+        title=f"Auto-update crash loop: {record.name}",
+        detail=detail,
+        severity="error",
+    )
+
+
+async def _deploy_primary_update(
+    record: ServiceRecord,
+    config: ComponentConfig,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    deploy_history_store: DeployHistoryStore,
+    env_store: EnvStore,
+) -> CaretakerFinding | None:
+    """Deploy the pending primary image, record it, then verify it."""
+    image_ref, configured_image = _resolve_update_image_ref(config, record)
+    deploy_config = await _build_update_deploy_config(env_store, record, config)
+    outcome = await backend.deploy(record, deploy_config, image_ref)
+    _apply_successful_deploy(record, outcome, configured_image)
+    await store.put(record)
+    await _append_update_history(deploy_history_store, record, outcome)
+    logger.info(
+        "phase_update: auto-deployed %s → %s",
+        record.name,
+        outcome.deployed_digest,
+    )
+    return await _verify_or_rollback(
+        backend, store, deploy_history_store, record, config, deploy_config, outcome
+    )
+
+
+async def _fanout_sibling_updates(
+    record: ServiceRecord,
+    config: ComponentConfig,
+    store: ServiceStore,
+    backend: ExecutionBackend,
+    env_store: EnvStore,
+) -> None:
+    """Deploy *record*'s siblings alongside (or instead of) the primary."""
+    # Siblings ride along with the parent's auto-update — and are
+    # refreshed on their own when only they are stale. The manual and
+    # chat deploy paths already fan out; the caretaker path did not
+    # (mail-ingester, 2026-09-09). The helper clears each sibling's
+    # update_available; a failing sibling is logged, never fatal.
+    # Deferred import: ``lifecycle.routers._sibling_utils`` imports
+    # ``lifecycle.deps``, which imports the caretaker scheduler and thus this
+    # module — a module-level import here is circular. The helper is looked
+    # up on the module at call time so it stays patchable.
+    from ..lifecycle.routers import _sibling_utils
+
+    deployed_sibs = await _sibling_utils._fanout_siblings_deploy_best_effort(
+        record.name, config, store, backend, "phase_update", env_store
+    )
+    if deployed_sibs:
+        logger.info(
+            "phase_update: auto-deployed sibling(s) of %s: %s",
+            record.name,
+            ", ".join(deployed_sibs),
+        )
+
+
+def _self_identity_unknown_finding() -> CaretakerFinding:
+    """Log and return the finding for a pass skipped on unknown self-identity."""
+    # Fail closed on unknown self-identity. The self-skip in
+    # ``_update_skip_reason`` can only exclude a record it can name; with no
+    # name every record is potentially this very container, and deploying it
+    # kills the management plane with no detached recreator to bring it back
+    # (2026-07-31 outage: a mid-scan NotFound made inspect_self return None,
+    # the guard fell through, and phase_update deployed central-deploy on top
+    # of itself). Skipping a pass only defers updates to the next one;
+    # guessing wrong takes the fleet down.
+    logger.warning(
+        "phase_update: self-identity unknown, skipping the update phase "
+        "(cannot rule out deploying our own container)"
+    )
+    return CaretakerFinding(
+        kind=FindingKind.UPDATE_FAILED,
+        title="Update phase skipped: self-identity unknown",
+        detail=(
+            "The caretaker could not determine which container it runs "
+            "inside, so it cannot guarantee an auto-deploy would not "
+            "replace the management plane itself. No component was "
+            "updated this pass; the next pass retries. Self-update "
+            "remains available via POST /system/update."
+        ),
+        severity="warning",
+    )
 
 
 async def phase_update(
@@ -96,32 +457,8 @@ async def phase_update(
     """
     findings: list[CaretakerFinding] = []
 
-    # Fail closed on unknown self-identity. The self-skip below can only
-    # exclude a record it can name; with no name every record is potentially
-    # this very container, and deploying it kills the management plane with no
-    # detached recreator to bring it back (2026-07-31 outage: a mid-scan
-    # NotFound made inspect_self return None, the guard fell through, and
-    # phase_update deployed central-deploy on top of itself). Skipping a pass
-    # only defers updates to the next one; guessing wrong takes the fleet down.
     if not self_identity_known:
-        logger.warning(
-            "phase_update: self-identity unknown, skipping the update phase "
-            "(cannot rule out deploying our own container)"
-        )
-        return [
-            CaretakerFinding(
-                kind=FindingKind.UPDATE_FAILED,
-                title="Update phase skipped: self-identity unknown",
-                detail=(
-                    "The caretaker could not determine which container it runs "
-                    "inside, so it cannot guarantee an auto-deploy would not "
-                    "replace the management plane itself. No component was "
-                    "updated this pass; the next pass retries. Self-update "
-                    "remains available via POST /system/update."
-                ),
-                severity="warning",
-            )
-        ]
+        return [_self_identity_unknown_finding()]
 
     records = await store.list_all()
     # Sibling records are never deployed on their own: they ride along with
@@ -135,87 +472,20 @@ async def phase_update(
     }
 
     for record in records:
-        # Skip sibling records (handled via their parent, see above)
-        if record.component_id:
-            continue
-
-        if only_components is not None and record.name not in only_components:
-            continue
-
-        # Never auto-deploy the container this caretaker runs inside. The
-        # deploy would replace our own container before this pass can persist
-        # ``update_available=False``, so every replacement boots, still sees
-        # the update as pending, and self-updates again — an unbreakable loop
-        # that took down deploy.robotsix.net on 2026-07-21. Self-update is
-        # instead driven by the detached updater: POST /system/update or the
-        # caretaker's end-of-pass self-update step (same path).
-        if self_container_name and record.container_name == self_container_name:
-            logger.debug(
-                "phase_update: skipping self-component %s "
-                "(self-update handled by the detached updater)",
-                record.name,
-            )
-            continue
-
-        siblings_stale = record.name in stale_sibling_parents
-        if not record.update_available and not siblings_stale:
-            continue
-
-        # Don't re-pull a registry digest that already crash-looped and was
-        # rolled back: retry only once the registry publishes a newer digest.
-        # (hexarchy, 2026-10-06 — the caretaker re-deployed the same broken
-        # :main image every pass.) A stale sibling still makes the parent
-        # eligible for a sibling-only refresh below.
-        update_is_known_bad = bool(
-            record.failed_update_digest
-            and record.latest_registry_digest == record.failed_update_digest
+        config = (
+            None if record.component_id else component_config_store.get(record.name)
         )
-        if update_is_known_bad and not siblings_stale:
-            logger.info(
-                "phase_update: skipping %s — registry digest %s already "
-                "crash-looped and was rolled back; waiting for a newer image",
-                record.name,
-                record.failed_update_digest,
-            )
+        reason = _update_skip_reason(
+            record,
+            config,
+            self_container_name=self_container_name,
+            only_components=only_components,
+            busy_components=busy_components,
+            stale_sibling_parents=stale_sibling_parents,
+        )
+        if reason is not None or config is None:
+            _log_update_skip(record, reason or SKIP_NO_CONFIG, busy_components)
             continue
-
-        # A component the caller marked busy (the mill with implement/ci_fix
-        # stages in flight — see the scheduler's /active probe) keeps its
-        # pending update for the next pass: recreating it mid-stage aborts
-        # hour-scale agent runs whose work is then redone from scratch.
-        if busy_components and record.name in busy_components:
-            logger.info(
-                "phase_update: deferring %s — %s",
-                record.name,
-                busy_components[record.name],
-            )
-            continue
-
-        config = component_config_store.get(record.name)
-        if config is None:
-            logger.warning(
-                "phase_update: no config for component %s, skipping", record.name
-            )
-            continue
-
-        if not component_auto_update_enabled(config):
-            logger.debug(
-                "phase_update: component %s opted out of auto-update", record.name
-            )
-            continue
-
-        # Pull by repo@digest: a bare "sha256:…" digest is not a valid image
-        # reference (docker resolves it as repository "sha256"), so anchor it
-        # to the record's repository. Falls back to the plain tag when no
-        # digest is recorded. The configured image is the source of truth: a
-        # stale ``record.image`` (e.g. an old tag nothing publishes any more)
-        # must never win over the component config.
-        configured_image = config.image
-        repo = configured_image.rsplit(":", 1)[0]
-        if record.latest_registry_digest:
-            image_ref = f"{repo}@{record.latest_registry_digest}"
-        else:
-            image_ref = configured_image
 
         # Serialise concurrent deploys of the same component (operator + caretaker).
         if not await try_acquire_deploy_lock(record.name, source="caretaker"):
@@ -225,150 +495,13 @@ async def phase_update(
             )
             continue
         try:
-            if record.update_available and not update_is_known_bad:
-                # Recreating the container with only the static registry env would
-                # silently drop EnvStore-provisioned variables (API keys, secrets),
-                # so merge them exactly like the manual deploy path does.
-                merged_env = await env_store.get_merged_env(record.name, config.env)
-                # Resolve credentials shared by other components via scope tags.
-                if config.consumed_scopes:
-                    cred_env = await env_store.resolve_consumed_credentials(
-                        record.name, config.consumed_scopes
-                    )
-                    if cred_env:
-                        merged_env = {**cred_env, **merged_env}
-                deploy_config = config.model_copy(update={"env": merged_env})
-                outcome = await backend.deploy(record, deploy_config, image_ref)
-                record.state = outcome.state
-                record.image = configured_image
-                record.image_revision = outcome.deployed_digest
-                record.deployed_image_digest = outcome.deployed_digest
-                record.previous_image_digest = outcome.previous_digest
-                record.update_available = False
-                # A fresh deploy clears any prior known-bad marker — if this
-                # image also fails verification the failure block re-sets it.
-                record.failed_update_digest = ""
-                # The bounded-defer clock (mill busy-guard) is only meaningful while
-                # an update waits; a completed deploy resets it so the next update
-                # starts a fresh window.
-                record.update_pending_since = None
-                # A successful deploy supersedes whatever the previous attempt
-                # left behind; a stale verifier reason otherwise sticks to a
-                # healthy record for days (chat/cost-monitor still carried the
-                # 2026-10-11 "unhealthy during the post-deploy window" text on
-                # 2026-10-13 after two clean auto-deploys).
-                record.last_error = ""
-                await store.put(record)
-
-                try:
-                    await deploy_history_store.append(
-                        record.name,
-                        DeployHistoryEntry(
-                            digest=outcome.deployed_digest,
-                            image_ref=record.latest_registry_digest,
-                            timestamp=time.time(),
-                            source=DeploySource.CARETAKER,
-                            previous_digest=outcome.previous_digest,
-                        ),
-                    )
-                except Exception:
-                    logger.warning(
-                        "phase_update: failed to record history for %s",
-                        record.name,
-                        exc_info=True,
-                    )
-
-                logger.info(
-                    "phase_update: auto-deployed %s → %s",
-                    record.name,
-                    outcome.deployed_digest,
+            if record.update_available and not _is_known_bad_update(record):
+                finding = await _deploy_primary_update(
+                    record, config, store, backend, deploy_history_store, env_store
                 )
-
-                # Verify the auto-deployed image actually stays up. An image whose
-                # config schema changed can boot, pass its startup healthcheck,
-                # then crash-loop under Docker's restart policy — the 2026-09-05
-                # hexarchy incident restarted 110 times with nothing noticing.
-                # Poll runtime state + RestartCount for a window; a restarting
-                # container or a growing RestartCount is a FAILED deploy that must
-                # produce a signal carrying the crash-log excerpt.
-                verification = await verify_post_deploy_health(backend, record)
-                if not verification.ok:
-                    record.state = ServiceState.FAILED
-                    record.last_error = verification.reason
-                    # Remember this registry digest as known-bad so we don't
-                    # re-pull it every pass (requirement: retry only on a newer
-                    # image). Recorded before the rollback swaps the digests.
-                    record.failed_update_digest = record.latest_registry_digest
-                    await store.put(record)
-                    logger.error(
-                        "phase_update: post-deploy verification failed for %s: %s",
-                        record.name,
-                        verification.reason,
-                    )
-
-                    # Roll the crash-looping container back to its last-good
-                    # image instead of leaving it restarting indefinitely
-                    # (hexarchy was down 6 days, 2026-10-06). Uses the same
-                    # one-step swap POST /services/{name}/rollback performs and
-                    # re-syncs the stored digest/health with the live container.
-                    recovery = await rollback_after_failed_deploy(
-                        backend,
-                        record,
-                        deploy_config,
-                        store,
-                        deploy_history_store,
-                        source=DeploySource.ROLLBACK,
-                        log_context="phase_update",
-                    )
-
-                    detail = (
-                        f"Auto-update of {record.name} to {outcome.deployed_digest} "
-                        f"landed a crash-looping container: {verification.reason}."
-                    )
-                    if recovery.rolled_back:
-                        detail += (
-                            f"\n\nRolled back to the previous image "
-                            f"{recovery.rolled_back_to}; the broken "
-                            f"{outcome.deployed_digest} will not be retried until "
-                            f"the registry publishes a newer digest."
-                        )
-                    elif recovery.error:
-                        detail += (
-                            f"\n\nAutomatic rollback FAILED ({recovery.error}); the "
-                            f"container is still crash-looping and needs manual "
-                            f"intervention."
-                        )
-                    if verification.crash_log:
-                        detail += f"\n\nLast container logs:\n{verification.crash_log}"
-
-                    findings.append(
-                        CaretakerFinding(
-                            component_id=record.name,
-                            repo_id=config.repo_id,
-                            kind=FindingKind.UPDATE_FAILED,
-                            title=f"Auto-update crash loop: {record.name}",
-                            detail=detail,
-                            severity="error",
-                        )
-                    )
-            # Siblings ride along with the parent's auto-update — and are
-            # refreshed on their own when only they are stale. The manual and
-            # chat deploy paths already fan out; the caretaker path did not
-            # (mail-ingester, 2026-09-09). The helper clears each sibling's
-            # update_available; a failing sibling is logged, never fatal.
-            from ..lifecycle.routers._sibling_utils import (
-                _fanout_siblings_deploy_best_effort,
-            )
-
-            deployed_sibs = await _fanout_siblings_deploy_best_effort(
-                record.name, config, store, backend, "phase_update", env_store
-            )
-            if deployed_sibs:
-                logger.info(
-                    "phase_update: auto-deployed sibling(s) of %s: %s",
-                    record.name,
-                    ", ".join(deployed_sibs),
-                )
+                if finding is not None:
+                    findings.append(finding)
+            await _fanout_sibling_updates(record, config, store, backend, env_store)
         except Exception as exc:  # noqa: BLE001
             logger.error("phase_update: deploy failed for %s: %s", record.name, exc)
             findings.append(
