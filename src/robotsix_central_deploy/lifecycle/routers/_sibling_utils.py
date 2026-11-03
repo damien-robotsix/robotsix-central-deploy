@@ -62,19 +62,22 @@ async def _fanout_siblings_deploy_best_effort(
     prevent the others from being deployed.  Missing sibling records
     are logged and skipped by ``_get_sibling_pairs``.
 
-    When *env_store* is provided, per-sibling environment is merged
-    via ``EnvStore.get_merged_env``; otherwise the sibling's own
-    ``env`` dict is used directly.
+    When *env_store* is provided, per-sibling environment is built via
+    ``EnvStore.build_deploy_env`` with the parent's ``consumed_scopes``, so
+    siblings inherit the parent's consumed-scope credentials; otherwise the
+    sibling's own ``env`` dict is used directly.
     """
     deployed: list[str] = []
     for sib_cfg, sib_record in await _get_sibling_pairs(name, config, store):
         sib_name = f"{name}-{sib_cfg.service_key}"
         try:
             if env_store is not None:
-                sib_env = await env_store.get_merged_env(sib_name, sib_cfg.env)
+                # Siblings inherit the parent's consumed-scope resolution.
+                sib_env = await env_store.build_deploy_env(
+                    sib_name, sib_cfg.env, config.consumed_scopes
+                )
             else:
                 sib_env = sib_cfg.env
-            # Siblings inherit the parent's deploy API key when chat access is enabled.
             sib_effective = config.model_copy(
                 update={
                     "id": sib_name,

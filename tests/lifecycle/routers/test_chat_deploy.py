@@ -857,6 +857,42 @@ async def test_service_deploy_happy_path(
     assert deploy_entries[-1].component == "test-svc"
 
 
+@pytest.mark.asyncio
+async def test_service_deploy_injects_consumed_scope_credentials(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    """A chat deploy of a component with ``consumed_scopes`` passes the
+    scoped credential to ``backend.deploy`` like the REST deploy path."""
+    cfg = _register_component("test-svc")
+    cfg.consumed_scopes = ["website:ovh"]
+    await _seed_service_record("test-svc", state=ServiceState.STOPPED)
+    env_store: EnvStore = server_mod.app.state.env_store
+    await env_store.upsert(
+        "provider",
+        env={},
+        secrets={"SFTP_PASSWORD": "s3cret"},
+        secret_scopes={"SFTP_PASSWORD": "website:ovh"},
+    )
+
+    mock = MagicMock()
+    mock.deploy = AsyncMock(
+        return_value=DeployOutcome(
+            deployed_digest="sha256:firstboot123",
+            previous_digest="",
+            state=ServiceState.RUNNING,
+        )
+    )
+    server_mod.app.state.backend = mock
+
+    resp = await client.post("/chat/services/test-svc/deploy", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+
+    mock.deploy.assert_awaited_once()
+    deployed_config = mock.deploy.await_args.args[1]
+    assert deployed_config.env["SFTP_PASSWORD"] == "s3cret"
+
+
 # ---------------------------------------------------------------------------
 # Service deploy — already running (idempotent)
 # ---------------------------------------------------------------------------

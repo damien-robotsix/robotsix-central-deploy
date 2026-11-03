@@ -229,14 +229,9 @@ async def phase_update(
                 # Recreating the container with only the static registry env would
                 # silently drop EnvStore-provisioned variables (API keys, secrets),
                 # so merge them exactly like the manual deploy path does.
-                merged_env = await env_store.get_merged_env(record.name, config.env)
-                # Resolve credentials shared by other components via scope tags.
-                if config.consumed_scopes:
-                    cred_env = await env_store.resolve_consumed_credentials(
-                        record.name, config.consumed_scopes
-                    )
-                    if cred_env:
-                        merged_env = {**cred_env, **merged_env}
+                merged_env = await env_store.build_deploy_env(
+                    record.name, config.env, config.consumed_scopes
+                )
                 deploy_config = config.model_copy(update={"env": merged_env})
                 outcome = await backend.deploy(record, deploy_config, image_ref)
                 record.state = outcome.state
@@ -830,13 +825,9 @@ async def phase_auto_rollback(
             # Recreate the prior container with its full merged env, exactly
             # like phase_update — the static registry env alone would drop
             # EnvStore-provisioned secrets.
-            merged_env = await env_store.get_merged_env(record.name, config.env)
-            if config.consumed_scopes:
-                cred_env = await env_store.resolve_consumed_credentials(
-                    record.name, config.consumed_scopes
-                )
-                if cred_env:
-                    merged_env = {**cred_env, **merged_env}
+            merged_env = await env_store.build_deploy_env(
+                record.name, config.env, config.consumed_scopes
+            )
             rollback_config = config.model_copy(update={"env": merged_env})
 
             old_deployed = record.deployed_image_digest

@@ -20,8 +20,9 @@ class ComponentEnvConfig(BaseModel):
     Scope fields map individual keys to colon-segmented scope tags
     (e.g. ``"OVH_SFTP_HOST": "website:ovh"``).  Consumers declare
     ``consumed_scopes`` glob patterns on their ``ComponentConfig``
-    and the deploy/rollback paths call ``EnvStore.resolve_consumed_credentials``
-    to receive matching scoped values at injection time.
+    and every deploy/rollback path builds its container env through
+    ``EnvStore.build_deploy_env``, which merges stored env/secrets with the
+    matching scoped values from ``resolve_consumed_credentials``.
     """
 
     env: dict[str, str] = {}
@@ -227,3 +228,27 @@ class EnvStore(JsonFileStore):
         for key, token in config.secret_tokens.items():
             merged[key] = self._key_manager.decrypt(token)
         return merged
+
+    async def build_deploy_env(
+        self,
+        name: str,
+        base_env: dict[str, str],
+        consumed_scopes: list[str] | None,
+    ) -> dict[str, str]:
+        """Return the full container environment for deploying *name*.
+
+        Combines :meth:`get_merged_env` with the credentials other
+        components share via scope tags matching *consumed_scopes*
+        (:meth:`resolve_consumed_credentials`).  On key collision the
+        component's own merged env wins over a consumed credential.
+
+        Siblings pass their parent's *consumed_scopes* so they inherit the
+        parent's consumed-scope resolution.
+        """
+        merged_env = await self.get_merged_env(name, base_env)
+        if not consumed_scopes:
+            return merged_env
+        cred_env = await self.resolve_consumed_credentials(name, consumed_scopes)
+        if not cred_env:
+            return merged_env
+        return {**cred_env, **merged_env}

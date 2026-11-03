@@ -74,5 +74,15 @@ subsequent boots load the existing key. `EnvStore` uses this to encrypt
 secret values before persisting them to disk and to decrypt them when
 building the merged environment for a container.
 
+Every deploy and rollback path (the REST deploy and rollback endpoints, the
+chat-agent deploy and update endpoints, and the caretaker's auto-update and
+auto-rollback) builds that environment through `EnvStore.build_deploy_env`.
+It merges the component's stored env and secrets with the credentials other
+components share through scope tags, matching the component's
+`consumed_scopes` patterns. On a key collision the component's own stored
+value wins. Siblings inherit their parent's `consumed_scopes`, so a sibling
+redeployed by the caretaker or by chat receives the same shared credentials
+as one deployed from the REST API.
+
 > **Warning:** Fernet key loss is irrecoverable — all stored secrets must
 > be re-entered if `secrets.key` is deleted.
