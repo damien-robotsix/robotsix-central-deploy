@@ -7,6 +7,7 @@ without touching Docker or the full ASGI stack.
 
 from __future__ import annotations
 
+from functools import partial
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,6 +22,7 @@ from robotsix_central_deploy.lifecycle.routers._sibling_utils import (
     _fanout_siblings_deploy_best_effort,
 )
 from robotsix_central_deploy.lifecycle.store import InMemoryStore
+from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.models import ComponentConfig, ServiceConfig
 
 # ---------------------------------------------------------------------------
@@ -312,7 +314,7 @@ class TestFanoutSiblingsDeployBestEffort:
         assert db_after.deployed_image_digest == "sha256:ok"
 
     async def test_env_store_merge_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When env_store is provided, get_merged_env is called with correct args."""
+        """When env_store is provided, the sibling env is merged with correct args."""
         store = InMemoryStore()
         backend = MagicMock()
         backend.deploy = AsyncMock(
@@ -325,6 +327,7 @@ class TestFanoutSiblingsDeployBestEffort:
 
         env_store = MagicMock()
         env_store.get_merged_env = AsyncMock(return_value={"MERGED_KEY": "merged_val"})
+        env_store.build_deploy_env = partial(EnvStore.build_deploy_env, env_store)
 
         sib_cfg = _make_svc_cfg("redis", env={"STATIC_KEY": "static_val"})
         sib_rec = _make_service_record("svc-a-redis")

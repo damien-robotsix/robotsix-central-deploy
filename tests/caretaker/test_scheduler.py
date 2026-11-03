@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from functools import partial
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,6 +23,7 @@ from robotsix_central_deploy.lifecycle.models import (
 )
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
+from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 
 
@@ -116,6 +118,7 @@ def scheduler_fixtures(tmp_path):
         side_effect=lambda name, base: dict(base) if isinstance(base, dict) else {}
     )
     env_store.resolve_consumed_credentials = AsyncMock(return_value={})
+    env_store.build_deploy_env = partial(EnvStore.build_deploy_env, env_store)
 
     scheduler = CaretakerScheduler(
         config=config,

@@ -403,6 +403,54 @@ class TestResolveConsumedCredentials:
 
 
 # ---------------------------------------------------------------------------
+# build_deploy_env
+# ---------------------------------------------------------------------------
+
+
+class TestBuildDeployEnv:
+    async def test_merges_consumed_credentials_with_stored_env_winning(
+        self, store_path, key_manager
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "provider",
+            env={"HOST": "provider.example", "SHARED": "from-provider"},
+            secrets={"PASSWORD": "s3cret"},
+            env_scopes={"HOST": "website:ovh", "SHARED": "website:ovh"},
+            secret_scopes={"PASSWORD": "website:ovh"},
+        )
+        await store.upsert("consumer", env={"SHARED": "own"}, secrets={})
+
+        result = await store.build_deploy_env(
+            "consumer", {"STATIC": "yaml"}, ["website:ovh"]
+        )
+
+        assert result == {
+            "HOST": "provider.example",
+            "PASSWORD": "s3cret",
+            "SHARED": "own",
+            "STATIC": "yaml",
+        }
+
+    @pytest.mark.parametrize("scopes", [None, []])
+    async def test_empty_scopes_returns_merged_env_only(
+        self, store_path, key_manager, scopes
+    ):
+        store = EnvStore(store_path, key_manager)
+        await store.upsert(
+            "provider",
+            env={"HOST": "provider.example"},
+            secrets={},
+            env_scopes={"HOST": "website:ovh"},
+        )
+        await store.upsert("consumer", env={"OWN": "1"}, secrets={})
+
+        result = await store.build_deploy_env("consumer", {"STATIC": "yaml"}, scopes)
+
+        assert result == {"STATIC": "yaml", "OWN": "1"}
+
+
+# ---------------------------------------------------------------------------
 # upsert with scope tags
 # ---------------------------------------------------------------------------
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from datetime import UTC, datetime
+from functools import partial
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -38,6 +39,7 @@ from robotsix_central_deploy.lifecycle.models import (
 )
 from robotsix_central_deploy.registry.config_store import ComponentConfigStore
 from robotsix_central_deploy.registry.deploy_history_store import DeployHistoryStore
+from robotsix_central_deploy.registry.env_store import EnvStore
 from robotsix_central_deploy.registry.loader import ComponentRegistry
 from robotsix_central_deploy.registry.models import ComponentConfig
 
@@ -74,6 +76,7 @@ def _make_env_store(overrides=None):
 
     env_store.get_merged_env = AsyncMock(side_effect=_merge)
     env_store.resolve_consumed_credentials = AsyncMock(return_value={})
+    env_store.build_deploy_env = partial(EnvStore.build_deploy_env, env_store)
     return env_store
 
 
@@ -420,6 +423,65 @@ class TestPhaseUpdate:
         args = fanout.await_args[0]
         assert args[0] == "svc" and args[1] is cfg and args[5] is env_store
         dhs.append.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sibling_fanout_inherits_consumed_scope_credentials(self, tmp_path):
+        """A caretaker sibling fan-out of a component with ``consumed_scopes``
+        passes the scoped credential to ``backend.deploy`` — siblings inherit
+        the parent's consumed-scope resolution like the manual deploy path."""
+        from robotsix_central_deploy.lifecycle.store import InMemoryStore
+        from robotsix_central_deploy.registry.models import ServiceConfig
+        from robotsix_central_deploy.registry.secret_key import SecretKeyManager
+
+        store = InMemoryStore()
+        await store.put(_make_record(update_available=False))
+        await store.put(
+            ServiceRecord(
+                name="svc-ingester",
+                image="repo-ingester:v1",
+                deployed_image_digest="sha256:old",
+                latest_registry_digest="sha256:new",
+                update_available=True,
+                component_id="svc",
+            )
+        )
+        backend = MagicMock()
+        backend.deploy = AsyncMock(
+            return_value=DeployOutcome(
+                deployed_digest="sha256:new",
+                previous_digest="sha256:old",
+                state=ServiceState.RUNNING,
+            )
+        )
+        cfg = _make_config()
+        cfg.consumed_scopes = ["website:ovh"]
+        cfg.siblings = [
+            ServiceConfig(
+                service_key="ingester",
+                container_name="svc-ingester",
+                image="repo-ingester:v1",
+            )
+        ]
+        ccs = MagicMock(spec=ComponentConfigStore)
+        ccs.get = MagicMock(return_value=cfg)
+        dhs = MagicMock(spec=DeployHistoryStore)
+        dhs.append = AsyncMock()
+        env_store = EnvStore(
+            tmp_path / "env.json", SecretKeyManager(tmp_path / "secrets.key")
+        )
+        await env_store.upsert(
+            "provider",
+            env={},
+            secrets={"SFTP_PASSWORD": "s3cret"},
+            secret_scopes={"SFTP_PASSWORD": "website:ovh"},
+        )
+
+        await phase_update(ComponentRegistry([]), store, backend, ccs, dhs, env_store)
+
+        backend.deploy.assert_awaited_once()
+        sib_record, sib_config, _ = backend.deploy.await_args.args
+        assert sib_record.name == "svc-ingester"
+        assert sib_config.env["SFTP_PASSWORD"] == "s3cret"
 
     @pytest.mark.asyncio
     async def test_primary_deploy_also_fans_out_siblings(self, monkeypatch):
@@ -1344,6 +1406,7 @@ class TestPhaseAutoRollback:
         dhs.append = AsyncMock()
         env_store = MagicMock()
         env_store.get_merged_env = AsyncMock(return_value={})
+        env_store.build_deploy_env = partial(EnvStore.build_deploy_env, env_store)
 
         findings = await phase_auto_rollback(
             [_crash_finding()], store, backend, ccs, dhs, env_store
@@ -1442,6 +1505,7 @@ class TestPhaseAutoRollback:
         dhs = MagicMock(spec=DeployHistoryStore)
         env_store = MagicMock()
         env_store.get_merged_env = AsyncMock(return_value={})
+        env_store.build_deploy_env = partial(EnvStore.build_deploy_env, env_store)
 
         findings = await phase_auto_rollback(
             [_crash_finding()], store, backend, ccs, dhs, env_store

@@ -224,8 +224,9 @@ async def chat_update_service(
 
     # Merge env overrides from the env store (same as the main deploy endpoint).
     env_store = await _get_env_store(request)
-    merged_env = await env_store.get_merged_env(name, config.env)
-    # Inject the deploy API key when chat access is enabled.
+    merged_env = await env_store.build_deploy_env(
+        name, config.env, config.consumed_scopes
+    )
     config = config.model_copy(update={"env": merged_env})
 
     outcome, updated_siblings = await _execute_deploy_staging(
@@ -368,8 +369,9 @@ async def chat_deploy_service(
 
     # Merge env overrides from the env store.
     env_store = await _get_env_store(request)
-    merged_env = await env_store.get_merged_env(name, config.env)
-    # Inject the deploy API key when chat access is enabled.
+    merged_env = await env_store.build_deploy_env(
+        name, config.env, config.consumed_scopes
+    )
     config = config.model_copy(update={"env": merged_env})
 
     outcome, deployed_siblings = await _execute_deploy_staging(
@@ -556,8 +558,9 @@ async def chat_deploy(
 
     # --- Merge env overrides and secrets ---
     env_store = await _get_env_store(request)
-    merged_env = await env_store.get_merged_env(body.name, comp_cfg.env)
-    # Inject the deploy API key when chat access is enabled.
+    merged_env = await env_store.build_deploy_env(
+        body.name, comp_cfg.env, comp_cfg.consumed_scopes
+    )
     comp_cfg = comp_cfg.model_copy(update={"env": merged_env})
 
     # --- Get or create the service record ---
