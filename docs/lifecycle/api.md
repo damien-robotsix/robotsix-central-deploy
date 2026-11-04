@@ -76,6 +76,12 @@
 
 ::: robotsix_central_deploy.lifecycle.routers.services_deploy
 
+::: robotsix_central_deploy.lifecycle.routers.services_deploy_job
+
+::: robotsix_central_deploy.lifecycle.routers.services_rollback
+
+::: robotsix_central_deploy.lifecycle.routers.services_sibling
+
 ::: robotsix_central_deploy.lifecycle.routers.services_env
 
 ::: robotsix_central_deploy.lifecycle.routers.system
