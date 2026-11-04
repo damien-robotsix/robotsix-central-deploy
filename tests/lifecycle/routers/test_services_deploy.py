@@ -6,7 +6,7 @@ from typing import Self
 
 import pytest
 
-from robotsix_central_deploy.lifecycle.routers.services_deploy import (
+from robotsix_central_deploy.lifecycle.routers.services_sibling import (
     _build_sibling_config,
 )
 from robotsix_central_deploy.registry.models import (
