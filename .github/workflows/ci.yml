@@ -68,7 +68,9 @@ jobs:
 
   # Standard Python gate set (lint, type-check, test, dead code). job_split
   # emits separate 'Lint' / 'Type Check' / 'Test' jobs plus 'Vulture (dead
-  # code)'; the reported status contexts are 'python-ci / <job name>'.
+  # code)'; the reported status contexts are 'python-ci / Lint',
+  # 'python-ci / Type Check', 'python-ci / Test' and
+  # 'python-ci / Vulture (dead code)' (the required contexts on main).
   # install-extras must be "": this repo declares no optional dependencies,
   # so the shared default ("tracing") would fail `uv sync --extra tracing`.
   python-ci:
@@ -139,7 +141,7 @@ jobs:
   # hadolint findings no longer appear in Code Scanning.
   hadolint:
     name: Hadolint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/lint-dockerfile.yml@47523e8aa2d34d41da060d29b57f75ab262cb840  # v1.4.0
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/lint-dockerfile.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     permissions:
       contents: read
     with:
@@ -418,7 +420,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write  # PR summary comment from dependency-review
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependency-review.yml@47523e8aa2d34d41da060d29b57f75ab262cb840  # v1.4.0
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependency-review.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     # central-deploy had no deny/allow-licenses policy inline, so
     # deny-licenses / allow-licenses are intentionally left at the
     # shared workflow's defaults (none).
