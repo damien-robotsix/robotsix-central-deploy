@@ -201,7 +201,9 @@ jobs:
     with:
       install-extras: ""
       trufflehog-pr-diff: true
-      trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
+      # Path exclusions live in the reviewed root `.secrets-patterns-excluded`
+      # (robotsix-standards: secret-files-are-never-tracked).
+      trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob --exclude-paths=.secrets-patterns-excluded"
 
   # Shared Docker PR scan: builds the image (with the GITHUB_TOKEN BuildKit
   # secret the Dockerfile consumes as `id=github_token`), smoke-tests it,

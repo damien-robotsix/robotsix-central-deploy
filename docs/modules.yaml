@@ -26,6 +26,7 @@ modules:
       - .gitattributes
       - .gitignore
       - .pre-commit-config.yaml
+      - .secrets-patterns-excluded
       - .trivyignore
       - .hadolint.yaml
       - .markdownlint-cli2.yaml
