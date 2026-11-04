@@ -100,6 +100,12 @@
 
 ::: robotsix_central_deploy.lifecycle.backends.docker_sdk
 
+::: robotsix_central_deploy.lifecycle.backends.docker_sdk_deploy
+
+::: robotsix_central_deploy.lifecycle.backends.docker_sdk_logs
+
+::: robotsix_central_deploy.lifecycle.backends.docker_sdk_maintenance
+
 ::: robotsix_central_deploy.lifecycle.backends.noop
 
 ## Lifecycle Dependencies

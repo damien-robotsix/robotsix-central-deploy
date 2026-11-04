@@ -301,3 +301,36 @@ class SelfMgmtOps:
         except docker.errors.APIError as exc:
             raise RuntimeError(f"failed to restart self container: {exc}") from exc
         return target.container_id
+
+
+class SelfMgmtDelegationMixin:
+    """Delegates the backend's self-management methods to :class:`SelfMgmtOps`.
+
+    Mixed into ``DockerSdkBackend``, which sets ``self._self_mgmt``.
+    """
+
+    _self_mgmt: SelfMgmtOps
+
+    async def inspect_self(self) -> SelfInspect | None:
+        """Resolve the server's own container via the container-id hostname."""
+        return await self._self_mgmt.inspect_self()
+
+    async def heal_self_network_alias(self, network_name: str) -> str | None:
+        """Repair the server's own service alias on *network_name*."""
+        return await self._self_mgmt.heal_self_network_alias(network_name)
+
+    async def trigger_self_update(
+        self,
+        target: SelfInspect,
+        watchtower_image: str,
+        docker_host_url: str,
+        docker_api_version: str,
+    ) -> str:
+        """Launch a one-shot watchtower container that updates *target*."""
+        return await self._self_mgmt.trigger_self_update(
+            target, watchtower_image, docker_host_url, docker_api_version
+        )
+
+    async def trigger_self_restart(self, target: SelfInspect) -> str:
+        """Restart the container identified by *target* via the Docker API."""
+        return await self._self_mgmt.trigger_self_restart(target)
