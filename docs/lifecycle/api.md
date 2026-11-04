@@ -138,6 +138,14 @@
 
 ::: robotsix_central_deploy.caretaker.phases
 
+::: robotsix_central_deploy.caretaker.phases_health
+
+::: robotsix_central_deploy.caretaker.phases_rollback
+
+::: robotsix_central_deploy.caretaker.phases_update
+
+::: robotsix_central_deploy.caretaker.phases_volumes
+
 ::: robotsix_central_deploy.caretaker.scheduler
 
 ## Deploy Lock
