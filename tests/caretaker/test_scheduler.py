@@ -35,7 +35,7 @@ def _stub_post_deploy_verify(monkeypatch):
     covered by ``test_deploy_verify.py`` and its wiring by ``test_phases.py``;
     here it only needs to return a clean pass instantly.
     """
-    from robotsix_central_deploy.caretaker import phases
+    from robotsix_central_deploy.caretaker import phases_update as phases
 
     monkeypatch.setattr(
         phases,

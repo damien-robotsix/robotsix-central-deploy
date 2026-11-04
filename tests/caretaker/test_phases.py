@@ -88,7 +88,7 @@ class TestPhaseUpdate:
         default it to a clean pass and let individual tests override the
         return value to simulate a crash-looping deploy.
         """
-        from robotsix_central_deploy.caretaker import phases
+        from robotsix_central_deploy.caretaker import phases_update as phases
 
         stub = AsyncMock(return_value=DeployVerification(ok=True, verified=True))
         monkeypatch.setattr(phases, "verify_post_deploy_health", stub)
@@ -529,7 +529,7 @@ class TestPhaseUpdate:
         async def _fake_try_acquire(_name: str, source: str = "manual") -> bool:
             return False
 
-        phases_mod = sys.modules["robotsix_central_deploy.caretaker.phases"]
+        phases_mod = sys.modules["robotsix_central_deploy.caretaker.phases_update"]
         monkeypatch.setattr(phases_mod, "try_acquire_deploy_lock", _fake_try_acquire)
 
         findings = await phase_update(
