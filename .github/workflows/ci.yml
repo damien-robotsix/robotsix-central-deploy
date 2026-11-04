@@ -203,6 +203,15 @@ jobs:
       trufflehog-pr-diff: true
       trufflehog-extra-args: "--results=verified,unknown --exclude-detectors=lob"
 
+  # Shared repo-baseline gate (robotsix-standards repo-baseline.md): AGENT.md
+  # and README.md link robotsix-standards, LICENSE is MIT, dependabot covers
+  # the required ecosystems and release-please config is present.
+  baseline:
+    name: Baseline (shared)
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/baseline-check.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
+    permissions:
+      contents: read
+
   # Shared Docker PR scan: builds the image (with the GITHUB_TOKEN BuildKit
   # secret the Dockerfile consumes as `id=github_token`), smoke-tests it,
   # gates on fixable CRITICAL/HIGH CVEs (blocking — unlike the former inline

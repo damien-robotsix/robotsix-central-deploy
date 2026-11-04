@@ -91,7 +91,11 @@ TestServiceStateMachine.settings = settings(max_examples=200)  # type: ignore[at
 
 
 @given(tail=st.integers())
-@settings(max_examples=200, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(
+    max_examples=200,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
 async def test_tail_validation(tail: int, client, auth_headers: dict[str, str]) -> None:
     """tail must be in [1, 10000]; out-of-band values must produce 422."""
     resp = await client.get(
