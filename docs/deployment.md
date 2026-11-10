@@ -25,6 +25,11 @@ docker compose up -d
 To update: `docker compose pull && docker compose up -d` (add `--build` only
 for local development builds from the checkout).
 
+The `central-deploy` service declares a compose-level `healthcheck` that probes
+`http://localhost:8100/health` with the stdlib `urllib` (interval 30s, timeout
+10s, start period 5s, 3 retries), matching the image `HEALTHCHECK`. Check it
+with `docker compose ps`, which shows `healthy` or `unhealthy` for the container.
+
 !!! warning "One-time migration: seed `/data/config.json`"
     Since the robotsix_config migration the server reads **all** of its own
     configuration from one JSON file — `ROBOTSIX_LIFECYCLE_*` environment
