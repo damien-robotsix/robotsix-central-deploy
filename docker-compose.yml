@@ -42,6 +42,12 @@ services:
     image: ghcr.io/damien-robotsix/robotsix-central-deploy:main
     build: .
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
     environment:
       # Since the robotsix_config migration, ROBOTSIX_LIFECYCLE_* env vars are
       # dead — ALL config values live in one JSON file. This var only locates

@@ -11,6 +11,12 @@ services:
     container_name: robotsix-central-deploy
     ports:
       - "8100:8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
     labels:
       robotsix.deploy.primary: "true"
       # ── System settings ──────────────────────────────────────────
