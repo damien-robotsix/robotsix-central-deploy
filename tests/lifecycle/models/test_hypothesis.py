@@ -165,12 +165,12 @@ def test_enum_rejects_invalid_string(enum_cls: type, bad: st.DataObject) -> None
     """An unrecognised string must raise ValueError."""
     valid_values = {m.value for m in enum_cls}
     invalid = bad.draw(st.text().filter(lambda s: s not in valid_values))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is not a valid"):
         enum_cls(invalid)
 
 
 def test_enum_rejects_empty_string() -> None:
     """Empty string is never a valid enum value."""
     for cls in ALL_ENUMS:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="is not a valid"):
             cls("")

@@ -71,7 +71,9 @@ def _fake_client(repo_obj: MagicMock) -> MagicMock:
 
 @pytest.fixture
 def enable_github_app():
-    """Configure github_app_id/private_key/installation_id so the endpoints don't 503."""
+    """Configure github_app_id/private_key/installation_id so the endpoints don't
+    503.
+    """
     from pydantic import SecretStr
 
     server_mod.app.state.config.github_app_id = "12345"
@@ -361,7 +363,9 @@ class TestGetWorkflowRun:
 
 
 class TestListWorkflowRunJobs:
-    """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/jobs``."""
+    """Tests for ``GET
+    /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/jobs``.
+    """
 
     async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/chat/github/repos/acme/widget/actions/runs/1/jobs")
@@ -511,7 +515,9 @@ class TestListWorkflowRunJobs:
 
 
 class TestGetWorkflowRunLogs:
-    """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs``."""
+    """Tests for ``GET
+    /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs``.
+    """
 
     async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.get("/chat/github/repos/acme/widget/actions/runs/1/logs")
@@ -701,7 +707,9 @@ class TestGetWorkflowRunLogs:
 
 
 class TestGetJobLogs:
-    """Tests for ``GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs``."""
+    """Tests for ``GET
+    /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs``.
+    """
 
     async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.get(
@@ -902,7 +910,7 @@ class TestDispatchWorkflow:
     def _clear_audit(self):
         """Ensure audit store is clean before each test."""
         server_mod.app.state.chat_agent_audit_store._entries = []
-        yield
+        return
 
     async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.post(

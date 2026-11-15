@@ -282,7 +282,9 @@ async def refresh_component_contract(
     except ParseError as exc:
         raise HTTPException(
             status_code=422,
-            detail=f"deploy/docker-compose.yml parse failed: {'; '.join(exc.violations)}",
+            detail=(
+                f"deploy/docker-compose.yml parse failed: {'; '.join(exc.violations)}"
+            ),
         ) from exc
 
     if repo_files.config_schema_json is not None:

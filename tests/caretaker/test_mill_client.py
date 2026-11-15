@@ -46,7 +46,7 @@ class TestMillClient:
         )
         client = MillClient("http://mill:8077", http)
         summary = await client.active_stage_summary()
-        assert summary == "2 heavy stage(s) in flight: implement×2"
+        assert summary == "2 heavy stage(s) in flight: implement×2"  # noqa: RUF001
         http.get.assert_called_once_with("http://mill:8077/active")
 
     @pytest.mark.asyncio

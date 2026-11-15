@@ -138,7 +138,9 @@ class TestParseSelfContractSettings:
                 "srv": {
                     "labels": {
                         "robotsix.deploy.settings.log-level": "DEBUG",
-                        "robotsix.deploy.settings.gateway-base-domain": "deploy.example.com",
+                        "robotsix.deploy.settings.gateway-base-domain": (
+                            "deploy.example.com"
+                        ),
                         "robotsix.deploy.settings.mill-component-id": "mill-01",
                     },
                 }
@@ -161,8 +163,12 @@ class TestParseSelfContractSettings:
                         "robotsix.deploy.settings.caretaker-interval-hours": "48",
                         "robotsix.deploy.settings.claude-auth-refresh-interval": "3600",
                         "robotsix.deploy.settings.rate-limit-api-per-hour": "1000",
-                        "robotsix.deploy.settings.volume-audit-interval-seconds": "7200",
-                        "robotsix.deploy.settings.volume-audit-min-delta-bytes": "52428800",
+                        "robotsix.deploy.settings.volume-audit-interval-seconds": (
+                            "7200"
+                        ),
+                        "robotsix.deploy.settings.volume-audit-min-delta-bytes": (
+                            "52428800"
+                        ),
                     },
                 }
             }
@@ -183,7 +189,9 @@ class TestParseSelfContractSettings:
             "services": {
                 "srv": {
                     "labels": {
-                        "robotsix.deploy.settings.registry-check-interval": "not-a-number",
+                        "robotsix.deploy.settings.registry-check-interval": (
+                            "not-a-number"
+                        ),
                         "robotsix.deploy.settings.log-level": "INFO",
                     },
                 }
@@ -203,7 +211,9 @@ class TestParseSelfContractSettings:
                 "srv": {
                     "labels": {
                         "robotsix.deploy.settings.disk-warn-pct": "25.5",
-                        "robotsix.deploy.settings.volume-audit-growth-threshold-pct": "15.0",
+                        "robotsix.deploy.settings.volume-audit-growth-threshold-pct": (
+                            "15.0"
+                        ),
                     },
                 }
             }
@@ -241,7 +251,9 @@ class TestParseSelfContractSettings:
                         "robotsix.deploy.settings.caretaker-enabled": "true",
                         "robotsix.deploy.settings.image-auto-prune": "1",
                         "robotsix.deploy.settings.volume-audit-enabled": "yes",
-                        "robotsix.deploy.settings.chat-agent-registration-enabled": "false",
+                        "robotsix.deploy.settings.chat-agent-registration-enabled": (
+                            "false"
+                        ),
                     },
                 }
             }
@@ -350,15 +362,21 @@ class TestParseSelfContractSettings:
                     "labels": {
                         "robotsix.deploy.settings.auth-username": "admin",
                         "robotsix.deploy.settings.log-level": "WARNING",
-                        "robotsix.deploy.settings.gateway-base-domain": "deploy.example.com",
+                        "robotsix.deploy.settings.gateway-base-domain": (
+                            "deploy.example.com"
+                        ),
                         "robotsix.deploy.settings.registry-check-interval": "60",
                         "robotsix.deploy.settings.disk-warn-pct": "20.0",
                         "robotsix.deploy.settings.caretaker-enabled": "true",
                         "robotsix.deploy.settings.llmio-tier-config": json.dumps(
                             tier_config
                         ),
-                        "robotsix.deploy.settings.volume-audit-interval-seconds": "1800",
-                        "robotsix.deploy.settings.volume-audit-growth-threshold-pct": "5.5",
+                        "robotsix.deploy.settings.volume-audit-interval-seconds": (
+                            "1800"
+                        ),
+                        "robotsix.deploy.settings.volume-audit-growth-threshold-pct": (
+                            "5.5"
+                        ),
                     },
                 }
             }

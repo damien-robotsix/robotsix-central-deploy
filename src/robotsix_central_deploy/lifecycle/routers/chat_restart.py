@@ -35,7 +35,7 @@ router = APIRouter(tags=["chat"])
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/services/{name}/restart
+# Endpoint for POST /chat/services/{name}/restart
 # ---------------------------------------------------------------------------
 
 
@@ -53,11 +53,11 @@ router = APIRouter(tags=["chat"])
 async def chat_restart_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentRestartResponse:
     """Restart an allowlisted service. Idempotent.
@@ -97,7 +97,7 @@ async def chat_restart_service(
 
     try:
         final_state = await backend.restart(record)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("chat restart %s failed", _sanitize_log(name))
         record.state = ServiceState.FAILED
         record.last_error = str(exc)

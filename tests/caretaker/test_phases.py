@@ -23,7 +23,8 @@ from robotsix_central_deploy.caretaker.volume_audit.models import (
 )
 
 # Import lifecycle models FIRST to break the circular import:
-#   caretaker.phases → lifecycle.models → lifecycle.__init__ → app → deps → caretaker.scheduler → caretaker.phases
+#   caretaker.phases → lifecycle.models → lifecycle.__init__ → app → deps
+#   → caretaker.scheduler → caretaker.phases
 # By loading lifecycle.models first (which pulls in the full lifecycle package
 # including deps/scheduler), caretaker.phases finds lifecycle already loaded
 # and the chain does not restart.
@@ -79,7 +80,7 @@ def _make_env_store(overrides=None):
 
 class TestPhaseUpdate:
     @pytest.fixture(autouse=True)
-    def _stub_verify(self, monkeypatch):
+    def stub_verify(self, monkeypatch):
         """Stub post-deploy verification so these wiring tests don't poll.
 
         ``verify_post_deploy_health`` observes the real 120s post-deploy
@@ -338,7 +339,7 @@ class TestPhaseUpdate:
             ccs,
             dhs,
             _make_env_store(),
-            busy_components={"mill": "2 heavy stage(s) in flight: implement×2"},
+            busy_components={"mill": "2 heavy stage(s) in flight: implement×2"},  # noqa: RUF001
         )
         assert len(findings) == 0
         backend.deploy.assert_not_called()
@@ -372,7 +373,7 @@ class TestPhaseUpdate:
             ccs,
             dhs,
             _make_env_store(),
-            busy_components={"mill": "1 heavy stage(s) in flight: implement×1"},
+            busy_components={"mill": "1 heavy stage(s) in flight: implement×1"},  # noqa: RUF001
         )
         backend.deploy.assert_called_once()
 
@@ -418,7 +419,9 @@ class TestPhaseUpdate:
         backend.deploy.assert_not_called()
         fanout.assert_awaited_once()
         args = fanout.await_args[0]
-        assert args[0] == "svc" and args[1] is cfg and args[5] is env_store
+        assert args[0] == "svc"
+        assert args[1] is cfg
+        assert args[5] is env_store
         dhs.append.assert_not_called()
 
     @pytest.mark.asyncio
@@ -651,16 +654,14 @@ class TestPhaseUpdate:
         assert record.update_available is False
 
     @pytest.mark.asyncio
-    async def test_emits_finding_when_post_deploy_verification_fails(
-        self, _stub_verify
-    ):
+    async def test_emits_finding_when_post_deploy_verification_fails(self, stub_verify):
         """A deploy that lands a crash loop yields an UPDATE_FAILED finding.
 
         The finding must carry the reason and the captured crash-log excerpt,
         and the record must be marked FAILED — this is the failure signal the
         escalation path (companion ticket) consumes.
         """
-        _stub_verify.return_value = DeployVerification(
+        stub_verify.return_value = DeployVerification(
             ok=False,
             verified=True,
             state="restarting",
@@ -693,7 +694,7 @@ class TestPhaseUpdate:
             registry, store, backend, ccs, dhs, _make_env_store()
         )
 
-        _stub_verify.assert_awaited_once()
+        stub_verify.assert_awaited_once()
         assert len(findings) == 1
         assert findings[0].kind == FindingKind.UPDATE_FAILED
         assert findings[0].severity == "error"
@@ -703,7 +704,7 @@ class TestPhaseUpdate:
 
     @pytest.mark.asyncio
     async def test_rolls_back_to_previous_image_on_verification_failure(
-        self, _stub_verify
+        self, stub_verify
     ):
         """A crash-looping auto-update is rolled back to the last-good image.
 
@@ -712,7 +713,7 @@ class TestPhaseUpdate:
         the failed registry digest is remembered, and a ROLLBACK history entry
         is recorded.
         """
-        _stub_verify.return_value = DeployVerification(
+        stub_verify.return_value = DeployVerification(
             ok=False,
             verified=True,
             state="restarting",
@@ -771,7 +772,7 @@ class TestPhaseUpdate:
         assert DeploySource.ROLLBACK in sources
 
     @pytest.mark.asyncio
-    async def test_skips_known_bad_registry_digest(self, _stub_verify):
+    async def test_skips_known_bad_registry_digest(self):
         """A registry digest that already crash-looped is not re-deployed."""
         store = MagicMock()
         record = _make_record()
@@ -797,7 +798,7 @@ class TestPhaseUpdate:
         assert findings == []
 
     @pytest.mark.asyncio
-    async def test_retries_once_registry_digest_advances(self, _stub_verify):
+    async def test_retries_once_registry_digest_advances(self):
         """A newer registry digest clears the known-bad marker and re-deploys."""
         store = MagicMock()
         record = _make_record()

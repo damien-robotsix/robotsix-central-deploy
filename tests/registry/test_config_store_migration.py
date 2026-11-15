@@ -112,7 +112,7 @@ class TestConfigStoreCorruptionGuard:
         )
 
     def test_load_skips_bad_entry_logs_warning(self, tmp_path: Path, caplog):
-        """Store file with one bad entry — only the valid entry loads, WARNING logged."""
+        """Store file with one bad entry — only the valid one loads, WARNING logged."""
         store_path = tmp_path / "data" / "component_configs.json"
         store_path.parent.mkdir(parents=True, exist_ok=True)
         # One valid, one with an invalid id (fails ^[a-z0-9][a-z0-9-]*$)

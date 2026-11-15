@@ -128,7 +128,7 @@ async def github_token_for_repo(
                 repo=repo,
             ),
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning(
             "Cannot get GitHub App installation token for %s/%s; "
             "cloning unauthenticated (public repos only)",

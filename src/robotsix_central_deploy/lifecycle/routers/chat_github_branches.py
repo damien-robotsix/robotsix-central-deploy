@@ -59,7 +59,9 @@ def _delete_branch_sync(
     if branch.lower() in _PROTECTED_BRANCH_NAMES or branch == repo_obj.default_branch:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Refusing to delete the default branch '{branch}' of {owner}/{repo}",
+            detail=(
+                f"Refusing to delete the default branch '{branch}' of {owner}/{repo}"
+            ),
         )
 
     branch_obj = repo_obj.get_branch(branch)
@@ -96,7 +98,7 @@ async def list_branches(
     owner: str,
     repo: str,
     per_page: int = 30,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s branches.
@@ -131,8 +133,8 @@ async def delete_branch(
     owner: str,
     repo: str,
     branch: str,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Delete *branch* from *owner*/*repo*.

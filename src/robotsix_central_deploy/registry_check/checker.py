@@ -145,7 +145,7 @@ class RegistryChecker:
             if resp.status_code not in (200, 206):
                 return (None, False)
             return (resp.headers.get("Docker-Content-Digest") or None, False)
-        except Exception:  # noqa: BLE001  network errors, parse errors
+        except Exception:
             return (None, False)
 
     async def _fetch_dockerhub_token(self, repo: str) -> str | None:
@@ -159,7 +159,7 @@ class RegistryChecker:
             if resp.status_code != 200:
                 return None
             return resp.json().get("token") or None
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
     async def _exchange_ghcr_token(
@@ -201,7 +201,7 @@ class RegistryChecker:
                     "(a read:packages PAT) or the GitHub App credentials.",
                 )
             return None
-        except Exception:  # noqa: BLE001  network errors, parse errors
+        except Exception:
             return None
 
         # Belt and braces: a client configured not to raise returns the 4xx
@@ -223,7 +223,7 @@ class RegistryChecker:
             return None
         try:
             return resp.json().get("token") or None
-        except Exception:  # noqa: BLE001  malformed body
+        except Exception:
             return None
 
     async def _fetch_ghcr_token(self, repo: str) -> str | None:

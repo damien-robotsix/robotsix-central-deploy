@@ -127,7 +127,7 @@ async def _lifecycle_action(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/start
+# Endpoint for POST /services/{name}/start
 # ---------------------------------------------------------------------------
 
 
@@ -142,9 +142,9 @@ async def _lifecycle_action(
 )
 async def start_service(
     name: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     """Start a service. Idempotent — returns success if already running or starting.
@@ -167,7 +167,7 @@ async def start_service(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/stop
+# Endpoint for POST /services/{name}/stop
 # ---------------------------------------------------------------------------
 
 
@@ -182,9 +182,9 @@ async def start_service(
 )
 async def stop_service(
     name: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     """Stop a service. Idempotent — returns success if already stopped or stopping.
@@ -207,7 +207,7 @@ async def stop_service(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/restart
+# Endpoint for POST /services/{name}/restart
 # ---------------------------------------------------------------------------
 
 
@@ -222,9 +222,9 @@ async def stop_service(
 )
 async def restart_service(
     name: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ActionResponse:
     """Restart a service. Idempotent — returns success if a restart is already in progress.
@@ -233,7 +233,7 @@ async def restart_service(
     Raises 404 on missing service, 409 if the current state does not allow a
     restart, and 500 on backend failure. Sibling services are restarted on a
     best-effort basis.
-    """
+    """  # noqa: E501
     return await _lifecycle_action(
         name=name,
         store=store,

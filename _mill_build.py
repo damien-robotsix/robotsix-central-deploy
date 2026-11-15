@@ -32,7 +32,7 @@ try:
         get_requires_for_build_wheel as _real_get_requires_for_build_wheel,
     )
     from hatchling.build import (
-        prepare_metadata_for_build_editable as _real_prepare_metadata_for_build_editable,
+        prepare_metadata_for_build_editable as _real_prepare_metadata_for_build_editable,  # noqa: E501
     )
     from hatchling.build import (
         prepare_metadata_for_build_wheel as _real_prepare_metadata_for_build_wheel,
@@ -67,7 +67,7 @@ if _tomllib is not None:
         _project = _data.get("project", {})
         _NAME = _project.get("name", _NAME)
         _VERSION = _project.get("version", _VERSION)
-    except Exception:  # noqa: BLE001, S110
+    except Exception:  # noqa: S110
         pass
 
 _NAME_NORMALIZED = _NAME.replace("-", "_")

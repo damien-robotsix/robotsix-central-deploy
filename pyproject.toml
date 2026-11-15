@@ -94,13 +94,15 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 # vulture_whitelist.py is a parse-only dead-code allowlist: bare name
 # references and an undefined `_` placeholder are inherent to its format.
 extend-exclude = ["vulture_whitelist.py"]
 
 [tool.ruff.lint]
-extend-select = ["S"]
+select = ["E", "F", "I", "W", "S"]
+extend-select = ["SIM", "C4", "LOG", "G", "ERA", "PGH", "RUF", "PT"]
+ignore = ["PT006"]
 
 [tool.ruff.lint.per-file-ignores]
 # Bandit S-rules are designed for production code.  Test files routinely use

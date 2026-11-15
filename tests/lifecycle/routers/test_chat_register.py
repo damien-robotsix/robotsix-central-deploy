@@ -252,7 +252,9 @@ async def test_chat_register_happy_path(
     component_config_store: ComponentConfigStore,
     monkeypatch,
 ):
-    """POST /chat/services registers a new component and it appears in GET /chat/components."""
+    """POST /chat/services registers a new component and it appears in GET
+    /chat/components.
+    """
     from robotsix_central_deploy.onboard import fetcher as fetcher_mod
     from robotsix_central_deploy.onboard import parser as parser_mod
 
@@ -601,7 +603,7 @@ async def test_chat_register_stores_contract_ports_and_volumes(
     config_yaml_store: ConfigYamlStore,
     monkeypatch,
 ):
-    """Registration builds the stored config from the contract, not from the request body.
+    """Registration builds the stored config from the contract, not the request body.
 
     Regression: the endpoint validated the contract and then persisted only
     ``id``/``image``/``git_url``. A component registered that way deployed with

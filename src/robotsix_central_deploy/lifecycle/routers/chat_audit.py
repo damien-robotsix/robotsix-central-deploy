@@ -29,7 +29,7 @@ router = APIRouter(tags=["chat"])
 )
 async def chat_audit_log(
     request: Request,
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     limit: int = 50,
     component: str | None = None,
     _auth: None = Depends(verify_auth),

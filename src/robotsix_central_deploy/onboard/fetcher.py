@@ -141,8 +141,9 @@ def fetch_repo_files(
                                     ):
                                         config_json_template = candidate.read_bytes()
                                 break
-                except Exception:  # noqa: BLE001, S110
-                    pass  # non-fatal; compose YAML errors surface later in parse_compose
+                except Exception:  # noqa: S110
+                    # non-fatal; compose YAML errors surface later in parse_compose
+                    pass
 
         return RepoFiles(
             compose_bytes=compose_bytes,

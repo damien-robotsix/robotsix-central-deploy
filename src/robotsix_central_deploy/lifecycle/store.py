@@ -109,7 +109,8 @@ class FileStore(ServiceStore):
         self._lock = asyncio.Lock()
 
     async def _load(self) -> dict[str, ServiceRecord]:
-        """Load and parse the YAML state file; returns empty dict on missing or invalid file."""
+        """Load and parse the YAML state file; returns empty dict on missing or
+        invalid file."""
         if not self._path.exists():
             return {}
         try:
@@ -150,7 +151,8 @@ class FileStore(ServiceStore):
         return records
 
     async def _save(self, records: dict[str, ServiceRecord]) -> None:
-        """Atomically write *records* to the YAML state file via temp-file + os.replace."""
+        """Atomically write *records* to the YAML state file via temp-file +
+        os.replace."""
         raw: dict[str, dict[str, object]] = {}
         for name, r in records.items():
             raw[name] = {

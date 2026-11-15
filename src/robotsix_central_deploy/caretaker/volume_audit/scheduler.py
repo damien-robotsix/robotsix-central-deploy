@@ -1,4 +1,7 @@
-"""Periodic volume-audit scheduler: measures, records, and reports on managed volumes."""
+"""Periodic volume-audit scheduler.
+
+Measures, records, and reports on managed volumes.
+"""
 
 from __future__ import annotations
 
@@ -79,13 +82,16 @@ class VolumeAuditScheduler:
     # ------------------------------------------------------------------
 
     def _load_snapshots(self) -> dict[str, VolumeSizeSnapshot]:
-        """Load previous snapshots from disk; return empty dict on missing/corrupt file."""
+        """Load previous snapshots from disk.
+
+        Returns an empty dict on a missing/corrupt file.
+        """
         if not self._snapshot_path.exists():
             return {}
         try:
             raw = json.loads(self._snapshot_path.read_text(encoding="utf-8"))
             return {k: VolumeSizeSnapshot.model_validate(v) for k, v in raw.items()}
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Failed to load volume snapshots: %s", exc)
             return {}
 
@@ -104,7 +110,7 @@ class VolumeAuditScheduler:
                 self._findings_path.read_text(encoding="utf-8")
             )
             return [AuditFinding.model_validate(f) for f in raw[-5:]]
-        except Exception:  # noqa: BLE001
+        except Exception:
             return []
 
     # ------------------------------------------------------------------
@@ -190,7 +196,7 @@ class VolumeAuditScheduler:
             measure_started = time.monotonic()
             try:
                 size = await self._backend.measure_volume_bytes(vol_name)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error(
                     "VolumeAudit: failed to measure volume %s: %s",
                     vol_name,
@@ -272,7 +278,7 @@ class VolumeAuditScheduler:
         for finding in all_findings:
             try:
                 await report_finding(finding, self._findings_path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error(
                     "report_finding failed for %s: %s",
                     finding.volume_name,
@@ -305,7 +311,7 @@ class VolumeAuditScheduler:
                     await self.run_once()
                 except asyncio.CancelledError:
                     raise
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.error("VolumeAudit scan failed: %s", exc)
                 await asyncio.sleep(interval_seconds)
         except asyncio.CancelledError:

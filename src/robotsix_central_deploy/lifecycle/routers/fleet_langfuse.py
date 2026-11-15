@@ -98,7 +98,9 @@ class FleetLangfuseResponse(BaseModel):
     """Top-level response for GET /fleet/langfuse."""
 
     components: list[FleetLangfuseComponent] = Field(
-        description="Every registered component; Langfuse fields are populated when configured"
+        description=(
+            "Every registered component; Langfuse fields are populated when configured"
+        )
     )
 
 
@@ -192,10 +194,10 @@ def _with_openrouter(
     summary="List components with Langfuse credentials",
 )
 async def fleet_langfuse_credentials(
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    registry: ComponentRegistry = Depends(_get_registry),
+    backend: ExecutionBackend = Depends(_get_backend),
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> FleetLangfuseResponse:
     """Return every registered component with its lifecycle status and,

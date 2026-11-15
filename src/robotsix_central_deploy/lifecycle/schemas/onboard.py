@@ -25,7 +25,10 @@ class PortShift(BaseModel):
         description="Auto-assigned free host port during onboarding"
     )
     collision_component_id: str = Field(
-        description="Component whose stored port collided; 'central-deploy' for lifecycle-assigned ports"
+        description=(
+            "Component whose stored port collided; 'central-deploy' for lifecycle-"
+            "assigned ports"
+        )
     )
     collision_repo_id: str = Field(
         description="Repo ID of the colliding component; empty string when unknown"
@@ -55,7 +58,9 @@ class OnboardPreflightResponse(BaseModel):
     )
     port_shifts: list[PortShift] = Field(
         default=[],
-        description="Port remappings needed to avoid collisions; empty when no shifts required",
+        description=(
+            "Port remappings needed to avoid collisions; empty when no shifts required"
+        ),
     )
 
 
@@ -75,7 +80,9 @@ class OnboardConfirmRequest(BaseModel):
     )
     port_shifts: list[PortShift] = Field(
         default=[],
-        description="Port shift list echoed from preflight; used for collision ticket filing",
+        description=(
+            "Port shift list echoed from preflight; used for collision ticket filing"
+        ),
     )
     target_disk: str = Field(
         default="",
@@ -105,7 +112,9 @@ class OnboardJobStatusResponse(_JobStatusFields):
     )
     warnings: list[str] = Field(
         default=[],
-        description="Non-empty when the mill was unreachable during port-shift ticket filing",
+        description=(
+            "Non-empty when the mill was unreachable during port-shift ticket filing"
+        ),
     )
 
 

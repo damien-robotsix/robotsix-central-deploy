@@ -9,7 +9,9 @@ class ClaudeAuthStatusResponse(BaseModel):
     """Credential state returned by GET /claude-auth/status."""
 
     status: str = Field(
-        description="Auth status: 'authenticated', 'not-authenticated', 'expiring', or 'error'"
+        description=(
+            "Auth status: 'authenticated', 'not-authenticated', 'expiring', or 'error'"
+        )
     )
     detail: str = Field(default="", description="Human-readable status detail")
     refresh_status: str = Field(

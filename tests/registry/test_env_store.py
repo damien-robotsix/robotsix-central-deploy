@@ -159,7 +159,7 @@ class TestEnvStoreGetMergedEnv:
     async def test_merged_env_overrides_secret_on_collision(
         self, store_path: Path, key_manager: SecretKeyManager
     ):
-        """Secrets are applied last, so they win over stored plaintext env on collision."""
+        """Secrets are applied last, so they win over stored plaintext env on clash."""
         store = EnvStore(store_path, key_manager)
         await store.upsert("chat", {"KEY": "env-val"}, {"KEY": "secret-val"})
         merged = await store.get_merged_env("chat", {"KEY": "base-val"})

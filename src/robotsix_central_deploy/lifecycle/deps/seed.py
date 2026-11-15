@@ -130,7 +130,8 @@ def _validate_config_or_422(schema: dict[str, Any], values: dict[str, Any]) -> N
 
 
 def _require_config_standard(derived_spec: DerivedSpec) -> None:
-    """Raise HTTP 422 if *derived_spec* does not satisfy the robotsix config standard."""
+    """Raise HTTP 422 if *derived_spec* does not satisfy the robotsix config
+    standard."""
     if derived_spec.config_schema is None or derived_spec.config_volume is None:
         missing: list[str] = []
         if derived_spec.config_schema is None:
@@ -401,7 +402,7 @@ def _derive_account_id(
             elif isinstance(node, list):
                 try:
                     node = node[int(part)]
-                except (ValueError, IndexError):
+                except ValueError, IndexError:
                     node = None
             else:
                 node = None

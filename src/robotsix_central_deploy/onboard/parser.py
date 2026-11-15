@@ -41,7 +41,7 @@ LABEL_CONFIG_ASSIST = "robotsix.deploy.config-assist"  # shell command string
 LABEL_CONFIG_ASSIST_SEEDS = (
     "robotsix.deploy.config-assist-seeds"  # comma-separated config keys
 )
-LABEL_LLMIO_TIER_LEVEL = "robotsix.deploy.llmio-tier-level"  # "level1"–"level3"
+LABEL_LLMIO_TIER_LEVEL = "robotsix.deploy.llmio-tier-level"  # "level1"-"level3"
 LABEL_CHAT_ACCESS = "robotsix.deploy.chat-access"  # "true" / "false"
 LABEL_CHAT_AGENT_MUTATABLE = "robotsix.deploy.chat-agent-mutatable"  # "true" / "false"
 LABEL_CHAT_SKILL = "robotsix.deploy.chat-skill"  # static Markdown skill body
@@ -112,7 +112,7 @@ def _parse_ports(raw_ports: Any) -> tuple[list[PortMapping], list[str]]:
 
     for entry in raw_ports:
         if isinstance(entry, str):
-            # "HOST:CONTAINER" or "HOST:CONTAINER/PROTO"
+            # Short form, e.g. "HOST:CONTAINER" or "HOST:CONTAINER/PROTO"
             proto = "tcp"
             rest = entry
             if "/" in entry:
@@ -129,7 +129,7 @@ def _parse_ports(raw_ports: Any) -> tuple[list[PortMapping], list[str]]:
                         protocol=proto,
                     )
                 )
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 violations.append(f"invalid port string: {entry!r}")
         elif isinstance(entry, dict):
             # long-form: {target, published, protocol}
@@ -141,7 +141,7 @@ def _parse_ports(raw_ports: Any) -> tuple[list[PortMapping], list[str]]:
                         protocol=str(entry.get("protocol", "tcp")),
                     )
                 )
-            except (KeyError, ValueError, TypeError):
+            except KeyError, ValueError, TypeError:
                 violations.append(f"invalid port mapping: {entry!r}")
         else:
             violations.append(f"unrecognised port entry: {entry!r}")
@@ -250,13 +250,13 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[HealthCheck | None, list[str]]:
 
     try:
         interval = _parse_go_duration(str(raw_hc.get("interval", "30s")))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         violations.append(f"invalid healthcheck interval: {raw_hc.get('interval')!r}")
         interval = 30
 
     try:
         timeout = _parse_go_duration(str(raw_hc.get("timeout", "10s")))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         violations.append(f"invalid healthcheck timeout: {raw_hc.get('timeout')!r}")
         timeout = 10
 
@@ -267,7 +267,7 @@ def _parse_healthcheck(raw_hc: Any) -> tuple[HealthCheck | None, list[str]]:
 
     try:
         start_period = _parse_go_duration(str(raw_hc.get("start_period", "0s")))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         violations.append(
             f"invalid healthcheck start_period: {raw_hc.get('start_period')!r}"
         )
@@ -540,7 +540,8 @@ def _parse_one_service(
     container_name = svc.get("container_name", "")
     if container_name is not None and not isinstance(container_name, str):
         violations.append(
-            f"{prefix}container_name: must be a string, got {type(container_name).__name__}"
+            f"{prefix}container_name: must be a string, got "
+            f"{type(container_name).__name__}"
         )
         container_name = ""
     # For siblings, derive container_name if absent
@@ -556,7 +557,8 @@ def _parse_one_service(
         command = [str(item) for item in raw_command]
     else:
         violations.append(
-            f"{prefix}command: must be a string or list, got {type(raw_command).__name__}"
+            f"{prefix}command: must be a string or list, got "
+            f"{type(raw_command).__name__}"
         )
         command = None
 
@@ -569,7 +571,8 @@ def _parse_one_service(
         entrypoint = [str(item) for item in raw_entrypoint]
     else:
         violations.append(
-            f"{prefix}entrypoint: must be a string or list, got {type(raw_entrypoint).__name__}"
+            f"{prefix}entrypoint: must be a string or list, got "
+            f"{type(raw_entrypoint).__name__}"
         )
         entrypoint = None
 
@@ -708,8 +711,8 @@ def parse_compose(compose_bytes: bytes, name: str, git_url: str) -> DerivedSpec:
         ]
         if len(primary_keys) == 0:
             violations.append(
-                f"multi-service compose ({len(services)} services) must designate exactly one "
-                f"primary via label '{PRIMARY_LABEL}: \"true\"'; none found"
+                f"multi-service compose ({len(services)} services) must designate "
+                f"exactly one primary via label '{PRIMARY_LABEL}: \"true\"'; none found"
             )
             raise ParseError(violations)
         if len(primary_keys) > 1:

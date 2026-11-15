@@ -10,7 +10,8 @@ Exposes:
 - ``GET /chat/langfuse/projects`` — list configured project aliases
 - ``GET /chat/langfuse/{project}/traces`` — proxy to Langfuse ``GET /api/public/traces``
 - ``GET /chat/langfuse/{project}/traces/{trace_id}`` — single trace detail
-- ``GET /chat/langfuse/{project}/observations`` — proxy to Langfuse ``GET /api/public/observations``
+- ``GET /chat/langfuse/{project}/observations`` — proxy to Langfuse
+  ``GET /api/public/observations``
 - ``GET /chat/langfuse/{project}/observations/{observation_id}`` — single observation
 
 Project aliases come from two sources, merged at request time:
@@ -149,7 +150,7 @@ async def _proxy_to_langfuse(
         if key == "limit":
             try:
                 ival = int(value)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 params[key] = value
             else:
                 params[key] = str(min(ival, 100))
@@ -231,7 +232,7 @@ async def _proxy_to_langfuse(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/langfuse/projects
+# Endpoint for GET /chat/langfuse/projects
 # ---------------------------------------------------------------------------
 
 
@@ -242,7 +243,7 @@ async def _proxy_to_langfuse(
 )
 async def list_projects(
     request: Request,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[str]:
     """Return the Langfuse project aliases whose key pairs are configured.
@@ -263,7 +264,7 @@ async def list_projects(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/langfuse/{project}/traces
+# Endpoint for GET /chat/langfuse/{project}/traces
 # ---------------------------------------------------------------------------
 
 
@@ -278,7 +279,7 @@ async def list_projects(
 async def list_traces(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/traces`` to Langfuse.
@@ -291,7 +292,7 @@ async def list_traces(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/langfuse/{project}/traces/{trace_id}
+# Endpoint for GET /chat/langfuse/{project}/traces/{trace_id}
 # ---------------------------------------------------------------------------
 
 
@@ -307,7 +308,7 @@ async def get_trace(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
     trace_id: str = Path(..., description="Langfuse trace ID"),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/traces/{trace_id}`` to Langfuse."""
@@ -315,7 +316,7 @@ async def get_trace(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/langfuse/{project}/observations
+# Endpoint for GET /chat/langfuse/{project}/observations
 # ---------------------------------------------------------------------------
 
 
@@ -330,7 +331,7 @@ async def get_trace(
 async def list_observations(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/observations`` to Langfuse.
@@ -343,7 +344,7 @@ async def list_observations(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/langfuse/{project}/observations/{observation_id}
+# Endpoint for GET /chat/langfuse/{project}/observations/{observation_id}
 # ---------------------------------------------------------------------------
 
 
@@ -359,7 +360,7 @@ async def get_observation(
     request: Request,
     project: str = Path(..., description="Langfuse project alias"),
     observation_id: str = Path(..., description="Langfuse observation ID"),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> Response:
     """Proxy ``GET /api/public/observations/{observation_id}`` to Langfuse."""

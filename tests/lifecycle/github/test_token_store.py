@@ -146,9 +146,11 @@ class TestValidate:
 
         # Restore real time for validation.
         monkeypatch.undo()
-        # The token's iat is ~now, revocation timestamp is ~now-60 → token iat > revocation time → accepted.
+        # The token's iat is ~now, revocation timestamp is ~now-60
+        # → token iat > revocation time → accepted.
         assert store.validate(token) is not None
-        # But the revocation timestamp was set; a token with iat = now-120 would be rejected.
+        # But the revocation timestamp was set; a token with iat = now-120
+        # would be rejected.
 
     def test_missing_required_claims_returns_none(self, tmp_path):
         """Encrypt a payload that is valid JSON but missing required keys."""

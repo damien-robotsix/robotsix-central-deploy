@@ -67,7 +67,7 @@ def _get_repo_sync(client: Any, owner: str, repo: str) -> dict[str, Any]:
 async def get_repo(
     owner: str,
     repo: str,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s details (visibility, description, settings)."""
@@ -149,8 +149,8 @@ async def update_repo(
     owner: str,
     repo: str,
     body: UpdateRepoRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Update *owner*/*repo*'s settings — only provided fields are changed."""
@@ -226,8 +226,8 @@ def _create_repo_sync(client: Any, body: CreateRepoRequest) -> dict[str, Any]:
 )
 async def create_repo(
     body: CreateRepoRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Create a new repository under the configured account.
@@ -325,8 +325,8 @@ async def relax_merge_gate(
     owner: str,
     repo: str,
     body: RelaxMergeGateRequest | None = None,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Set required approving pull-request reviews to 0 on *owner*/*repo*'s

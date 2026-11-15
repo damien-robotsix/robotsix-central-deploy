@@ -314,6 +314,8 @@ class TestComputeOverallHealth:
         )
 
     def test_mixed_no_priority_disease_returns_empty(self) -> None:
-        """When checked values exist but none are UNHEALTHY, STARTING, or all-HEALTHY, return ''."""
+        """When checked values exist but none are UNHEALTHY, STARTING, or all-HEALTHY,
+        return ''.
+        """
         siblings = [self._summary("some-unknown-status")]
         assert _compute_overall_health(HealthStatus.HEALTHY, siblings) == ""

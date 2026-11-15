@@ -73,14 +73,16 @@ async def _delete_component_volumes(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/refresh-contract
+# Endpoint for POST /services/{name}/refresh-contract
 # ---------------------------------------------------------------------------
 
 
 @router.post(
     "/services/{name}/refresh-contract",
     response_model=ContractRefreshResponse,
-    summary="Refetch deploy/docker-compose.yml from the repo and update stored contract",
+    summary=(
+        "Refetch deploy/docker-compose.yml from the repo and update stored contract"
+    ),
     responses={
         400: {
             "model": ErrorDetail,
@@ -88,7 +90,9 @@ async def _delete_component_volumes(
         },
         404: {
             "model": ErrorDetail,
-            "description": "Component not found or repo has no deploy/docker-compose.yml",
+            "description": (
+                "Component not found or repo has no deploy/docker-compose.yml"
+            ),
         },
         409: {
             "model": ErrorDetail,
@@ -103,12 +107,12 @@ async def _delete_component_volumes(
 )
 async def refresh_contract(
     name: str,
-    body: ContractRefreshRequest = Body(default=ContractRefreshRequest()),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    body: ContractRefreshRequest = Body(default=ContractRefreshRequest()),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    registry: ComponentRegistry = Depends(_get_registry),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    store: ServiceStore = Depends(_get_store),
     _auth: None = Depends(verify_auth),
 ) -> ContractRefreshResponse:
     """Re-parse the component's deploy/docker-compose.yml and update stored settings.
@@ -154,7 +158,7 @@ async def refresh_contract(
 
 
 # ---------------------------------------------------------------------------
-# DELETE /services/{name}
+# Endpoint for DELETE /services/{name}
 # ---------------------------------------------------------------------------
 
 
@@ -167,18 +171,23 @@ async def delete_service(
     name: str,
     stop_container: bool = Query(
         default=True,
-        description="Stop and remove the managed container (true) or leave it running (false)",
+        description=(
+            "Stop and remove the managed container (true) or leave it running (false)"
+        ),
     ),
     remove_volumes: bool = Query(
         default=False,
-        description="Also delete the component's data volumes (IRREVERSIBLE — destroys stored data)",
+        description=(
+            "Also delete the component's data volumes (IRREVERSIBLE — destroys "
+            "stored data)"
+        ),
     ),
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Remove an onboarded component and optionally its container and volumes.

@@ -39,7 +39,7 @@ async def _fanout_siblings_best_effort(
             final = await backend_method(sib_record)
             sib_record.state = final
             await store.put(sib_record)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning(
                 "%s sibling '%s-%s' failed",
                 action,
@@ -113,7 +113,7 @@ async def _fanout_siblings_deploy_best_effort(
             sib_record.update_pending_since = None
             await store.put(sib_record)
             deployed.append(sib_name)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning(
                 "%s: deploy sibling '%s' failed",
                 log_prefix,

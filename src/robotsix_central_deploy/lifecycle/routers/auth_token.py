@@ -2,8 +2,10 @@
 
 ``GET  /auth/token``            — exchange an SSO session for a mobile bearer token.
 ``GET  /auth/login``            — start the mobile deep-link login handoff.
-``GET  /auth/login/complete``   — finish the handoff: issue a token, redirect to the app.
-``POST /chat/auth/mobile-token`` — validate a stored token; returns the TokenResponse shape.
+``GET  /auth/login/complete``   — finish the handoff: issue a token, redirect to the
+    app.
+``POST /chat/auth/mobile-token`` — validate a stored token; returns the TokenResponse
+    shape.
 ``GET  /auth/validate``         — Traefik ForwardAuth: validate a bearer token.
 ``DELETE /auth/token/{token_id}`` — revoke a single token.
 ``POST  /auth/revoke-user``     — revoke all tokens for a user.
@@ -109,7 +111,7 @@ class RevokeUserRequest(BaseModel):
 @router.get("/auth/token", response_model=TokenResponse)
 async def exchange_token(
     request: Request,
-    token_store: TokenStore = Depends(_get_token_store),  # noqa: B008
+    token_store: TokenStore = Depends(_get_token_store),
 ) -> TokenResponse:
     """Exchange the current SSO session for a long-lived mobile bearer token.
 
@@ -198,7 +200,7 @@ async def start_mobile_login(
 @router.get("/auth/login/complete")
 async def complete_mobile_login(
     request: Request,
-    token_store: TokenStore = Depends(_get_token_store),  # noqa: B008
+    token_store: TokenStore = Depends(_get_token_store),
 ) -> RedirectResponse:
     """Finish the mobile login handoff (only reachable through the SSO gate).
 
@@ -257,7 +259,7 @@ class MobileTokenExchangeRequest(BaseModel):
 @router.post("/chat/auth/mobile-token", response_model=TokenResponse)
 async def exchange_mobile_token(
     body: MobileTokenExchangeRequest,
-    token_store: TokenStore = Depends(_get_token_store),  # noqa: B008
+    token_store: TokenStore = Depends(_get_token_store),
 ) -> TokenResponse:
     """Validate the app's stored token and return it in TokenResponse shape.
 
@@ -331,7 +333,7 @@ async def validate_token(
 @router.delete("/auth/token/{token_id}", status_code=204)
 async def revoke_token(
     token_id: str,
-    token_store: TokenStore = Depends(_get_token_store),  # noqa: B008
+    token_store: TokenStore = Depends(_get_token_store),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Revoke a single mobile token by its ``jti`` (token id).
@@ -360,7 +362,7 @@ async def revoke_token(
 @router.post("/auth/revoke-user", status_code=204)
 async def revoke_user_tokens(
     body: RevokeUserRequest,
-    token_store: TokenStore = Depends(_get_token_store),  # noqa: B008
+    token_store: TokenStore = Depends(_get_token_store),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Revoke every mobile token issued for *user* before this moment.

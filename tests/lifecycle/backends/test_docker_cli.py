@@ -506,34 +506,36 @@ class TestContractConformance:
         method = getattr(backend, method_name)
 
         # Build reasonable dummy args for each method.
-        # The exact signature varies; use try/except to call.
+        # The exact signature varies per method.
+        args: tuple = ()
+        if method_name == "deploy":
+            args = (MagicMock(), MagicMock(), "img:ref")
+        elif method_name == "rollback":
+            args = (MagicMock(), MagicMock())
+        elif method_name == "remove_container":
+            args = (MagicMock(),)
+        elif method_name in (
+            "write_config_to_volume",
+            "write_llmio_tier_config_to_volume",
+        ):
+            args = ("vol", {})
+        elif method_name == "read_config_from_volume":
+            args = ("vol",)
+        elif method_name == "list_volume_dir":
+            args = ("vol", "")
+        elif method_name == "read_volume_file":
+            args = ("vol", "f", 100)
+        elif method_name == "remove_volume":
+            args = ("vol",)
+        elif method_name == "inspect_self":
+            args = ()
+        elif method_name == "trigger_self_update":
+            args = (MagicMock(), "img", "url", "1.43")
+        elif method_name == "check_claude_auth":
+            args = ("vol",)
+        elif method_name == "write_claude_credentials":
+            args = ("vol", '{"key":"val"}')
+        elif method_name == "read_claude_credentials":
+            args = ("vol",)
         with pytest.raises(NotImplementedError):
-            if method_name == "deploy":
-                await method(MagicMock(), MagicMock(), "img:ref")
-            elif method_name == "rollback":
-                await method(MagicMock(), MagicMock())
-            elif method_name == "remove_container":
-                await method(MagicMock())
-            elif method_name in (
-                "write_config_to_volume",
-                "write_llmio_tier_config_to_volume",
-            ):
-                await method("vol", {})
-            elif method_name == "read_config_from_volume":
-                await method("vol")
-            elif method_name == "list_volume_dir":
-                await method("vol", "")
-            elif method_name == "read_volume_file":
-                await method("vol", "f", 100)
-            elif method_name == "remove_volume":
-                await method("vol")
-            elif method_name == "inspect_self":
-                await method()
-            elif method_name == "trigger_self_update":
-                await method(MagicMock(), "img", "url", "1.43")
-            elif method_name == "check_claude_auth":
-                await method("vol")
-            elif method_name == "write_claude_credentials":
-                await method("vol", '{"key":"val"}')
-            elif method_name == "read_claude_credentials":
-                await method("vol")
+            await method(*args)

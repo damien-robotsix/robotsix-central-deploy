@@ -126,7 +126,10 @@ class TestFetchRepoFiles:
         """Shallow clone of a local repo that has both deploy/compose
         and config/config.json — both are returned."""
         source_repo = tmp_path / "source"
-        compose_bytes = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n  svc:\n    image: img:latest\n"
+        )
         config_bytes = b'{"host": "localhost", "port": 8080}'
         _init_local_git_repo(
             source_repo,
@@ -146,7 +149,10 @@ class TestFetchRepoFiles:
     def test_successful_clone_without_config(self, tmp_path: Path):
         """When config/config.json is absent, ``config_json`` is ``None``."""
         source_repo = tmp_path / "source"
-        compose_bytes = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n  svc:\n    image: img:latest\n"
+        )
         _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
 
         with mock.patch(
@@ -166,7 +172,7 @@ class TestFetchRepoFiles:
             mock.patch(
                 "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
             ),
-            pytest.raises(FetchError, match="no deploy/docker-compose.yml found"),
+            pytest.raises(FetchError, match=r"no deploy/docker-compose\.yml found"),
         ):
             fetch_repo_files("https://example.com/repo.git")
 
@@ -179,7 +185,7 @@ class TestFetchRepoFiles:
             mock.patch(
                 "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
             ),
-            pytest.raises(FetchError, match="no deploy/docker-compose.yml found"),
+            pytest.raises(FetchError, match=r"no deploy/docker-compose\.yml found"),
         ):
             fetch_repo_files("https://example.com/repo.git")
 
@@ -233,7 +239,10 @@ class TestFetchComposeBytes:
     def test_returns_compose_bytes(self, tmp_path: Path):
         """Convenience wrapper returns only ``compose_bytes``."""
         source_repo = tmp_path / "source"
-        compose_bytes = b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n"
+        compose_bytes = (
+            b"# central-deploy-contract-version: 1\n"
+            b"services:\n  svc:\n    image: img:latest\n"
+        )
         _init_local_git_repo(source_repo, deploy_compose=compose_bytes)
 
         with mock.patch(
@@ -267,7 +276,7 @@ class TestFetchComposeBytes:
             mock.patch(
                 "subprocess.run", side_effect=_real_git_clone_side_effect(source_repo)
             ),
-            pytest.raises(FetchError, match="no deploy/docker-compose.yml found"),
+            pytest.raises(FetchError, match=r"no deploy/docker-compose\.yml found"),
         ):
             fetch_compose_bytes("https://example.com/repo.git")
 
@@ -474,7 +483,10 @@ class TestFetchRepoFilesGitHubToken:
         source_repo = tmp_path / "source"
         _init_local_git_repo(
             source_repo,
-            deploy_compose=b"# central-deploy-contract-version: 1\nservices:\n  svc:\n    image: img:latest\n",
+            deploy_compose=(
+                b"# central-deploy-contract-version: 1\n"
+                b"services:\n  svc:\n    image: img:latest\n"
+            ),
         )
 
         captured_urls: list[str] = []
@@ -506,13 +518,12 @@ class TestFetchRepoFilesGitHubToken:
                     github_token="ghs_test123",
                 )
             # The error message must NOT contain the token
-            try:
+            with pytest.raises(FetchError) as excinfo:
                 fetch_repo_files(
                     "https://github.com/owner/repo.git",
                     github_token="ghs_test123",
                 )
-            except FetchError as e:
-                assert "ghs_test123" not in str(e)
+            assert "ghs_test123" not in str(excinfo.value)
 
     def test_token_redacted_when_stderr_contains_token(self):
         """If stderr accidentally includes the token string, it is
@@ -520,7 +531,10 @@ class TestFetchRepoFilesGitHubToken:
         with mock.patch("subprocess.run") as m_run:
             m_run.return_value = mock.Mock(
                 returncode=128,
-                stderr=b"error: https://x-access-token:ghs_test123@github.com/ not accessible\n",
+                stderr=(
+                    b"error: https://x-access-token:ghs_test123@github.com/"
+                    b" not accessible\n"
+                ),
             )
             with pytest.raises(FetchError) as exc_info:
                 fetch_repo_files(

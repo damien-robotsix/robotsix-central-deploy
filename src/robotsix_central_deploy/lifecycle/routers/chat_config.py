@@ -44,7 +44,7 @@ _RETIRED_DETAIL = (
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/config/{name}
+# Endpoint for GET /chat/config/{name}
 # ---------------------------------------------------------------------------
 
 
@@ -59,9 +59,9 @@ _RETIRED_DETAIL = (
 )
 async def chat_get_config(
     name: str,
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentConfigRollbackResponse:
     """Return the current config for an allowlisted service.

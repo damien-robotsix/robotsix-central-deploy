@@ -76,14 +76,21 @@ class CaretakerFinding(BaseModel):
 
     component_id: str = Field(
         default="",
-        description="Managed-component slug; empty for host-level or orphan-volume findings",
+        description=(
+            "Managed-component slug; empty for host-level or orphan-volume findings"
+        ),
     )
     repo_id: str = Field(
         default="",
-        description="Upstream repository identifier; empty when the finding is untracked",
+        description=(
+            "Upstream repository identifier; empty when the finding is untracked"
+        ),
     )
     kind: FindingKind = Field(
-        description="Category of the finding (update_applied, update_failed, self_update_triggered, health, volume_growth, volume_orphan, disk)"
+        description=(
+            "Category of the finding (update_applied, update_failed, "
+            "self_update_triggered, health, volume_growth, volume_orphan, disk)"
+        )
     )
     title: str = Field(description="Short human-readable summary of the finding")
     detail: str = Field(
@@ -91,7 +98,10 @@ class CaretakerFinding(BaseModel):
     )
     severity: Literal["warning", "error"] = Field(
         default="warning",
-        description="Severity level: 'warning' for actionable issues, 'error' for failures requiring attention",
+        description=(
+            "Severity level: 'warning' for actionable issues, 'error' for failures "
+            "requiring attention"
+        ),
     )
 
 

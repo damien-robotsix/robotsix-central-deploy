@@ -260,7 +260,7 @@ class TestGetServiceConfig:
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/config/assist
+# Tests for POST /services/{name}/config/assist
 # ---------------------------------------------------------------------------
 
 
@@ -421,7 +421,7 @@ class TestDeprecatedConfigWriteEndpoints:
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/config/export  (migration-only)
+# Tests for GET /services/{name}/config/export  (migration-only)
 # ---------------------------------------------------------------------------
 
 
@@ -524,7 +524,9 @@ class TestExportServiceConfig:
         assert "No config schema" in resp.json()["error"]
 
     async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
-        """Component-level auth was removed; a missing X-API-Key header no longer yields 401."""
+        """Component-level auth was removed; a missing X-API-Key header no longer yields
+        401.
+        """
         resp = await client.get("/services/chat/config/export")
         assert resp.status_code != 401
 

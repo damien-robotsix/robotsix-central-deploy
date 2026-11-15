@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from ..registry.config_store import ComponentConfigStore
+from ..registry.constants import PROXY_NETWORK
 from ..registry.loader import ComponentRegistry
 from ..registry.models import ComponentConfig
 from ..registry.traefik_labels import traefik_labels
@@ -35,8 +36,6 @@ from .schemas import (
 from .store import ServiceStore
 
 logger = logging.getLogger(__name__)
-
-from ..registry.constants import PROXY_NETWORK
 
 
 def _compute_verdict(
@@ -62,14 +61,19 @@ def _compute_verdict(
         return DiagnoseVerdict(
             classification="not-routable",
             detail="Component has routable=false; it is not published at the edge.",
-            remediation="No action needed — this is by design for sibling/internal services.",
+            remediation=(
+                "No action needed — this is by design for sibling/internal services."
+            ),
         )
 
     # 2. No proxy network
     if runtime is not None and not routing.proxy_network_attached:
         return DiagnoseVerdict(
             classification="no-proxy-network",
-            detail="Container is running but not attached to the central-deploy-proxy network.",
+            detail=(
+                "Container is running but not attached to the "
+                "central-deploy-proxy network."
+            ),
             remediation=f"Recreate the container: POST /services/{config.id}/deploy",
         )
 
@@ -84,7 +88,10 @@ def _compute_verdict(
         if repo_contract.changed_fields:
             return DiagnoseVerdict(
                 classification="stale-contract",
-                detail=f"Stored spec differs from repo contract in: {', '.join(repo_contract.changed_fields)}",
+                detail=(
+                    "Stored spec differs from repo contract in: "
+                    f"{', '.join(repo_contract.changed_fields)}"
+                ),
                 remediation=f"POST /services/{config.id}/refresh-contract then deploy",
             )
 
@@ -108,8 +115,13 @@ def _compute_verdict(
         if expected_traefik != actual_traefik:
             return DiagnoseVerdict(
                 classification="edge-mismatch",
-                detail="Traefik labels on the container differ from what the stored spec would generate.",
-                remediation=f"Recreate the container: POST /services/{config.id}/deploy",
+                detail=(
+                    "Traefik labels on the container differ from what the "
+                    "stored spec would generate."
+                ),
+                remediation=(
+                    f"Recreate the container: POST /services/{config.id}/deploy"
+                ),
             )
 
     # 6. Edge probe failure (when we have labels but edge returns non-2xx)
@@ -121,7 +133,10 @@ def _compute_verdict(
         return DiagnoseVerdict(
             classification="edge-mismatch",
             detail=f"Edge probe returned HTTP {edge_probe.status_code}.",
-            remediation=f"Check Traefik routing and container health: GET /services/{config.id}/diagnose",
+            remediation=(
+                "Check Traefik routing and container health: "
+                f"GET /services/{config.id}/diagnose"
+            ),
         )
 
     # 7. OK
@@ -207,7 +222,7 @@ async def build_diagnose_report(
                 digest = await checker.get_latest_digest(config.image)
                 if digest:
                     registry_digest = digest
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("registry digest lookup failed for %s", config.image)
 
         recent_logs = ""
@@ -216,7 +231,7 @@ async def build_diagnose_report(
                 name=name, container_name=config.container_name or name
             )
             recent_logs = await backend.get_container_logs(record, tail=20)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("log capture failed for %s", name)
 
         runtime = DiagnoseRuntime(
@@ -274,7 +289,7 @@ async def _fetch_and_compare_contract(
         _comp_cfg, repo_files = await _fetch_component_repo_files(
             name, component_config_store, lifecycle_config
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # _fetch_component_repo_files raises HTTPException on failure;
         # capture the detail message.
         detail = str(exc)
@@ -341,7 +356,7 @@ async def _probe_edge(name: str, base_domain: str) -> DiagnoseEdgeProbe:
                 status_code=resp.status_code,
                 body_preview=body_preview,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return DiagnoseEdgeProbe(
             url=url,
             error=str(exc),

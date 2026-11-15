@@ -81,7 +81,7 @@ class TestGoDuration:
         assert _parse_go_duration("500ms") == 0
 
     def test_invalid_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid Go duration"):
             _parse_go_duration("abc")
 
 
@@ -647,7 +647,7 @@ services:
         assert "entrypoint:" in str(exc.value)
 
     def test_port_typeerror_caught_as_parse_error(self):
-        """A TypeError during port parsing (e.g. int(list)) must surface as ParseError."""
+        """A TypeError during port parsing (e.g. int(list)) surfaces as ParseError."""
         y = """\
 # central-deploy-contract-version: 1
 services:
@@ -848,7 +848,7 @@ services:
         assert "primary" in str(exc.value).lower()
 
     def test_config_target_resolves_volume_name(self):
-        """robotsix.deploy.config-target resolves to the matching named-volume host name."""
+        """robotsix.deploy.config-target resolves to the matching named-volume host."""
         y = """\
 # central-deploy-contract-version: 1
 services:
@@ -1205,7 +1205,7 @@ services:
         assert spec.siblings[0].container_name == "custom-worker"
 
     def test_named_volumes_cross_service_validated(self):
-        """Volume declared only in sibling but not in top-level volumes: → ParseError."""
+        """Volume declared only in sibling, not in top-level volumes: → ParseError."""
         y = """\
 # central-deploy-contract-version: 1
 services:
@@ -1338,7 +1338,7 @@ services:
 
 
 def minimal_compose_with_label(label_key: str, label_value: str) -> bytes:
-    """Build a minimal valid docker-compose YAML with a single label on the primary service."""
+    """Build a minimal valid docker-compose YAML with one label on the primary."""
     return f"""\
 # central-deploy-contract-version: 1
 services:
@@ -1501,7 +1501,7 @@ volumes:
 
 
 # ---------------------------------------------------------------------------
-# user: parsing
+# Parsing of the user field
 # ---------------------------------------------------------------------------
 
 

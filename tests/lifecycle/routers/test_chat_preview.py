@@ -540,7 +540,7 @@ class TestDockerHelpers:
 
 
 # ---------------------------------------------------------------------------
-# Endpoint: POST /chat/preview/deploy
+# Tests for POST /chat/preview/deploy
 # ---------------------------------------------------------------------------
 
 
@@ -645,7 +645,7 @@ class TestPreviewDeployEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# Endpoint: POST /chat/preview/teardown
+# Tests for POST /chat/preview/teardown
 # ---------------------------------------------------------------------------
 
 

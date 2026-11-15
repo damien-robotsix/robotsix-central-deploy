@@ -364,7 +364,9 @@ async def test_unknown_component_404_suggests_the_registered_id(
 async def test_restart_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Component-level auth was removed; restart without auth headers no longer returns 401."""
+    """Component-level auth was removed; restart without auth headers no longer returns
+    401.
+    """
     resp = await client.post("/chat/services/test-svc/restart")
     assert resp.status_code != 401, resp.text
 

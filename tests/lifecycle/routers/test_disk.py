@@ -280,7 +280,8 @@ class TestDiskEndpoint:
         monkeypatch.setattr(NoopBackend, "prune_images", _fake_prune_images)
         resp = await client.post("/disk/reclaim", headers=auth_headers)
         assert resp.status_code == 200
-        assert seen and {"sha256:current", "sha256:rollback"} <= seen[0]
+        assert seen
+        assert {"sha256:current", "sha256:rollback"} <= seen[0]
 
     async def test_reclaim_no_longer_401(self, client: AsyncClient):
         """Component-level auth was removed — unauthenticated requests now pass."""

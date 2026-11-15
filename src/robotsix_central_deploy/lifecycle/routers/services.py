@@ -58,7 +58,10 @@ async def _gather_sibling_health(
     store: ServiceStore,
     backend: ExecutionBackend,
 ) -> tuple[list[ContainerHealthSummary], list[SiblingUpdateSummary]]:
-    """Collect health and update-state summaries for all siblings of *name* (best-effort)."""
+    """Collect health and update-state summaries for all siblings of *name*.
+
+    Best-effort.
+    """
     sibling_summaries: list[ContainerHealthSummary] = []
     sibling_update_states: list[SiblingUpdateSummary] = []
     if comp_config and comp_config.siblings:
@@ -67,7 +70,7 @@ async def _gather_sibling_health(
         ):
             try:
                 sib_inspect = await backend.status(sib_record)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning(
                     "failed to inspect sibling '%s'; skipping",
                     _sanitize_log(sib_record.name),
@@ -108,7 +111,7 @@ async def _gather_sibling_health(
 
 
 # ---------------------------------------------------------------------------
-# GET /services
+# Endpoint for GET /services
 # ---------------------------------------------------------------------------
 
 
@@ -118,11 +121,11 @@ async def _gather_sibling_health(
     summary="List managed services",
 )
 async def list_services(
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ServiceListResponse:
-    """Return all managed services with their current state and optional config metadata."""
+    """Return all managed services with their current state and optional config metadata."""  # noqa: E501
     records = await store.list_all()
     items: list[ServiceListItem] = []
     for r in records:
@@ -132,7 +135,7 @@ async def list_services(
 
 
 # ---------------------------------------------------------------------------
-# GET /components/suggest
+# Endpoint for GET /components/suggest
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +145,7 @@ async def list_services(
     summary="List registered components for config-form URL suggestions",
 )
 async def list_component_suggestions(
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ComponentSuggestResponse:
     """Return every registered component's id, container_name, and first
@@ -163,7 +166,7 @@ async def list_component_suggestions(
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}
+# Endpoint for GET /services/{name}
 # ---------------------------------------------------------------------------
 
 
@@ -176,10 +179,10 @@ async def list_component_suggestions(
 async def get_service_status(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     """Return full status for a service: live state, health, image digests,
@@ -208,7 +211,7 @@ async def get_service_status(
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/health
+# Endpoint for GET /services/{name}/health
 # ---------------------------------------------------------------------------
 
 
@@ -220,8 +223,8 @@ async def get_service_status(
 )
 async def get_service_health(
     name: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ServiceHealthResponse:
     """Return the current health status string for a service.
@@ -238,7 +241,7 @@ async def get_service_health(
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/logs
+# Endpoint for GET /services/{name}/logs
 # ---------------------------------------------------------------------------
 
 
@@ -257,8 +260,8 @@ async def get_service_logs(
     follow: bool = Query(
         False, description="If true, stream new log lines as they arrive"
     ),
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> StreamingResponse:
     """Stream container log output as a plain-text response.

@@ -43,7 +43,7 @@ def _fake_branch(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/branches
+# Tests for GET /chat/github/repos/{owner}/{repo}/branches
 # ---------------------------------------------------------------------------
 
 
@@ -136,7 +136,7 @@ class TestListBranches:
 
 
 # ---------------------------------------------------------------------------
-# DELETE /chat/github/repos/{owner}/{repo}/branches/{branch:path}
+# Tests for DELETE /chat/github/repos/{owner}/{repo}/branches/{branch:path}
 # ---------------------------------------------------------------------------
 
 

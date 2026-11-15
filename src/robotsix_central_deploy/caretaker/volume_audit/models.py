@@ -42,19 +42,27 @@ class VolumeGrowthRecord(BaseModel):
     )
     prev_size_bytes: int | None = Field(
         default=None,
-        description="Bytes consumed in the previous snapshot; None on first measurement",
+        description=(
+            "Bytes consumed in the previous snapshot; None on first measurement"
+        ),
     )
     delta_bytes: int | None = Field(
         default=None,
-        description="Difference between current and previous size; None on first measurement",
+        description=(
+            "Difference between current and previous size; None on first measurement"
+        ),
     )
     growth_pct: float | None = Field(
         default=None,
-        description="Percentage growth since the previous snapshot; None on first measurement",
+        description=(
+            "Percentage growth since the previous snapshot; None on first measurement"
+        ),
     )
     flagged: bool = Field(
         default=False,
-        description="True when both the absolute and percentage growth thresholds are breached",
+        description=(
+            "True when both the absolute and percentage growth thresholds are breached"
+        ),
     )
 
 

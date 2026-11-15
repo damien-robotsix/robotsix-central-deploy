@@ -372,7 +372,10 @@ class TestSelfUpdate:
 
     @pytest.mark.asyncio
     async def test_triggered_at_end_of_pass(self, scheduler_fixtures):
-        """A pending self update launches the detached updater (POST /system/update path)."""
+        """A pending self update launches the detached updater.
+
+        Exercises the POST /system/update path.
+        """
         from robotsix_central_deploy.caretaker.models import FindingKind
 
         scheduler, store, backend, _ccs, _http = scheduler_fixtures

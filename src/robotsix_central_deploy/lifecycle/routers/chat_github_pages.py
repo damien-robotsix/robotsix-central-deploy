@@ -173,8 +173,8 @@ async def update_pages(
     owner: str,
     repo: str,
     body: UpdatePagesRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Enable, disable, or reconfigure GitHub Pages on *owner*/*repo*.

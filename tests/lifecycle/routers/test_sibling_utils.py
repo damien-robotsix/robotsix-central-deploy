@@ -401,7 +401,9 @@ class TestFanoutSiblingsDeployBestEffort:
     async def test_effective_config_fields(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The effective config passed to deploy contains all sibling-specific fields."""
+        """The effective config passed to deploy contains all sibling-specific
+        fields.
+        """
         store = InMemoryStore()
         backend = MagicMock()
         backend.deploy = AsyncMock(
@@ -446,7 +448,9 @@ class TestFanoutSiblingsDeployBestEffort:
     async def test_all_fail_still_completes(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When every sibling deploy fails the loop exits cleanly, returns empty list."""
+        """When every sibling deploy fails the loop exits cleanly, returns empty
+        list.
+        """
         store = InMemoryStore()
         backend = MagicMock()
 

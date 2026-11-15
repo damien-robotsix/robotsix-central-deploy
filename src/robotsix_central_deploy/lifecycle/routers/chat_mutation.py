@@ -68,7 +68,7 @@ def _schedule_ttl_task(
                         detail=f"Auto-disabled after TTL ({ttl_seconds}s)",
                     )
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning(
                 "TTL auto-disable for '%s' failed",
                 _sanitize_log(name),
@@ -81,7 +81,7 @@ def _schedule_ttl_task(
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/services/{name}/enable-mutation
+# Endpoint for POST /chat/services/{name}/enable-mutation
 # ---------------------------------------------------------------------------
 
 
@@ -97,9 +97,9 @@ async def chat_enable_mutation(
     name: str,
     body: ChatAgentMutationEnableRequest,
     request: Request,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentMutationEnableResponse:
     """Enable the per-service ``chat_agent_mutatable`` flag for *name*.
@@ -182,7 +182,7 @@ async def chat_enable_mutation(
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/services/{name}/disable-mutation
+# Endpoint for POST /chat/services/{name}/disable-mutation
 # ---------------------------------------------------------------------------
 
 
@@ -197,9 +197,9 @@ async def chat_enable_mutation(
 async def chat_disable_mutation(
     name: str,
     request: Request,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentMutationDisableResponse:
     """Disable the per-service ``chat_agent_mutatable`` flag for *name*.

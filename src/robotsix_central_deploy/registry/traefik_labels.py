@@ -14,16 +14,17 @@ config file.
 Three routers are emitted per component, distinguished by priority so the most
 specific rule wins:
 
-===============  ========  ====================================  ======================================
-Router            Priority  Matches                              Authenticated by
-===============  ========  ====================================  ======================================
-``-health``       30        ``GET /health``                      nothing — the health contract requires
-                                                                 an auth-exempt probe
-``-bearer``       20        ``Host(...) && Authorization: Bearer``  ``mobile-token`` ForwardAuth — validates
-                                                                 a mobile bearer token issued by
-                                                                 ``GET /auth/token``
-(base)            10        everything else                      tinyauth SSO via ``forwardAuth``
-===============  ========  ====================================  ======================================
+============  ========  =========================  ===============================
+Router        Priority  Matches                    Authenticated by
+============  ========  =========================  ===============================
+``-health``   30        ``GET /health``            nothing — the health contract
+                                                   requires an auth-exempt probe
+``-bearer``   20        ``Host(...) &&             ``mobile-token`` ForwardAuth —
+                        Authorization: Bearer``    validates a mobile bearer token
+                                                   issued by ``GET /auth/token``
+(base)        10        everything else            tinyauth SSO via
+                                                   ``forwardAuth``
+============  ========  =========================  ===============================
 
 Requests carrying an ``Authorization: Bearer <token>`` header match the
 higher-priority ``-bearer`` router and never reach tinyauth — the

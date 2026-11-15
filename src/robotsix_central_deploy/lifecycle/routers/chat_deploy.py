@@ -100,7 +100,7 @@ async def _execute_deploy_staging(
 
     try:
         outcome = await backend.deploy(record, config, image)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("%s %s failed", log_prefix, _sanitize_log(name))
         await audit_store.append(
             ChatAgentAuditEntry(
@@ -135,7 +135,7 @@ async def _execute_deploy_staging(
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/services/{name}/update
+# Endpoint for POST /chat/services/{name}/update
 # ---------------------------------------------------------------------------
 
 
@@ -154,13 +154,13 @@ async def _execute_deploy_staging(
 async def chat_update_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentUpdateResponse:
     """Pull the latest image and recreate the container for an allowlisted service.
@@ -282,7 +282,7 @@ async def chat_update_service(
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/services/{name}/deploy
+# Endpoint for POST /chat/services/{name}/deploy
 # ---------------------------------------------------------------------------
 
 
@@ -301,11 +301,11 @@ async def chat_update_service(
 async def chat_deploy_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentServiceDeployResponse:
     """Deploy an already-registered component for the first time.
@@ -347,7 +347,9 @@ async def chat_deploy_service(
             ChatAgentAuditEntry(
                 component=name,
                 action="deploy",
-                detail="Deploy requested but component is already running (idempotent).",
+                detail=(
+                    "Deploy requested but component is already running (idempotent)."
+                ),
             )
         )
         return ChatAgentServiceDeployResponse(
@@ -418,7 +420,7 @@ async def chat_deploy_service(
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/deploy
+# Endpoint for POST /chat/deploy
 # ---------------------------------------------------------------------------
 
 
@@ -501,7 +503,10 @@ async def _resolve_deploy_contract(
 @router.post(
     "/chat/deploy",
     response_model=ChatAgentDeployResponse,
-    summary="Contract-aware deploy: fetch docker-compose.yml and deploy an allowlisted component",
+    summary=(
+        "Contract-aware deploy: fetch docker-compose.yml and deploy an allowlisted "
+        "component"
+    ),
     responses={
         403: {"description": "Component not in the deploy allowlist"},
         409: {"description": "Deploy already in progress"},
@@ -512,11 +517,11 @@ async def _resolve_deploy_contract(
 async def chat_deploy(
     body: ChatAgentDeployRequest,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentDeployResponse:
     """Deploy an allowlisted component by fetching and parsing its deploy contract.

@@ -304,7 +304,7 @@ def _parse_self_contract_settings(config: LifecycleConfig) -> SystemSettings | N
 
     try:
         return SystemSettings(**settings_kwargs)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "Self-contract %s: failed to build SystemSettings — %s", contract_path, exc
         )
@@ -819,7 +819,7 @@ async def _init_component_registry(app: FastAPI) -> None:
     # finally-remove dies with the process) BEFORE new scans start.
     try:
         await _backend.remove_stale_helpers()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("stale-helper sweep at startup failed: %s", exc)
 
     _volume_audit_task: asyncio.Task[Any] | None = None

@@ -1,4 +1,7 @@
-"""Generate docs/lifecycle/openapi.json by loading the FastAPI app and dumping its schema."""
+"""Generate docs/lifecycle/openapi.json from the FastAPI app.
+
+Loads the FastAPI app and dumps its OpenAPI schema.
+"""
 
 import json
 

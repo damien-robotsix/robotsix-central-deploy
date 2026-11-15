@@ -96,7 +96,7 @@ def _validation_detail(exc: Exception, fallback: str) -> str:
         return fallback
     try:
         items = list(errors())
-    except Exception:  # noqa: BLE001 # pragma: no cover — errors() is pydantic's
+    except Exception:  # pragma: no cover — errors() is pydantic's
         return fallback
     if not items:
         return fallback

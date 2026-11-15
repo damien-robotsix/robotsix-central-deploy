@@ -268,7 +268,9 @@ def _reraise_merge_errors(
         if gh_status == 422:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"GitHub rejected merge for {owner}/{repo}#{pull_number}: {detail}",
+                detail=(
+                    f"GitHub rejected merge for {owner}/{repo}#{pull_number}: {detail}"
+                ),
             ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -298,9 +300,9 @@ async def merge_pull(
     owner: str,
     repo: str,
     pull_number: int,
-    body: MergePullRequest = MergePullRequest(merge_method=None, sha=None),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    body: MergePullRequest = MergePullRequest(merge_method=None, sha=None),
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Merge *owner*/*repo*'s pull request *pull_number*.
@@ -359,7 +361,10 @@ async def merge_pull(
                 "sha": body.sha,
                 "result": result,
             },
-            detail=f"Merged (or enqueued) {owner}/{repo}#{pull_number}: {result['message']}",
+            detail=(
+                f"Merged (or enqueued) {owner}/{repo}#{pull_number}: "
+                f"{result['message']}"
+            ),
         )
     )
     return result
@@ -482,7 +487,7 @@ async def list_reviews(
     repo: str,
     pull_number: int,
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s pull request *pull_number*'s reviews,
@@ -511,7 +516,7 @@ async def list_review_comments(
     repo: str,
     pull_number: int,
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s pull request *pull_number*'s inline review
@@ -548,8 +553,8 @@ async def create_review(
     repo: str,
     pull_number: int,
     body: CreateReviewRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Submit a review on *owner*/*repo*'s pull request *pull_number*.
@@ -641,8 +646,8 @@ async def dismiss_review(
     pull_number: int,
     review_id: int,
     body: DismissReviewRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Dismiss *review_id* on *owner*/*repo*'s pull request *pull_number*.
@@ -672,7 +677,10 @@ async def dismiss_review(
             action="dismiss_review",
             key=f"{owner}/{repo}#{pull_number}/reviews/{review_id}",
             new_value={"message": body.message},
-            detail=f"Dismissed review {review_id} on {owner}/{repo}#{pull_number}: {body.message}",
+            detail=(
+                f"Dismissed review {review_id} on {owner}/{repo}#{pull_number}: "
+                f"{body.message}"
+            ),
         )
     )
     return result
@@ -724,7 +732,7 @@ async def list_pulls(
     repo: str,
     state: str = "open",
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s pull requests, most-recently-updated first.
@@ -750,7 +758,7 @@ async def get_pull(
     owner: str,
     repo: str,
     number: int,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s pull request *number* (status, mergeable, URL)."""
@@ -781,7 +789,7 @@ async def list_pull_files(
     repo: str,
     pull_number: int,
     per_page: int = 30,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List the files changed by *owner*/*repo*'s pull request *pull_number*.
@@ -815,8 +823,8 @@ async def close_pull(
     owner: str,
     repo: str,
     pull_number: int,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Close *owner*/*repo*'s open pull request *pull_number*.
@@ -867,8 +875,8 @@ async def reopen_pull(
     owner: str,
     repo: str,
     pull_number: int,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Reopen *owner*/*repo*'s closed (unmerged) pull request *pull_number*.

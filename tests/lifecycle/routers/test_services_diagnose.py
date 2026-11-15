@@ -385,11 +385,16 @@ async def test_diagnose_basic(
         "traefik.enable": "true",
         "traefik.docker.network": PROXY_NETWORK,
         "traefik.http.services.test-svc.loadbalancer.server.port": "8080",
-        "traefik.http.routers.test-svc-health.rule": "Host(`test-svc.example.com`) && Path(`/health`)",
+        "traefik.http.routers.test-svc-health.rule": (
+            "Host(`test-svc.example.com`) && Path(`/health`)"
+        ),
         "traefik.http.routers.test-svc-health.priority": "30",
         "traefik.http.routers.test-svc-health.entrypoints": "websecure",
         "traefik.http.routers.test-svc-health.service": "test-svc",
-        "traefik.http.routers.test-svc-bearer.rule": "Host(`test-svc.example.com`) && HeaderRegexp(`Authorization`, `^Bearer .+`)",
+        "traefik.http.routers.test-svc-bearer.rule": (
+            "Host(`test-svc.example.com`) && "
+            "HeaderRegexp(`Authorization`, `^Bearer .+`)"
+        ),
         "traefik.http.routers.test-svc-bearer.priority": "20",
         "traefik.http.routers.test-svc-bearer.entrypoints": "websecure",
         "traefik.http.routers.test-svc-bearer.service": "test-svc",
@@ -434,7 +439,9 @@ async def test_diagnose_stale_contract_integration(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    """Diagnose returns stale-contract verdict when ports are empty and refresh fails."""
+    """Diagnose returns stale-contract verdict when ports are empty and refresh
+    fails.
+    """
     cfg = _make_config(ports=[], git_url="https://github.com/org/repo.git")
     _register_component(cfg)
     await _seed_service_record()

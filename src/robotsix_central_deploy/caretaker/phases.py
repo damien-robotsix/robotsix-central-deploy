@@ -369,7 +369,7 @@ async def phase_update(
                     record.name,
                     ", ".join(deployed_sibs),
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("phase_update: deploy failed for %s: %s", record.name, exc)
             findings.append(
                 CaretakerFinding(
@@ -408,7 +408,7 @@ async def phase_claude_auth(
         status = await backend.check_claude_auth(CLAUDE_AUTH_VOLUME)
     except NotImplementedError:
         return []
-    except Exception as exc:  # noqa: BLE001 — a probe failure is itself the finding
+    except Exception as exc:
         return [
             CaretakerFinding(
                 kind=FindingKind.CLAUDE_AUTH,
@@ -892,7 +892,7 @@ async def phase_auto_rollback(
                     severity="warning",
                 )
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(
                 "phase_auto_rollback: rollback failed for %s: %s", record.name, exc
             )
@@ -927,7 +927,7 @@ async def _apply_volume_retention(
         glob = str(rule.get("glob", "*")).strip() or "*"
         try:
             max_age_days = int(rule.get("max_age_days", 0))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             max_age_days = 0
         if not volume_name or max_age_days < 1 or ".." in rel_path.split("/"):
             logger.warning("volume retention: skipping invalid rule %r", rule)
@@ -936,7 +936,7 @@ async def _apply_volume_retention(
             result = await backend.prune_volume_files(
                 volume_name, rel_path, glob, max_age_days
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "volume retention: prune failed for %s/%s: %s",
                 volume_name,
@@ -978,7 +978,7 @@ async def phase_volumes(
     # 1. Growth scan (reuse VolumeAuditScheduler.run_once)
     try:
         await volume_audit_scheduler.run_once()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("phase_volumes: run_once failed: %s", exc)
         # Continue with empty findings — the audit scan itself already
         # persisted its own findings to disk.
@@ -1042,7 +1042,7 @@ async def phase_volumes(
             # A volume mounted by ANY container (``in_use`` = docker's
             # ``RefCount > 0``) is not an orphan, whoever owns the
             # container: central-deploy's own compose volumes
-            # (central_deploy_data, traefik_letsencrypt, tinyauth_data),
+            # -- central_deploy_data, traefik_letsencrypt, tinyauth_data --
             # sibling volumes and operator side stacks are not in
             # ``named_volumes`` and were flagged on every pass
             # (2026-09-09). Same rule as ``lifecycle.deps.volume``.
@@ -1061,7 +1061,7 @@ async def phase_volumes(
                         severity="warning",
                     )
                 )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("phase_volumes: orphan detection failed: %s", exc)
 
     # 3. Disk usage
@@ -1085,7 +1085,7 @@ async def phase_volumes(
                     severity="error" if pct_free < 5 else "warning",
                 )
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("phase_volumes: disk check failed: %s", exc)
 
     return findings

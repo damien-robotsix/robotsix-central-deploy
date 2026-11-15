@@ -55,9 +55,9 @@ router = APIRouter(tags=["volumes"])
 async def get_volume_audit(
     request: Request,
     _auth: None = Depends(verify_auth),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
 ) -> VolumeAuditResponse:
-    """Current volume audit state (sizes and growth). Returns enabled=false when subsystem is off."""
+    """Current volume audit state (sizes and growth). Returns enabled=false when subsystem is off."""  # noqa: E501
     if not config.volume_audit_enabled:
         return VolumeAuditResponse(enabled=False)
     scheduler: VolumeAuditScheduler = request.app.state.volume_audit_scheduler
@@ -70,8 +70,8 @@ async def get_volume_audit(
     summary="List Docker volumes owned by no component and not in use",
 )
 async def list_orphan_volumes(
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> OrphanVolumesResponse:
     """Return the prune-safe orphan volumes and their total size.
@@ -92,9 +92,9 @@ async def list_orphan_volumes(
     summary="Remove orphan Docker volumes (owned by no component, not in use)",
 )
 async def prune_orphan_volumes(
-    body: PruneVolumesRequest | None = Body(default=None),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    body: PruneVolumesRequest | None = Body(default=None),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> PruneVolumesResponse:
     """Delete orphan volumes (IRREVERSIBLE).
@@ -143,8 +143,8 @@ async def prune_orphan_volumes(
 async def list_volume_files(
     name: str,
     path: str = "",
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> VolumeListResponse:
     """Return immediate children of a directory within a named volume.
@@ -177,8 +177,8 @@ async def list_volume_files(
 async def cat_volume_file(
     name: str,
     path: str = "",
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> VolumeFileResponse:
     """Return the text content of a file within a named volume.
@@ -213,10 +213,10 @@ async def cat_volume_file(
 )
 async def relocate_volume(
     name: str,
-    body: RelocateVolumeRequest = Body(...),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    body: RelocateVolumeRequest = Body(...),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> RelocateVolumeResponse:
     """Relocate *name*'s data to another physical disk.
@@ -318,7 +318,7 @@ async def relocate_volume(
             stop_result = await backend.stop(svc_record)
             svc_record.state = stop_result
             await store.put(svc_record)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "relocate: failed to stop %s before migration: %s",
                 _sanitize_log(component_id),
@@ -343,7 +343,7 @@ async def relocate_volume(
                 stop_result = await backend.stop(o_svc)
                 o_svc.state = stop_result
                 await store.put(o_svc)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "relocate: failed to stop co-owner %s before migration: %s",
                     _sanitize_log(oid),
@@ -378,7 +378,7 @@ async def relocate_volume(
     except NotImplementedError:
         # The DockerBackend (docker-cli) does not support relocation.
         outcome = {"status": STATUS_FAILED, "detail": "Not supported by this backend"}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         outcome = {"status": STATUS_FAILED, "detail": f"Backend error: {exc}"}
 
     if outcome.get("status") != STATUS_OK:
@@ -389,7 +389,7 @@ async def relocate_volume(
                 ocfg.target_disk = prev
                 try:
                     await component_config_store.put(ocfg)
-                except Exception as rollback_exc:  # noqa: BLE001
+                except Exception as rollback_exc:
                     logger.warning(
                         "relocate: failed to rollback target_disk for %s: %s",
                         _sanitize_log(oid),
@@ -405,7 +405,7 @@ async def relocate_volume(
                 start_result = await backend.start(svc_record)
                 svc_record.state = start_result
                 await store.put(svc_record)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "relocate: failed to restart %s after failed migration: %s",
                     _sanitize_log(component_id),
@@ -428,9 +428,10 @@ async def relocate_volume(
                     start_result = await backend.start(o_svc)
                     o_svc.state = start_result
                     await store.put(o_svc)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning(
-                        "relocate: failed to restart co-owner %s after failed migration: %s",
+                        "relocate: failed to restart co-owner %s after failed "
+                        "migration: %s",
                         _sanitize_log(oid),
                         exc,
                     )
@@ -448,7 +449,9 @@ async def relocate_volume(
         )
         raise HTTPException(
             status_code=status_code,
-            detail=f"Volume relocation failed: {outcome.get('detail', 'unknown error')}",
+            detail=(
+                f"Volume relocation failed: {outcome.get('detail', 'unknown error')}"
+            ),
         )
 
     # 9. Restart all owning components (and their siblings).  Evaluate
@@ -470,7 +473,7 @@ async def relocate_volume(
             start_result = await backend.start(svc_record)
             svc_record.state = start_result
             await store.put(svc_record)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "relocate: failed to restart %s after migration: %s",
                 _sanitize_log(component_id),
@@ -495,7 +498,7 @@ async def relocate_volume(
                 start_result = await backend.start(o_svc)
                 o_svc.state = start_result
                 await store.put(o_svc)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "relocate: failed to restart co-owner %s after migration: %s",
                     _sanitize_log(oid),

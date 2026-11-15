@@ -13,7 +13,8 @@ Exposes:
   read default workflow permissions
 - ``PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow`` —
   set default workflow permissions
-- ``POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches`` —
+- ``POST /chat/github/repos/{owner}/{repo}/actions/workflows/
+  {workflow_file}/dispatches`` —
   trigger a workflow via ``workflow_dispatch`` (write; App installation token)
 """
 
@@ -192,7 +193,7 @@ async def list_workflow_runs(
     branch: str | None = None,
     run_status: str | None = None,
     per_page: int = 10,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List *owner*/*repo*'s workflow runs, most-recent-first.
@@ -219,7 +220,7 @@ async def get_workflow_run(
     owner: str,
     repo: str,
     run_id: int,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s workflow run *run_id* (status, conclusion, URL)."""
@@ -245,7 +246,7 @@ async def list_workflow_run_jobs(
         ge=1,
         le=100,
     ),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """List jobs for *owner*/*repo*'s workflow run *run_id*, with step
@@ -270,7 +271,7 @@ async def list_workflow_run_jobs(
 async def get_workflow_permissions(
     owner: str,
     repo: str,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Get *owner*/*repo*'s default workflow permissions and whether Actions
@@ -294,8 +295,8 @@ async def set_workflow_permissions(
     owner: str,
     repo: str,
     body: WorkflowPermissionsRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Set *owner*/*repo*'s default workflow permissions and whether Actions
@@ -313,7 +314,9 @@ async def set_workflow_permissions(
             key=f"{owner}/{repo}",
             new_value={
                 "default_workflow_permissions": body.default_workflow_permissions,
-                "can_approve_pull_request_reviews": body.can_approve_pull_request_reviews,
+                "can_approve_pull_request_reviews": (
+                    body.can_approve_pull_request_reviews
+                ),
             },
             detail=(
                 f"Updated workflow permissions on {owner}/{repo}: "
@@ -325,7 +328,8 @@ async def set_workflow_permissions(
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches
+# Endpoint for POST
+# /chat/github/repos/{owner}/{repo}/actions/workflows/{workflow_file}/dispatches
 # — trigger a workflow via workflow_dispatch (write; App installation token)
 # ---------------------------------------------------------------------------
 
@@ -336,7 +340,7 @@ class WorkflowDispatchRequest(BaseModel):
     *ref* is required (the branch or tag to run the workflow against).
     *inputs* are optional and passed through to GitHub's workflow_dispatch
     API unchanged.
-    """
+    """  # noqa: E501
 
     ref: str = Field(
         ...,
@@ -383,8 +387,8 @@ async def dispatch_workflow(
     repo: str,
     workflow_file: str,
     body: WorkflowDispatchRequest,
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> dict[str, Any]:
     """Trigger *owner*/*repo*'s workflow *workflow_file* via
@@ -443,7 +447,7 @@ async def dispatch_workflow(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs
+# Endpoint for GET /chat/github/repos/{owner}/{repo}/actions/runs/{run_id}/logs
 # ---------------------------------------------------------------------------
 
 
@@ -632,7 +636,7 @@ async def get_workflow_run_logs(
         description="Only return the last N KB per job log (0 for unlimited)",
         ge=0,
     ),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> str:
     """Get *owner*/*repo*'s workflow run *run_id* logs.
@@ -664,7 +668,7 @@ async def get_workflow_run_logs(
         )
     except HTTPException:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=502,
             detail=f"Failed to fetch run logs: {exc}",
@@ -695,7 +699,7 @@ async def get_workflow_run_log(
         description="Only return the last N KB per job log (0 for unlimited)",
         ge=0,
     ),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> str:
     """Alias for the ``/logs`` endpoint (the canonical GitHub API path).
@@ -714,7 +718,7 @@ async def get_workflow_run_log(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs
+# Endpoint for GET /chat/github/repos/{owner}/{repo}/actions/jobs/{job_id}/logs
 # ---------------------------------------------------------------------------
 
 
@@ -736,7 +740,7 @@ async def get_job_logs(
         description="Only return the last N KB of the log (0 for unlimited)",
         ge=0,
     ),
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> str:
     """Get *owner*/*repo*'s job *job_id* log text.
@@ -763,7 +767,7 @@ async def get_job_logs(
         )
     except HTTPException:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=502,
             detail=f"Failed to fetch job log: {exc}",

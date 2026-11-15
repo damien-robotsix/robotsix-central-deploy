@@ -14,7 +14,7 @@ Two pieces stay central-deploy-specific because the helper does not provide
 them:
 
 * the per-request ``request_id`` field, bound onto ``structlog.contextvars``
-  by :class:`~robotsix_central_deploy.lifecycle.request_id_middleware.RequestIDMiddleware`
+  by :class:`~.request_id_middleware.RequestIDMiddleware`
   and merged onto every record via ``correlation_id=True``; and
 * :data:`UVICORN_LOG_CONFIG`, a minimal uvicorn ``log_config`` that keeps the
   human-readable startup banner on stderr while letting access logs

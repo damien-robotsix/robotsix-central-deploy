@@ -70,6 +70,10 @@ from ..store import ServiceStore
 
 logger = logging.getLogger(__name__)
 
+# Strong references to fire-and-forget background tasks so they are not
+# garbage-collected before completion.
+_background_tasks: set[asyncio.Task[None]] = set()
+
 
 router = APIRouter(tags=["services"])
 
@@ -115,7 +119,7 @@ async def _verify_edge_route(config: ComponentConfig, base_domain: str) -> str |
             # are exactly the ones it turns into exceptions.
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(probe_url)
-        except Exception as exc:  # noqa: BLE001 — advisory probe, any failure is a warning
+        except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
             continue
         code = response.status_code
@@ -147,7 +151,7 @@ def _build_sibling_config(
     sib_name: str,
     merged_env: dict[str, str],
 ) -> ComponentConfig:
-    """Build a ComponentConfig for a sibling service from its ServiceConfig and merged env."""
+    """Build a sibling's ComponentConfig from its ServiceConfig and merged env."""
     return ComponentConfig(
         id=sib_name,
         image=sib_config.image,
@@ -204,7 +208,7 @@ async def _fanout_sibling_action(
         effective_sib = _build_sibling_config(sib_config, sib_name, merged_env)
         try:
             await action(sib_config, sib_record, sib_name, effective_sib)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning(
                 "%s sibling '%s' failed",
                 action_label,
@@ -213,7 +217,7 @@ async def _fanout_sibling_action(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/deploy
+# Endpoint for POST /services/{name}/deploy
 # ---------------------------------------------------------------------------
 
 
@@ -250,14 +254,14 @@ async def _fanout_sibling_action(
 async def deploy_service(
     name: str,
     request: Request,
-    body: DeployRequest | None = Body(default=None),  # type: ignore[assignment]  # noqa: B008
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
-    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
+    body: DeployRequest | None = Body(default=None),  # type: ignore[assignment]
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
+    job_registry: JobRegistry = Depends(_get_job_registry),
     _auth: None = Depends(verify_auth),
 ) -> DeployAcceptedResponse:
     """Queue a deploy for a service and return immediately with a job id.
@@ -388,7 +392,7 @@ async def deploy_service(
     # Schedule the deploy sequence as a background task.
     settings_store = getattr(request.app.state, "settings_store", None)
     lifecycle_config = await _get_config(request)
-    asyncio.create_task(
+    task = asyncio.create_task(
         _run_deploy_job(
             job_id=job_id,
             name=name,
@@ -406,6 +410,8 @@ async def deploy_service(
             gateway_base_domain=lifecycle_config.gateway_base_domain,
         )
     )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return DeployAcceptedResponse(job_id=job_id, name=name)
 
@@ -444,7 +450,7 @@ async def _run_deploy_job(
             # depend on knowing whether it exists.
             try:
                 live_dict = await backend.read_config_from_volume(config.config_volume)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 live_dict = {}
 
             # Seed only. The component owns its config; the deploy plane must
@@ -477,7 +483,7 @@ async def _run_deploy_job(
                             _sanitize_log(name),
                             _sanitize_log(config.config_volume),
                         )
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         logger.warning(
                             "deploy %s: could not seed config.json into volume %s: %s",
                             _sanitize_log(name),
@@ -700,7 +706,7 @@ async def _run_deploy_job(
 
 
 # ---------------------------------------------------------------------------
-# GET /services/deploy-jobs/{job_id}
+# Endpoint for GET /services/deploy-jobs/{job_id}
 # ---------------------------------------------------------------------------
 
 
@@ -715,7 +721,7 @@ async def _run_deploy_job(
 async def deploy_job_status(
     job_id: str,
     _: None = Depends(verify_auth),
-    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
+    job_registry: JobRegistry = Depends(_get_job_registry),
 ) -> DeployJobStatusResponse:
     """Return the current phase of a background deploy job."""
     job = job_registry.get(job_id)
@@ -738,7 +744,7 @@ async def deploy_job_status(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/rollback
+# Endpoint for POST /services/{name}/rollback
 # ---------------------------------------------------------------------------
 
 
@@ -833,11 +839,11 @@ async def _execute_rollback_staging(
 async def rollback_service(
     name: str,
     request: Request,
-    body: RollbackRequest | None = Body(default=None),  # type: ignore[assignment]  # noqa: B008
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
+    body: RollbackRequest | None = Body(default=None),  # type: ignore[assignment]
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
     _auth: None = Depends(verify_auth),
 ) -> RollbackResponse:
     """Roll back a service to a previously recorded image digest.
@@ -952,7 +958,9 @@ async def rollback_service(
         if not record.previous_image_digest:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"No prior image digest recorded for '{name}' — run a deploy first",
+                detail=(
+                    f"No prior image digest recorded for '{name}' — run a deploy first"
+                ),
             )
         rolled_back_to, state, warnings = await _execute_rollback_staging(
             name,
@@ -983,7 +991,7 @@ async def rollback_service(
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/history
+# Endpoint for GET /services/{name}/history
 # ---------------------------------------------------------------------------
 
 
@@ -995,8 +1003,8 @@ async def rollback_service(
 )
 async def get_service_history(
     name: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
     _auth: None = Depends(verify_auth),
 ) -> DeployHistoryResponse:
     """Return the deploy history for a service, most-recent-first.
