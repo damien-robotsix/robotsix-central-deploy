@@ -9562,6 +9562,17 @@
           "detail": {
             "title": "Detail",
             "default": ""
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
           }
         },
         "type": "object",

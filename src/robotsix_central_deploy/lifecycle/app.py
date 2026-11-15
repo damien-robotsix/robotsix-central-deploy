@@ -99,11 +99,6 @@ register_error_handlers(app)
 
 app.add_middleware(RateLimitMiddleware)
 
-# Assign/propagate a correlation id per request. Added after the rate
-# limiter so it wraps the stack outermost: the id is bound before any
-# other middleware runs, so every log record for the request is stamped.
-app.add_middleware(RequestIDMiddleware)
-
 if _HAS_CSRF:
     _initial_csrf_secret = get_csrf_secret("")
     app.add_middleware(
@@ -127,6 +122,13 @@ if _HAS_SECURE:
     # don't set) their own headers — no gateway-aware wrapper needed.
     secure_headers = Secure.from_preset(Preset.BALANCED)
     app.add_middleware(SecureASGIMiddleware, secure=secure_headers)
+
+# Assign/propagate a correlation id per request. Added last so it wraps the
+# stack outermost: the id is bound before any other middleware runs, so every
+# log record for the request is stamped. Being outermost also means it sees
+# the same ASGI scope as ServerErrorMiddleware (asgi-csrf copies the scope),
+# so the catch-all 500 handler can read the id from the scope state.
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(ui_router)
 app.include_router(health_router)

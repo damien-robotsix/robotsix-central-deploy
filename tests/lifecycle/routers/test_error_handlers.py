@@ -109,6 +109,41 @@ class TestUnhandledException:
         assert "RuntimeError" not in str(body)
         assert "traceback" not in str(body).lower()
 
+    async def _raise_500(self, auth_headers, monkeypatch, extra_headers=None):
+        from httpx import ASGITransport, AsyncClient
+
+        transport = ASGITransport(
+            app=server_mod.app,
+            raise_app_exceptions=False,  # type: ignore[arg-type]
+        )
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            store = server_mod.app.state.store
+
+            async def _boom():
+                raise RuntimeError("simulated database failure")
+
+            monkeypatch.setattr(store, "list_all", _boom)
+            return await client.get(
+                "/services", headers={**auth_headers, **(extra_headers or {})}
+            )
+
+    async def test_500_carries_generated_request_id(self, auth_headers, monkeypatch):
+        """A 500 exposes the request id in both the body and the header."""
+        resp = await self._raise_500(auth_headers, monkeypatch)
+        assert resp.status_code == 500, resp.text
+        body = resp.json()
+        assert body["request_id"], f"missing request_id in {body}"
+        assert resp.headers.get("X-Request-ID") == body["request_id"]
+
+    async def test_500_echoes_client_request_id(self, auth_headers, monkeypatch):
+        """A client-supplied X-Request-ID is echoed back on a 500."""
+        resp = await self._raise_500(
+            auth_headers, monkeypatch, {"X-Request-ID": "client-abc-123"}
+        )
+        assert resp.status_code == 500, resp.text
+        assert resp.json()["request_id"] == "client-abc-123"
+        assert resp.headers.get("X-Request-ID") == "client-abc-123"
+
 
 class TestHTTPExceptionEnvelope:
     """Existing HTTPException handler still produces ErrorDetail shape."""
