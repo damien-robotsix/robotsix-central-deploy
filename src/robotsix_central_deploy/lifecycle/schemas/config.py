@@ -10,11 +10,13 @@ from robotsix_central_deploy.registry import ConfigAssistSeed
 
 
 class ConfigResponse(BaseModel):
-    """Config schema, current values, and assist metadata from GET /services/{name}/config."""
+    """Config schema, current values, and assist metadata from GET /services/{name}/config."""  # noqa: E501
 
     config_schema: dict[str, Any] = Field(
         serialization_alias="schema",
-        description="JSON Schema describing the config.json structure for the component",
+        description=(
+            "JSON Schema describing the config.json structure for the component"
+        ),
     )
     current: dict[str, Any] = Field(
         description="Current config values read from the volume; secrets masked"
@@ -25,7 +27,9 @@ class ConfigResponse(BaseModel):
     )
     config_assist_command: str | None = Field(
         default=None,
-        description="One-shot container command for config auto-fill; None when unavailable",
+        description=(
+            "One-shot container command for config auto-fill; None when unavailable"
+        ),
     )
     config_assist_seeds: list[ConfigAssistSeed] = Field(
         default=[],

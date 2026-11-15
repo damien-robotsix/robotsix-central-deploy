@@ -61,7 +61,10 @@ def preserve_host_port_assignments(
 def find_free_host_port(
     occupied: set[int], start: int = 10000, end: int = 20000
 ) -> int:
-    """Lowest port in [start, end) not in occupied. Raises RuntimeError when exhausted."""
+    """Lowest port in [start, end) not in occupied.
+
+    Raises RuntimeError when exhausted.
+    """
     for port in range(start, end):
         if port not in occupied:
             return port

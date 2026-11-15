@@ -1,8 +1,10 @@
 """Claude auth endpoints — credential management for the ``claude-auth`` volume.
 
 ``GET  /claude-auth/status``           — check whether valid credentials exist.
-``POST /claude-auth/login``            — start a PKCE OAuth login; returns the authorize URL.
-``POST /claude-auth/login/complete``   — exchange the pasted authorization code for tokens.
+``POST /claude-auth/login``            — start a PKCE OAuth login; returns the authorize
+    URL.
+``POST /claude-auth/login/complete``   — exchange the pasted authorization code for
+    tokens.
 ``POST /claude-auth/login/cancel``     — discard an in-progress login session.
 ``POST /claude-auth/credentials``      — paste credentials JSON directly.
 
@@ -18,6 +20,7 @@ Anthropic's own callback page.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import logging
@@ -49,8 +52,10 @@ router = APIRouter(tags=["claude-auth"])
 # OAuth parameters mirroring what `claude setup-token` (Claude Code CLI)
 # uses for its device authorization flow.
 OAUTH_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize"
-OAUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL, not a password
-OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # gitleaks:allow — public OAuth client id, not a secret
+# OAUTH_TOKEN_URL is a URL, not a password; OAUTH_CLIENT_ID is a public OAuth
+# client id, not a secret.
+OAUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105
+OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"  # gitleaks:allow
 OAUTH_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
 
 # Scope set requested at authorize time.
@@ -100,7 +105,7 @@ def _prune_login_sessions() -> None:
 
 @router.get("/claude-auth/status", response_model=ClaudeAuthStatusResponse)
 async def get_claude_auth_status(
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ClaudeAuthStatusResponse:
     """Return the current Claude authentication status."""
@@ -109,7 +114,9 @@ async def get_claude_auth_status(
     except NotImplementedError:
         raise HTTPException(
             status_code=501,
-            detail="Claude auth not supported by this backend. Use the Docker SDK backend.",
+            detail=(
+                "Claude auth not supported by this backend. Use the Docker SDK backend."
+            ),
         )
     # Enrich with background-refresh state.
     refresh_state = get_claude_auth_refresh_state()
@@ -200,14 +207,12 @@ async def _exchange_code(auth_code: str, state: str, verifier: str) -> dict[str,
             detail: str = (
                 exc.response.text[:500] if exc.response is not None else str(exc)
             )
-            try:
+            with contextlib.suppress(Exception):
                 detail = (
                     exc.response.json().get("error", {}).get("message", detail)
                     if exc.response is not None
                     else detail
                 )
-            except Exception:  # noqa: BLE001, S110
-                pass
             raise HTTPException(
                 status_code=400,
                 detail=f"Token exchange failed ({exc.status_code}): {detail}",
@@ -219,7 +224,7 @@ async def _exchange_code(auth_code: str, state: str, verifier: str) -> dict[str,
 @router.post("/claude-auth/login/complete", response_model=ClaudeAuthCompleteResponse)
 async def complete_claude_login(
     body: ClaudeAuthCompleteRequest,
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ClaudeAuthCompleteResponse:
     """Exchange the pasted authorization code for tokens and persist them.
@@ -278,7 +283,9 @@ async def complete_claude_login(
     except NotImplementedError:
         raise HTTPException(
             status_code=501,
-            detail="Claude auth not supported by this backend. Use the Docker SDK backend.",
+            detail=(
+                "Claude auth not supported by this backend. Use the Docker SDK backend."
+            ),
         )
     if result.get("status") != "authenticated":
         return ClaudeAuthCompleteResponse(
@@ -330,7 +337,7 @@ async def cancel_claude_login(
 @router.post("/claude-auth/credentials", response_model=ClaudeAuthCredentialsResponse)
 async def write_claude_credentials(
     body: ClaudeAuthCredentialsRequest,
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ClaudeAuthCredentialsResponse:
     """Write credentials JSON directly into the ``claude-auth`` volume.
@@ -345,7 +352,9 @@ async def write_claude_credentials(
     except NotImplementedError:
         raise HTTPException(
             status_code=501,
-            detail="Claude auth not supported by this backend. Use the Docker SDK backend.",
+            detail=(
+                "Claude auth not supported by this backend. Use the Docker SDK backend."
+            ),
         )
 
     return ClaudeAuthCredentialsResponse(**result)

@@ -1,4 +1,7 @@
-"""Pydantic models for the registry layer: ComponentConfig, PortMapping, VolumeMount, etc."""
+"""Pydantic models for the registry layer.
+
+Includes ComponentConfig, PortMapping, VolumeMount, etc.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +45,7 @@ class HealthCheck(BaseModel):
 
 
 class ServiceConfig(BaseModel):
-    """Persisted config for one non-primary (sibling) service in a multi-service component."""
+    """Persisted config for one non-primary (sibling) service in a multi-service component."""  # noqa: E501
 
     service_key: str = Field(
         description="Short key identifying this sibling service within the component"
@@ -84,7 +87,9 @@ class ServiceConfig(BaseModel):
     )
     tmpfs: list[str] = Field(
         default_factory=list,
-        description="Paths to mount as tmpfs in this sibling's container (e.g. ['/run'])",
+        description=(
+            "Paths to mount as tmpfs in this sibling's container (e.g. ['/run'])"
+        ),
     )
     mem_limit: str = Field(
         "2g", description="Memory limit for this sibling's container (e.g. '2g')"
@@ -162,7 +167,9 @@ class ComponentConfig(BaseModel):
     )
     siblings: list[ServiceConfig] = Field(
         default_factory=list,
-        description="Additional sibling services; empty list for single-service components",
+        description=(
+            "Additional sibling services; empty list for single-service components"
+        ),
     )
     command: list[str] | None = Field(
         default=None,
@@ -170,7 +177,9 @@ class ComponentConfig(BaseModel):
     )
     entrypoint: list[str] | None = Field(
         default=None,
-        description="Override the image's default ENTRYPOINT (from compose 'entrypoint:')",
+        description=(
+            "Override the image's default ENTRYPOINT (from compose 'entrypoint:')"
+        ),
     )
     tmpfs: list[str] = Field(
         default_factory=list, description="Paths to mount as tmpfs (e.g. ['/run'])"
@@ -180,7 +189,10 @@ class ComponentConfig(BaseModel):
     )
     config_volume: str | None = Field(
         default=None,
-        description="Named volume holding config.json, resolved from the robotsix.deploy.config-target label",
+        description=(
+            "Named volume holding config.json, resolved from the "
+            "robotsix.deploy.config-target label"
+        ),
     )
     config_assist_command: str | None = Field(
         default=None,
@@ -224,15 +236,23 @@ class ComponentConfig(BaseModel):
     )
     chat_agent_mutatable: bool = Field(
         False,
-        description="If true, the chat agent may restart, deploy, or update config for this component",
+        description=(
+            "If true, the chat agent may restart, deploy, or update config for this "
+            "component"
+        ),
     )
     is_virtual: bool = Field(
         False,
-        description="If true, non-Docker component; never gets a ServiceRecord or dashboard row",
+        description=(
+            "If true, non-Docker component; never gets a ServiceRecord or dashboard row"
+        ),
     )
     chat_base_url: str | None = Field(
         default=None,
-        description="Base URL override for virtual (non-Docker) components; None derives from container:port",
+        description=(
+            "Base URL override for virtual (non-Docker) components; None derives from "
+            "container:port"
+        ),
     )
     chat_skill_endpoint: str = Field(
         "/chat-skill",

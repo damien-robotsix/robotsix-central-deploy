@@ -138,11 +138,11 @@ _RESPONSE_SNIPPET_MAX: int = 500
 async def chat_test_deploy(
     body: ChatAgentTestDeployRequest,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentTestDeployResponse:
     """Test-deploy a component and validate by probing *website*.
@@ -217,7 +217,7 @@ async def chat_test_deploy(
     deploy_image = comp_cfg.image
     try:
         outcome = await backend.deploy(record, comp_cfg, deploy_image)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("test-deploy %s: deploy failed", _sanitize_log(body.stub_name))
         await audit_store.append(
             ChatAgentAuditEntry(
@@ -263,14 +263,14 @@ async def chat_test_deploy(
         probe_error = f"Probe timed out after 10s: {probe_url}"
     except httpx.ConnectError as exc:
         probe_error = f"Probe connection failed: {exc}"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         probe_error = f"Probe error: {exc}"
 
     # --- Capture container logs ---
     container_logs: str = ""
     try:
         container_logs = await backend.get_container_logs(record, tail=200)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning(
             "test-deploy %s: failed to capture container logs",
             _sanitize_log(body.stub_name),
@@ -313,7 +313,7 @@ async def chat_test_deploy(
                 record.state = ServiceState.STOPPED
                 await store.put(record)
                 rollback_detail = " Container stopped (no previous digest to restore)."
-        except Exception as rb_exc:  # noqa: BLE001
+        except Exception as rb_exc:
             logger.exception(
                 "test-deploy %s: rollback failed",
                 _sanitize_log(body.stub_name),

@@ -486,18 +486,18 @@ class TestDeployEndpoint:
         """Deploying the mill while it runs heavy stages is refused: the
         2026-09-03 chat-driven deploy aborted 3 in-flight implement runs."""
         await self._seed("mill")
-        self._arm_mill_guard(monkeypatch, "3 heavy stage(s) in flight: implement×3")
+        self._arm_mill_guard(monkeypatch, "3 heavy stage(s) in flight: implement×3")  # noqa: RUF001
         resp = await client.post("/services/mill/deploy", headers=auth_headers)
         assert resp.status_code == 409
         data = resp.json()
-        assert "implement×3" in data["error"]
+        assert "implement×3" in data["error"]  # noqa: RUF001
         assert "force" in data["error"]
 
     async def test_deploy_mill_busy_force_returns_202(
         self, client: AsyncClient, auth_headers: dict, registry, monkeypatch
     ):
         await self._seed("mill")
-        self._arm_mill_guard(monkeypatch, "1 heavy stage(s) in flight: implement×1")
+        self._arm_mill_guard(monkeypatch, "1 heavy stage(s) in flight: implement×1")  # noqa: RUF001
         resp = await client.post(
             "/services/mill/deploy",
             json={"force": True},
@@ -603,7 +603,7 @@ class TestDeployDriftGuard:
         # -- config YAML store setup --
         cys = server_mod.app.state.config_yaml_store
 
-        # Template (schema + defaults)
+        # Template, holding schema and defaults
         template: dict[str, Any] = {
             "type": "object",
             "properties": {
@@ -956,7 +956,9 @@ class TestDockerSdkBackendDeploy:
         }
 
     async def test_deploy_precreates_volume_already_exists(self, backend):
-        """volumes.create raises APIError 409 (Conflict) — handled gracefully, deploy continues."""
+        """volumes.create raises APIError 409 (Conflict) — handled gracefully, deploy
+        continues.
+        """
         import docker as docker_mod
 
         b, client = backend
@@ -967,7 +969,8 @@ class TestDockerSdkBackendDeploy:
         pulled_image.id = "sha256:new123"
         client.images.pull.return_value = pulled_image
 
-        # First call: no existing container; second call: healthy container for health poll
+        # First call: no existing container; second call: healthy container for
+        # health poll
         client.containers.get.side_effect = [
             docker_mod.errors.NotFound("nope"),
             self._make_container(health_status="healthy"),

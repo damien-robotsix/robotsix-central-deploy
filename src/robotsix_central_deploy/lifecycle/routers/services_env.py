@@ -36,7 +36,7 @@ router = APIRouter(tags=["services"])
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/env
+# Endpoint for GET /services/{name}/env
 # ---------------------------------------------------------------------------
 
 
@@ -48,10 +48,10 @@ router = APIRouter(tags=["services"])
 )
 async def get_service_env(
     name: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    settings_store: SystemSettingsStore = Depends(_get_settings_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),
     _auth: None = Depends(verify_auth),
 ) -> EnvResponse:
     """Return stored environment variables and masked secret keys for a service.
@@ -61,7 +61,7 @@ async def get_service_env(
     """
     await _get_or_create_record(name, store)
     config = await env_store.get(name)
-    secrets_masked: dict[str, str] = {key: "***" for key in config.secret_tokens}
+    secrets_masked: dict[str, str] = dict.fromkeys(config.secret_tokens, "***")
 
     # For central-deploy, surface the fleet-wide ghcr_pull_token as a
     # masked secret so the operator can set/rotate it from the dashboard.
@@ -92,7 +92,7 @@ async def get_service_env(
 
 
 # ---------------------------------------------------------------------------
-# PUT /services/{name}/env
+# Endpoint for PUT /services/{name}/env
 # ---------------------------------------------------------------------------
 
 
@@ -106,13 +106,13 @@ async def put_service_env(
     name: str,
     body: EnvUpdate,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    settings_store: SystemSettingsStore = Depends(_get_settings_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    registry: ComponentRegistry = Depends(_get_registry),
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Create or update environment variables and secrets for a service.
@@ -178,7 +178,7 @@ async def put_service_env(
 
 
 # ---------------------------------------------------------------------------
-# POST /services/{name}/env/sync-keys
+# Endpoint for POST /services/{name}/env/sync-keys
 # ---------------------------------------------------------------------------
 
 
@@ -197,8 +197,8 @@ async def put_service_env(
 )
 async def sync_env_keys(
     name: str,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    env_store: EnvStore = Depends(_get_env_store),
     _auth: None = Depends(verify_auth),
 ) -> EnvSyncResponse:
     """Re-read the repo's compose env contract and seed newly declared keys.
@@ -245,7 +245,7 @@ async def sync_env_keys(
 
 
 # ---------------------------------------------------------------------------
-# DELETE /services/{name}/env/{key}
+# Endpoint for DELETE /services/{name}/env/{key}
 # ---------------------------------------------------------------------------
 
 
@@ -260,10 +260,10 @@ async def sync_env_keys(
 async def delete_service_env_key(
     name: str,
     key: str,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
-    settings_store: SystemSettingsStore = Depends(_get_settings_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    settings_store: SystemSettingsStore = Depends(_get_settings_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> None:
     """Delete a single environment-variable or secret key for a service.

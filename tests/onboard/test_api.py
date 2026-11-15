@@ -268,7 +268,7 @@ class TestOnboardPreflight:
         client: AsyncClient,
         auth_headers: dict,
     ):
-        """Preflight detects that namespaced volumes would collide with an existing component."""
+        """Preflight detects namespaced volumes colliding with an existing component."""
         # Seed an existing component with namespaced volumes.
         from robotsix_central_deploy.registry.models import (
             ComponentConfig,
@@ -643,7 +643,7 @@ class TestOnboardConfirm:
         client: AsyncClient,
         auth_headers: dict,
     ):
-        """The created ServiceRecord should use container_name from DerivedSpec when set."""
+        """The created ServiceRecord uses container_name from DerivedSpec when set."""
         spec = _make_derived_spec("broker")
         spec.container_name = "agent-comm"
 
@@ -938,7 +938,7 @@ class TestOnboardConfirm:
 
 
 # ---------------------------------------------------------------------------
-# GET /onboard/jobs/{job_id}
+# GET /onboard/jobs/<job_id>
 # ---------------------------------------------------------------------------
 
 
@@ -1185,7 +1185,7 @@ class TestMultiServiceOnboardConfirm:
         client: AsyncClient,
         auth_headers: dict,
     ):
-        """POST /onboard/preflight mocked to return 2-service parse includes siblings."""
+        """POST /onboard/preflight with a mocked 2-service parse includes siblings."""
         spec = _make_multi_service_derived_spec("auto-mail")
 
         with (
@@ -1257,7 +1257,7 @@ class TestMultiServiceOnboardConfirm:
         assert sib_record.state == ServiceState.RUNNING
 
         # The persisted ComponentConfig should have the sibling with
-        # disable: true
+        # the disable flag set to true.
         all_configs = config_store.all()
         assert len(all_configs) == 1
         cfg = all_configs[0]
@@ -1316,7 +1316,10 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_config_schema_null_when_absent(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Preflight returns 422 when no config schema is present (hard precondition)."""
+        """Preflight returns 422 when no config schema is present.
+
+        A config schema is a hard precondition.
+        """
         spec = _make_derived_spec("cool-app")
 
         with (
@@ -1381,7 +1384,10 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_gate_missing_config_target_label(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Preflight returns 422 when config schema is present but no robotsix.deploy.config-target label."""
+        """Preflight returns 422 when config schema is present but no config-target.
+
+        The missing label is ``robotsix.deploy.config-target``.
+        """
         spec = _make_derived_spec("cool-app")
         spec.config_volume = None  # simulates missing config-target label
         schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
@@ -1417,7 +1423,7 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_gate_config_target_without_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Preflight returns 422 when config-target label is set but no config schema is found."""
+        """Preflight returns 422 when config-target is set but no schema is found."""
         spec = _make_derived_spec("cool-app")
         spec.config_volume = "cool-app-config"
         # config_schema will be None because config_schema_json is None
@@ -1454,7 +1460,7 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_gate_both_missing(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """Preflight returns 422 when both config schema and config-target are missing."""
+        """Preflight returns 422 when config schema and config-target are absent."""
         spec = _make_derived_spec("cool-app")
         spec.config_volume = None  # explicit — no config-target
         # config_schema will be None because config_schema_json is None
@@ -1492,7 +1498,10 @@ class TestOnboardPreflightWithConfig:
     async def test_preflight_yaml_only_no_schema_gives_no_config_schema(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """When only config.json exists (no schema JSON), preflight returns 422 (hard precondition)."""
+        """When only config.json exists (no schema JSON), preflight returns 422.
+
+        A config schema is a hard precondition.
+        """
         spec = _make_derived_spec("cool-app")
         config_json_bytes = b'{"host": "localhost"}'
 
@@ -1579,7 +1588,8 @@ class TestOnboardConfirmWithConfig:
         template = await store.get_template("cfg-svc")
         assert template == spec.config_schema
 
-        # Volume written via backend — uses the real config volume (now namespaced), not synthetic
+        # Volume written via backend — uses the real config volume (now
+        # namespaced), not synthetic
         assert len(captured) == 1
         assert captured[0][0] == "cfg-svc-cfg-svc-data"
         assert captured[0][1] == {"host": "", "password": ""}
@@ -1919,7 +1929,7 @@ class TestOnboardConfigSchemaValidation:
     async def test_preflight_returns_json_schema_in_spec(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """config_schema_json present → spec.config_schema equals the parsed schema dict."""
+        """config_schema_json present → spec.config_schema equals the parsed schema."""
         spec = _make_derived_spec("cool-app")
         spec.config_volume = "cool-app-config"
         schema_json_bytes = json.dumps(SAMPLE_SCHEMA).encode()
@@ -2276,7 +2286,7 @@ class TestOnboardMillIntegration:
     async def test_confirm_sets_repo_id_when_register_true(
         self, client: AsyncClient, auth_headers: dict, tmp_path
     ):
-        """When caretaker is enabled and register_with_mill=True, repo_id is set from git_url."""
+        """Caretaker enabled and register_with_mill=True → repo_id set from git_url."""
         ss = SystemSettingsStore(tmp_path / "settings2.json")
         await ss.put(SystemSettings(caretaker_enabled=True))
         server_mod.app.state.settings_store = ss

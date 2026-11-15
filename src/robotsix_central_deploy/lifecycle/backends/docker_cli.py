@@ -58,7 +58,8 @@ class DockerBackend(ExecutionBackend):
     """Executes lifecycle actions via the local Docker daemon (``docker`` CLI)."""
 
     async def start(self, service: ServiceRecord) -> ServiceState:
-        """Start the container for *service* via ``docker start``, falling back to ``docker run``."""
+        """Start the container for *service* via ``docker start``, falling
+        back to ``docker run``."""
         if not service.image:
             logger.warning(
                 "Service %r has no image — cannot start via Docker", service.name
@@ -109,7 +110,8 @@ class DockerBackend(ExecutionBackend):
         )
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
-        """Restart the container for *service* via ``docker restart``, falling back to stop+start."""
+        """Restart the container for *service* via ``docker restart``, falling
+        back to stop+start."""
         if not service.image:
             # Restart requires we can recreate; treat like stop+start.
             stop_state = await self.stop(service)
@@ -174,7 +176,8 @@ class DockerBackend(ExecutionBackend):
         return combined
 
     async def disk_df(self) -> DockerDfStats:
-        """Return zeroed DockerDfStats (CLI backend does not support ``docker system df``)."""
+        """Return zeroed DockerDfStats (CLI backend does not support
+        ``docker system df``)."""
         # CLI backend does not support df — returns zeroes.
         return DockerDfStats()
 
@@ -195,7 +198,8 @@ class DockerBackend(ExecutionBackend):
     ) -> None:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
-            "write_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
+            "write_config_to_volume not supported for DockerBackend "
+            "— use DockerSdkBackend"
         )
 
     async def write_llmio_tier_config_to_volume(
@@ -203,13 +207,15 @@ class DockerBackend(ExecutionBackend):
     ) -> None:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
-            "write_llmio_tier_config_to_volume not supported for DockerBackend — use DockerSdkBackend"
+            "write_llmio_tier_config_to_volume not supported for DockerBackend "
+            "— use DockerSdkBackend"
         )
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
-            "read_config_from_volume not supported for DockerBackend — use DockerSdkBackend"
+            "read_config_from_volume not supported for DockerBackend "
+            "— use DockerSdkBackend"
         )
 
     async def run_config_assist(
@@ -295,7 +301,8 @@ class DockerBackend(ExecutionBackend):
     async def trigger_self_restart(self, target: SelfInspect) -> str:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
-            "trigger_self_restart not supported for DockerBackend — use DockerSdkBackend"
+            "trigger_self_restart not supported for DockerBackend "
+            "— use DockerSdkBackend"
         )
 
     # -- claude-auth stubs --------------------------------------------------
@@ -311,13 +318,15 @@ class DockerBackend(ExecutionBackend):
     ) -> dict[str, Any]:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
-            "write_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
+            "write_claude_credentials not supported for DockerBackend "
+            "— use DockerSdkBackend"
         )
 
     async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
         """Not supported — raises NotImplementedError."""
         raise NotImplementedError(
-            "read_claude_credentials not supported for DockerBackend — use DockerSdkBackend"
+            "read_claude_credentials not supported for DockerBackend "
+            "— use DockerSdkBackend"
         )
 
     async def _inspect_state(self, container_name: str) -> ServiceState | None:

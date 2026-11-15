@@ -100,7 +100,10 @@ def test_health_probe_is_auth_exempt() -> None:
 def test_router_priority_order() -> None:
     """Health (30) > bearer (20) > browser (10)."""
     labels = _labels()
-    priority = lambda r: int(labels[f"traefik.http.routers.{r}.priority"])
+
+    def priority(r: str) -> int:
+        return int(labels[f"traefik.http.routers.{r}.priority"])
+
     assert priority("board-health") > priority("board-bearer") > priority("board")
 
 

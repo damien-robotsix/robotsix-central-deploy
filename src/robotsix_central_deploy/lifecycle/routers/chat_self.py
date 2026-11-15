@@ -48,9 +48,9 @@ router = APIRouter(tags=["chat"])
 )
 async def chat_self_restart(
     request: Request,
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentSelfRestartResponse:
     """Restart the central-deploy container itself.
@@ -71,7 +71,10 @@ async def chat_self_restart(
     if self_info is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="self-restart requires the docker_sdk backend running inside a container",
+            detail=(
+                "self-restart requires the docker_sdk backend running inside a "
+                "container"
+            ),
         )
 
     try:
@@ -110,10 +113,10 @@ async def chat_self_restart(
 )
 async def chat_self_update(
     request: Request,
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
+    config: LifecycleConfig = Depends(_get_config),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentSelfUpdateResponse:
     """Pull the latest image and recreate the central-deploy container itself.
@@ -136,7 +139,9 @@ async def chat_self_update(
     if self_info is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="self-update requires the docker_sdk backend running inside a container",
+            detail=(
+                "self-update requires the docker_sdk backend running inside a container"
+            ),
         )
 
     try:

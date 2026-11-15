@@ -32,7 +32,7 @@ def _cfg(
     host_ports: tuple[int, ...] = (),
     sibling_host_ports: dict[str, tuple[int, ...]] | None = None,
 ) -> ComponentConfig:
-    """Minimal ComponentConfig with host ports spread across primary + optional siblings."""
+    """Minimal ComponentConfig with host ports across primary + optional siblings."""
     cfg = ComponentConfig(
         id=id,
         image="img:latest",

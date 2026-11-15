@@ -799,7 +799,9 @@ class TestReconcileAutoLangfuseProjects:
 
     @pytest.mark.asyncio
     async def test_multiple_projects_per_component(self):
-        """A single component declaring several Langfuse projects exposes all of them."""
+        """A single component declaring several Langfuse projects exposes all of
+        them.
+        """
         comp_store = MagicMock()
         comp_store.all.return_value = [
             _make_config("chat", allow_chat_access=True),

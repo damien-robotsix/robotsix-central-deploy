@@ -54,6 +54,10 @@ from ..store import ServiceStore
 
 logger = logging.getLogger(__name__)
 
+# Strong references to fire-and-forget background tasks so they are not
+# garbage-collected before completion.
+_background_tasks: set[asyncio.Task[None]] = set()
+
 router = APIRouter(tags=["onboard"])
 
 
@@ -116,7 +120,7 @@ async def _deploy_onboard_siblings(
             sib_record.deployed_image_digest = sib_outcome.deployed_digest
             sib_record.previous_image_digest = sib_outcome.previous_digest
             await store.put(sib_record)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             msg = f"deploy onboard sibling '{sib_name}' failed: {exc}"
             logger.warning(msg)
             failures.append(msg)
@@ -139,7 +143,10 @@ async def _rollback_onboard(
     sibling_records: list[ServiceRecord] | None = None,
     named_volumes: list[str] | None = None,
 ) -> None:
-    """Best-effort rollback: remove containers, volumes, config, records, and registry entries."""
+    """Best-effort rollback.
+
+    Removes containers, volumes, config, records, and registry entries.
+    """
     # Remove all deployed containers — primary first, then siblings.
     for rec in [primary_record] + (sibling_records or []):
         try:
@@ -173,7 +180,7 @@ async def _rollback_onboard(
 
 
 # ---------------------------------------------------------------------------
-# POST /onboard/preflight
+# Endpoint for POST /onboard/preflight
 # ---------------------------------------------------------------------------
 
 
@@ -181,9 +188,9 @@ async def _rollback_onboard(
 async def onboard_preflight(
     req: OnboardPreflightRequest,
     _: None = Depends(verify_auth),
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
 ) -> OnboardPreflightResponse:
     """Fetch and parse a service repo's docker-compose.yml, returning a DerivedSpec.
 
@@ -289,7 +296,10 @@ async def onboard_preflight(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
-                    "error": "onboarding would create volume name collision(s) with existing component(s)",
+                    "error": (
+                        "onboarding would create volume name collision(s) with "
+                        "existing component(s)"
+                    ),
                     "collisions": collisions,
                 },
             )
@@ -369,7 +379,7 @@ async def _capture_logs_and_fail_onboard(
     record_for_logs: ServiceRecord | None = None,
     sibling_records: list[ServiceRecord] | None = None,
 ) -> None:
-    """Capture logs, write deploy-history, rollback, and mark the onboard job as failed."""
+    """Capture logs, write deploy-history, rollback, and mark the onboard job failed."""
     captured_logs: str | None = None
     if record_for_logs is not None:
         try:
@@ -478,7 +488,8 @@ async def _run_onboard_deploy_job(
             for shift in port_shifts:
                 if shift.collision_component_id:
                     port_shift_warnings.append(
-                        f"Port {shift.original_host} \u2192 {shift.assigned_host}: collided with "
+                        f"Port {shift.original_host} \u2192 {shift.assigned_host}: "
+                        "collided with "
                         f"'{shift.collision_component_id}' \u2014 update its "
                         f"deploy/docker-compose.yml to use a unique default host port."
                     )
@@ -564,7 +575,7 @@ async def _run_onboard_deploy_job(
 
 
 # ---------------------------------------------------------------------------
-# POST /onboard/confirm
+# Endpoint for POST /onboard/confirm
 # ---------------------------------------------------------------------------
 
 
@@ -577,15 +588,15 @@ async def onboard_confirm(
     req: OnboardConfirmRequest,
     request: Request,
     _: None = Depends(verify_auth),
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
-    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
-    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),  # noqa: B008
-    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    registry: ComponentRegistry = Depends(_get_registry),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    env_store: EnvStore = Depends(_get_env_store),
+    job_registry: JobRegistry = Depends(_get_job_registry),
+    deploy_history_store: DeployHistoryStore = Depends(_get_deploy_history_store),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
 ) -> OnboardConfirmAcceptedResponse:
     """Persist a reviewed DerivedSpec, then schedule the deploy as a background job.
 
@@ -733,7 +744,7 @@ async def onboard_confirm(
                 await backend.write_llmio_tier_config_to_volume(
                     config.config_volume, settings.llmio_tier_config
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "onboard %s: could not write llmio tier config to volume %s: %s",
                 config.id,
@@ -751,7 +762,7 @@ async def onboard_confirm(
     await store.put(record)
 
     # Schedule the deploy sequence as a background task.
-    asyncio.create_task(
+    task = asyncio.create_task(
         _run_onboard_deploy_job(
             job_id=job_id,
             spec_name=spec.name,
@@ -775,12 +786,14 @@ async def onboard_confirm(
             port_shifts=req.port_shifts,
         )
     )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return OnboardConfirmAcceptedResponse(job_id=job_id, name=spec.name)
 
 
 # ---------------------------------------------------------------------------
-# GET /onboard/jobs/{job_id}
+# Endpoint for GET /onboard/jobs/{job_id}
 # ---------------------------------------------------------------------------
 
 
@@ -788,7 +801,7 @@ async def onboard_confirm(
 async def onboard_job_status(
     job_id: str,
     _: None = Depends(verify_auth),
-    job_registry: JobRegistry = Depends(_get_job_registry),  # noqa: B008
+    job_registry: JobRegistry = Depends(_get_job_registry),
 ) -> OnboardJobStatusResponse:
     """Return the current phase of an onboard background deploy job."""
     job = job_registry.get(job_id)

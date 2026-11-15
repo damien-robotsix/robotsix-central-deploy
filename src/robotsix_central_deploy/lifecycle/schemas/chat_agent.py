@@ -80,7 +80,10 @@ class ChatAgentDeployRequest(BaseModel):
         pattern=r"^[a-z0-9][a-z0-9-]*$",
     )
     repo: str = Field(
-        description="Git clone URL of the repository whose deploy/docker-compose.yml defines the component",
+        description=(
+            "Git clone URL of the repository whose deploy/docker-compose.yml defines "
+            "the component"
+        ),
     )
 
 
@@ -140,7 +143,10 @@ class ChatAgentRegisterResponse(BaseModel):
     detail: str = Field(default="", description="Human-readable summary")
     existed: bool = Field(
         default=False,
-        description="True when the component was already registered (idempotent re-registration)",
+        description=(
+            "True when the component was already registered "
+            "(idempotent re-registration)"
+        ),
     )
 
 
@@ -153,7 +159,9 @@ class ChatAgentSelfUpdateResponse(BaseModel):
         description="Container id of the one-shot updater that performs the update"
     )
     detail: str = Field(
-        default="Self-update triggered; the server will restart with the new image shortly.",
+        default=(
+            "Self-update triggered; the server will restart with the new image shortly."
+        ),
         description="Human-readable summary",
     )
 
@@ -330,11 +338,17 @@ class ChatAgentTestDeployRequest(BaseModel):
         pattern=r"^[a-z0-9][a-z0-9-]*$",
     )
     website: str = Field(
-        description="Probe URL (e.g. http://localhost:8080/health) to validate the deployed container",
+        description=(
+            "Probe URL (e.g. http://localhost:8080/health) to validate the deployed "
+            "container"
+        ),
     )
     repo: str | None = Field(
         default=None,
-        description="Optional Git clone URL of the repository; used to resolve the deploy contract when no persisted ComponentConfig exists",
+        description=(
+            "Optional Git clone URL of the repository; used to resolve the deploy "
+            "contract when no persisted ComponentConfig exists"
+        ),
     )
 
 
@@ -345,15 +359,21 @@ class ChatAgentTestDeployResponse(BaseModel):
     pass_fail: Literal["pass", "fail"] = Field(description="'pass' or 'fail'")
     http_status: int | None = Field(
         default=None,
-        description="HTTP status code returned by the probe; None when the connection failed",
+        description=(
+            "HTTP status code returned by the probe; None when the connection failed"
+        ),
     )
     response_snippet: str | None = Field(
         default=None,
-        description="First 500 characters of the probe response body; None when unavailable",
+        description=(
+            "First 500 characters of the probe response body; None when unavailable"
+        ),
     )
     container_logs: str = Field(
         default="",
-        description="Last 200 lines of container stdout/stderr captured after the probe",
+        description=(
+            "Last 200 lines of container stdout/stderr captured after the probe"
+        ),
     )
     deployed_digest: str = Field(
         default="",
@@ -417,7 +437,9 @@ class ChatAgentDiskReclaimResponse(BaseModel):
     )
     images_skipped_in_use: int = Field(
         default=0,
-        description="Dangling images skipped because a container still references them.",
+        description=(
+            "Dangling images skipped because a container still references them."
+        ),
     )
     images_skipped_intermediate: int = Field(
         default=0,

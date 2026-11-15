@@ -382,7 +382,9 @@ class TestDockerSdkBackendPruneImages:
         ]
 
     async def test_prune_tracks_intermediate_images(self, backend):
-        """Images that are intermediate parent layers are tracked as skipped_intermediate."""
+        """Images that are intermediate parent layers are tracked as
+        skipped_intermediate.
+        """
         b, client, docker_mock = backend
         client.images.list.return_value = [
             _make_image("sha256:intermediate", 400),
@@ -998,7 +1000,7 @@ class TestDockerSdkBackendVolumeBrowser:
         await b.list_volume_dir("test-vol", "subdir/logs")
         call_args = client.containers.run.call_args
         command = call_args[1]["command"]
-        # command = ["sh", "-c", script, "sh", rel_path]
+        # Expected shape: ["sh", "-c", script, "sh", rel_path]
         # $0="sh", $1="subdir/logs"
         assert command[4] == "subdir/logs"
 

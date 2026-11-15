@@ -53,7 +53,9 @@ class TestCSRFHelper:
 
     @pytest.mark.skipif(not _HAS_ITSDANGEROUS, reason="itsdangerous not installed")
     def test_generate_returns_url_safe_token(self):
-        """generate() returns a signed, URL-safe token when itsdangerous is available."""
+        """generate() returns a signed, URL-safe token when itsdangerous is
+        available.
+        """
         helper = CSRFHelper("test-secret")
         token = helper.generate()
         assert isinstance(token, str)

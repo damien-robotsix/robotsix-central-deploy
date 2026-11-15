@@ -252,19 +252,24 @@ class TestSeedForDetect:
 # Bug 1 — _merge_config preserves both accounts
 # ---------------------------------------------------------------------------
 
-# test_merge_preserves_both_accounts_two_account_config removed — old sentinel-based templates no longer supported
+# test_merge_preserves_both_accounts_two_account_config removed —
+# old sentinel-based templates no longer supported
 
-# test_merge_editing_account0_does_not_touch_account1 removed — old sentinel-based templates no longer supported
+# test_merge_editing_account0_does_not_touch_account1 removed —
+# old sentinel-based templates no longer supported
 
 # ---------------------------------------------------------------------------
 # Bug 3 — _merge_config no "***" literals
 # ---------------------------------------------------------------------------
 
-# test_merge_no_sentinel_literal_when_existing_dict_absent removed — old sentinel-based templates no longer supported
+# test_merge_no_sentinel_literal_when_existing_dict_absent removed —
+# old sentinel-based templates no longer supported
 
-# test_merge_unsubmitted_secret_leaf_never_persists_sentinel removed — old sentinel-based templates no longer supported
+# test_merge_unsubmitted_secret_leaf_never_persists_sentinel removed —
+# old sentinel-based templates no longer supported
 
-# test_merge_dict_branch_recurses_with_empty_existing removed — old sentinel-based templates no longer supported
+# test_merge_dict_branch_recurses_with_empty_existing removed —
+# old sentinel-based templates no longer supported
 
 # ---------------------------------------------------------------------------
 # Bug 2 — _validate_account_ids

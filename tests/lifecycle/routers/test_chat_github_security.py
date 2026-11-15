@@ -45,7 +45,7 @@ class _FakeRepo:
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/github/repos/{owner}/{repo}/vulnerability-alerts
+# Tests for PUT /chat/github/repos/{owner}/{repo}/vulnerability-alerts
 # ---------------------------------------------------------------------------
 
 
@@ -155,7 +155,7 @@ class TestEnableVulnerabilityAlerts:
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/github/repos/{owner}/{repo}/security-features
+# Tests for PUT /chat/github/repos/{owner}/{repo}/security-features
 # ---------------------------------------------------------------------------
 
 

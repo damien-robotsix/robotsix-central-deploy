@@ -25,7 +25,9 @@ class VirtualComponentEntry(BaseModel):
     id: str = Field(
         ...,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
-        description="Stable slug of the virtual component (lowercase, digits, hyphens).",
+        description=(
+            "Stable slug of the virtual component (lowercase, digits, hyphens)."
+        ),
     )
     chat_base_url: str = Field(
         "",
@@ -172,7 +174,9 @@ class LifecycleConfig(BaseModel):
     )
     disk_warn_pct: float = Field(
         SETTINGS_DEFAULTS["disk_warn_pct"],
-        description="Warn on the dashboard when free disk space drops below this percentage.",
+        description=(
+            "Warn on the dashboard when free disk space drops below this percentage."
+        ),
     )
     target_disk: str = Field(
         "",

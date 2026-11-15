@@ -611,7 +611,8 @@ async def test_fetch_component_repo_files_uses_github_app_token() -> None:
             "hexarchy", _Store(), cfg
         )
 
-    assert got_cfg is comp and got_files is repo_files
+    assert got_cfg is comp
+    assert got_files is repo_files
     mock_fetch.assert_called_once_with(comp.git_url, 30, "ghs_token")
 
 

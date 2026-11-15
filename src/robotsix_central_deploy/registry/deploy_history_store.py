@@ -23,7 +23,10 @@ class DeployHistoryStore(JsonFileStore):
     """
 
     async def append(self, name: str, entry: DeployHistoryEntry) -> None:
-        """Prepend *entry* to the history for *name*, capping at ``MAX_HISTORY_ENTRIES``."""
+        """Prepend *entry* to the history for *name*.
+
+        Caps the history at ``MAX_HISTORY_ENTRIES``.
+        """
 
         def _mutate(data: dict[str, Any]) -> None:
             entries: list[dict[str, Any]] = data.get(name, [])

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import shlex
@@ -133,7 +134,8 @@ class DockerSdkBackend(ExecutionBackend):
     # -- ExecutionBackend ---------------------------------------------------
 
     async def status(self, service: ServiceRecord) -> ComponentInspect:
-        """Return a ComponentInspect with state, image revision, health status, and running digest."""
+        """Return a ComponentInspect with state, image revision, health
+        status, and running digest."""
         name = self._container_name(service)
         import docker
 
@@ -155,13 +157,12 @@ class DockerSdkBackend(ExecutionBackend):
 
             # image revision label from the container's image
             revision = ""
-            try:
+            # Gracefully degrade; label stays empty
+            with contextlib.suppress(Exception):
                 revision = container.image.labels.get(
                     "org.opencontainers.image.revision",
                     "",
                 )
-            except Exception:  # Gracefully degrade; label stays empty  # noqa: BLE001
-                pass
 
             # health check result
             health = ""
@@ -169,7 +170,7 @@ class DockerSdkBackend(ExecutionBackend):
                 health_obj = container.attrs["State"].get("Health")
                 if health_obj:
                     health = health_obj.get("Status", "")
-            except Exception:  # Gracefully degrade; health stays empty  # noqa: BLE001
+            except Exception:  # Gracefully degrade; health stays empty
                 pass
 
             # running_digest from the image's RepoDigests
@@ -191,7 +192,7 @@ class DockerSdkBackend(ExecutionBackend):
                             if "@sha256:" in rd:
                                 running_digest = rd.split("@", 1)[1]
                                 break
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass  # Gracefully degrade; digest stays ""
 
             return ComponentInspect(
@@ -204,7 +205,8 @@ class DockerSdkBackend(ExecutionBackend):
         return await loop.run_in_executor(None, _inspect)
 
     async def start(self, service: ServiceRecord) -> ServiceState:
-        """Start the container for *service*. Returns RUNNING on success, FAILED otherwise."""
+        """Start the container for *service*. Returns RUNNING on success,
+        FAILED otherwise."""
         name = self._container_name(service)
         import docker
 
@@ -228,7 +230,8 @@ class DockerSdkBackend(ExecutionBackend):
         return ServiceState.RUNNING
 
     async def stop(self, service: ServiceRecord) -> ServiceState:
-        """Stop the container for *service*. Returns STOPPED on success (or if already gone), FAILED otherwise."""
+        """Stop the container for *service*. Returns STOPPED on success (or if
+        already gone), FAILED otherwise."""
         name = self._container_name(service)
         import docker
 
@@ -264,11 +267,12 @@ class DockerSdkBackend(ExecutionBackend):
             await loop.run_in_executor(None, lambda: container.remove(force=True))
         except docker.errors.NotFound:  # Container already removed
             pass
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("remove_container %s: %s", name, exc)
 
     async def restart(self, service: ServiceRecord) -> ServiceState:
-        """Restart the container for *service*. Returns RUNNING on success, FAILED otherwise."""
+        """Restart the container for *service*. Returns RUNNING on success,
+        FAILED otherwise."""
         name = self._container_name(service)
         import docker
 
@@ -376,7 +380,7 @@ class DockerSdkBackend(ExecutionBackend):
             healthcheck=healthcheck,
             ports=ports,
             labels=labels,
-            tmpfs={p: "" for p in config.tmpfs} if config.tmpfs else None,
+            tmpfs=dict.fromkeys(config.tmpfs, "") if config.tmpfs else None,
             detach=True,
             user=user,
             restart_policy={"Name": "unless-stopped"},  # type: ignore[arg-type]  # types-docker stubs are incomplete for restart policy names
@@ -395,8 +399,8 @@ class DockerSdkBackend(ExecutionBackend):
                 raise RuntimeError(f"Container {name} disappeared during health wait")
 
             def _poll() -> str:
-                container.reload()  # noqa: B023
-                h = container.attrs["State"].get("Health")  # noqa: B023
+                container.reload()
+                h = container.attrs["State"].get("Health")
                 return (
                     h["Status"] if h else HealthStatus.HEALTHY
                 )  # no healthcheck → treat as healthy
@@ -419,7 +423,7 @@ class DockerSdkBackend(ExecutionBackend):
                         detail_parts.append(f"last check: exit code {exit_code}")
                         if output:
                             detail_parts.append(f"output: {output[:500]}")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     # Best-effort operation — failure is non-critical here.
                     pass
                 detail = (
@@ -437,10 +441,9 @@ class DockerSdkBackend(ExecutionBackend):
 
     def _stop_and_remove(self, container: Any) -> None:
         """Stop and force-remove a container (synchronous, best-effort stop)."""
-        try:
+        # Best-effort stop; proceed to force-remove
+        with contextlib.suppress(Exception):
             container.stop(timeout=30)
-        except Exception:  # Best-effort stop; proceed to force-remove  # noqa: BLE001
-            pass
         container.remove(force=True)
 
     # -- claude-auth API (delegated to AuthOps) -----------------------------
@@ -507,8 +510,8 @@ class DockerSdkBackend(ExecutionBackend):
                             if "@sha256:" in rd:
                                 image_digest = rd.split("@", 1)[1]
                                 break
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception:
+                pass  # Gracefully degrade; image_digest stays empty
 
             return {
                 "exists": True,
@@ -530,12 +533,9 @@ class DockerSdkBackend(ExecutionBackend):
 
         loop = asyncio.get_running_loop()
         prior_digest = ""
-        try:
+        # Gracefully degrade; prior_digest stays empty
+        with contextlib.suppress(Exception):
             prior_digest = await loop.run_in_executor(None, lambda: existing.image.id)
-        except (
-            Exception  # noqa: BLE001
-        ):  # Gracefully degrade; prior_digest stays empty
-            pass
 
         try:
             await loop.run_in_executor(None, lambda: self._stop_and_remove(existing))
@@ -635,7 +635,8 @@ class DockerSdkBackend(ExecutionBackend):
                 ) from exc
             except docker.errors.DockerException as exc:
                 raise RuntimeError(
-                    f"Docker daemon unreachable while creating volume {vol_name!r}: {exc}"
+                    "Docker daemon unreachable while creating volume "
+                    f"{vol_name!r}: {exc}"
                 ) from exc
 
             # Freshly-created volume — fix ownership so the container
@@ -660,7 +661,7 @@ class DockerSdkBackend(ExecutionBackend):
                     deploy_warnings.extend(cred_warnings)
                     for w in cred_warnings:
                         logger.warning(w)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "claude-auth credential check failed (non-fatal): %s", exc
                 )
@@ -670,7 +671,8 @@ class DockerSdkBackend(ExecutionBackend):
     async def _try_restore(
         self, name: str, config: ComponentConfig, prior_digest: str
     ) -> None:
-        """Best-effort restore of a container from *prior_digest* after a failed deploy."""
+        """Best-effort restore of a container from *prior_digest* after a
+        failed deploy."""
         if not prior_digest:
             return
 
@@ -686,7 +688,7 @@ class DockerSdkBackend(ExecutionBackend):
             )
             await loop.run_in_executor(None, restore.start)
             logger.info("Restored %s from prior digest %s", name, prior_digest)
-        except Exception as restore_exc:  # noqa: BLE001
+        except Exception as restore_exc:
             logger.error("Restore of %s also failed: %s", name, restore_exc)
 
     async def _build_auth_configs(self, image_ref: str) -> list[dict[str, str]]:
@@ -751,7 +753,8 @@ class DockerSdkBackend(ExecutionBackend):
                 if status not in (401, 403) or index == len(attempts) - 1:
                     break
                 logger.warning(
-                    "ghcr.io rejected credential %d/%d (%s) for %s — trying the next one",
+                    "ghcr.io rejected credential %d/%d (%s) for %s"
+                    " — trying the next one",
                     index + 1,
                     len(attempts),
                     status,
@@ -964,9 +967,10 @@ class DockerSdkBackend(ExecutionBackend):
                         rollback_warnings.extend(cred_warnings)
                         for w in cred_warnings:
                             logger.warning(w)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning(
-                        "claude-auth credential check failed during rollback (non-fatal): %s",
+                        "claude-auth credential check failed during rollback"
+                        " (non-fatal): %s",
                         exc,
                     )
 
@@ -999,7 +1003,8 @@ class DockerSdkBackend(ExecutionBackend):
     async def write_llmio_tier_config_to_volume(
         self, volume_name: str, tier_config: dict[str, Any]
     ) -> None:
-        """Write *tier_config* as ``llmio_tier_config.json`` into a Docker named volume."""
+        """Write *tier_config* as ``llmio_tier_config.json`` into a Docker
+        named volume."""
         await self._volume.write_llmio_tier_config_to_volume(volume_name, tier_config)
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
@@ -1076,7 +1081,8 @@ class DockerSdkBackend(ExecutionBackend):
         env_dict: dict[str, str],
         timeout_seconds: int = 60,
     ) -> str:
-        """Run a one-shot container from *image*, mount config volume at *volume_mount_path*."""
+        """Run a one-shot container from *image*, mount config volume at
+        *volume_mount_path*."""
         import requests.exceptions
 
         loop = asyncio.get_running_loop()
@@ -1101,19 +1107,14 @@ class DockerSdkBackend(ExecutionBackend):
                     )
                 return logs
             except requests.exceptions.ReadTimeout:
-                try:
+                # Best-effort kill; container may already be gone
+                with contextlib.suppress(Exception):
                     container.kill()
-                except (
-                    Exception  # noqa: BLE001
-                ):  # Best-effort kill; container may already be gone
-                    pass
                 raise TimeoutError(f"config-assist timed out after {timeout_seconds}s")
             finally:
-                try:
+                # Best-effort operation — failure is non-critical here.
+                with contextlib.suppress(Exception):
                     container.remove(force=True)
-                except Exception:  # noqa: BLE001
-                    # Best-effort operation — failure is non-critical here.
-                    pass
 
         return await loop.run_in_executor(None, _run)
 
@@ -1171,12 +1172,9 @@ class DockerSdkBackend(ExecutionBackend):
             yield f"[docker error: {exc}]\n".encode()
         finally:
             if log_iter is not None:
-                try:
+                # Best-effort close; iterator may already be exhausted
+                with contextlib.suppress(Exception):
                     log_iter.close()
-                except (
-                    Exception  # noqa: BLE001
-                ):  # Best-effort close; iterator may already be exhausted
-                    pass
 
     async def get_container_logs(
         self,

@@ -1,4 +1,7 @@
-"""Pydantic models for the onboarding pipeline: preflight inputs, derived specs, and confirm payloads."""
+"""Pydantic models for the onboarding pipeline.
+
+Covers preflight inputs, derived specs, and confirm payloads.
+"""
 
 from __future__ import annotations
 
@@ -25,41 +28,67 @@ class DerivedSpec(BaseModel):
 
     name: str = Field(description="User-supplied component slug (e.g. 'my-service')")
     git_url: str = Field(
-        description="Git repository URL of the service (used to clone and parse docker-compose.yml)"
+        description=(
+            "Git repository URL of the service (used to clone and parse "
+            "docker-compose.yml)"
+        )
     )
     image: str = Field(
-        description="Container image reference from docker-compose (e.g. 'ghcr.io/your-org/your-service:main')"
+        description=(
+            "Container image reference from docker-compose (e.g. "
+            "'ghcr.io/your-org/your-service:main')"
+        )
     )
     ports: list[PortMapping] = Field(
         description="Port mappings from docker-compose (container port ↔ host port)"
     )
     volume_mounts: list[VolumeMount] = Field(
-        description="Named volume mounts from docker-compose (host=volume_name, named volumes only)"
+        description=(
+            "Named volume mounts from docker-compose (host=volume_name, named volumes "
+            "only)"
+        )
     )
     env: dict[str, str] = Field(
-        description="Environment variables from docker-compose; empty-string values indicate secrets, non-empty strings are preset defaults"
+        description=(
+            "Environment variables from docker-compose; empty-string values indicate "
+            "secrets, non-empty strings are preset defaults"
+        )
     )
     claude_mount: bool = Field(
-        description="Whether to mount ~/.claude for Claude Code authentication (from robotsix.deploy.claude-mount label)"
+        description=(
+            "Whether to mount ~/.claude for Claude Code authentication (from "
+            "robotsix.deploy.claude-mount label)"
+        )
     )
     claude_mount_path: str = Field(
         default="/home/app/.claude",
         description="Container path for the Claude authentication volume mount",
     )
     host_docker_sock: bool = Field(
-        description="Whether to bind-mount the host Docker socket into the container (from robotsix.deploy.host-docker-sock label)"
+        description=(
+            "Whether to bind-mount the host Docker socket into the container (from "
+            "robotsix.deploy.host-docker-sock label)"
+        )
     )
     health_check: HealthCheck | None = Field(
         default=None,
-        description="Container health check configuration from docker-compose (test, interval, timeout, retries, start_period)",
+        description=(
+            "Container health check configuration from docker-compose (test, "
+            "interval, timeout, retries, start_period)"
+        ),
     )
     command: list[str] | None = Field(
         default=None,
-        description="Container command override from docker-compose (overrides the image's CMD)",
+        description=(
+            "Container command override from docker-compose (overrides the image's CMD)"
+        ),
     )
     entrypoint: list[str] | None = Field(
         default=None,
-        description="Container entrypoint override from docker-compose (overrides the image's ENTRYPOINT)",
+        description=(
+            "Container entrypoint override from docker-compose (overrides the image's "
+            "ENTRYPOINT)"
+        ),
     )
     tmpfs: list[str] = Field(
         default=[],
@@ -71,67 +100,117 @@ class DerivedSpec(BaseModel):
     )
     memswap_limit: str | None = Field(
         default=None,
-        description="Optional memory+swap limit for the container (e.g. '4g'); defaults to Docker's own 2x-memory swap",
+        description=(
+            "Optional memory+swap limit for the container (e.g. '4g'); defaults to "
+            "Docker's own 2x-memory swap"
+        ),
     )
     container_name: str = Field(
         default="",
-        description="Docker container name override from docker-compose; empty means use the component id",
+        description=(
+            "Docker container name override from docker-compose; empty means use the "
+            "component id"
+        ),
     )
     siblings: list[SiblingDerivedSpec] = Field(
         default=[],
-        description="Additional sibling services for multi-service components (empty for single-service repos)",
+        description=(
+            "Additional sibling services for multi-service components (empty for "
+            "single-service repos)"
+        ),
     )
     config_schema: dict[str, Any] | None = Field(
         default=None,
-        description="Parsed JSON Schema (config.schema.json) for the component's runtime config; null when no schema file is present",
+        description=(
+            "Parsed JSON Schema (config.schema.json) for the component's runtime "
+            "config; null when no schema file is present"
+        ),
     )
     config_example_values: dict[str, Any] | None = Field(
         default=None,
-        description="Example config values from config.json or config.example.json — the deploy-default base layered under schema defaults and overridden by user input during onboard confirm; null when absent",
+        description=(
+            "Example config values from config.json or config.example.json — the "
+            "deploy-default base layered under schema defaults and overridden by user "
+            "input during onboard confirm; null when absent"
+        ),
     )
     config_volume: str | None = Field(
         default=None,
-        description="Named volume that holds config.json at runtime (resolved from robotsix.deploy.config-target label)",
+        description=(
+            "Named volume that holds config.json at runtime (resolved from "
+            "robotsix.deploy.config-target label)"
+        ),
     )
     config_assist_command: str | None = Field(
         default=None,
-        description="Shell command that generates or validates config values (from robotsix.deploy.config-assist label)",
+        description=(
+            "Shell command that generates or validates config values (from "
+            "robotsix.deploy.config-assist label)"
+        ),
     )
     config_assist_seeds: list[ConfigAssistSeed] = Field(
         default=[],
-        description="Seed field key-label pairs for the config-assist form (from robotsix.deploy.config-assist-seeds label)",
+        description=(
+            "Seed field key-label pairs for the config-assist form (from "
+            "robotsix.deploy.config-assist-seeds label)"
+        ),
     )
     llmio_tier_level: str | None = Field(
         default=None,
-        description='LLM I/O tier level ("level1" through "level3") from robotsix.deploy.llmio-tier-level label; null when unset',
+        description=(
+            'LLM I/O tier level ("level1" through "level3") from '
+            "robotsix.deploy.llmio-tier-level label; null when unset"
+        ),
     )
     allow_chat_access: bool = Field(
         default=False,
-        description="Whether this component is reachable via the chat-proxy gateway (from robotsix.deploy.chat-access label)",
+        description=(
+            "Whether this component is reachable via the chat-proxy gateway (from "
+            "robotsix.deploy.chat-access label)"
+        ),
     )
     chat_agent_mutatable: bool = Field(
         default=False,
-        description="Whether the chat agent is permitted to mutate this component's configuration at runtime (from robotsix.deploy.chat-agent-mutatable label)",
+        description=(
+            "Whether the chat agent is permitted to mutate this component's "
+            "configuration at runtime (from robotsix.deploy.chat-agent-mutatable "
+            "label)"
+        ),
     )
     chat_skill: str = Field(
         default="",
-        description="Static Markdown skill description for the chat assistant (from robotsix.deploy.chat-skill label)",
+        description=(
+            "Static Markdown skill description for the chat assistant (from "
+            "robotsix.deploy.chat-skill label)"
+        ),
     )
     chat_skill_endpoint: str = Field(
         default="/chat-skill",
-        description="HTTP path the roster probe hits for the skill body (from robotsix.deploy.chat-skill-endpoint label)",
+        description=(
+            "HTTP path the roster probe hits for the skill body (from "
+            "robotsix.deploy.chat-skill-endpoint label)"
+        ),
     )
     advisories: list[str] = Field(
         default=[],
-        description="Non-blocking advisory notes about deploy-contract compliance (e.g. missing chat-access label)",
+        description=(
+            "Non-blocking advisory notes about deploy-contract compliance (e.g. "
+            "missing chat-access label)"
+        ),
     )
     user: str | None = Field(
         default=None,
-        description='Container user override from docker-compose (e.g. "1000:1000" for uid:gid, or "root")',
+        description=(
+            'Container user override from docker-compose (e.g. "1000:1000" for '
+            'uid:gid, or "root")'
+        ),
     )
     target_disk: str = Field(
         default="",
-        description="Disk mount point for volume placement (e.g. '/mnt/data'); empty means use the config default or Docker's default volume location",
+        description=(
+            "Disk mount point for volume placement (e.g. '/mnt/data'); empty means "
+            "use the config default or Docker's default volume location"
+        ),
     )
 
 

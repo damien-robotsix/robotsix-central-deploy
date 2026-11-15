@@ -162,7 +162,9 @@ class AuthOps:
                         if has_refresh:
                             return {
                                 "status": "authenticated",
-                                "detail": "Access token expired; refreshes on next use.",
+                                "detail": (
+                                    "Access token expired; refreshes on next use."
+                                ),
                                 "refresh_capable": True,
                             }
                         return {
@@ -186,7 +188,7 @@ class AuthOps:
                             ),
                             "refresh_capable": False,
                         }
-                except (ValueError, TypeError, OSError, OverflowError):
+                except ValueError, TypeError, OSError, OverflowError:
                     pass  # unparsable expiry → treat as valid
 
             return {"status": "authenticated", "refresh_capable": has_refresh}
@@ -235,7 +237,11 @@ class AuthOps:
                 command=[
                     "sh",
                     "-c",
-                    'echo "$B64" | base64 -d > /mnt/.credentials.json && chown 1000:1000 /mnt/.credentials.json && chmod 600 /mnt/.credentials.json',
+                    (
+                        'echo "$B64" | base64 -d > /mnt/.credentials.json'
+                        " && chown 1000:1000 /mnt/.credentials.json"
+                        " && chmod 600 /mnt/.credentials.json"
+                    ),
                 ],
                 environment={"B64": b64},
                 volumes={volume_name: {"bind": "/mnt", "mode": "rw"}},
@@ -258,7 +264,7 @@ class AuthOps:
 
             result: Any = json.loads(content)
             if not isinstance(result, dict):
-                raise ValueError("Credentials file is not a JSON object.")  # noqa: TRY004
+                raise ValueError("Credentials file is not a JSON object.")
             return result
 
         return await loop.run_in_executor(None, _read)

@@ -45,7 +45,8 @@ class ConfigVolumeOpsMixin:
 
         json_content = json.dumps(config_dict, indent=2, sort_keys=True)
         encoded = base64.b64encode(json_content.encode()).decode()
-        # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in sh without quoting
+        # base64 output contains only [A-Za-z0-9+/=] — safe to interpolate in
+        # sh without quoting.
         # The busybox helper runs as root while fleet components run as
         # 1000:1000, so the tightened 700/600 permissions must come with a
         # chown or the component is locked out of its own config (chat
@@ -95,7 +96,8 @@ class ConfigVolumeOpsMixin:
         )
 
     async def read_config_from_volume(self, volume_name: str) -> dict[str, Any]:
-        """Read /config/config.json from a named volume via a temporary busybox container."""
+        """Read /config/config.json from a named volume via a temporary
+        busybox container."""
         import json
 
         loop = asyncio.get_running_loop()

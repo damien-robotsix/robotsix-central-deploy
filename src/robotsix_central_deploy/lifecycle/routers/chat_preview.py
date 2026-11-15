@@ -62,7 +62,10 @@ def _resolve_gateway_base_domain(config: LifecycleConfig) -> str:
     if not domain:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="gateway_base_domain is not configured — preview URLs cannot be generated",
+            detail=(
+                "gateway_base_domain is not configured — preview URLs cannot be "
+                "generated"
+            ),
         )
     return domain
 
@@ -188,7 +191,7 @@ def _parse_ports(svc: dict[str, Any]) -> list[PortMapping]:
                             protocol=proto,
                         )
                     )
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     continue
         elif isinstance(entry, dict):
             try:
@@ -199,7 +202,7 @@ def _parse_ports(svc: dict[str, Any]) -> list[PortMapping]:
                         protocol=entry.get("protocol", "tcp"),
                     )
                 )
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
     return ports
 
@@ -262,7 +265,10 @@ async def _build_image(
             if proc2.returncode != 0 or not stdout2.strip():
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="docker compose build succeeded but could not locate built image",
+                    detail=(
+                        "docker compose build succeeded but could not locate built "
+                        "image"
+                    ),
                 )
             image_id = stdout2.decode().strip().split("\n")[0]
             # Tag the built image
@@ -302,17 +308,17 @@ async def _stop_and_remove_preview_container(backend: Any) -> None:
         )
     except docker.errors.NotFound:
         return
-    except Exception:  # noqa: BLE001
+    except Exception:
         return
 
     logger.info("Stopping existing preview container")
     try:
         await loop.run_in_executor(None, lambda: container.stop(timeout=10))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Stop preview container: %s", exc)
     try:
         await loop.run_in_executor(None, lambda: container.remove(force=True))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Remove preview container: %s", exc)
 
 
@@ -379,7 +385,7 @@ async def _create_preview_container(
         # Best-effort cleanup
         try:
             await loop.run_in_executor(None, lambda: container.remove(force=True))
-        except Exception as cleanup_exc:  # noqa: BLE001
+        except Exception as cleanup_exc:
             logger.debug(
                 "Cleanup preview container after start failure: %s", cleanup_exc
             )
@@ -421,7 +427,7 @@ def _register_preview_component(
     # Unregister first if it was previously registered
     try:
         registry.unregister(_PREVIEW_COMPONENT_ID)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Unregister preview component: %s", exc)
     registry.register(config)
     logger.info("Registered preview component in registry")
@@ -431,7 +437,7 @@ def _unregister_preview_component(registry: Any) -> None:
     """Remove the preview component from the in-memory registry (best-effort)."""
     try:
         registry.unregister(_PREVIEW_COMPONENT_ID)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Unregister preview component on teardown: %s", exc)
 
 
@@ -453,9 +459,9 @@ def _unregister_preview_component(registry: Any) -> None:
 async def preview_deploy(
     body: ChatAgentPreviewDeployRequest,
     request: Request,
-    backend: Any = Depends(_get_backend),  # noqa: B008
-    registry: Any = Depends(_get_registry),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    backend: Any = Depends(_get_backend),
+    registry: Any = Depends(_get_registry),
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentPreviewDeployResponse:
     """Deploy *repo_url* at *branch* into the single reusable preview slot.
@@ -512,7 +518,10 @@ async def preview_deploy(
 
     return ChatAgentPreviewDeployResponse(
         preview_url=preview_url,
-        detail=f"Preview deployed from {body.repo_url}@{body.branch} (container {container_id})",
+        detail=(
+            f"Preview deployed from {body.repo_url}@{body.branch} (container "
+            f"{container_id})"
+        ),
     )
 
 
@@ -531,8 +540,8 @@ async def preview_deploy(
 )
 async def preview_teardown(
     request: Request,
-    backend: Any = Depends(_get_backend),  # noqa: B008
-    registry: Any = Depends(_get_registry),  # noqa: B008
+    backend: Any = Depends(_get_backend),
+    registry: Any = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentPreviewTeardownResponse:
     """Tear down the preview slot — stop/remove the container and clean up."""

@@ -69,11 +69,11 @@ def _assign_free_host_ports(
 async def chat_register_component(
     body: ChatAgentRegisterRequest,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    registry: ComponentRegistry = Depends(_get_registry),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentRegisterResponse:
     """Register a new managed component in the service inventory.
@@ -115,7 +115,10 @@ async def chat_register_component(
             ChatAgentAuditEntry(
                 component=body.name,
                 action="register",
-                detail=f"Re-registration (idempotent) — image={body.image}, owner_repo={body.owner_repo}",
+                detail=(
+                    f"Re-registration (idempotent) — image={body.image}, "
+                    f"owner_repo={body.owner_repo}"
+                ),
             )
         )
         return ChatAgentRegisterResponse(

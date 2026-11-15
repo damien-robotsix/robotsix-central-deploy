@@ -50,7 +50,7 @@ CHAT_OBSERVABILITY_MAX_BYTES: int = 262_144
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/logs
+# Endpoint for GET /chat/services/{name}/logs
 # ---------------------------------------------------------------------------
 
 
@@ -65,9 +65,9 @@ async def chat_service_logs(
     name: str,
     tail: int = Query(100, ge=1, le=10000),
     since: str | None = Query(None, description="ISO 8601 or Unix timestamp"),
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> PlainTextResponse:
     """Return recent container logs (bounded tail, no follow).
@@ -100,7 +100,7 @@ async def chat_service_logs(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/status
+# Endpoint for GET /chat/services/{name}/status
 # ---------------------------------------------------------------------------
 
 
@@ -115,9 +115,9 @@ async def chat_service_logs(
 async def chat_service_status(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> ServiceStatus:
     """Return machine-readable lifecycle status for an allowlisted service.
@@ -134,7 +134,7 @@ async def chat_service_status(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/volumes
+# Endpoint for GET /chat/services/{name}/volumes
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ async def chat_service_status(
 )
 async def chat_service_volumes(
     name: str,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> list[str]:
     """Return the named volumes owned by an allowlisted service.
@@ -166,7 +166,7 @@ async def chat_service_volumes(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/volumes/{vol}/files
+# Endpoint for GET /chat/services/{name}/volumes/{vol}/files
 # ---------------------------------------------------------------------------
 
 
@@ -185,8 +185,8 @@ async def chat_volume_file(
     name: str,
     vol: str,
     path: str = Query("", description="File path relative to the volume root"),
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> VolumeFileResponse:
     """Return the text content of a file within a service's named volume.
@@ -230,7 +230,7 @@ async def chat_volume_file(
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/services/{name}/volumes/{vol}/files
+# Endpoint for PUT /chat/services/{name}/volumes/{vol}/files
 # ---------------------------------------------------------------------------
 
 
@@ -250,11 +250,11 @@ async def chat_volume_file(
 async def chat_volume_file_write(
     name: str,
     vol: str,
-    body: VolumeFileWriteRequest = Body(...),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    body: VolumeFileWriteRequest = Body(...),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
+    config: LifecycleConfig = Depends(_get_config),
     _auth: None = Depends(verify_auth),
 ) -> VolumeFileWriteResponse:
     """Create-or-overwrite a file within a service's named volume.
@@ -339,7 +339,7 @@ async def chat_volume_file_write(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/diagnose
+# Endpoint for GET /chat/services/{name}/diagnose
 # ---------------------------------------------------------------------------
 
 
@@ -354,11 +354,11 @@ async def chat_volume_file_write(
 async def chat_diagnose_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> DiagnoseReport:
     """Return a structured diagnostic report for an allowlisted service.

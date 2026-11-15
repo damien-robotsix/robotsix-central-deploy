@@ -7,6 +7,7 @@ busybox containers.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -205,14 +206,14 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 stale = self._client.containers.list(
                     all=True, filters={"label": self.HELPER_LABEL}
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("stale-helper sweep: listing failed: %s", exc)
                 return 0
             for container in stale:
                 try:
                     container.remove(force=True)
                     removed += 1
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning(
                         "stale-helper sweep: failed to remove %s: %s",
                         getattr(container, "name", "?"),
@@ -260,7 +261,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
         finally:
             try:
                 container.remove(force=True)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "one-shot helper cleanup failed (container may leak): %s", exc
                 )
@@ -300,7 +301,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
                     self._MEASURE_TIMEOUT_S,
                 )
                 return None
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "measure_volume_bytes(%r) attempt %d/%d failed: %s",
                     volume_name,
@@ -339,7 +340,8 @@ class VolumeOps(ConfigVolumeOpsMixin):
             '[ -n "$1" ] && dir="/vol/$1"\n'
             '[ -d "$dir" ] || { echo "0 0"; exit 0; }\n'
             "n=0; s=0\n"
-            'find "$dir" -type f -name "$2" -mtime "+$3" > /tmp/prune-list 2>/dev/null || true\n'
+            'find "$dir" -type f -name "$2" -mtime "+$3"'
+            " > /tmp/prune-list 2>/dev/null || true\n"
             "while IFS= read -r f; do\n"
             '  sz=$(stat -c %s "$f" 2>/dev/null || echo 0)\n'
             '  rm -f "$f" 2>/dev/null && { n=$((n+1)); s=$((s+sz)); }\n'
@@ -468,7 +470,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
         lines = raw.split(b"\n", 1)
         try:
             size_bytes = int(lines[0].strip())
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             size_bytes = 0
         body = lines[1] if len(lines) > 1 else b""
 
@@ -582,10 +584,8 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 ) from exc
             finally:
                 if container is not None:
-                    try:
+                    with contextlib.suppress(docker.errors.APIError):
                         container.remove(force=True)
-                    except docker.errors.APIError:
-                        pass
 
         raw = await loop.run_in_executor(None, _run)
         if raw.startswith(_IS_A_DIR.encode()):
@@ -612,7 +612,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
             await loop.run_in_executor(None, _remove)
         except docker.errors.NotFound:  # Volume already removed
             pass
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("remove_volume %s: %s", volume_name, exc)
 
     async def relocate_volume(
@@ -705,7 +705,9 @@ class VolumeOps(ConfigVolumeOpsMixin):
         except OSError as exc:
             return {
                 "status": STATUS_FAILED,
-                "detail": f"Failed to create target directory {target_volume_path!r}: {exc}",
+                "detail": (
+                    f"Failed to create target directory {target_volume_path!r}: {exc}"
+                ),
             }
 
         # 4. Fail-fast: verify the directory we just created is the SAME
@@ -771,10 +773,9 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 ),
             }
         finally:
-            try:
+            # best-effort; never mask the probe result
+            with contextlib.suppress(OSError):
                 await loop.run_in_executor(None, os.remove, marker_path)
-            except OSError:  # best-effort; never mask the probe result
-                pass
 
         # 5. Copy data from source to target via a busybox container.
         #    Mount source (the Docker volume, which Docker resolves to the
@@ -802,10 +803,8 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 try:
                     exit_code = self._wait_container_exit_sync(container, 1800)
                 except Exception:
-                    try:
+                    with contextlib.suppress(Exception):
                         container.remove(force=True)
-                    except Exception:  # noqa: BLE001,S110
-                        pass
                     raise
                 container.remove()
                 return exit_code == 0
@@ -848,10 +847,8 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 try:
                     exit_code = self._wait_container_exit_sync(container, 600)
                 except Exception:
-                    try:
+                    with contextlib.suppress(Exception):
                         container.remove(force=True)
-                    except Exception:  # noqa: BLE001,S110
-                        pass
                     raise
                 container.remove()
                 return exit_code == 0
@@ -932,7 +929,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
                         ),
                     )
                     await loop.run_in_executor(None, _create_new)
-                except Exception as retry_exc:  # noqa: BLE001
+                except Exception as retry_exc:
                     # Attempt to restore the old volume at its original
                     # location so the data is not orphaned.
                     try:
@@ -945,7 +942,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
                                 labels=old_labels,
                             ),
                         )
-                    except Exception as restore_exc:  # noqa: BLE001
+                    except Exception as restore_exc:
                         logger.warning(
                             "relocate_volume %s: failed to restore old "
                             "volume after failed recreation: %s",
@@ -995,7 +992,7 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 import shutil
 
                 await loop.run_in_executor(None, shutil.rmtree, source_path)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning(
                     "relocate %s: failed to remove old source %s (non-fatal)",
                     volume_name,

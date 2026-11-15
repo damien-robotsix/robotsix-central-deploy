@@ -38,7 +38,7 @@ class TestVolumeResultStatusConstants:
 
 
 # ---------------------------------------------------------------------------
-# resolve_user_to_uid_gid (static)
+# Tests for resolve_user_to_uid_gid (static)
 # ---------------------------------------------------------------------------
 
 

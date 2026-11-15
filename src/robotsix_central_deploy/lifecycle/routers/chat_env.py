@@ -29,7 +29,7 @@ router = APIRouter(tags=["chat"])
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/env/{name}
+# Endpoint for PUT /chat/env/{name}
 # ---------------------------------------------------------------------------
 
 
@@ -46,9 +46,9 @@ async def chat_upsert_env(
     name: str,
     body: ChatAgentEnvUpdate,
     request: Request,
-    env_store: EnvStore = Depends(_get_env_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    env_store: EnvStore = Depends(_get_env_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentEnvResponse:
     """Upsert environment variables and secrets for an allowlisted service.

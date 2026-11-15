@@ -49,7 +49,7 @@ async def _seed_service_record(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/logs
+# Tests for GET /chat/services/{name}/logs
 # ---------------------------------------------------------------------------
 
 
@@ -137,7 +137,7 @@ async def test_logs_capped(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/status
+# Tests for GET /chat/services/{name}/status
 # ---------------------------------------------------------------------------
 
 
@@ -201,7 +201,7 @@ async def test_status_not_found(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/volumes
+# Tests for GET /chat/services/{name}/volumes
 # ---------------------------------------------------------------------------
 
 
@@ -254,7 +254,7 @@ async def test_volumes_not_allowlisted(
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/services/{name}/volumes/{vol}/files
+# Tests for GET /chat/services/{name}/volumes/{vol}/files
 # ---------------------------------------------------------------------------
 
 
@@ -369,7 +369,7 @@ async def test_volume_file_component_not_found(
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/services/{name}/volumes/{vol}/files
+# Tests for PUT /chat/services/{name}/volumes/{vol}/files
 # ---------------------------------------------------------------------------
 
 

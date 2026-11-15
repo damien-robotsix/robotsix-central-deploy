@@ -76,7 +76,7 @@ class ActionType(str, Enum):
 
 
 class DeploySource(str, Enum):
-    """Source of a deploy: manual operator action, caretaker auto-update, or rollback."""
+    """Source of a deploy: manual operator action, caretaker auto-update, or rollback."""  # noqa: E501
 
     MANUAL = "manual"
     CARETAKER = "caretaker"
@@ -479,7 +479,8 @@ class ReclaimResponse(BaseModel):
 
 @dataclass
 class SelfInspect:
-    """What ``ExecutionBackend.inspect_self()`` learns about the server's own container."""
+    """What ``ExecutionBackend.inspect_self()`` learns about the server's own
+    container."""
 
     container_id: str
     container_name: str

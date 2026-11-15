@@ -413,7 +413,8 @@ class TestMergeConfig:
         existing = {"host": "old.example.com", "port": 3000}
         submitted = {"host": "new.example.com"}
         result = _merge_config(schema, existing, submitted)
-        # submitted wins for host, existing wins for unset port (prefer_existing_for_unset=False → default)
+        # submitted wins for host, existing wins for unset port
+        # (prefer_existing_for_unset=False → default)
         assert result == {"host": "new.example.com", "port": 8080}
 
     def test_delegates_to_flat_path(self):

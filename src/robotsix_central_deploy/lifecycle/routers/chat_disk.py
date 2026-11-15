@@ -55,11 +55,11 @@ router = APIRouter(tags=["chat"])
 async def chat_disk_reclaim(
     body: ChatAgentDiskReclaimRequest,
     request: Request,
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),
+    config: LifecycleConfig = Depends(_get_config),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    audit_store: ChatAgentAuditStore = Depends(_get_chat_agent_audit_store),
     _auth: None = Depends(verify_auth),
 ) -> ChatAgentDiskReclaimResponse:
     """Prune safe Docker disk targets: dangling images and/or build cache.

@@ -79,23 +79,35 @@ async def deploy_chat_skill() -> str:
         "- `GET /chat/audit-log` — read recent audit entries\n"
         "- `GET /chat/langfuse/projects` — list configured Langfuse project aliases\n"
         "- `GET /chat/langfuse/{project}/traces` — list Langfuse traces for a project\n"
-        "- `GET /chat/langfuse/{project}/traces/{traceId}` — single Langfuse trace detail\n"
+        "- `GET /chat/langfuse/{project}/traces/{traceId}` — single Langfuse trace "
+        "detail\n"
         "- `GET /chat/langfuse/{project}/observations` — list Langfuse observations\n"
-        "- `GET /chat/langfuse/{project}/observations/{observationId}` — single observation detail\n"
-        "- `GET /chat/services/{name}/logs` — recent container logs (bounded tail, per-component gate)\n"
-        "- `GET /chat/services/{name}/status` — lifecycle status as structured JSON (per-component gate)\n"
-        "- `GET /chat/services/{name}/diagnose` — full diagnostic report: stored spec vs repo contract, routing labels, edge probe, runtime state, and verdict (per-component gate)\n"
-        "- `GET /chat/services/{name}/volumes` — list named volumes for a service (per-component gate)\n"
-        "- `GET /chat/services/{name}/volumes/{vol}/files?path=…` — read-only file inspection within a volume (per-component gate)\n\n"
+        "- `GET /chat/langfuse/{project}/observations/{observationId}` — single "
+        "observation detail\n"
+        "- `GET /chat/services/{name}/logs` — recent container logs (bounded tail, "
+        "per-component gate)\n"
+        "- `GET /chat/services/{name}/status` — lifecycle status as structured JSON "
+        "(per-component gate)\n"
+        "- `GET /chat/services/{name}/diagnose` — full diagnostic report: stored spec "
+        "vs repo contract, routing labels, edge probe, runtime state, and verdict "
+        "(per-component gate)\n"
+        "- `GET /chat/services/{name}/volumes` — list named volumes for a service "
+        "(per-component gate)\n"
+        "- `GET /chat/services/{name}/volumes/{vol}/files?path=…` — read-only file "
+        "inspection within a volume (per-component gate)\n\n"
         "## Scoped write endpoints (chat-agent allowlisted)\n"
-        "- `PUT /chat/services/{name}/volumes/{vol}/files` — create or overwrite a file "
+        "- `PUT /chat/services/{name}/volumes/{vol}/files` — create or overwrite a "
+        "file "
         "within a volume (JSON body `{path, content, overwrite}`; create-only unless "
         "`overwrite: true`, 1 MiB default cap, per-component gate)\n"
-        "- `POST /chat/services` — register a new managed component (registration only; no auto-start)\n"
-        "- `POST /chat/services/{name}/deploy` — first-boot deploy a newly-registered component (create + start container)\n"
+        "- `POST /chat/services` — register a new managed component (registration "
+        "only; no auto-start)\n"
+        "- `POST /chat/services/{name}/deploy` — first-boot deploy a newly-registered "
+        "component (create + start container)\n"
         "- `POST /chat/services/{name}/restart` — restart a service\n"
         "- `POST /chat/services/{name}/update` — pull + recreate (deploy) a service\n"
-        "- `POST /chat/disk/reclaim` — prune dangling Docker images and/or reclaimable build cache\n\n"
+        "- `POST /chat/disk/reclaim` — prune dangling Docker images and/or "
+        "reclaimable build cache\n\n"
         "## Config writes\n"
         "A component owns its own config. Read it here via "
         "`GET /chat/config/{name}`, but send changes to the component's own "
@@ -123,7 +135,7 @@ async def deploy_chat_skill() -> str:
 )
 async def list_chat_components(
     request: Request,
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
     _auth: None = Depends(verify_auth),
 ) -> list[dict[str, Any]]:
     """Return a roster of components the chat agent can interact with.
@@ -158,7 +170,7 @@ async def list_chat_components(
         _cfg = await _get_config(request)
         base_domain = _cfg.gateway_base_domain
         remote_hosts = _cfg.remote_hosts
-    except Exception:  # noqa: BLE001 — an unconfigured gateway is not an error here
+    except Exception:
         base_domain = ""
         remote_hosts = {}
 
@@ -237,7 +249,7 @@ async def list_chat_components(
                     _sanitize_log(base_url),
                     resp.status_code,
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "chat components: skill probe failed for %s (%s): %s",
                 _sanitize_log(comp_cfg.id),

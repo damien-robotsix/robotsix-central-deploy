@@ -125,7 +125,7 @@ async def _seed_service(name: str = "chat") -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/config/{name}
+# Tests for GET /chat/config/{name}
 # ---------------------------------------------------------------------------
 
 
@@ -216,7 +216,9 @@ class TestChatGetConfig:
         assert resp.status_code == 403
 
     async def test_unauthenticated_no_longer_401(self, client: AsyncClient):
-        """Component-level auth was removed; GET without auth headers no longer returns 401."""
+        """Component-level auth was removed; GET without auth headers no longer returns
+        401.
+        """
         resp = await client.get("/chat/config/chat")
         assert resp.status_code != 401
 

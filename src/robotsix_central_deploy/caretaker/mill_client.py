@@ -46,11 +46,11 @@ class MillClient:
         transport or shape error also returns ``None`` — an unreachable or
         broken mill must not block its own update (deploying is then the
         likely remedy, not the risk).
-        """
+        """  # noqa: RUF002
         try:
             response = await self._http.get(f"{self._base_url}/active")
             stages = response.json()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("mill /active probe failed (fail-open): %s", exc)
             return None
         if not isinstance(stages, list):
@@ -63,7 +63,10 @@ class MillClient:
         if not counts:
             return None
         total = sum(counts.values())
-        detail = ", ".join(f"{stage}×{n}" for stage, n in sorted(counts.items()))
+        detail = ", ".join(
+            f"{stage}×{n}"  # noqa: RUF001
+            for stage, n in sorted(counts.items())
+        )
         return f"{total} heavy stage(s) in flight: {detail}"
 
     async def register_repo(self, repo_id: str, git_url: str) -> bool:

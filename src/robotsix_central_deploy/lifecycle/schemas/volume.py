@@ -45,7 +45,9 @@ class VolumeFileWriteRequest(BaseModel):
     """Request body for creating or overwriting a file inside a volume."""
 
     path: str = Field(
-        description="File path relative to the volume root (no traversal, no leading '/')"
+        description=(
+            "File path relative to the volume root (no traversal, no leading '/')"
+        )
     )
     content: str = Field(description="File content as a UTF-8 string")
     overwrite: bool = Field(

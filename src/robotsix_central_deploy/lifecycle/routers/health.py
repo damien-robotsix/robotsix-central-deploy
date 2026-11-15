@@ -21,7 +21,7 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health", include_in_schema=False)
 async def health(
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
 ) -> dict[str, object]:
     """Unauthenticated Traefik liveness probe — always HTTP 200 / ``"ok"``.
 
@@ -54,8 +54,8 @@ async def health(
 @router.get("/disk", response_model=DiskUsageResponse)
 async def get_disk_usage(
     _auth: None = Depends(verify_auth),
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    config: LifecycleConfig = Depends(_get_config),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
+    config: LifecycleConfig = Depends(_get_config),
 ) -> DiskUsageResponse:
     """Host disk usage and Docker storage breakdown.
 
@@ -106,8 +106,8 @@ async def get_disk_usage(
 @router.post("/disk/reclaim", response_model=ReclaimResponse)
 async def reclaim_build_cache(
     _auth: None = Depends(verify_auth),
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
+    backend: ExecutionBackend = Depends(_get_backend),
+    store: ServiceStore = Depends(_get_store),
 ) -> ReclaimResponse:
     """Prune Docker build cache and dangling images, return bytes freed.
 

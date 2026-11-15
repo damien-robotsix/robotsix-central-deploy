@@ -1052,7 +1052,9 @@ async def test_service_deploy_lock_contention(
 async def test_service_deploy_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Component-level auth was removed; deploy without auth headers no longer returns 401."""
+    """Component-level auth was removed; deploy without auth headers no longer returns
+    401.
+    """
     resp = await client.post("/chat/services/test-svc/deploy")
     assert resp.status_code != 401, resp.text
 
@@ -1103,7 +1105,9 @@ async def test_service_deploy_audit_entry(
 async def test_update_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Component-level auth was removed; update without auth headers no longer returns 401."""
+    """Component-level auth was removed; update without auth headers no longer returns
+    401.
+    """
     resp = await client.post("/chat/services/test-svc/update")
     assert resp.status_code != 401, resp.text
 
@@ -1112,7 +1116,9 @@ async def test_update_no_longer_401(
 async def test_deploy_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Component-level auth was removed; deploy without auth headers no longer returns 401."""
+    """Component-level auth was removed; deploy without auth headers no longer returns
+    401.
+    """
     resp = await client.post("/chat/deploy", json={"name": "x", "repo": "r"})
     assert resp.status_code != 401, resp.text
 
@@ -1450,7 +1456,9 @@ async def test_chat_deploy_not_in_allowlist(
     auth_headers: dict[str, str],
     store: InMemoryStore,
 ):
-    """POST /chat/deploy returns 403 when the component is not in the deploy allowlist."""
+    """POST /chat/deploy returns 403 when the component is not in the deploy
+    allowlist.
+    """
     await store.put(ServiceRecord(name="cognee", state=ServiceState.RUNNING))
 
     resp = await client.post(

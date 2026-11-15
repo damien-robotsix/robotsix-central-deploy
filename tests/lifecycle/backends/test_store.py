@@ -121,7 +121,8 @@ class TestFileStoreSpecific:
             # And it recovers: a subsequent write repopulates cleanly.
             await store.put(ServiceRecord(name="rebuilt", state=ServiceState.RUNNING))
             got = await store.get("rebuilt")
-            assert got is not None and got.state == ServiceState.RUNNING
+            assert got is not None
+            assert got.state == ServiceState.RUNNING
 
     async def test_load_tolerates_explicit_null_top_level(self):
         """`null`/`~` (yaml None) top level also self-heals rather than crashing."""

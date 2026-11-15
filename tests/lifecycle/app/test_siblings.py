@@ -46,7 +46,9 @@ class TestStartWithSibling:
     async def test_start_propagates_to_sibling(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """start_service fans out to sibling records — both transition STOPPED→RUNNING."""
+        """start_service fans out to sibling records — both transition
+        STOPPED→RUNNING.
+        """
         from robotsix_central_deploy.registry.models import ServiceConfig
 
         config_store = server_mod.app.state.component_config_store
@@ -91,7 +93,9 @@ class TestStopWithSibling:
     async def test_stop_propagates_to_sibling(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """stop_service fans out to sibling records — both transition RUNNING→STOPPED."""
+        """stop_service fans out to sibling records — both transition
+        RUNNING→STOPPED.
+        """
         from robotsix_central_deploy.registry.models import ServiceConfig
 
         config_store = server_mod.app.state.component_config_store
@@ -134,7 +138,9 @@ class TestRestartWithSibling:
     async def test_restart_propagates_to_sibling(
         self, client: AsyncClient, auth_headers: dict
     ):
-        """restart_service fans out to sibling records — both stay RUNNING after restart."""
+        """restart_service fans out to sibling records — both stay RUNNING after
+        restart.
+        """
         from robotsix_central_deploy.registry.models import ServiceConfig
 
         config_store = server_mod.app.state.component_config_store
@@ -177,7 +183,9 @@ class TestDeployWithSibling:
     async def test_deploy_propagates_to_sibling(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        """deploy_service fans out to siblings — backend.deploy called for both primary and sibling."""
+        """deploy_service fans out to siblings — backend.deploy called for both primary
+        and sibling.
+        """
         from robotsix_central_deploy.registry.models import ServiceConfig
 
         config_store = server_mod.app.state.component_config_store
@@ -233,7 +241,9 @@ class TestRollbackWithSibling:
     async def test_rollback_propagates_to_sibling(
         self, client: AsyncClient, auth_headers: dict, monkeypatch
     ):
-        """rollback_service fans out to siblings — backend.rollback called, digests swapped."""
+        """rollback_service fans out to siblings — backend.rollback called, digests
+        swapped.
+        """
         from robotsix_central_deploy.registry.models import ServiceConfig
 
         config_store = server_mod.app.state.component_config_store
@@ -294,5 +304,5 @@ class TestRollbackWithSibling:
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/config
+# Tests for GET /services/{name}/config
 # ---------------------------------------------------------------------------

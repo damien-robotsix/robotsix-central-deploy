@@ -42,11 +42,11 @@ router = APIRouter(tags=["services"])
 async def diagnose_service(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    lifecycle_config: LifecycleConfig = Depends(_get_config),  # noqa: B008
-    registry: ComponentRegistry = Depends(_get_registry),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    backend: ExecutionBackend = Depends(_get_backend),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    lifecycle_config: LifecycleConfig = Depends(_get_config),
+    registry: ComponentRegistry = Depends(_get_registry),
     _auth: None = Depends(verify_auth),
 ) -> DiagnoseReport:
     """Return a structured diagnostic report for a managed component.

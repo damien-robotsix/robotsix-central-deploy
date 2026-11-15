@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -56,15 +57,18 @@ async def _check_and_update_record(
     checker: RegistryChecker,
     backend: ExecutionBackend,
 ) -> None:
-    """Refresh a single service record's digest and update-availability from the registry."""
+    """Refresh a single service record's digest and update-availability from
+    the registry."""
     if record.image and not record.deployed_image_digest:
         try:
             ins = await backend.status(record)
             if ins.running_digest:
                 record.deployed_image_digest = ins.running_digest
                 await store.put(record)
-        except Exception:  # noqa: BLE001
-            pass  # Status check may fail if the container isn't running; proceed without digest
+        except Exception:
+            # Status check may fail if the container isn't running; proceed
+            # without digest.
+            pass
 
     if not record.image:
         return
@@ -91,8 +95,8 @@ async def _check_and_update_record(
             if record.registry_auth_error:
                 record.registry_auth_error = False
                 await store.put(record)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        pass  # Best-effort registry check; retried on the next loop tick
 
 
 async def _registry_check_loop(
@@ -145,18 +149,16 @@ async def _refresh_claude_credentials(
             error_detail: str = (
                 exc.response.text[:500] if exc.response is not None else str(exc)
             )
-            try:
+            with contextlib.suppress(Exception):
                 error_detail = (
                     exc.response.json().get("error", {}).get("message", error_detail)
                     if exc.response is not None
                     else error_detail
                 )
-            except Exception:  # noqa: BLE001
-                pass
             error_msg = f"Refresh failed ({exc.status_code}): {error_detail}"
             logger.warning("Claude auth refresh: %s", error_detail)
             return False, error_msg
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # Not every transport surfaces a rejected request as
             # ExternalHTTPError — httpx's own HTTPStatusError lands here too.
             # Those carry a `response`, so reporting them as "unreachable" is
@@ -170,10 +172,8 @@ async def _refresh_claude_credentials(
             else:
                 status = getattr(response, "status_code", "unknown")
                 detail = str(getattr(response, "text", "") or exc)[:500]
-                try:
+                with contextlib.suppress(Exception):
                     detail = response.json().get("error", {}).get("message", detail)
-                except Exception:  # noqa: BLE001
-                    pass
                 error_msg = f"Refresh rejected ({status}): {detail}"
             logger.warning("Claude auth refresh: request failed: %s", error_msg)
             return False, error_msg
@@ -181,7 +181,7 @@ async def _refresh_claude_credentials(
     # -- 2xx response ----------------------------------------------------
     try:
         payload: dict[str, Any] = resp.json()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error_msg = f"Invalid JSON in refresh response: {exc}"
         logger.warning("Claude auth refresh: bad response JSON: %s", exc)
         return False, error_msg
@@ -214,7 +214,7 @@ async def _refresh_claude_credentials(
         await backend.write_claude_credentials(
             CLAUDE_AUTH_VOLUME, json.dumps(new_creds, indent=2)
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error_msg = f"Failed to write refreshed credentials: {exc}"
         logger.warning("Claude auth refresh: write failed: %s", exc)
         return False, error_msg

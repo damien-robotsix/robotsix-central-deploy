@@ -24,7 +24,8 @@ def compute_growth_records(
     - findings: subset where both threshold guards were breached
 
     Growth guards (BOTH must be true to flag):
-    1. delta_bytes > min_delta_bytes     (absolute-size guard — prevents tiny-baseline false positives)
+    1. delta_bytes > min_delta_bytes     (absolute-size guard — prevents
+       tiny-baseline false positives)
     2. growth_pct > growth_threshold_pct (percent-growth guard)
     """
     records: list[VolumeGrowthRecord] = []

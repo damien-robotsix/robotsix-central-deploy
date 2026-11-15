@@ -569,7 +569,9 @@ class TestDockerSdkBackendDeploy:
     async def test_deploy_401_on_ghcr_without_token_diagnostic(
         self, backend, monkeypatch
     ):
-        """401 on ghcr.io without GitHub App creds raises RuntimeError mentioning config."""
+        """401 on ghcr.io without GitHub App creds raises RuntimeError mentioning
+        config.
+        """
         b, client, dm = backend
         config = self._make_config()
         record = ServiceRecord(name="test-svc", container_name="test-svc")

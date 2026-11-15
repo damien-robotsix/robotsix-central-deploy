@@ -43,7 +43,9 @@ async def _get_client_or_503(config: LifecycleConfig, owner: str, repo: str) -> 
     except UnknownObjectException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Not found: {owner}/{repo} (or the GitHub App is not installed on it)",
+            detail=(
+                f"Not found: {owner}/{repo} (or the GitHub App is not installed on it)"
+            ),
         )
     except GitHubAppNotConfiguredError as exc:
         raise HTTPException(
@@ -101,7 +103,9 @@ def _reraise_github_errors(exc: Exception, owner: str, repo: str) -> None:
     if isinstance(exc, UnknownObjectException):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Not found: {owner}/{repo} (or the GitHub App is not installed on it)",
+            detail=(
+                f"Not found: {owner}/{repo} (or the GitHub App is not installed on it)"
+            ),
         ) from exc
     if isinstance(exc, GithubException):
         raise HTTPException(

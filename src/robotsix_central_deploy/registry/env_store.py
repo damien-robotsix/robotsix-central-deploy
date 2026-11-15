@@ -57,7 +57,7 @@ class EnvStore(JsonFileStore):
         env_scopes: dict[str, str] | None = None,
         secret_scopes: dict[str, str] | None = None,
     ) -> None:
-        """Merge *env*, *secrets*, and optional scope tags into the stored config for *name*.
+        """Merge *env*, *secrets*, and optional scope tags into *name*'s stored config.
 
         Overwrites matching keys; does not wipe keys not mentioned.
         Encrypts each secret value before storing.
@@ -98,7 +98,10 @@ class EnvStore(JsonFileStore):
         await self._update(_mutate)
 
     async def delete_key(self, name: str, key: str) -> bool:
-        """Remove *key* from env, secret_tokens, and scope maps.  Return True if found."""
+        """Remove *key* from env, secret_tokens, and scope maps.
+
+        Return True if found.
+        """
         found = False
 
         def _mutate(data: dict[str, Any]) -> None:
@@ -151,10 +154,7 @@ class EnvStore(JsonFileStore):
             if pp == "**":
                 # ``**`` matches zero or more scope segments.
                 # Try consuming 0, 1, ..., remaining segments from scope.
-                for n in range(si, len(scope_parts) + 1):
-                    if _match(pi + 1, n):
-                        return True
-                return False
+                return any(_match(pi + 1, n) for n in range(si, len(scope_parts) + 1))
             if si >= len(scope_parts):
                 return False
             if pp == "*" or pp == scope_parts[si]:

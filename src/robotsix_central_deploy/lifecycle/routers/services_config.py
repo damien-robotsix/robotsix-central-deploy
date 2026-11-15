@@ -143,7 +143,7 @@ def _resolve_ref(prop_schema: dict[str, Any], defs: dict[str, Any]) -> dict[str,
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/config
+# Endpoint for GET /services/{name}/config
 # ---------------------------------------------------------------------------
 
 
@@ -180,10 +180,10 @@ async def _current_config_values(
 async def get_service_config(
     name: str,
     request: Request,
-    store: ServiceStore = Depends(_get_store),  # noqa: B008
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    store: ServiceStore = Depends(_get_store),
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ConfigResponse:
     """Return the config.json schema and current masked values for a service.
@@ -232,7 +232,7 @@ async def get_service_config(
         base_domain = config.gateway_base_domain
         if base_domain:
             component_settings_url = f"https://{name}.{base_domain}/ui"
-    except Exception:  # noqa: BLE001
+    except Exception:
         component_settings_url = None
 
     return ConfigResponse(
@@ -246,7 +246,7 @@ async def get_service_config(
 
 
 # ---------------------------------------------------------------------------
-# GET /services/{name}/config/export  (migration-only)
+# Endpoint for GET /services/{name}/config/export  (migration-only)
 # ---------------------------------------------------------------------------
 
 
@@ -262,9 +262,9 @@ async def get_service_config(
 async def export_service_config(
     name: str,
     request: Request,
-    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),  # noqa: B008
-    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),  # noqa: B008
-    backend: ExecutionBackend = Depends(_get_backend),  # noqa: B008
+    config_yaml_store: ConfigYamlStore = Depends(_get_config_yaml_store),
+    component_config_store: ComponentConfigStore = Depends(_get_component_config_store),
+    backend: ExecutionBackend = Depends(_get_backend),
     _auth: None = Depends(verify_auth),
 ) -> ConfigExportResponse:
     """Export the full current config INCLUDING unmasked secret values.

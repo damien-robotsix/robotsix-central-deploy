@@ -713,8 +713,15 @@ class TestConfigDefaultSeeding:
 
     Exercises the exact sequence::
 
-        base_values = _strip_secret_values(spec.config_schema, spec.config_example_values or {})
-        merged = _merge_config(spec.config_schema, base_values, req.config_values or {}, prefer_existing_for_unset=True)
+        base_values = _strip_secret_values(
+            spec.config_schema, spec.config_example_values or {}
+        )
+        merged = _merge_config(
+            spec.config_schema,
+            base_values,
+            req.config_values or {},
+            prefer_existing_for_unset=True,
+        )
         _validate_config_or_422(spec.config_schema, merged)
     """
 

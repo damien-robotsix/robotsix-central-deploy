@@ -37,7 +37,7 @@ def enable_github_app():
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/github/repos/{owner}/{repo}/pages
+# Tests for PUT /chat/github/repos/{owner}/{repo}/pages
 # ---------------------------------------------------------------------------
 
 

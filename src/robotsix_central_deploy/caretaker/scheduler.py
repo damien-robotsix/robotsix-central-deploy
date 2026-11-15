@@ -674,7 +674,7 @@ class CaretakerScheduler:
                 self._config.docker_socket_url,
                 self._config.self_update_docker_api_version,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("caretaker: self-update launch failed: %s", exc)
             return CaretakerFinding(
                 component_id=self_record.name,
@@ -716,7 +716,7 @@ class CaretakerScheduler:
             if len(lines) > _MAX_LOCAL_FINDINGS:
                 lines = lines[-_MAX_LOCAL_FINDINGS:]
             self._findings_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Failed to write local finding: %s", exc)
 
     async def get_status(self) -> dict[str, Any]:
@@ -767,7 +767,7 @@ class CaretakerScheduler:
                     await asyncio.sleep(remaining)
                     return
                 recheck_seconds = max(settings.caretaker_mill_recheck_minutes, 1) * 60
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("CaretakerScheduler: failed to read settings: %s", exc)
                 recheck_seconds = 60
             await asyncio.sleep(min(remaining, recheck_seconds))
@@ -789,7 +789,7 @@ class CaretakerScheduler:
             while True:
                 try:
                     settings = await self._settings_store.get()
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.error("CaretakerScheduler: failed to read settings: %s", exc)
                     await asyncio.sleep(60)
                     continue
@@ -800,7 +800,7 @@ class CaretakerScheduler:
                     except Exception as exc:
                         logger.exception(
                             "CaretakerScheduler: run_once crashed: %s",
-                            exc,  # noqa: TRY401
+                            exc,
                         )
 
                 interval = max(settings.caretaker_interval_hours, 1) * 3600

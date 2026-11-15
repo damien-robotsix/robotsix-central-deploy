@@ -1,4 +1,6 @@
-"""Integration tests for the chat-agent GitHub pull-request, review, and merge-gate endpoints."""
+"""Integration tests for the chat-agent GitHub pull-request, review, and merge-gate
+endpoints.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +27,9 @@ def _fake_client(repo_obj: MagicMock) -> MagicMock:
 
 @pytest.fixture
 def enable_github_app():
-    """Configure github_app_id/private_key/installation_id so the endpoints don't 503."""
+    """Configure github_app_id/private_key/installation_id so the endpoints don't
+    503.
+    """
     from pydantic import SecretStr
 
     server_mod.app.state.config.github_app_id = "12345"
@@ -325,7 +329,7 @@ class _FakeMergeStatus:
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge
+# Tests for POST /chat/github/repos/{owner}/{repo}/pulls/{number}/merge
 # ---------------------------------------------------------------------------
 
 
@@ -679,19 +683,18 @@ class TestGitHubAppNotConfiguredError:
     def test_message_mentions_all_fields(self):
         # Sanity check on the error message content raised by github_app.py,
         # surfaced verbatim as the 503 detail above.
-        try:
-            raise GitHubAppNotConfiguredError(
-                "github_app_id, github_app_private_key, and installation_id "
-                "must all be set to use the github chat component."
-            )
-        except GitHubAppNotConfiguredError as exc:
-            assert "github_app_id" in str(exc)
-            assert "github_app_private_key" in str(exc)
-            assert "installation_id" in str(exc)
+        exc = GitHubAppNotConfiguredError(
+            "github_app_id, github_app_private_key, and installation_id "
+            "must all be set to use the github chat component."
+        )
+        assert isinstance(exc, Exception)
+        assert "github_app_id" in str(exc)
+        assert "github_app_private_key" in str(exc)
+        assert "installation_id" in str(exc)
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow
+# Tests for GET /chat/github/repos/{owner}/{repo}/actions/permissions/workflow
 # ---------------------------------------------------------------------------
 
 
@@ -774,7 +777,7 @@ class TestGetWorkflowPermissions:
 
 
 # ---------------------------------------------------------------------------
-# PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow
+# Tests for PUT /chat/github/repos/{owner}/{repo}/actions/permissions/workflow
 # ---------------------------------------------------------------------------
 
 
@@ -993,7 +996,7 @@ class _FakeReviewComment:
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews
+# Tests for GET /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews
 # ---------------------------------------------------------------------------
 
 
@@ -1097,7 +1100,7 @@ class TestListReviews:
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/pulls/{number}/comments
+# Tests for GET /chat/github/repos/{owner}/{repo}/pulls/{number}/comments
 # ---------------------------------------------------------------------------
 
 
@@ -1178,7 +1181,7 @@ class TestListReviewComments:
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews
+# Tests for POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reviews
 # ---------------------------------------------------------------------------
 
 
@@ -1553,7 +1556,7 @@ class TestDismissReview:
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/github/repos/{owner}/{repo}/relax-merge-gate
+# Tests for POST /chat/github/repos/{owner}/{repo}/relax-merge-gate
 # ---------------------------------------------------------------------------
 
 
@@ -1582,7 +1585,7 @@ class TestRelaxMergeGate:
     def _clear_audit(self):
         """Ensure audit store is clean before each test."""
         server_mod.app.state.chat_agent_audit_store._entries = []
-        yield
+        return
 
     async def test_unauthorized_no_longer_401(self, client: AsyncClient):
         resp = await client.post("/chat/github/repos/acme/widget/relax-merge-gate")
@@ -1849,7 +1852,7 @@ class TestRelaxMergeGate:
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/github/repos/{owner}/{repo}/pulls/{number}/files
+# Tests for GET /chat/github/repos/{owner}/{repo}/pulls/{number}/files
 # ---------------------------------------------------------------------------
 
 
@@ -1954,7 +1957,7 @@ class TestListPullFiles:
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/close
+# Tests for POST /chat/github/repos/{owner}/{repo}/pulls/{number}/close
 # ---------------------------------------------------------------------------
 
 
@@ -2009,7 +2012,7 @@ class TestClosePull:
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reopen
+# Tests for POST /chat/github/repos/{owner}/{repo}/pulls/{number}/reopen
 # ---------------------------------------------------------------------------
 
 

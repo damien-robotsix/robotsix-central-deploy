@@ -331,7 +331,10 @@ class TestClaudeAuthRouter:
         resp = await client.post(
             "/claude-auth/credentials",
             json={
-                "credentials_json": '{"oauth_token": "test-token", "expires_at": "2099-01-01T00:00:00Z"}'
+                "credentials_json": (
+                    '{"oauth_token": "test-token", '
+                    '"expires_at": "2099-01-01T00:00:00Z"}'
+                )
             },
             headers={"X-API-Key": self.API_KEY},
         )

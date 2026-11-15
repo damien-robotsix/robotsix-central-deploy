@@ -142,7 +142,7 @@ class TestRetryClientContext:
 
         def fake_async_client(*args: object, **kwargs: object) -> MagicMock:
             nonlocal captured_timeout
-            captured_timeout = kwargs.get("timeout", None)  # type: ignore[assignment]
+            captured_timeout = kwargs.get("timeout")  # type: ignore[assignment]
             return fake_raw
 
         monkeypatch.setattr(

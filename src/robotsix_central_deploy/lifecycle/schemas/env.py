@@ -22,7 +22,9 @@ class EnvResponse(BaseModel):
     )
     secret_scopes: dict[str, str] = Field(
         default={},
-        description="Visibility scope per secret key ('global', 'component', or repo URL)",
+        description=(
+            "Visibility scope per secret key ('global', 'component', or repo URL)"
+        ),
     )
     mem_limit: str = Field(
         default="2g", description="Docker memory limit string (e.g. '2g')"
@@ -75,7 +77,9 @@ class EnvUpdate(_EnvSecretsFields):
     )
     allow_chat_access: bool | None = Field(
         default=None,
-        description="Toggle chat-agent mutability; None leaves the current value unchanged",
+        description=(
+            "Toggle chat-agent mutability; None leaves the current value unchanged"
+        ),
     )
     claude_mount: bool | None = Field(
         default=None,

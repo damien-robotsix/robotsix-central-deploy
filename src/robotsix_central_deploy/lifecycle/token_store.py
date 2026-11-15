@@ -94,7 +94,7 @@ class TokenStore:
 
     async def _save_locked(self) -> None:
         data: dict[str, Any] = {
-            "revoked_jtis": {jti: True for jti in sorted(self._revoked_jtis)},
+            "revoked_jtis": dict.fromkeys(sorted(self._revoked_jtis), True),
             "user_revoke_before": dict(sorted(self._user_revoke_before.items())),
         }
         self._revocation_path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,7 +141,7 @@ class TokenStore:
 
         try:
             payload: dict[str, Any] = json.loads(payload_json)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             return None
 
         # Required claims.

@@ -136,7 +136,7 @@ async def verify_post_deploy_health(
         health = str(diag.get("health", ""))
         try:
             restart_count = int(diag.get("restart_count", 0) or 0)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             restart_count = 0
 
         if baseline is None:
@@ -263,7 +263,7 @@ async def rollback_after_failed_deploy(
     # prior container BEFORE we swap the stored digests below.
     try:
         outcome = await backend.rollback(record, config)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "%s %s: auto-rollback after failed deploy failed: %s",
             log_context,

@@ -326,7 +326,9 @@ async def test_deploy_rate_limited(
 async def test_deploy_unauthorized_no_longer_401(
     client: AsyncClient,
 ) -> None:
-    """Component-level auth was removed; test-deploy without auth header no longer returns 401."""
+    """Component-level auth was removed; test-deploy without auth header no longer
+    returns 401.
+    """
     _register_test_component()
     resp = await client.post(
         "/chat/deploy/test",

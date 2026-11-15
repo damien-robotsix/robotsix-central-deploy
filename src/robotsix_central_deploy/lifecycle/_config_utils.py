@@ -797,7 +797,7 @@ async def _write_llmio_tier_config(
             await backend.write_llmio_tier_config_to_volume(
                 component_config.config_volume, settings.llmio_tier_config
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "%s %s: could not write llmio tier config to volume %s: %s",
             log_context,
