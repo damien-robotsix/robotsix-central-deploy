@@ -511,7 +511,7 @@ class DockerSdkBackend(ExecutionBackend):
                                 image_digest = rd.split("@", 1)[1]
                                 break
             except Exception:
-                pass
+                pass  # Gracefully degrade; image_digest stays empty
 
             return {
                 "exists": True,

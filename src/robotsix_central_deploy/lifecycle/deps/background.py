@@ -96,7 +96,7 @@ async def _check_and_update_record(
                 record.registry_auth_error = False
                 await store.put(record)
     except Exception:
-        pass
+        pass  # Best-effort registry check; retried on the next loop tick
 
 
 async def _registry_check_loop(

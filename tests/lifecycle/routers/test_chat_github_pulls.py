@@ -683,14 +683,14 @@ class TestGitHubAppNotConfiguredError:
     def test_message_mentions_all_fields(self):
         # Sanity check on the error message content raised by github_app.py,
         # surfaced verbatim as the 503 detail above.
-        with pytest.raises(GitHubAppNotConfiguredError) as excinfo:
-            raise GitHubAppNotConfiguredError(
-                "github_app_id, github_app_private_key, and installation_id "
-                "must all be set to use the github chat component."
-            )
-        assert "github_app_id" in str(excinfo.value)
-        assert "github_app_private_key" in str(excinfo.value)
-        assert "installation_id" in str(excinfo.value)
+        exc = GitHubAppNotConfiguredError(
+            "github_app_id, github_app_private_key, and installation_id "
+            "must all be set to use the github chat component."
+        )
+        assert isinstance(exc, Exception)
+        assert "github_app_id" in str(exc)
+        assert "github_app_private_key" in str(exc)
+        assert "installation_id" in str(exc)
 
 
 # ---------------------------------------------------------------------------
