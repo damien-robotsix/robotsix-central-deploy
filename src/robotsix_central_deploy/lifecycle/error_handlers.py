@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .models import ErrorDetail
+from .request_id_middleware import REQUEST_ID_HEADER, REQUEST_ID_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +116,28 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: Exception
     ) -> JSONResponse:
         logger.exception("Unhandled exception: %s", exc)
+        request_id = _request_id_for(request)
         return JSONResponse(
             status_code=500,
             content=ErrorDetail(
                 error="Internal server error",
                 detail="",
+                request_id=request_id,
             ).model_dump(),
+            headers={REQUEST_ID_HEADER: request_id} if request_id else None,
         )
+
+
+def _request_id_for(request: Request) -> str | None:
+    """Return the correlation id for *request*, if any is known.
+
+    Prefers the id ``RequestIDMiddleware`` stored on the scope state (it
+    survives the middleware's contextvar unbind), then the inbound header.
+    """
+    stored = request.scope.get("state", {}).get(REQUEST_ID_KEY)
+    if isinstance(stored, str) and stored:
+        return stored
+    incoming = request.headers.get(REQUEST_ID_HEADER)
+    if incoming and incoming.strip():
+        return incoming.strip()
+    return None

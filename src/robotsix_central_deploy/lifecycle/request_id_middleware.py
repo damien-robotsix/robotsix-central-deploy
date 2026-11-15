@@ -58,6 +58,10 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             incoming.strip() if incoming and incoming.strip() else str(uuid.uuid4())
         )
         bind_contextvars(**{REQUEST_ID_KEY: request_id})
+        # Also stash it on the ASGI scope state: the catch-all 500 handler
+        # runs in ServerErrorMiddleware (outside this middleware), after the
+        # contextvar has been unbound and without our response header.
+        request.scope.setdefault("state", {})[REQUEST_ID_KEY] = request_id
         try:
             response: Response = await call_next(request)  # type: ignore[operator]
         finally:

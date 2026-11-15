@@ -295,6 +295,7 @@ class ErrorDetail(BaseModel):
 
     error: str
     detail: Any = ""
+    request_id: str | None = None
 
 
 class ServiceHealthResponse(BaseModel):
