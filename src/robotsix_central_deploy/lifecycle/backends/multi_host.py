@@ -181,6 +181,19 @@ class MultiHostBackend(ExecutionBackend):
         return await self._for_service(service).stop(service)
 
     async def remove_container(self, service: ServiceRecord) -> None:
+        """Remove *service*'s container from the backend that owns it.
+
+        When the owning backend is a remote host and a Traefik dynamic
+        directory is configured, also drop the service's Traefik routing
+        fragment (keyed by ``component_id``, falling back to ``name``).
+
+        Args:
+            service: The service whose container is removed.
+
+        Raises:
+            Any exception raised by the owning backend's ``remove_container``;
+            the fragment is then left in place.
+        """
         backend = self._for_service(service)
         await backend.remove_container(service)
         if backend is not self._local and self._traefik_dynamic_dir:
@@ -309,6 +322,27 @@ class MultiHostBackend(ExecutionBackend):
         env_dict: dict[str, str],
         timeout_seconds: int = 60,
     ) -> str:
+        """Run a one-shot config-assist command against a config volume.
+
+        The call is dispatched to the backend that owns *volume_name*, which
+        starts a throwaway container from *image* with the volume mounted.
+
+        Args:
+            image: Container image to run the command in.
+            command_str: Command line to execute, split shell-style into argv.
+            volume_name: Config volume to mount; also selects the backend.
+            volume_mount_path: Path inside the container where the volume
+                is mounted.
+            env_dict: Environment variables passed to the container.
+            timeout_seconds: Seconds to wait before the run is aborted.
+
+        Returns:
+            The container's captured stdout and stderr.
+
+        Raises:
+            TimeoutError: The container did not exit within *timeout_seconds*.
+            RuntimeError: The command exited non-zero (Docker SDK backend).
+        """
         return await self._for_volume(volume_name).run_config_assist(
             image,
             command_str,

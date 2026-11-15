@@ -166,6 +166,17 @@ class NoopBackend(ExecutionBackend):
         return {"status": "authenticated"}
 
     async def read_claude_credentials(self, volume_name: str) -> dict[str, Any]:
+        """Return placeholder Claude OAuth credentials for the no-op backend.
+
+        This is a stub: nothing is read from disk or Docker.
+
+        Args:
+            volume_name: Accepted for interface compatibility; ignored.
+
+        Returns:
+            A dict with a ``claudeAiOauth`` key holding placeholder ``"noop"``
+            tokens, a far-future ``expiresAt`` and the ``user:inference`` scope.
+        """
         return {
             "claudeAiOauth": {
                 "accessToken": "noop",
