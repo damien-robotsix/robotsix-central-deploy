@@ -13,6 +13,7 @@ from robotsix_central_deploy.lifecycle.backends._volume_ops import (
     STATUS_FAILED,
     STATUS_OK,
     VolumeOps,
+    _RelocateError,
 )
 
 # ---------------------------------------------------------------------------
@@ -821,6 +822,131 @@ class TestVolumeOpsRelocate:
             "type": "none",
         }
         assert restore_call.kwargs["labels"] == {"com.example": "kept"}
+
+    # -- focused step-helper tests -------------------------------------------
+
+    async def test_probe_mismatch_raises_and_removes_sentinel(
+        self, client, docker_mock, tmp_path
+    ):
+        vo = VolumeOps(client)
+        target = tmp_path / "target"
+        target.mkdir()
+        client.containers.run.return_value = b"MISSING"
+
+        with (
+            patch.dict(sys.modules, {"docker": docker_mock}),
+            pytest.raises(_RelocateError) as excinfo,
+        ):
+            await vo._relocate_probe_host_path(str(target))
+
+        assert "not reachable at the same path" in excinfo.value.detail
+        assert excinfo.value.cleanup_target is False
+        # The sentinel file is always cleaned up, even on mismatch.
+        assert list(target.iterdir()) == []
+
+    async def test_probe_api_error_raises(self, client, docker_mock, tmp_path):
+        vo = VolumeOps(client)
+        target = tmp_path / "target"
+        target.mkdir()
+        client.containers.run.side_effect = docker_mock.errors.APIError("boom")
+
+        with (
+            patch.dict(sys.modules, {"docker": docker_mock}),
+            pytest.raises(_RelocateError) as excinfo,
+        ):
+            await vo._relocate_probe_host_path(str(target))
+
+        assert "Failed to probe target directory" in excinfo.value.detail
+        assert list(target.iterdir()) == []
+
+    async def test_probe_mismatch_aborts_relocate_before_copy(
+        self, client, docker_mock, tmp_path
+    ):
+        vo = VolumeOps(client)
+        client.containers.run.side_effect = [b"MISSING"]
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == STATUS_FAILED
+        assert "not reachable" in result["detail"]
+        # Only the probe container ran — no data was touched.
+        assert client.containers.run.call_count == 1
+        client.volumes.create.assert_not_called()
+
+    async def test_recreate_409_removes_old_and_retries_with_labels(
+        self, client, docker_mock
+    ):
+        vo = VolumeOps(client)
+        conflict = docker_mock.errors.APIError("already exists", status_code=409)
+        client.volumes.create.side_effect = [conflict, None]
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            await vo._relocate_recreate_volume(
+                "my-vol", "/new/disk/my-vol", {"com.example": "kept"}
+            )
+
+        client.volumes.get.return_value.remove.assert_called_once_with(force=True)
+        assert client.volumes.create.call_count == 2
+        retry = client.volumes.create.call_args_list[1]
+        assert retry.args == ("my-vol",)
+        assert retry.kwargs["driver_opts"] == {
+            "type": "none",
+            "device": "/new/disk/my-vol",
+            "o": "bind",
+        }
+        assert retry.kwargs["labels"] == {"com.example": "kept"}
+
+    async def test_recreate_409_retry_failure_restores_old_volume(
+        self, client, docker_mock
+    ):
+        vo = VolumeOps(client)
+        conflict = docker_mock.errors.APIError("already exists", status_code=409)
+        retry_err = docker_mock.errors.APIError("daemon exploded", status_code=500)
+        client.volumes.create.side_effect = [conflict, retry_err, None]
+
+        with (
+            patch.dict(sys.modules, {"docker": docker_mock}),
+            pytest.raises(_RelocateError) as excinfo,
+        ):
+            await vo._relocate_recreate_volume(
+                "my-vol", "/new/disk/my-vol", {"com.example": "kept"}
+            )
+
+        assert "Failed to recreate volume 'my-vol'" in excinfo.value.detail
+        restore = client.volumes.create.call_args_list[2]
+        assert restore.kwargs["driver_opts"]["device"] == "/old/disk/my-vol"
+        assert restore.kwargs["labels"] == {"com.example": "kept"}
+
+    async def test_recreate_non_409_error_leaves_old_volume(self, client, docker_mock):
+        vo = VolumeOps(client)
+        client.volumes.create.side_effect = docker_mock.errors.APIError(
+            "bad request", status_code=400
+        )
+
+        with (
+            patch.dict(sys.modules, {"docker": docker_mock}),
+            pytest.raises(_RelocateError) as excinfo,
+        ):
+            await vo._relocate_recreate_volume("my-vol", "/new/disk/my-vol", {})
+
+        assert excinfo.value.detail == "Failed to create new volume: bad request"
+        client.volumes.get.return_value.remove.assert_not_called()
+
+    async def test_copy_failure_cleans_up_target_directory(
+        self, client, docker_mock, tmp_path
+    ):
+        vo = VolumeOps(client)
+        client.containers.run.side_effect = [
+            b"robotsix-probe",  # probe
+            _exited_container(1),  # copy fails
+        ]
+
+        with patch.dict(sys.modules, {"docker": docker_mock}):
+            result = await vo.relocate_volume("my-vol", str(tmp_path), "1000:1000")
+
+        assert result["status"] == STATUS_FAILED
+        assert not (tmp_path / "robotsix-volumes" / "my-vol").exists()
 
 
 # ---------------------------------------------------------------------------

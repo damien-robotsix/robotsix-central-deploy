@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import Callable
 from typing import Any
 
 from robotsix_central_deploy.lifecycle.backends._config_volume_ops import (
@@ -40,6 +41,20 @@ _DU_BYTES_FN = (
     "-exec du -b {} + 2>/dev/null | awk '{s+=$1}END{print s+0}'\n"
     "}\n"
 )
+
+
+class _RelocateError(Exception):
+    """A :meth:`VolumeOps.relocate_volume` step failed.
+
+    *detail* is the API-facing message returned in the failure payload;
+    *cleanup_target* asks the orchestrator to remove the (partially
+    populated) target directory before returning.
+    """
+
+    def __init__(self, detail: str, *, cleanup_target: bool = False) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.cleanup_target = cleanup_target
 
 
 class VolumeOps(ConfigVolumeOpsMixin):
@@ -636,17 +651,54 @@ class VolumeOps(ConfigVolumeOpsMixin):
         On failure the source volume is left intact; the target
         directory (if created) is removed.
         """
-        import docker
-
-        loop = asyncio.get_running_loop()
-
         # Resolve the owning component's uid/gid so a non-default ``user``
         # keeps its volume root owned accordingly.  Defaults to the server's
         # own uid/gid (as _prepare_volumes does) when no override is given.
         user_str = container_user or f"{os.getuid()}:{os.getgid()}"
         chown_uid, chown_gid = self.resolve_user_to_uid_gid(user_str)
+        target_volume_path = os.path.join(
+            target_disk_path, "robotsix-volumes", volume_name
+        )
 
-        # 1. Inspect current volume to find source data path.
+        try:
+            attrs, source_path = await self._relocate_inspect_source(volume_name)
+            await self._relocate_prepare_target(target_volume_path)
+            await self._relocate_probe_host_path(target_volume_path)
+            await self._relocate_copy_data(volume_name, target_volume_path)
+            await self._relocate_verify_copy(volume_name, target_volume_path)
+            # Capture the old labels *before* any removal so the new volume
+            # preserves them (review #436, minor: on-success label preservation).
+            await self._relocate_recreate_volume(
+                volume_name, target_volume_path, dict(attrs.get("Labels") or {})
+            )
+        except _RelocateError as exc:
+            if exc.cleanup_target:
+                await self._relocate_remove_target(target_volume_path)
+            return {"status": STATUS_FAILED, "detail": exc.detail}
+
+        await self._relocate_fix_ownership(volume_name, chown_uid, chown_gid)
+        await self._relocate_remove_old_source(volume_name, source_path)
+        return {
+            "status": STATUS_OK,
+            "detail": (
+                f"Volume {volume_name!r} relocated to {target_volume_path!r} "
+                f"(content verified)"
+            ),
+        }
+
+    async def _relocate_inspect_source(
+        self, volume_name: str
+    ) -> tuple[dict[str, Any], str]:
+        """Steps 1–2: inspect *volume_name*; return ``(attrs, source_path)``.
+
+        Raises :class:`_RelocateError` when the volume is missing, the
+        daemon errors, the source path cannot be determined, or the volume
+        is not a bind-mount volume.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
+
         def _inspect_volume() -> dict[str, Any]:
             try:
                 attrs: dict[str, Any] = dict(
@@ -666,17 +718,16 @@ class VolumeOps(ConfigVolumeOpsMixin):
         try:
             attrs = await loop.run_in_executor(None, _inspect_volume)
         except RuntimeError as exc:
-            return {"status": STATUS_FAILED, "detail": str(exc)}
+            raise _RelocateError(str(exc)) from exc
 
         # For a bind-mount volume the data lives at Options.device;
         # for a regular Docker volume it's at the Mountpoint.
         options = attrs.get("Options") or {}
-        source_path = options.get("device") or attrs.get("Mountpoint", "")
+        source_path: str = options.get("device") or attrs.get("Mountpoint", "")
         if not source_path:
-            return {
-                "status": STATUS_FAILED,
-                "detail": f"Could not determine source path for volume {volume_name!r}",
-            }
+            raise _RelocateError(
+                f"Could not determine source path for volume {volume_name!r}"
+            )
 
         # 2. Guard: only bind-mount volumes can be safely relocated.
         #    For a non-bind-mount (regular Docker volume), the backing data
@@ -684,41 +735,42 @@ class VolumeOps(ConfigVolumeOpsMixin):
         #    would destroy it.  Check before creating the target directory
         #    so we don't waste I/O on an unsupported volume type.
         if options.get("type") != "none":
-            return {
-                "status": STATUS_FAILED,
-                "detail": (
-                    f"Volume {volume_name!r} is not a bind-mount volume "
-                    "and cannot be relocated. Only bind-mount volumes "
-                    "(type=none) are supported."
-                ),
-            }
+            raise _RelocateError(
+                f"Volume {volume_name!r} is not a bind-mount volume "
+                "and cannot be relocated. Only bind-mount volumes "
+                "(type=none) are supported."
+            )
+        return attrs, source_path
 
-        # 3. Create target directory (via executor — blocking I/O).
-        target_volume_path = os.path.join(
-            target_disk_path, "robotsix-volumes", volume_name
-        )
+    async def _relocate_prepare_target(self, target_volume_path: str) -> None:
+        """Step 3: create the target directory (via executor — blocking I/O)."""
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
                 None,
                 lambda: os.makedirs(target_volume_path, mode=0o755, exist_ok=True),
             )
         except OSError as exc:
-            return {
-                "status": STATUS_FAILED,
-                "detail": f"Failed to create target directory {target_volume_path!r}: {exc}",
-            }
+            raise _RelocateError(
+                f"Failed to create target directory {target_volume_path!r}: {exc}"
+            ) from exc
 
-        # 4. Fail-fast: verify the directory we just created is the SAME
-        #     directory the Docker daemon will bind into the copy container.
-        #     ``os.makedirs`` above runs inside the central-deploy container,
-        #     while the busybox ``/dst`` bind below resolves the path on the
-        #     Docker *host*.  They agree only when the target disk is
-        #     bind-mounted into central-deploy at the identical path.  A
-        #     mismatch would silently copy the data to a different (empty)
-        #     host directory and then remove the source — a data-loss shape —
-        #     so we probe with a sentinel file before touching any data.
+    async def _relocate_probe_host_path(self, target_volume_path: str) -> None:
+        """Step 4: fail fast unless *target_volume_path* is the same host dir.
+
+        ``os.makedirs`` runs inside the central-deploy container, while the
+        busybox ``/dst`` bind resolves the path on the Docker *host*.  They
+        agree only when the target disk is bind-mounted into central-deploy
+        at the identical path.  A mismatch would silently copy the data to a
+        different (empty) host directory and then remove the source — a
+        data-loss shape — so we probe with a sentinel file before touching
+        any data.  Raises :class:`_RelocateError` on any mismatch or error.
+        """
         import secrets
 
+        import docker
+
+        loop = asyncio.get_running_loop()
         sentinel = f".robotsix-relocate-probe-{secrets.token_hex(8)}"
         marker_path = os.path.join(target_volume_path, sentinel)
 
@@ -729,12 +781,9 @@ class VolumeOps(ConfigVolumeOpsMixin):
         try:
             await loop.run_in_executor(None, _write_probe)
         except OSError as exc:
-            return {
-                "status": STATUS_FAILED,
-                "detail": (
-                    f"Target directory {target_volume_path!r} is not writable: {exc}"
-                ),
-            }
+            raise _RelocateError(
+                f"Target directory {target_volume_path!r} is not writable: {exc}"
+            ) from exc
         try:
             raw_probe: bytes = await loop.run_in_executor(
                 None,
@@ -755,134 +804,141 @@ class VolumeOps(ConfigVolumeOpsMixin):
                 else str(raw_probe).strip()
             )
             if probe_text != "robotsix-probe":
-                return {
-                    "status": STATUS_FAILED,
-                    "detail": (
-                        f"Target directory {target_volume_path!r} is not reachable "
-                        "at the same path on the Docker host. The target disk must "
-                        "be bind-mounted into central-deploy at an identical path."
-                    ),
-                }
+                raise _RelocateError(
+                    f"Target directory {target_volume_path!r} is not reachable "
+                    "at the same path on the Docker host. The target disk must "
+                    "be bind-mounted into central-deploy at an identical path."
+                )
         except docker.errors.APIError as exc:
-            return {
-                "status": STATUS_FAILED,
-                "detail": (
-                    f"Failed to probe target directory {target_volume_path!r}: {exc}"
-                ),
-            }
+            raise _RelocateError(
+                f"Failed to probe target directory {target_volume_path!r}: {exc}"
+            ) from exc
         finally:
             try:
                 await loop.run_in_executor(None, os.remove, marker_path)
             except OSError:  # best-effort; never mask the probe result
                 pass
 
-        # 5. Copy data from source to target via a busybox container.
-        #    Mount source (the Docker volume, which Docker resolves to the
-        #    correct backing path) at /src ro, and target at /dst rw.
-        #    ``containers.run()`` does NOT accept a ``timeout`` kwarg
-        #    (``timeout`` is forwarded to ``Container.stop()``), so we use
-        #    ``detach=True`` and a poll-wait with an 1800s deadline.
+    def _relocate_run_helper_sync(
+        self,
+        command: list[str],
+        volume_name: str,
+        target_volume_path: str,
+        dst_mode: str,
+        deadline_s: float,
+    ) -> bool:
+        """Run a detached busybox helper with ``/src`` and ``/dst`` mounted.
+
+        ``containers.run()`` does NOT accept a ``timeout`` kwarg
+        (``timeout`` is forwarded to ``Container.stop()``), so we use
+        ``detach=True`` and a poll-wait with *deadline_s*.  Returns whether
+        the helper exited 0; the container is always removed.
+        """
+        container = self._client.containers.run(
+            "busybox",
+            command=command,
+            volumes={
+                volume_name: {"bind": "/src", "mode": "ro"},
+                target_volume_path: {"bind": "/dst", "mode": dst_mode},
+            },
+            detach=True,
+        )
+        try:
+            exit_code = self._wait_container_exit_sync(container, deadline_s)
+        except Exception:
+            try:
+                container.remove(force=True)
+            except Exception:  # noqa: BLE001,S110
+                pass
+            raise
+        container.remove()
+        return exit_code == 0
+
+    async def _relocate_copy_data(
+        self, volume_name: str, target_volume_path: str
+    ) -> None:
+        """Step 5: copy the volume's data to the target via busybox ``cp -a``.
+
+        Mounts the source (the Docker volume, which Docker resolves to the
+        correct backing path) at /src ro and the target at /dst rw, with an
+        1800s deadline.  Raises :class:`_RelocateError` (with target
+        cleanup) on failure.
+        """
+        loop = asyncio.get_running_loop()
         copy_ok = False
         try:
-
-            def _run_copy() -> bool:
-                container = self._client.containers.run(
-                    "busybox",
-                    command=[
-                        "sh",
-                        "-c",
-                        "cp -a /src/. /dst/ 2>&1 || { echo COPY_FAILED; exit 1; }",
-                    ],
-                    volumes={
-                        volume_name: {"bind": "/src", "mode": "ro"},
-                        target_volume_path: {"bind": "/dst", "mode": "rw"},
-                    },
-                    detach=True,
-                )
-                try:
-                    exit_code = self._wait_container_exit_sync(container, 1800)
-                except Exception:
-                    try:
-                        container.remove(force=True)
-                    except Exception:  # noqa: BLE001,S110
-                        pass
-                    raise
-                container.remove()
-                return exit_code == 0
-
-            copy_ok = await loop.run_in_executor(None, _run_copy)
+            copy_ok = await loop.run_in_executor(
+                None,
+                self._relocate_run_helper_sync,
+                [
+                    "sh",
+                    "-c",
+                    "cp -a /src/. /dst/ 2>&1 || { echo COPY_FAILED; exit 1; }",
+                ],
+                volume_name,
+                target_volume_path,
+                "rw",
+                1800,
+            )
         except Exception:
             logger.warning(
                 "relocate_volume %s: copy container failed", volume_name, exc_info=True
             )
-
         if not copy_ok:
-            # Clean up the target directory on failure (via executor).
-            try:
-                import shutil
+            raise _RelocateError(
+                f"Data copy failed for volume {volume_name!r}", cleanup_target=True
+            )
 
-                await loop.run_in_executor(None, shutil.rmtree, target_volume_path)
-            except OSError:  # best-effort cleanup; ignore if dir is already gone
-                pass
-            return {
-                "status": STATUS_FAILED,
-                "detail": f"Data copy failed for volume {volume_name!r}",
-            }
+    async def _relocate_verify_copy(
+        self, volume_name: str, target_volume_path: str
+    ) -> None:
+        """Step 6: verify content integrity with ``diff -rq`` in busybox.
 
-        # 6. Verify content integrity with diff -rq in a busybox container.
-        #    This catches corruption that preserves file sizes, which a
-        #    byte-count-only check would miss.
+        This catches corruption that preserves file sizes, which a
+        byte-count-only check would miss.  Raises :class:`_RelocateError`
+        (with target cleanup) on failure.
+        """
+        loop = asyncio.get_running_loop()
         verify_ok = False
         try:
-
-            def _run_verify() -> bool:
-                container = self._client.containers.run(
-                    "busybox",
-                    command=["diff", "-rq", "/src", "/dst"],
-                    volumes={
-                        volume_name: {"bind": "/src", "mode": "ro"},
-                        target_volume_path: {"bind": "/dst", "mode": "ro"},
-                    },
-                    detach=True,
-                )
-                try:
-                    exit_code = self._wait_container_exit_sync(container, 600)
-                except Exception:
-                    try:
-                        container.remove(force=True)
-                    except Exception:  # noqa: BLE001,S110
-                        pass
-                    raise
-                container.remove()
-                return exit_code == 0
-
-            verify_ok = await loop.run_in_executor(None, _run_verify)
+            verify_ok = await loop.run_in_executor(
+                None,
+                self._relocate_run_helper_sync,
+                ["diff", "-rq", "/src", "/dst"],
+                volume_name,
+                target_volume_path,
+                "ro",
+                600,
+            )
         except Exception:
             logger.warning(
                 "relocate_volume %s: content verification failed",
                 volume_name,
                 exc_info=True,
             )
-
         if not verify_ok:
-            try:
-                import shutil
+            raise _RelocateError(
+                f"Content verification failed for volume {volume_name!r}",
+                cleanup_target=True,
+            )
 
-                await loop.run_in_executor(None, shutil.rmtree, target_volume_path)
-            except OSError:  # best-effort cleanup; ignore if dir is already gone
-                pass
-            return {
-                "status": STATUS_FAILED,
-                "detail": (f"Content verification failed for volume {volume_name!r}"),
-            }
+    async def _relocate_recreate_volume(
+        self,
+        volume_name: str,
+        target_volume_path: str,
+        labels: dict[str, str],
+    ) -> None:
+        """Step 7: recreate *volume_name* as a bind volume at the target path.
 
-        # 7. Create new volume pointing to target path.  Try first — the
-        #    old volume still exists under the same name so we expect a 409
-        #    Conflict.  On 409 we remove the old volume and retry.  For any
-        #    other error the old volume is left intact (safe).
-        # Capture the old labels *before* any removal so the new volume
-        # preserves them (review #436, minor: on-success label preservation).
-        old_labels: dict[str, str] = dict(attrs.get("Labels") or {})
+        Try first — the old volume still exists under the same name so we
+        expect a 409 Conflict.  On 409 we snapshot and remove the old volume
+        and retry; if the retry fails the old volume is restored at its
+        original location.  For any other error the old volume is left
+        intact (safe).  Raises :class:`_RelocateError` on failure.
+        """
+        import docker
+
+        loop = asyncio.get_running_loop()
 
         def _create_new() -> None:
             self._client.volumes.create(
@@ -893,88 +949,88 @@ class VolumeOps(ConfigVolumeOpsMixin):
                     "device": target_volume_path,
                     "o": "bind",
                 },
-                labels=old_labels,
+                labels=labels,
             )
 
         try:
             await loop.run_in_executor(None, _create_new)
         except docker.errors.APIError as exc:
-            if exc.status_code == 409:
-                logger.info(
-                    "Volume %s already exists, removing old and recreating "
-                    "at new location %s",
-                    volume_name,
-                    target_volume_path,
-                )
-
-                # Snapshot old volume attributes before removal so we can
-                # restore it at its original location if recreation fails.
-                def _snapshot_old_volume() -> tuple[
-                    str, dict[str, Any], dict[str, str]
-                ]:
-                    old_volume = self._client.volumes.get(volume_name)
-                    old_attrs: dict[str, Any] = dict(old_volume.attrs)
-                    old_driver: str = old_attrs.get("Driver", "local")
-                    old_driver_opts: dict[str, Any] = dict(
-                        old_attrs.get("Options") or {}
-                    )
-                    old_labels: dict[str, str] = dict(old_attrs.get("Labels") or {})
-                    return old_driver, old_driver_opts, old_labels
-
-                old_driver, old_driver_opts, old_labels = await loop.run_in_executor(
-                    None, _snapshot_old_volume
-                )
-                try:
-                    await loop.run_in_executor(
-                        None,
-                        lambda: self._client.volumes.get(volume_name).remove(
-                            force=True
-                        ),
-                    )
-                    await loop.run_in_executor(None, _create_new)
-                except Exception as retry_exc:  # noqa: BLE001
-                    # Attempt to restore the old volume at its original
-                    # location so the data is not orphaned.
-                    try:
-                        await loop.run_in_executor(
-                            None,
-                            lambda: self._client.volumes.create(
-                                volume_name,
-                                driver=old_driver,
-                                driver_opts=old_driver_opts,
-                                labels=old_labels,
-                            ),
-                        )
-                    except Exception as restore_exc:  # noqa: BLE001
-                        logger.warning(
-                            "relocate_volume %s: failed to restore old "
-                            "volume after failed recreation: %s",
-                            volume_name,
-                            restore_exc,
-                        )
-                    return {
-                        "status": STATUS_FAILED,
-                        "detail": (
-                            f"Failed to recreate volume {volume_name!r}: {retry_exc}"
-                        ),
-                    }
-            else:
-                return {
-                    "status": STATUS_FAILED,
-                    "detail": f"Failed to create new volume: {exc.explanation or exc}",
-                }
+            if exc.status_code != 409:
+                raise _RelocateError(
+                    f"Failed to create new volume: {exc.explanation or exc}"
+                ) from exc
+            logger.info(
+                "Volume %s already exists, removing old and recreating "
+                "at new location %s",
+                volume_name,
+                target_volume_path,
+            )
+            await self._relocate_replace_conflicting(volume_name, _create_new)
         except docker.errors.DockerException as exc:
-            return {
-                "status": STATUS_FAILED,
-                "detail": f"Docker daemon unreachable: {exc}",
-            }
+            raise _RelocateError(f"Docker daemon unreachable: {exc}") from exc
 
-        # 8. Fix ownership on the new volume.  The volume root must be owned
-        #    by the owning container's user so the container can write to it.
-        #    ``cp -a`` preserved ownership of files *inside* the volume; this
-        #    chown ensures the mount point itself is also accessible.  The
-        #    uid/gid are resolved from the component's ``user`` override (or
-        #    the server's own uid/gid as the default), not hardcoded 1000:1000.
+    async def _relocate_replace_conflicting(
+        self, volume_name: str, create_new: Callable[[], None]
+    ) -> None:
+        """Remove the old *volume_name* and run *create_new*; restore on failure."""
+        loop = asyncio.get_running_loop()
+
+        # Snapshot old volume attributes before removal so we can
+        # restore it at its original location if recreation fails.
+        def _snapshot_old_volume() -> tuple[str, dict[str, Any], dict[str, str]]:
+            old_volume = self._client.volumes.get(volume_name)
+            old_attrs: dict[str, Any] = dict(old_volume.attrs)
+            old_driver: str = old_attrs.get("Driver", "local")
+            old_driver_opts: dict[str, Any] = dict(old_attrs.get("Options") or {})
+            old_labels: dict[str, str] = dict(old_attrs.get("Labels") or {})
+            return old_driver, old_driver_opts, old_labels
+
+        old_driver, old_driver_opts, old_labels = await loop.run_in_executor(
+            None, _snapshot_old_volume
+        )
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: self._client.volumes.get(volume_name).remove(force=True),
+            )
+            await loop.run_in_executor(None, create_new)
+        except Exception as retry_exc:
+            # Attempt to restore the old volume at its original
+            # location so the data is not orphaned.
+            try:
+                await loop.run_in_executor(
+                    None,
+                    lambda: self._client.volumes.create(
+                        volume_name,
+                        driver=old_driver,
+                        driver_opts=old_driver_opts,
+                        labels=old_labels,
+                    ),
+                )
+            except Exception as restore_exc:  # noqa: BLE001
+                logger.warning(
+                    "relocate_volume %s: failed to restore old "
+                    "volume after failed recreation: %s",
+                    volume_name,
+                    restore_exc,
+                )
+            raise _RelocateError(
+                f"Failed to recreate volume {volume_name!r}: {retry_exc}"
+            ) from retry_exc
+
+    async def _relocate_fix_ownership(
+        self, volume_name: str, chown_uid: int, chown_gid: int
+    ) -> None:
+        """Step 8: fix ownership on the new volume root.
+
+        The volume root must be owned by the owning container's user so the
+        container can write to it.  ``cp -a`` preserved ownership of files
+        *inside* the volume; this chown ensures the mount point itself is
+        also accessible.  The uid/gid are resolved from the component's
+        ``user`` override (or the server's own uid/gid as the default), not
+        hardcoded 1000:1000.
+        """
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
             self.ensure_volume_ownership,
@@ -984,28 +1040,36 @@ class VolumeOps(ConfigVolumeOpsMixin):
             0o755,
         )
 
-        # 9. Best-effort cleanup of the old bind-mount source directory.
-        #    For bind-mount volumes, the volume `remove(force=True)` above
-        #    only removes the Docker metadata — the host directory is
-        #    preserved.  Since the relocation intent is to free disk space,
-        #    we remove the old source data here.  A failure is logged and
-        #    does not abort the successful relocation.
-        if source_path:
-            try:
-                import shutil
+    async def _relocate_remove_old_source(
+        self, volume_name: str, source_path: str
+    ) -> None:
+        """Step 9: best-effort cleanup of the old bind-mount source directory.
 
-                await loop.run_in_executor(None, shutil.rmtree, source_path)
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    "relocate %s: failed to remove old source %s (non-fatal)",
-                    volume_name,
-                    source_path,
-                )
+        For bind-mount volumes, the volume ``remove(force=True)`` only
+        removes the Docker metadata — the host directory is preserved.
+        Since the relocation intent is to free disk space, we remove the old
+        source data here.  A failure is logged and does not abort the
+        successful relocation.
+        """
+        import shutil
 
-        return {
-            "status": STATUS_OK,
-            "detail": (
-                f"Volume {volume_name!r} relocated to {target_volume_path!r} "
-                f"(content verified)"
-            ),
-        }
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, shutil.rmtree, source_path)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "relocate %s: failed to remove old source %s (non-fatal)",
+                volume_name,
+                source_path,
+            )
+
+    @staticmethod
+    async def _relocate_remove_target(target_volume_path: str) -> None:
+        """Remove the target directory after a failed copy/verify (best-effort)."""
+        import shutil
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, shutil.rmtree, target_volume_path)
+        except OSError:  # best-effort cleanup; ignore if dir is already gone
+            pass
