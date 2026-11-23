@@ -18,11 +18,11 @@ dependencies = [
     "PyGithub>=2.9.0",
     "asgi-csrf>=0.11",
     "secure>=2.0",
-    "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@bed0a5b3a7b77f01bd4a16a4e6753dc92982e8f9",
-    "robotsix-github-auth @ git+https://github.com/damien-robotsix/robotsix-github-auth.git@e6214c41fd743120aa987bacb4e9b2bc88e73943",
-    "robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@c57947232685f4e4798a61e2bc53d747d3dbc75d",
-    "robotsix-ui @ git+https://github.com/damien-robotsix/robotsix-ui.git@b2bdbf5082c208162f31480442487dab3772c518",
-    "robotsix-llmio @ git+https://github.com/damien-robotsix/robotsix-llmio.git@d82bf43a4de36acf5b8ef3ce9442c5cf9a6621c9",
+    "robotsix-config @ git+https://github.com/damien-robotsix/robotsix-config.git@fdf125d4f34de1ff68b711a5e5d561f6061759ce",
+    "robotsix-github-auth @ git+https://github.com/damien-robotsix/robotsix-github-auth.git@457e959ed0df6996519e99687b2dde7acdf30836",
+    "robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@d73d042518b0ed77271e3c5ff8d48bca9d98273e",
+    "robotsix-ui @ git+https://github.com/damien-robotsix/robotsix-ui.git@43b09be037aa4c1cc28238b7bd51ece30b35720d",
+    "robotsix-llmio @ git+https://github.com/damien-robotsix/robotsix-llmio.git@e8291531b4e8de6320e6eace8fa000bd9e6988ec",
 ]
 
 # Dev tooling as a PEP 735 dependency-group (the fleet convention), pulled
@@ -42,7 +42,7 @@ dev = [
     # vulture: dead-code detection (CI gate). Findings that are false
     # positives are recorded in vulture_whitelist.py.
     "vulture>=2.14",
-    "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules.git@39a1d024f7656de661779c594c2b07bb84162023",
+    "robotsix-modules @ git+https://github.com/damien-robotsix/robotsix-modules.git@28c4c04b9f6dbf31108ee2c4af9f94a72bae43c3",
 ]
 docs = [
     "mkdocs-material>=9.7.7",
